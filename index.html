@@ -1,0 +1,2347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f172a">
+<title>MWA Point Tracker</title>
+<link rel="manifest" href="manifest.json">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface2: #334155;
+  --border: #475569;
+  --text: #f1f5f9;
+  --text-dim: #94a3b8;
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --accent: #10b981;
+  --accent2: #f59e0b;
+  --danger: #ef4444;
+  --purple: #8b5cf6;
+  --radius: 10px;
+  --bottom-nav: 64px;
+  --header-h: 56px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* ===== HEADER ===== */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
+
+header h1 { font-size: 1.1rem; font-weight: 700; color: var(--primary); }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-pts { font-size: 0.95rem; color: var(--accent); font-weight: 700; }
+.header-date-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+/* ===== BOTTOM NAV ===== */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--bottom-nav);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.bottom-nav button {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.65rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 44px;
+  padding: 4px 2px;
+  transition: color 0.2s;
+}
+
+.bottom-nav button .nav-icon { font-size: 1.3rem; line-height: 1; }
+.bottom-nav button.active { color: var(--primary); }
+.bottom-nav button:active { color: var(--primary); }
+
+/* ===== PAGES ===== */
+.page {
+  display: none;
+  padding: calc(var(--header-h) + 12px) 12px calc(var(--bottom-nav) + 16px);
+  max-width: 600px;
+  margin: 0 auto;
+}
+.page.active { display: block; }
+
+/* ===== CARDS ===== */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.card h2 { font-size: 1rem; margin-bottom: 12px; color: var(--text); }
+.card h3 { font-size: 0.9rem; margin-bottom: 8px; color: var(--text-dim); }
+
+.card-collapse-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.card-collapse-header .arrow { transition: transform 0.2s; color: var(--text-dim); }
+.card-collapse-header .arrow.open { transform: rotate(180deg); }
+.card-collapse-body { overflow: hidden; transition: max-height 0.3s ease; }
+
+/* ===== FORMS ===== */
+.form-group { margin-bottom: 12px; }
+
+.form-group label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+input, select, textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 16px; /* prevents iOS zoom */
+  outline: none;
+  transition: border-color 0.2s;
+  min-height: 44px;
+}
+
+input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+textarea { resize: vertical; min-height: 60px; }
+
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  min-height: 44px;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.checkbox-group label {
+  font-size: 0.9rem;
+  color: var(--text);
+  cursor: pointer;
+  margin-bottom: 0;
+}
+
+/* ===== BUTTONS ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.btn-primary { background: var(--primary); color: white; width: 100%; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary:active { transform: scale(0.98); }
+.btn-accent { background: var(--accent); color: white; }
+.btn-danger { background: var(--danger); color: white; padding: 8px 14px; font-size: 0.85rem; }
+.btn-sm { padding: 8px 14px; font-size: 0.85rem; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ===== BADGES ===== */
+.point-badge {
+  display: inline-block;
+  background: var(--primary);
+  color: white;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.point-badge.large { font-size: 1.1rem; padding: 4px 14px; }
+.point-badge.green { background: var(--accent); }
+.point-badge.yellow { background: var(--accent2); color: #1e293b; }
+
+/* ===== SUMMARY GRID ===== */
+.summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+
+.summary-item {
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.summary-item .label { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 4px; }
+.summary-item .value { font-size: 1.3rem; font-weight: 700; }
+.summary-item .value.blue { color: var(--primary); }
+.summary-item .value.green { color: var(--accent); }
+.summary-item .value.yellow { color: var(--accent2); }
+.summary-item .value.purple { color: var(--purple); }
+
+/* ===== TYPE SELECT GRIDS ===== */
+.shift-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+
+.shift-type-btn {
+  padding: 14px 10px;
+  background: var(--surface2);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shift-type-btn.selected { border-color: var(--primary); background: rgba(59,130,246,0.15); }
+.shift-type-btn:hover { border-color: var(--primary); }
+
+.case-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+
+.case-type-btn {
+  padding: 12px 8px;
+  background: var(--surface2);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.case-type-btn.selected { border-color: var(--accent); background: rgba(16,185,129,0.15); }
+.case-type-btn:hover { border-color: var(--accent); }
+
+/* ===== LISTS ===== */
+.case-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--surface2);
+  gap: 8px;
+}
+.case-list-item:last-child { border-bottom: none; }
+.case-list-item .info { flex: 1; min-width: 0; }
+.case-list-item .info h4 { font-size: 0.85rem; font-weight: 600; }
+.case-list-item .info p { font-size: 0.75rem; color: var(--text-dim); }
+.case-list-item .actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.day-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  min-height: 44px;
+}
+.day-list-item:hover { border-color: var(--primary); }
+.day-list-item:active { border-color: var(--primary); background: var(--surface2); }
+.day-list-item .date { font-weight: 600; font-size: 0.9rem; }
+.day-list-item .meta { font-size: 0.75rem; color: var(--text-dim); }
+
+/* ===== POINT BREAKDOWN ===== */
+.point-breakdown {
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.point-breakdown .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.8rem; }
+
+.point-breakdown .row.total {
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 8px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+/* ===== MONTH NAV ===== */
+.month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.month-nav button {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 1rem;
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.month-nav span { font-weight: 600; font-size: 1rem; min-width: 150px; text-align: center; }
+
+/* ===== CHART ===== */
+.chart-container { position: relative; height: 250px; margin: 12px 0; }
+
+/* ===== RECONCILIATION ===== */
+.recon-status { padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; font-size: 0.85rem; }
+.recon-match { background: rgba(16,185,129,0.15); border: 1px solid var(--accent); color: var(--accent); }
+.recon-warn { background: rgba(245,158,11,0.15); border: 1px solid var(--accent2); color: var(--accent2); }
+.recon-miss { background: rgba(239,68,68,0.15); border: 1px solid var(--danger); color: var(--danger); }
+
+.recon-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  margin: 8px 0;
+}
+
+.recon-table th, .recon-table td {
+  padding: 8px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--surface2);
+}
+
+.recon-table th { color: var(--text-dim); font-weight: 600; font-size: 0.7rem; text-transform: uppercase; }
+.recon-table td { vertical-align: top; }
+.recon-table tr.match { background: rgba(16,185,129,0.07); }
+.recon-table tr.warn { background: rgba(245,158,11,0.07); }
+.recon-table tr.miss { background: rgba(239,68,68,0.07); }
+
+/* ===== UPLOAD AREA ===== */
+.upload-area {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  min-height: 44px;
+}
+
+.upload-area:hover { border-color: var(--primary); }
+.upload-area p { color: var(--text-dim); font-size: 0.85rem; margin-top: 8px; }
+.upload-area input { display: none; }
+
+/* ===== SHIFT TEMPLATES ===== */
+.template-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+
+.template-btn {
+  padding: 10px 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.template-btn:hover { border-color: var(--primary); }
+.template-btn:active { background: rgba(59,130,246,0.15); border-color: var(--primary); }
+.template-btn .t-label { font-weight: 600; }
+.template-btn .t-time { font-size: 0.7rem; color: var(--text-dim); }
+
+/* ===== TOAST ===== */
+.toast {
+  position: fixed;
+  bottom: calc(var(--bottom-nav) + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: white;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  z-index: 200;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; }
+
+/* ===== MODAL ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 300;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  padding: 20px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.modal h2 { margin-bottom: 16px; }
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+/* ===== TAB SWITCHER ===== */
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px 8px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 44px;
+  transition: all 0.2s;
+}
+
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* ===== MISC ===== */
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text-dim); }
+.empty-state p { margin-top: 8px; font-size: 0.85rem; }
+.divider { height: 1px; background: var(--border); margin: 16px 0; }
+.hidden { display: none !important; }
+
+.settings-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--surface2);
+}
+
+.settings-field label { font-size: 0.85rem; color: var(--text-dim); white-space: nowrap; min-width: 60px; }
+
+@media (max-width: 480px) {
+  .form-row { grid-template-columns: 1fr; }
+  .form-row-3 { grid-template-columns: 1fr 1fr; }
+  .template-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<header>
+  <h1>MWA Points</h1>
+  <div class="header-right">
+    <span class="header-pts" id="headerPoints">0 pts</span>
+    <button class="header-date-btn" id="headerDateBtn"></button>
+  </div>
+</header>
+
+<!-- ===== PAGES ===== -->
+
+<!-- SHIFT PAGE -->
+<div class="page active" id="page-shift">
+  <div class="card">
+    <h2>Quick Templates</h2>
+    <div class="template-grid" id="templateGrid"></div>
+  </div>
+
+  <div class="card">
+    <h2>Shift Setup</h2>
+
+    <div class="form-group">
+      <label>Date</label>
+      <input type="date" id="shiftDate">
+    </div>
+
+    <div class="form-group">
+      <label>Assignment Type</label>
+      <div class="shift-type-grid">
+        <div class="shift-type-btn selected" data-type="OR">OR / General</div>
+        <div class="shift-type-btn" data-type="OB_restricted">OB (Restricted)</div>
+        <div class="shift-type-btn" data-type="OB_unrestricted">OB (Unrestricted)</div>
+        <div class="shift-type-btn" data-type="cardiac_liver">Cardiac / Liver</div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Shift Start</label>
+        <input type="time" id="shiftStart" value="07:00">
+      </div>
+      <div class="form-group">
+        <label>Shift End</label>
+        <input type="time" id="shiftEnd" value="17:00">
+      </div>
+    </div>
+
+    <div class="checkbox-group">
+      <input type="checkbox" id="shiftHoliday">
+      <label for="shiftHoliday">Holiday</label>
+    </div>
+
+    <div class="checkbox-group">
+      <input type="checkbox" id="shiftUnrestrictedCall">
+      <label for="shiftUnrestrictedCall">Unrestricted Call (Home/Beeper)</label>
+    </div>
+
+    <div class="form-row hidden" id="callTimeRow">
+      <div class="form-group">
+        <label>Call Start</label>
+        <input type="time" id="callStart" value="17:00">
+      </div>
+      <div class="form-group">
+        <label>Call End</label>
+        <input type="time" id="callEnd" value="07:00">
+      </div>
+    </div>
+
+    <div class="checkbox-group">
+      <input type="checkbox" id="shiftForcedOff">
+      <label for="shiftForcedOff">Forced Off (no cases)</label>
+    </div>
+
+    <div id="cardiacLiverOptions" class="hidden">
+      <div class="divider"></div>
+      <h3>Subspecialty Options</h3>
+      <div class="checkbox-group">
+        <input type="checkbox" id="subspecCoverage">
+        <label for="subspecCoverage">Subspecialty coverage (45 pts/day)</label>
+      </div>
+      <div class="form-group">
+        <label>TEE Exams Performed</label>
+        <input type="number" id="teeCount" value="0" min="0">
+      </div>
+    </div>
+
+    <div style="margin-top: 16px;">
+      <button class="btn btn-primary" id="saveShiftBtn">Save Shift</button>
+    </div>
+  </div>
+</div>
+
+<!-- CASES PAGE -->
+<div class="page" id="page-cases">
+  <div class="card">
+    <h2>Log a Case</h2>
+
+    <div class="form-group">
+      <label>Case Type</label>
+      <div class="case-type-grid">
+        <div class="case-type-btn selected" data-case="standard">Standard Case</div>
+        <div class="case-type-btn" data-case="epidural_blood_patch">Epidural Blood Patch</div>
+        <div class="case-type-btn" data-case="emergency_intubation">Emergency Intubation</div>
+        <div class="case-type-btn" data-case="01996">Epidural Rounding (01996)</div>
+        <div class="case-type-btn" data-case="99231">Pain Rounding (99231)</div>
+        <div class="case-type-btn" data-case="tee">TEE Exam</div>
+      </div>
+    </div>
+
+    <div id="standardFields">
+      <div class="form-group">
+        <label>Procedure Name</label>
+        <input type="text" id="caseProcedure" placeholder="e.g., Lap Chole, Total Knee">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>ASA Base Units</label>
+          <input type="number" id="caseBaseUnits" min="0" step="1" value="0">
+        </div>
+        <div class="form-group">
+          <label>Physical Status</label>
+          <select id="casePhysicalStatus">
+            <option value="P1">P1</option>
+            <option value="P2">P2</option>
+            <option value="P3" selected>P3</option>
+            <option value="P4">P4</option>
+            <option value="P5">P5</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Anesthesia Start</label>
+          <input type="time" id="caseStart">
+        </div>
+        <div class="form-group">
+          <label>Anesthesia End</label>
+          <input type="time" id="caseEnd">
+        </div>
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="caseEmergency">
+        <label for="caseEmergency">Emergency Case (+1 pt)</label>
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="caseEModifier">
+        <label for="caseEModifier">E-Modifier (+1 pt)</label>
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="caseMedicalProc">
+        <label for="caseMedicalProc">Medical Procedure (arterial/central line)</label>
+      </div>
+
+      <div class="form-group hidden" id="medicalUnitsRow">
+        <label>ASA Medical Procedure Units</label>
+        <input type="number" id="caseMedicalUnits" min="0" step="1" value="0">
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="caseAcutePain">
+        <label for="caseAcutePain">Acute Pain Procedure</label>
+      </div>
+
+      <div class="form-group hidden" id="acutePainUnitsRow">
+        <label>MWA Acute Pain Unit Value</label>
+        <input type="number" id="caseAcutePainUnits" min="0" step="0.1" value="0">
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="caseHighRiskPeds">
+        <label for="caseHighRiskPeds">High Risk Pediatrics (1.33x time)</label>
+      </div>
+    </div>
+
+    <div id="simpleFields" class="hidden">
+      <div class="form-group">
+        <label>Procedure Notes (optional)</label>
+        <input type="text" id="simpleNotes" placeholder="Optional notes">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Notes (optional)</label>
+      <textarea id="caseNotes" placeholder="Surgeon, location, or other notes"></textarea>
+    </div>
+
+    <div id="casePointPreview" class="point-breakdown hidden">
+      <div class="row"><span>Estimated Points</span><span id="previewPoints">--</span></div>
+    </div>
+
+    <div style="margin-top: 16px;">
+      <button class="btn btn-primary" id="saveCaseBtn">Save Case</button>
+    </div>
+  </div>
+</div>
+
+<!-- TODAY PAGE -->
+<div class="page" id="page-today">
+  <div class="card">
+    <h2 id="todayTitle">Today's Summary</h2>
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="label">Availability (AR)</div>
+        <div class="value blue" id="todayAR">0</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Productivity</div>
+        <div class="value green" id="todayProd">0</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Call / Other</div>
+        <div class="value yellow" id="todayCall">0</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Total Points</div>
+        <div class="value" id="todayTotal">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="todayBreakdownCard">
+    <h2>Point Breakdown</h2>
+    <div id="todayBreakdown"></div>
+  </div>
+
+  <div class="card">
+    <h2>Cases <span id="todayCaseCount"></span></h2>
+    <div id="todayCaseList">
+      <div class="empty-state">
+        <p>No cases logged yet.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- RECONCILE PAGE -->
+<div class="page" id="page-reconcile">
+  <div class="tab-bar">
+    <button class="tab-btn active" data-rtab="qgenda">QGenda Time</button>
+    <button class="tab-btn" data-rtab="production">Production</button>
+  </div>
+
+  <!-- QGenda Tab -->
+  <div id="rtab-qgenda">
+    <div class="card">
+      <h2>QGenda Time Reconciliation</h2>
+      <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+        Upload your QGenda time punch export (.xlsx) to compare against your tracked shifts.
+      </p>
+      <div class="upload-area" id="qgendaUploadArea">
+        <div style="font-size:2rem;">&#128196;</div>
+        <p>Tap to upload QGenda .xlsx</p>
+        <input type="file" id="qgendaFile" accept=".xlsx,.xls">
+      </div>
+    </div>
+
+    <div class="month-nav" style="margin-top:12px;">
+      <button id="qPrevMonth">&larr;</button>
+      <span id="qMonthLabel">January 2026</span>
+      <button id="qNextMonth">&rarr;</button>
+    </div>
+
+    <div id="qgendaResults"></div>
+  </div>
+
+  <!-- Production Tab -->
+  <div id="rtab-production" class="hidden">
+    <div class="card">
+      <h2>Production Reconciliation</h2>
+      <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+        Upload your Charge Detail PDF to compare billing production against your tracked cases.
+      </p>
+      <div class="upload-area" id="prodUploadArea">
+        <div style="font-size:2rem;">&#128196;</div>
+        <p>Tap to upload Charge Detail PDF</p>
+        <input type="file" id="prodFile" accept=".pdf">
+      </div>
+    </div>
+
+    <div class="month-nav" style="margin-top:12px;">
+      <button id="pPrevMonth">&larr;</button>
+      <span id="pMonthLabel">January 2026</span>
+      <button id="pNextMonth">&rarr;</button>
+    </div>
+
+    <div id="prodResults"></div>
+  </div>
+</div>
+
+<!-- MORE PAGE (Settings / Dashboard / Export) -->
+<div class="page" id="page-more">
+  <!-- Settings -->
+  <div class="card">
+    <h2>Settings</h2>
+    <div class="settings-field">
+      <label>Name</label>
+      <input type="text" id="settingsName" placeholder="Your name (labels exports)">
+    </div>
+  </div>
+
+  <!-- Dashboard Charts -->
+  <div class="card">
+    <h2>Monthly Trend</h2>
+    <div class="chart-container">
+      <canvas id="monthlyChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Points Breakdown (This Month)</h2>
+    <div class="chart-container">
+      <canvas id="breakdownChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Stabilization-Weighted Points</h2>
+    <p style="font-size:0.8rem; color:var(--text-dim); margin-bottom:12px;">
+      Weighted: 10% current + 40% prior + 25% 2-mo + 15% 3-mo + 10% 4-mo
+    </p>
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="label">Raw This Month</div>
+        <div class="value blue" id="stabRaw">0</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Stabilized</div>
+        <div class="value green" id="stabWeighted">0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="card">
+    <h2>Monthly History</h2>
+    <div class="month-nav">
+      <button id="prevMonth">&larr;</button>
+      <span id="historyMonth">January 2026</span>
+      <button id="nextMonth">&rarr;</button>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="label">Monthly Total</div>
+        <div class="value blue" id="monthTotal">0</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Days Worked</div>
+        <div class="value green" id="monthDays">0</div>
+      </div>
+    </div>
+    <div id="historyList">
+      <div class="empty-state"><p>No shifts recorded for this month.</p></div>
+    </div>
+  </div>
+
+  <!-- Export / Import -->
+  <div class="card">
+    <h2>Data Management</h2>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn btn-outline btn-sm" id="exportCSVBtn">Export CSV</button>
+      <button class="btn btn-outline btn-sm" id="exportAllBtn">Export JSON</button>
+      <label class="btn btn-outline btn-sm" style="cursor:pointer;">
+        Import JSON
+        <input type="file" id="importFile" accept=".json" style="display:none;">
+      </label>
+      <button class="btn btn-danger btn-sm" id="clearAllBtn">Clear All Data</button>
+    </div>
+  </div>
+</div>
+
+<!-- Day detail modal -->
+<div class="modal-overlay hidden" id="dayModal">
+  <div class="modal">
+    <h2 id="dayModalTitle">Day Details</h2>
+    <div id="dayModalContent"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" id="closeDayModal">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Date picker modal -->
+<div class="modal-overlay hidden" id="datePickerModal">
+  <div class="modal">
+    <h2>Select Working Date</h2>
+    <div class="form-group">
+      <input type="date" id="globalDatePicker">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" id="cancelDatePicker">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="applyDatePicker" style="width:auto;">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- BOTTOM NAV -->
+<div class="bottom-nav">
+  <button class="active" data-page="shift">
+    <span class="nav-icon">&#128197;</span>
+    <span>Shift</span>
+  </button>
+  <button data-page="cases">
+    <span class="nav-icon">&#128203;</span>
+    <span>Cases</span>
+  </button>
+  <button data-page="today">
+    <span class="nav-icon">&#11088;</span>
+    <span>Today</span>
+  </button>
+  <button data-page="reconcile">
+    <span class="nav-icon">&#128260;</span>
+    <span>Reconcile</span>
+  </button>
+  <button data-page="more">
+    <span class="nav-icon">&#9776;</span>
+    <span>More</span>
+  </button>
+</div>
+
+<script>
+// ================================================================
+// DATA STORE
+// ================================================================
+const STORAGE_KEY = 'mwa_point_tracker';
+const SETTINGS_KEY = 'mwa_settings';
+const QGENDA_KEY = 'mwa_qgenda';
+const PROD_KEY = 'mwa_production';
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return { shifts: {}, cases: [] };
+}
+
+function saveData(d) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return { name: '', templates: [] };
+}
+
+function saveSettings(s) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+let data = loadData();
+let settings = loadSettings();
+
+// ================================================================
+// UTILITY
+// ================================================================
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function formatDateShort(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function timeToMinutes(timeStr) {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function isWeekend(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  const day = d.getDay();
+  return day === 0 || day === 6;
+}
+
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
+
+// ================================================================
+// POINT CALCULATION ENGINE (preserved from v1)
+// ================================================================
+function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
+  const isOB = assignmentType === 'OB_restricted';
+  const baseRate = isOB ? 13 : 20;
+  if (isHol || isWknd) {
+    if (timeMinutes >= 420 && timeMinutes < 1020) return baseRate * 1.10;
+    else return baseRate * 1.25;
+  } else {
+    if (timeMinutes >= 420 && timeMinutes < 1020) return baseRate;
+    else if (timeMinutes >= 1020 && timeMinutes < 1380) return baseRate * 1.10;
+    else return baseRate * 1.25;
+  }
+}
+
+function calcARPoints(shift) {
+  if (shift.forcedOff) return 56;
+  const startMin = timeToMinutes(shift.startTime);
+  let endMin = timeToMinutes(shift.endTime);
+  if (endMin <= startMin) endMin += 1440;
+  const isHol = shift.isHoliday;
+  const isWknd = isWeekend(shift.date);
+  let totalPoints = 0;
+  for (let m = startMin; m < endMin; m++) {
+    const normalizedMin = m % 1440;
+    totalPoints += getARRate(shift.assignmentType, isHol, isWknd, normalizedMin) / 60;
+  }
+  const minPoints = (shift.assignmentType === 'OB_restricted') ? 13 * 4 : 20 * 4;
+  return Math.max(round2(totalPoints), minPoints);
+}
+
+function getTimeMultiplier(physicalStatus, isHol, isWknd, caseStartMin, isHighRiskPeds) {
+  const isWeekdayDay = !isHol && !isWknd && caseStartMin >= 420 && caseStartMin < 1020;
+  const isWeekdayEve = !isHol && !isWknd && caseStartMin >= 1020 && caseStartMin < 1380;
+  const isWeekendDay = (isHol || isWknd) && caseStartMin >= 420 && caseStartMin < 1020;
+  let multiplier = 1.0;
+  if (physicalStatus === 'P4') {
+    if (isWeekdayDay) multiplier = 1.33;
+  } else if (physicalStatus === 'P5') {
+    if (isWeekdayDay) multiplier = 1.83;
+    else if (isWeekdayEve || isWeekendDay) multiplier = 1.5;
+  }
+  if (isHighRiskPeds && isWeekdayDay && multiplier < 1.33) multiplier = 1.33;
+  return multiplier;
+}
+
+function calcCasePoints(caseData, shift) {
+  const ct = caseData.caseType;
+  if (ct === 'epidural_blood_patch') return 5;
+  if (ct === 'emergency_intubation') return 4;
+  if (ct === '01996') return 3;
+  if (ct === '99231') return 2;
+  if (ct === 'tee') return 22;
+
+  const baseUnits = parseFloat(caseData.baseUnits) || 0;
+  const basePoints = 0.5 * baseUnits;
+  let caseStartMin = timeToMinutes(caseData.startTime);
+  let caseEndMin = timeToMinutes(caseData.endTime);
+  if (caseEndMin <= caseStartMin) caseEndMin += 1440;
+  const caseMinutes = caseEndMin - caseStartMin;
+  const caseHours = caseMinutes / 60;
+  const isHol = shift ? shift.isHoliday : false;
+  const isWknd = shift ? isWeekend(shift.date) : false;
+  const timeMultiplier = getTimeMultiplier(caseData.physicalStatus, isHol, isWknd, caseStartMin, caseData.isHighRiskPeds);
+  const adjustedHours = caseHours * timeMultiplier;
+  const timePoints = adjustedHours * 6;
+  const medicalPoints = caseData.isMedicalProc ? 0.20 * (parseFloat(caseData.medicalUnits) || 0) : 0;
+  const acutePainPoints = caseData.isAcutePain ? 0.375 * (parseFloat(caseData.acutePainUnits) || 0) : 0;
+  const eModPoints = caseData.eModifier ? 1 : 0;
+  const emergencyPoints = caseData.isEmergency ? 1 : 0;
+  let total = basePoints + timePoints + medicalPoints + acutePainPoints + eModPoints + emergencyPoints;
+  if (shift && shift.assignmentType === 'OB_restricted') total *= 2;
+  return round2(total);
+}
+
+function getCaseBreakdown(caseData, shift) {
+  const ct = caseData.caseType;
+  const bd = [];
+  if (ct === 'epidural_blood_patch') { bd.push({label:'Epidural Blood Patch', pts:5}); return bd; }
+  if (ct === 'emergency_intubation') { bd.push({label:'Emergency Intubation', pts:4}); return bd; }
+  if (ct === '01996') { bd.push({label:'Epidural Rounding (01996)', pts:3}); return bd; }
+  if (ct === '99231') { bd.push({label:'Pain Rounding (99231)', pts:2}); return bd; }
+  if (ct === 'tee') { bd.push({label:'TEE Exam', pts:22}); return bd; }
+
+  const baseUnits = parseFloat(caseData.baseUnits) || 0;
+  bd.push({label: `Half Base Units (${baseUnits} x 0.5)`, pts: round2(0.5 * baseUnits)});
+  let caseStartMin = timeToMinutes(caseData.startTime);
+  let caseEndMin = timeToMinutes(caseData.endTime);
+  if (caseEndMin <= caseStartMin) caseEndMin += 1440;
+  const caseMinutes = caseEndMin - caseStartMin;
+  const caseHours = round2(caseMinutes / 60);
+  const isHol = shift ? shift.isHoliday : false;
+  const isWknd = shift ? isWeekend(shift.date) : false;
+  const tm = getTimeMultiplier(caseData.physicalStatus, isHol, isWknd, caseStartMin, caseData.isHighRiskPeds);
+  const adjustedHours = round2(caseHours * tm);
+  const timePoints = round2(adjustedHours * 6);
+  let tl = `Time (${caseHours}h x 6 pts/hr`;
+  if (tm > 1) tl += ` x ${tm}`;
+  tl += ')';
+  bd.push({label: tl, pts: timePoints});
+  if (caseData.isMedicalProc) {
+    const mu = parseFloat(caseData.medicalUnits) || 0;
+    bd.push({label: `Medical Proc (20% x ${mu})`, pts: round2(0.20 * mu)});
+  }
+  if (caseData.isAcutePain) {
+    const au = parseFloat(caseData.acutePainUnits) || 0;
+    bd.push({label: `Acute Pain (37.5% x ${au})`, pts: round2(0.375 * au)});
+  }
+  if (caseData.eModifier) bd.push({label: 'E-Modifier', pts: 1});
+  if (caseData.isEmergency) bd.push({label: 'Emergency', pts: 1});
+  if (shift && shift.assignmentType === 'OB_restricted') {
+    const subtotal = bd.reduce((s,r) => s + r.pts, 0);
+    bd.push({label: 'OB Doubled (x2)', pts: round2(subtotal)});
+  }
+  return bd;
+}
+
+function calcCallPoints(shift) {
+  if (!shift.unrestrictedCall) return 0;
+  let startMin = timeToMinutes(shift.callStart || '17:00');
+  let endMin = timeToMinutes(shift.callEnd || '07:00');
+  if (endMin <= startMin) endMin += 1440;
+  return round2((endMin - startMin) / 60 * 3.5);
+}
+
+function calcSubspecPoints(shift) {
+  let pts = 0;
+  if (shift.subspecCoverage) pts += 45;
+  pts += (parseInt(shift.teeCount) || 0) * 22;
+  return pts;
+}
+
+function calcShiftTotal(shift) {
+  const shiftCases = data.cases.filter(c => c.shiftDate === shift.date);
+  const arPts = calcARPoints(shift);
+  let prodPts = 0;
+  shiftCases.forEach(c => { prodPts += calcCasePoints(c, shift); });
+  const callPts = calcCallPoints(shift);
+  const subspecPts = (shift.assignmentType === 'cardiac_liver') ? calcSubspecPoints(shift) : 0;
+  return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, total: round2(arPts + prodPts + callPts + subspecPts) };
+}
+
+function getCaseTypeName(type) {
+  const names = {
+    standard: 'Standard Case', epidural_blood_patch: 'Epidural Blood Patch',
+    emergency_intubation: 'Emergency Intubation', '01996': 'Epidural Rounding (01996)',
+    '99231': 'Pain Rounding (99231)', tee: 'TEE Exam'
+  };
+  return names[type] || type;
+}
+
+// ================================================================
+// WORKING DATE
+// ================================================================
+let workingDate = todayStr();
+
+function setWorkingDate(d) {
+  workingDate = d;
+  document.getElementById('shiftDate').value = d;
+  document.getElementById('headerDateBtn').textContent = formatDateShort(d);
+  loadShiftForDate();
+  updateHeaderPoints();
+}
+
+// Header date picker
+document.getElementById('headerDateBtn').addEventListener('click', () => {
+  document.getElementById('globalDatePicker').value = workingDate;
+  document.getElementById('datePickerModal').classList.remove('hidden');
+});
+
+document.getElementById('cancelDatePicker').addEventListener('click', () => {
+  document.getElementById('datePickerModal').classList.add('hidden');
+});
+
+document.getElementById('applyDatePicker').addEventListener('click', () => {
+  const v = document.getElementById('globalDatePicker').value;
+  if (v) setWorkingDate(v);
+  document.getElementById('datePickerModal').classList.add('hidden');
+});
+
+document.getElementById('datePickerModal').addEventListener('click', (e) => {
+  if (e.target.id === 'datePickerModal') document.getElementById('datePickerModal').classList.add('hidden');
+});
+
+// ================================================================
+// NAVIGATION (bottom nav)
+// ================================================================
+document.querySelectorAll('.bottom-nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('page-' + btn.dataset.page).classList.add('active');
+    if (btn.dataset.page === 'today') renderToday();
+    if (btn.dataset.page === 'more') { renderHistory(); renderDashboard(); }
+    if (btn.dataset.page === 'reconcile') renderReconTabs();
+  });
+});
+
+// ================================================================
+// SHIFT TEMPLATES
+// ================================================================
+const defaultTemplates = [
+  { name: 'OR Day', type: 'OR', start: '07:00', end: '17:00', call: false },
+  { name: 'OR + Call', type: 'OR', start: '07:00', end: '17:00', call: true, callStart: '17:00', callEnd: '07:00' },
+  { name: 'OB Day', type: 'OB_restricted', start: '07:00', end: '19:00', call: false },
+  { name: 'Cardiac', type: 'cardiac_liver', start: '07:00', end: '17:00', call: false },
+  { name: 'Weekend OR', type: 'OR', start: '07:00', end: '15:00', call: false },
+  { name: 'OB Night', type: 'OB_restricted', start: '19:00', end: '07:00', call: false },
+];
+
+function renderTemplates() {
+  const grid = document.getElementById('templateGrid');
+  const templates = defaultTemplates;
+  grid.innerHTML = templates.map((t, i) => `
+    <button class="template-btn" data-tidx="${i}">
+      <span class="t-label">${t.name}</span>
+      <span class="t-time">${t.start} - ${t.end}</span>
+    </button>
+  `).join('');
+
+  grid.querySelectorAll('.template-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = templates[parseInt(btn.dataset.tidx)];
+      document.querySelectorAll('.shift-type-btn').forEach(b => {
+        b.classList.toggle('selected', b.dataset.type === t.type);
+      });
+      document.getElementById('shiftStart').value = t.start;
+      document.getElementById('shiftEnd').value = t.end;
+      document.getElementById('shiftUnrestrictedCall').checked = t.call || false;
+      document.getElementById('callTimeRow').classList.toggle('hidden', !t.call);
+      if (t.call) {
+        document.getElementById('callStart').value = t.callStart || '17:00';
+        document.getElementById('callEnd').value = t.callEnd || '07:00';
+      }
+      document.getElementById('cardiacLiverOptions').classList.toggle('hidden', t.type !== 'cardiac_liver');
+      showToast('Template applied');
+    });
+  });
+}
+
+// ================================================================
+// SHIFT PAGE
+// ================================================================
+const shiftDateInput = document.getElementById('shiftDate');
+
+document.querySelectorAll('.shift-type-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.shift-type-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    document.getElementById('cardiacLiverOptions').classList.toggle('hidden', btn.dataset.type !== 'cardiac_liver');
+  });
+});
+
+document.getElementById('shiftUnrestrictedCall').addEventListener('change', function() {
+  document.getElementById('callTimeRow').classList.toggle('hidden', !this.checked);
+});
+
+shiftDateInput.addEventListener('change', function() {
+  workingDate = this.value;
+  document.getElementById('headerDateBtn').textContent = formatDateShort(workingDate);
+  loadShiftForDate();
+});
+
+function getSelectedAssignmentType() {
+  return document.querySelector('.shift-type-btn.selected')?.dataset.type || 'OR';
+}
+
+function loadShiftForDate() {
+  const date = workingDate;
+  const shift = data.shifts[date];
+  if (shift) {
+    document.querySelectorAll('.shift-type-btn').forEach(b => {
+      b.classList.toggle('selected', b.dataset.type === shift.assignmentType);
+    });
+    document.getElementById('shiftStart').value = shift.startTime || '07:00';
+    document.getElementById('shiftEnd').value = shift.endTime || '17:00';
+    document.getElementById('shiftHoliday').checked = shift.isHoliday || false;
+    document.getElementById('shiftUnrestrictedCall').checked = shift.unrestrictedCall || false;
+    document.getElementById('callTimeRow').classList.toggle('hidden', !shift.unrestrictedCall);
+    document.getElementById('callStart').value = shift.callStart || '17:00';
+    document.getElementById('callEnd').value = shift.callEnd || '07:00';
+    document.getElementById('shiftForcedOff').checked = shift.forcedOff || false;
+    document.getElementById('cardiacLiverOptions').classList.toggle('hidden', shift.assignmentType !== 'cardiac_liver');
+    document.getElementById('subspecCoverage').checked = shift.subspecCoverage || false;
+    document.getElementById('teeCount').value = shift.teeCount || 0;
+  }
+}
+
+document.getElementById('saveShiftBtn').addEventListener('click', () => {
+  const date = workingDate;
+  if (!date) { showToast('Please select a date'); return; }
+  data.shifts[date] = {
+    date, assignmentType: getSelectedAssignmentType(),
+    startTime: document.getElementById('shiftStart').value,
+    endTime: document.getElementById('shiftEnd').value,
+    isHoliday: document.getElementById('shiftHoliday').checked,
+    unrestrictedCall: document.getElementById('shiftUnrestrictedCall').checked,
+    callStart: document.getElementById('callStart').value,
+    callEnd: document.getElementById('callEnd').value,
+    forcedOff: document.getElementById('shiftForcedOff').checked,
+    subspecCoverage: document.getElementById('subspecCoverage').checked,
+    teeCount: parseInt(document.getElementById('teeCount').value) || 0
+  };
+  saveData(data);
+  updateHeaderPoints();
+  showToast('Shift saved!');
+});
+
+// ================================================================
+// CASE PAGE
+// ================================================================
+let selectedCaseType = 'standard';
+
+document.querySelectorAll('.case-type-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.case-type-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedCaseType = btn.dataset.case;
+    document.getElementById('standardFields').classList.toggle('hidden', selectedCaseType !== 'standard');
+    document.getElementById('simpleFields').classList.toggle('hidden', selectedCaseType === 'standard');
+    updatePointPreview();
+  });
+});
+
+document.getElementById('caseMedicalProc').addEventListener('change', function() {
+  document.getElementById('medicalUnitsRow').classList.toggle('hidden', !this.checked);
+  updatePointPreview();
+});
+
+document.getElementById('caseAcutePain').addEventListener('change', function() {
+  document.getElementById('acutePainUnitsRow').classList.toggle('hidden', !this.checked);
+  updatePointPreview();
+});
+
+['caseBaseUnits','caseStart','caseEnd','casePhysicalStatus','caseMedicalUnits','caseAcutePainUnits'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) { el.addEventListener('input', updatePointPreview); el.addEventListener('change', updatePointPreview); }
+});
+
+['caseEmergency','caseEModifier','caseHighRiskPeds','caseMedicalProc','caseAcutePain'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', updatePointPreview);
+});
+
+function updatePointPreview() {
+  const previewEl = document.getElementById('casePointPreview');
+  const previewPts = document.getElementById('previewPoints');
+  const tempCase = buildCaseFromForm();
+  const shift = data.shifts[workingDate] || { date: workingDate, assignmentType: 'OR', isHoliday: false };
+  const pts = calcCasePoints(tempCase, shift);
+  previewEl.classList.remove('hidden');
+  previewPts.textContent = pts.toFixed(2) + ' pts';
+}
+
+function buildCaseFromForm() {
+  return {
+    caseType: selectedCaseType,
+    procedure: document.getElementById('caseProcedure')?.value || selectedCaseType,
+    baseUnits: document.getElementById('caseBaseUnits')?.value || 0,
+    physicalStatus: document.getElementById('casePhysicalStatus')?.value || 'P3',
+    startTime: document.getElementById('caseStart')?.value || '',
+    endTime: document.getElementById('caseEnd')?.value || '',
+    isEmergency: document.getElementById('caseEmergency')?.checked || false,
+    eModifier: document.getElementById('caseEModifier')?.checked || false,
+    isMedicalProc: document.getElementById('caseMedicalProc')?.checked || false,
+    medicalUnits: document.getElementById('caseMedicalUnits')?.value || 0,
+    isAcutePain: document.getElementById('caseAcutePain')?.checked || false,
+    acutePainUnits: document.getElementById('caseAcutePainUnits')?.value || 0,
+    isHighRiskPeds: document.getElementById('caseHighRiskPeds')?.checked || false,
+    notes: document.getElementById('caseNotes')?.value || ''
+  };
+}
+
+document.getElementById('saveCaseBtn').addEventListener('click', () => {
+  const date = workingDate;
+  if (!date) { showToast('Set shift date first'); return; }
+  if (!data.shifts[date]) { showToast('Please save a shift for this date first'); return; }
+  const caseData = buildCaseFromForm();
+  caseData.id = genId();
+  caseData.shiftDate = date;
+  caseData.timestamp = new Date().toISOString();
+  if (caseData.caseType === 'standard') {
+    if (!caseData.startTime || !caseData.endTime) { showToast('Please enter start and end times'); return; }
+  }
+  data.cases.push(caseData);
+  saveData(data);
+  updateHeaderPoints();
+  showToast('Case saved! (' + calcCasePoints(caseData, data.shifts[date]).toFixed(2) + ' pts)');
+  resetCaseForm();
+});
+
+function resetCaseForm() {
+  document.getElementById('caseProcedure').value = '';
+  document.getElementById('caseBaseUnits').value = '0';
+  document.getElementById('casePhysicalStatus').value = 'P3';
+  document.getElementById('caseStart').value = '';
+  document.getElementById('caseEnd').value = '';
+  document.getElementById('caseEmergency').checked = false;
+  document.getElementById('caseEModifier').checked = false;
+  document.getElementById('caseMedicalProc').checked = false;
+  document.getElementById('caseMedicalUnits').value = '0';
+  document.getElementById('medicalUnitsRow').classList.add('hidden');
+  document.getElementById('caseAcutePain').checked = false;
+  document.getElementById('caseAcutePainUnits').value = '0';
+  document.getElementById('acutePainUnitsRow').classList.add('hidden');
+  document.getElementById('caseHighRiskPeds').checked = false;
+  document.getElementById('caseNotes').value = '';
+  document.getElementById('simpleNotes').value = '';
+  document.getElementById('casePointPreview').classList.add('hidden');
+}
+
+// ================================================================
+// TODAY PAGE
+// ================================================================
+function renderToday() {
+  const date = workingDate;
+  const shift = data.shifts[date];
+  const shiftCases = data.cases.filter(c => c.shiftDate === date);
+  document.getElementById('todayTitle').textContent = date === todayStr() ? "Today's Summary" : formatDate(date);
+
+  if (!shift) {
+    document.getElementById('todayAR').textContent = '0';
+    document.getElementById('todayProd').textContent = '0';
+    document.getElementById('todayCall').textContent = '0';
+    document.getElementById('todayTotal').textContent = '0';
+    document.getElementById('todayBreakdown').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No shift saved for this date.</p>';
+    document.getElementById('todayCaseList').innerHTML = '<div class="empty-state"><p>No cases logged yet.</p></div>';
+    document.getElementById('todayCaseCount').textContent = '';
+    return;
+  }
+
+  const totals = calcShiftTotal(shift);
+  document.getElementById('todayAR').textContent = totals.ar.toFixed(1);
+  document.getElementById('todayProd').textContent = totals.prod.toFixed(1);
+  document.getElementById('todayCall').textContent = (totals.call + totals.subspec).toFixed(1);
+  document.getElementById('todayTotal').textContent = totals.total.toFixed(1);
+
+  let bdHtml = '<div class="point-breakdown">';
+  bdHtml += `<div class="row"><span>Availability Rate</span><span>${totals.ar.toFixed(2)}</span></div>`;
+  bdHtml += `<div class="row"><span>Productivity (${shiftCases.length} cases)</span><span>${totals.prod.toFixed(2)}</span></div>`;
+  if (totals.call > 0) bdHtml += `<div class="row"><span>Unrestricted Call</span><span>${totals.call.toFixed(2)}</span></div>`;
+  if (totals.subspec > 0) bdHtml += `<div class="row"><span>Subspecialty</span><span>${totals.subspec.toFixed(2)}</span></div>`;
+  bdHtml += `<div class="row total"><span>Total</span><span>${totals.total.toFixed(2)} pts</span></div>`;
+  bdHtml += '</div>';
+  document.getElementById('todayBreakdown').innerHTML = bdHtml;
+
+  document.getElementById('todayCaseCount').textContent = `(${shiftCases.length})`;
+
+  if (shiftCases.length === 0) {
+    document.getElementById('todayCaseList').innerHTML = '<div class="empty-state"><p>No cases logged yet.</p></div>';
+    return;
+  }
+
+  let listHtml = '';
+  shiftCases.forEach(c => {
+    const pts = calcCasePoints(c, shift);
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
+    const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : '';
+    const details = [];
+    if (c.physicalStatus && c.caseType === 'standard') details.push(c.physicalStatus);
+    if (c.baseUnits && c.caseType === 'standard') details.push(`${c.baseUnits} base`);
+    if (timeStr) details.push(timeStr);
+    listHtml += `
+      <div class="case-list-item">
+        <div class="info">
+          <h4>${escHtml(name)}</h4>
+          <p>${escHtml(details.join(' | '))}</p>
+          ${c.notes ? `<p style="margin-top:2px;font-style:italic;">${escHtml(c.notes)}</p>` : ''}
+        </div>
+        <div class="actions">
+          <span class="point-badge">${pts.toFixed(1)} pts</span>
+          <button class="btn btn-danger btn-sm" onclick="deleteCase('${c.id}')">Del</button>
+        </div>
+      </div>`;
+  });
+  document.getElementById('todayCaseList').innerHTML = listHtml;
+}
+
+function escHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function deleteCase(id) {
+  if (!confirm('Delete this case?')) return;
+  data.cases = data.cases.filter(c => c.id !== id);
+  saveData(data);
+  updateHeaderPoints();
+  renderToday();
+  showToast('Case deleted');
+}
+
+// ================================================================
+// HISTORY (in More page)
+// ================================================================
+let historyYear = new Date().getFullYear();
+let historyMonth = new Date().getMonth();
+
+function renderHistory() {
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('historyMonth').textContent = `${monthNames[historyMonth]} ${historyYear}`;
+  const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
+  const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix)).sort((a,b) => b.date.localeCompare(a.date));
+  let monthTotalPts = 0;
+  let listHtml = '';
+  monthShifts.forEach(shift => {
+    const totals = calcShiftTotal(shift);
+    monthTotalPts += totals.total;
+    const caseCount = data.cases.filter(c => c.shiftDate === shift.date).length;
+    listHtml += `
+      <div class="day-list-item" onclick="showDayDetail('${shift.date}')">
+        <div>
+          <div class="date">${formatDate(shift.date)}</div>
+          <div class="meta">${shift.assignmentType.replace(/_/g,' ')} | ${caseCount} cases</div>
+        </div>
+        <span class="point-badge large">${totals.total.toFixed(1)}</span>
+      </div>`;
+  });
+  document.getElementById('monthTotal').textContent = monthTotalPts.toFixed(1);
+  document.getElementById('monthDays').textContent = monthShifts.length;
+  document.getElementById('historyList').innerHTML = monthShifts.length === 0
+    ? '<div class="empty-state"><p>No shifts recorded for this month.</p></div>'
+    : listHtml;
+}
+
+document.getElementById('prevMonth').addEventListener('click', () => {
+  historyMonth--;
+  if (historyMonth < 0) { historyMonth = 11; historyYear--; }
+  renderHistory();
+});
+
+document.getElementById('nextMonth').addEventListener('click', () => {
+  historyMonth++;
+  if (historyMonth > 11) { historyMonth = 0; historyYear++; }
+  renderHistory();
+});
+
+function showDayDetail(dateStr) {
+  const shift = data.shifts[dateStr];
+  if (!shift) return;
+  const totals = calcShiftTotal(shift);
+  const shiftCases = data.cases.filter(c => c.shiftDate === dateStr);
+  document.getElementById('dayModalTitle').textContent = formatDate(dateStr);
+  let html = `
+    <div class="summary-grid" style="margin-bottom:12px;">
+      <div class="summary-item"><div class="label">AR</div><div class="value blue">${totals.ar.toFixed(1)}</div></div>
+      <div class="summary-item"><div class="label">Prod</div><div class="value green">${totals.prod.toFixed(1)}</div></div>
+      <div class="summary-item"><div class="label">Call/Other</div><div class="value yellow">${(totals.call + totals.subspec).toFixed(1)}</div></div>
+      <div class="summary-item"><div class="label">Total</div><div class="value">${totals.total.toFixed(1)}</div></div>
+    </div>
+    <h3 style="margin-bottom:8px;">Cases (${shiftCases.length})</h3>`;
+  shiftCases.forEach(c => {
+    const pts = calcCasePoints(c, shift);
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
+    const breakdown = getCaseBreakdown(c, shift);
+    html += `<div style="padding:8px 0;border-bottom:1px solid var(--surface2);">
+      <div style="display:flex;justify-content:space-between;"><strong>${escHtml(name)}</strong><span class="point-badge">${pts.toFixed(1)}</span></div>`;
+    breakdown.forEach(r => {
+      html += `<div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-dim);padding:2px 0;"><span>${escHtml(r.label)}</span><span>${r.pts.toFixed(2)}</span></div>`;
+    });
+    if (c.notes) html += `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;margin-top:2px;">${escHtml(c.notes)}</div>`;
+    html += '</div>';
+  });
+  document.getElementById('dayModalContent').innerHTML = html;
+  document.getElementById('dayModal').classList.remove('hidden');
+}
+
+document.getElementById('closeDayModal').addEventListener('click', () => { document.getElementById('dayModal').classList.add('hidden'); });
+document.getElementById('dayModal').addEventListener('click', (e) => {
+  if (e.target.id === 'dayModal') document.getElementById('dayModal').classList.add('hidden');
+});
+
+// ================================================================
+// DASHBOARD (in More page)
+// ================================================================
+let monthlyChart = null;
+let breakdownChart = null;
+
+function renderDashboard() {
+  renderMonthlyChart();
+  renderBreakdownChart();
+  renderStabilization();
+}
+
+function getMonthlyTotals() {
+  const months = {};
+  Object.values(data.shifts).forEach(shift => {
+    const mk = shift.date.substring(0, 7);
+    if (!months[mk]) months[mk] = 0;
+    months[mk] += calcShiftTotal(shift).total;
+  });
+  return months;
+}
+
+function renderMonthlyChart() {
+  const totals = getMonthlyTotals();
+  const sortedKeys = Object.keys(totals).sort();
+  const last6 = sortedKeys.slice(-6);
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const labels = last6.map(k => { const [y,m] = k.split('-'); return monthNames[parseInt(m)-1] + ' ' + y; });
+  const values = last6.map(k => round2(totals[k]));
+  const ctx = document.getElementById('monthlyChart').getContext('2d');
+  if (monthlyChart) monthlyChart.destroy();
+  monthlyChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Total Points', data: values, backgroundColor: 'rgba(59,130,246,0.7)', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(71,85,105,0.3)' } },
+        x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderBreakdownChart() {
+  const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
+  const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix));
+  let totalAR = 0, totalProd = 0, totalCall = 0, totalSubspec = 0;
+  monthShifts.forEach(shift => { const t = calcShiftTotal(shift); totalAR += t.ar; totalProd += t.prod; totalCall += t.call; totalSubspec += t.subspec; });
+  const ctx = document.getElementById('breakdownChart').getContext('2d');
+  if (breakdownChart) breakdownChart.destroy();
+  breakdownChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Availability','Productivity','Call','Subspecialty'],
+      datasets: [{ data: [round2(totalAR), round2(totalProd), round2(totalCall), round2(totalSubspec)], backgroundColor: ['#3b82f6','#10b981','#f59e0b','#8b5cf6'], borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 16 } } } }
+  });
+}
+
+function renderStabilization() {
+  const now = new Date();
+  const mt = getMonthlyTotals();
+  function mk(offset) { const d = new Date(now.getFullYear(), now.getMonth() - offset, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+  const raw = mt[mk(0)] || 0;
+  const weighted = round2(0.10 * raw + 0.40 * (mt[mk(1)]||0) + 0.25 * (mt[mk(2)]||0) + 0.15 * (mt[mk(3)]||0) + 0.10 * (mt[mk(4)]||0));
+  document.getElementById('stabRaw').textContent = raw.toFixed(1);
+  document.getElementById('stabWeighted').textContent = weighted.toFixed(1);
+}
+
+// ================================================================
+// EXPORT / IMPORT
+// ================================================================
+document.getElementById('exportCSVBtn').addEventListener('click', () => {
+  const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
+  const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix)).sort((a,b) => a.date.localeCompare(b.date));
+  let csv = 'Date,Assignment,Shift Start,Shift End,AR Points,Productivity Points,Call Points,Subspec Points,Total Points,Cases\n';
+  monthShifts.forEach(shift => {
+    const totals = calcShiftTotal(shift);
+    const cc = data.cases.filter(c => c.shiftDate === shift.date).length;
+    csv += `${shift.date},${shift.assignmentType},${shift.startTime},${shift.endTime},${totals.ar.toFixed(2)},${totals.prod.toFixed(2)},${totals.call.toFixed(2)},${totals.subspec.toFixed(2)},${totals.total.toFixed(2)},${cc}\n`;
+  });
+  const namePrefix = settings.name ? settings.name.replace(/\s+/g, '_') + '_' : '';
+  downloadFile(csv, `${namePrefix}mwa-points-${prefix}.csv`, 'text/csv');
+  showToast('CSV exported!');
+});
+
+document.getElementById('exportAllBtn').addEventListener('click', () => {
+  const namePrefix = settings.name ? settings.name.replace(/\s+/g, '_') + '_' : '';
+  downloadFile(JSON.stringify(data, null, 2), `${namePrefix}mwa-backup.json`, 'application/json');
+  showToast('Data exported!');
+});
+
+document.getElementById('importFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const imported = JSON.parse(ev.target.result);
+      if (imported.shifts && imported.cases) {
+        if (confirm('This will replace all existing data. Continue?')) {
+          data = imported;
+          saveData(data);
+          updateHeaderPoints();
+          showToast('Data imported!');
+          renderHistory();
+        }
+      } else { showToast('Invalid file format'); }
+    } catch(err) { showToast('Error reading file'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+document.getElementById('clearAllBtn').addEventListener('click', () => {
+  if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+    if (confirm('Really delete everything?')) {
+      data = { shifts: {}, cases: [] };
+      saveData(data);
+      updateHeaderPoints();
+      showToast('All data cleared');
+      renderHistory();
+    }
+  }
+});
+
+function downloadFile(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ================================================================
+// SETTINGS
+// ================================================================
+const nameInput = document.getElementById('settingsName');
+nameInput.value = settings.name || '';
+nameInput.addEventListener('change', () => {
+  settings.name = nameInput.value;
+  saveSettings(settings);
+  showToast('Name saved');
+});
+
+// ================================================================
+// HEADER POINTS
+// ================================================================
+function updateHeaderPoints() {
+  const date = workingDate;
+  const shift = data.shifts[date];
+  if (shift) {
+    const totals = calcShiftTotal(shift);
+    document.getElementById('headerPoints').textContent = totals.total.toFixed(1) + ' pts';
+  } else {
+    document.getElementById('headerPoints').textContent = '0 pts';
+  }
+}
+
+// ================================================================
+// RECONCILE PAGE — Tab switching
+// ================================================================
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('rtab-qgenda').classList.toggle('hidden', btn.dataset.rtab !== 'qgenda');
+    document.getElementById('rtab-production').classList.toggle('hidden', btn.dataset.rtab !== 'production');
+  });
+});
+
+function renderReconTabs() {
+  updateReconMonthLabels();
+}
+
+// ================================================================
+// QGENDA RECONCILIATION
+// ================================================================
+let qgendaData = [];
+let qYear = new Date().getFullYear();
+let qMonth = new Date().getMonth();
+
+function updateReconMonthLabels() {
+  const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('qMonthLabel').textContent = `${mn[qMonth]} ${qYear}`;
+  document.getElementById('pMonthLabel').textContent = `${mn[pMonth]} ${pYear}`;
+}
+
+document.getElementById('qPrevMonth').addEventListener('click', () => { qMonth--; if (qMonth < 0) { qMonth = 11; qYear--; } updateReconMonthLabels(); renderQgendaRecon(); });
+document.getElementById('qNextMonth').addEventListener('click', () => { qMonth++; if (qMonth > 11) { qMonth = 0; qYear++; } updateReconMonthLabels(); renderQgendaRecon(); });
+
+// Upload area
+document.getElementById('qgendaUploadArea').addEventListener('click', () => document.getElementById('qgendaFile').click());
+
+document.getElementById('qgendaFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const wb = XLSX.read(ev.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      qgendaData = rows.map(r => {
+        // Parse the date fields — handle Excel serial numbers and strings
+        let schedDate = parseExcelDate(r['Schedule Date']);
+        let clockInDate = parseExcelDate(r['Effective Clock In Date']);
+        let clockOutDate = parseExcelDate(r['Effective Clock Out Date']);
+        return {
+          scheduleDate: schedDate,
+          clockInDate: clockInDate,
+          clockInTime: parseExcelTime(r['Effective Clock In Time']),
+          clockOutDate: clockOutDate,
+          clockOutTime: parseExcelTime(r['Effective Clock Out Time']),
+          duration: parseFloat(r['Duration']) || 0,
+          task: String(r['Scheduled Task Abbreviation'] || ''),
+          location: String(r['Location Name'] || ''),
+          notes: String(r['Notes'] || '')
+        };
+      });
+      localStorage.setItem(QGENDA_KEY, JSON.stringify(qgendaData));
+      showToast(`Loaded ${qgendaData.length} QGenda entries`);
+
+      // Auto-detect month from data
+      if (qgendaData.length > 0 && qgendaData[0].scheduleDate) {
+        const d = new Date(qgendaData[0].scheduleDate + 'T12:00:00');
+        if (!isNaN(d)) { qYear = d.getFullYear(); qMonth = d.getMonth(); updateReconMonthLabels(); }
+      }
+      renderQgendaRecon();
+    } catch(err) {
+      showToast('Error reading QGenda file: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+});
+
+function parseExcelDate(val) {
+  if (!val && val !== 0) return '';
+  // Excel serial number
+  if (typeof val === 'number') {
+    const d = new Date((val - 25569) * 86400 * 1000);
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+  // String like "1/2/2026" or "2026-01-02"
+  const s = String(val).trim();
+  if (s.includes('-') && s.length === 10) return s; // already YYYY-MM-DD
+  const parts = s.split('/');
+  if (parts.length === 3) {
+    let [m, d, y] = parts.map(Number);
+    if (y < 100) y += 2000;
+    return y + '-' + String(m).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+  }
+  return s;
+}
+
+function parseExcelTime(val) {
+  if (!val && val !== 0) return '';
+  // Excel fractional day (0.0 to 1.0)
+  if (typeof val === 'number' && val < 1) {
+    const totalMin = Math.round(val * 1440);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  }
+  // String like "7:00" or "13:01"
+  const s = String(val).trim();
+  if (s.includes(':')) {
+    const [h, m] = s.split(':').map(Number);
+    return String(h).padStart(2,'0') + ':' + String(m || 0).padStart(2,'0');
+  }
+  return s;
+}
+
+function renderQgendaRecon() {
+  // Load cached data if needed
+  if (qgendaData.length === 0) {
+    try {
+      const cached = localStorage.getItem(QGENDA_KEY);
+      if (cached) qgendaData = JSON.parse(cached);
+    } catch(e) {}
+  }
+
+  const container = document.getElementById('qgendaResults');
+  const prefix = `${qYear}-${String(qMonth+1).padStart(2,'0')}`;
+
+  // Filter QGenda entries for month (by Schedule Date)
+  const qEntries = qgendaData.filter(e => e.scheduleDate && e.scheduleDate.startsWith(prefix));
+  const trackerShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix));
+
+  if (qgendaData.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>Upload a QGenda export file to begin reconciliation.</p></div>';
+    return;
+  }
+
+  if (qEntries.length === 0 && trackerShifts.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No data for this month in QGenda or Tracker.</p></div>';
+    return;
+  }
+
+  // Group QGenda by schedule date
+  const qByDate = {};
+  qEntries.forEach(e => {
+    if (!qByDate[e.scheduleDate]) qByDate[e.scheduleDate] = [];
+    qByDate[e.scheduleDate].push(e);
+  });
+
+  // Get all unique dates
+  const allDates = new Set([...Object.keys(qByDate), ...trackerShifts.map(s => s.date)]);
+  const sortedDates = [...allDates].sort();
+
+  // Totals
+  let qTotalHours = 0;
+  let tTotalHours = 0;
+  let matchCount = 0, warnCount = 0, missCount = 0;
+
+  let html = '<div class="card"><h2>QGenda vs Tracker</h2>';
+  html += '<table class="recon-table"><thead><tr><th>Date</th><th>QGenda</th><th>Tracker</th><th>Status</th></tr></thead><tbody>';
+
+  sortedDates.forEach(date => {
+    const qDay = qByDate[date] || [];
+    const tShift = data.shifts[date];
+
+    // QGenda total hours for the day
+    const qHours = qDay.reduce((s, e) => s + e.duration, 0);
+    qTotalHours += qHours;
+
+    // Tracker hours
+    let tHours = 0;
+    if (tShift) {
+      let start = timeToMinutes(tShift.startTime);
+      let end = timeToMinutes(tShift.endTime);
+      if (end <= start) end += 1440;
+      tHours = (end - start) / 60;
+      tTotalHours += tHours;
+    }
+
+    let status = '', rowClass = '';
+    if (qDay.length > 0 && tShift) {
+      const diff = Math.abs(qHours - tHours);
+      if (diff <= 0.25) { status = 'Match'; rowClass = 'match'; matchCount++; }
+      else if (diff <= 1) { status = 'Close'; rowClass = 'warn'; warnCount++; }
+      else { status = `${diff.toFixed(1)}h diff`; rowClass = 'miss'; missCount++; }
+    } else if (qDay.length > 0 && !tShift) {
+      status = 'Missing in Tracker'; rowClass = 'miss'; missCount++;
+    } else if (qDay.length === 0 && tShift) {
+      status = 'Missing in QGenda'; rowClass = 'warn'; warnCount++;
+    }
+
+    const qDetail = qDay.map(e => `${e.clockInTime}-${e.clockOutTime}`).join(', ');
+    const tDetail = tShift ? `${tShift.startTime}-${tShift.endTime}` : '-';
+
+    html += `<tr class="${rowClass}">
+      <td>${formatDateShort(date)}</td>
+      <td>${qHours.toFixed(1)}h<br><span style="font-size:0.65rem;color:var(--text-dim)">${escHtml(qDetail)}</span></td>
+      <td>${tHours > 0 ? tHours.toFixed(1) + 'h' : '-'}<br><span style="font-size:0.65rem;color:var(--text-dim)">${tDetail}</span></td>
+      <td>${status}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+
+  // Summary card
+  let summary = '<div class="card"><h2>Summary</h2><div class="summary-grid">';
+  summary += `<div class="summary-item"><div class="label">QGenda Hours</div><div class="value blue">${qTotalHours.toFixed(1)}</div></div>`;
+  summary += `<div class="summary-item"><div class="label">Tracker Hours</div><div class="value green">${tTotalHours.toFixed(1)}</div></div>`;
+  summary += `<div class="summary-item"><div class="label">Matched</div><div class="value green">${matchCount}</div></div>`;
+  summary += `<div class="summary-item"><div class="label">Issues</div><div class="value" style="color:var(--danger)">${warnCount + missCount}</div></div>`;
+  summary += '</div></div>';
+
+  container.innerHTML = summary + html;
+}
+
+// ================================================================
+// PRODUCTION RECONCILIATION (PDF)
+// ================================================================
+let prodData = [];
+let pYear = new Date().getFullYear();
+let pMonth = new Date().getMonth();
+
+document.getElementById('pPrevMonth').addEventListener('click', () => { pMonth--; if (pMonth < 0) { pMonth = 11; pYear--; } updateReconMonthLabels(); renderProdRecon(); });
+document.getElementById('pNextMonth').addEventListener('click', () => { pMonth++; if (pMonth > 11) { pMonth = 0; pYear++; } updateReconMonthLabels(); renderProdRecon(); });
+
+document.getElementById('prodUploadArea').addEventListener('click', () => document.getElementById('prodFile').click());
+
+document.getElementById('prodFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  showToast('Parsing PDF...');
+
+  try {
+    // Dynamically load pdf.js
+    if (!window.pdfjsLib) {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs', true);
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    let allText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const items = textContent.items;
+      // Group by y-position to reconstruct rows
+      const rows = {};
+      items.forEach(item => {
+        const y = Math.round(item.transform[5]);
+        if (!rows[y]) rows[y] = [];
+        rows[y].push({ x: item.transform[4], text: item.str });
+      });
+      // Sort rows by y (descending = top to bottom in PDF coords)
+      const sortedYs = Object.keys(rows).map(Number).sort((a, b) => b - a);
+      sortedYs.forEach(y => {
+        const row = rows[y].sort((a, b) => a.x - b.x);
+        allText += row.map(r => r.text).join('\t') + '\n';
+      });
+    }
+
+    prodData = parseProdText(allText);
+    localStorage.setItem(PROD_KEY, JSON.stringify(prodData));
+    showToast(`Loaded ${prodData.length} billing cases`);
+
+    // Auto-detect month
+    if (prodData.length > 0 && prodData[0].date) {
+      const d = new Date(prodData[0].date + 'T12:00:00');
+      if (!isNaN(d)) { pYear = d.getFullYear(); pMonth = d.getMonth(); updateReconMonthLabels(); }
+    }
+    renderProdRecon();
+  } catch(err) {
+    showToast('Error reading PDF: ' + err.message);
+    console.error(err);
+  }
+  e.target.value = '';
+});
+
+function loadScript(src, isModule) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    if (isModule) s.type = 'module';
+    s.onload = () => {
+      // For pdf.js loaded as module, we need the global
+      if (src.includes('pdf.min.mjs') && !window.pdfjsLib) {
+        // Try importing
+        import(src).then(mod => {
+          window.pdfjsLib = mod;
+          resolve();
+        }).catch(reject);
+        return;
+      }
+      resolve();
+    };
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+function parseProdText(text) {
+  const lines = text.split('\n');
+  const cases = [];
+  let currentDate = '';
+
+  for (const line of lines) {
+    const cols = line.split('\t').map(c => c.trim());
+
+    // Try to find date of service pattern: M/D/YY or M/D/YYYY
+    const dateMatch = cols[0] && cols[0].match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (dateMatch) {
+      let [, m, d, y] = dateMatch;
+      y = parseInt(y);
+      if (y < 100) y += 2000;
+      currentDate = y + '-' + String(parseInt(m)).padStart(2,'0') + '-' + String(parseInt(d)).padStart(2,'0');
+    }
+
+    // Look for a row with military time start/end (4-digit integers)
+    // Pattern: ... startTime endTime minutes bonusMin timePoints units ...
+    if (!currentDate) continue;
+
+    // Try to extract case data — look for CPT code pattern or numeric start time
+    let startTime = '', endTime = '', mdMinutes = 0, totalPoints = 0, units = 0, locCode = '', cptCode = '';
+
+    // Scan columns for military time (3-4 digit number between 0 and 2359)
+    for (let i = 0; i < cols.length; i++) {
+      const val = cols[i].replace(/[^0-9]/g, '');
+      if (val.length >= 3 && val.length <= 4) {
+        const num = parseInt(val);
+        if (num >= 0 && num <= 2359) {
+          if (!startTime) startTime = val;
+          else if (!endTime) { endTime = val; break; }
+        }
+      }
+    }
+
+    // Look for Total at end of row
+    const lastNum = cols.filter(c => c && !isNaN(parseFloat(c)));
+    if (lastNum.length >= 2 && startTime && endTime) {
+      totalPoints = parseFloat(lastNum[lastNum.length - 1]) || 0;
+      // Find units — typically a small integer near the middle
+      for (const c of cols) {
+        const n = parseFloat(c);
+        if (!isNaN(n) && n >= 1 && n <= 30 && Number.isInteger(n) && c !== startTime && c !== endTime) {
+          units = n;
+          break;
+        }
+      }
+
+      // Loc code — short alphabetic code
+      for (const c of cols) {
+        if (c.match(/^[A-Z]{2,4}$/) && c !== 'Y') {
+          locCode = c;
+          break;
+        }
+      }
+
+      // CPT code — 5-digit number
+      for (const c of cols) {
+        if (c.match(/^\d{5}$/)) {
+          cptCode = c;
+          break;
+        }
+      }
+
+      // Only add if we found meaningful data
+      if (totalPoints !== 0 || units > 0) {
+        cases.push({
+          date: currentDate,
+          startTime: formatMilitaryTime(startTime),
+          endTime: formatMilitaryTime(endTime),
+          mdMinutes: mdMinutes,
+          totalPoints: totalPoints,
+          units: units,
+          locCode: locCode,
+          cptCode: cptCode
+        });
+      }
+    }
+  }
+
+  // Filter out rows that look like subtotals (Day Total rows often lack times)
+  return cases.filter(c => c.startTime && c.endTime);
+}
+
+function formatMilitaryTime(val) {
+  const s = val.padStart(4, '0');
+  return s.substring(0, 2) + ':' + s.substring(2, 4);
+}
+
+function renderProdRecon() {
+  // Load cached
+  if (prodData.length === 0) {
+    try {
+      const cached = localStorage.getItem(PROD_KEY);
+      if (cached) prodData = JSON.parse(cached);
+    } catch(e) {}
+  }
+
+  const container = document.getElementById('prodResults');
+  const prefix = `${pYear}-${String(pMonth+1).padStart(2,'0')}`;
+
+  const billingCases = prodData.filter(c => c.date && c.date.startsWith(prefix));
+  const trackerCases = data.cases.filter(c => c.shiftDate && c.shiftDate.startsWith(prefix));
+
+  if (prodData.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>Upload a Charge Detail PDF to begin reconciliation.</p></div>';
+    return;
+  }
+
+  if (billingCases.length === 0 && trackerCases.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No data for this month.</p></div>';
+    return;
+  }
+
+  // Group by date
+  const bByDate = {};
+  billingCases.forEach(c => { if (!bByDate[c.date]) bByDate[c.date] = []; bByDate[c.date].push(c); });
+
+  const tByDate = {};
+  trackerCases.forEach(c => { if (!tByDate[c.shiftDate]) tByDate[c.shiftDate] = []; tByDate[c.shiftDate].push(c); });
+
+  const allDates = new Set([...Object.keys(bByDate), ...Object.keys(tByDate)]);
+  const sortedDates = [...allDates].sort();
+
+  let bTotalPts = 0, tTotalPts = 0;
+  let bTotalCases = 0, tTotalCases = 0;
+  let matchCount = 0, issueCount = 0;
+
+  let html = '<div class="card"><h2>Billing vs Tracker by Day</h2>';
+  html += '<table class="recon-table"><thead><tr><th>Date</th><th>Billing</th><th>Tracker</th><th>Status</th></tr></thead><tbody>';
+
+  sortedDates.forEach(date => {
+    const bDay = bByDate[date] || [];
+    const tDay = tByDate[date] || [];
+    const shift = data.shifts[date];
+
+    const bPts = bDay.reduce((s, c) => s + c.totalPoints, 0);
+    const tPts = tDay.reduce((s, c) => s + calcCasePoints(c, shift), 0);
+    bTotalPts += bPts;
+    tTotalPts += tPts;
+    bTotalCases += bDay.length;
+    tTotalCases += tDay.length;
+
+    const caseDiff = Math.abs(bDay.length - tDay.length);
+    const ptDiff = Math.abs(bPts - tPts);
+
+    let status = '', rowClass = '';
+    if (bDay.length === 0) { status = 'Not in billing'; rowClass = 'warn'; issueCount++; }
+    else if (tDay.length === 0) { status = 'Not in tracker'; rowClass = 'miss'; issueCount++; }
+    else if (caseDiff === 0 && ptDiff < 5) { status = 'Match'; rowClass = 'match'; matchCount++; }
+    else if (caseDiff <= 1 && ptDiff < 15) { status = 'Close'; rowClass = 'warn'; issueCount++; }
+    else { status = 'Mismatch'; rowClass = 'miss'; issueCount++; }
+
+    html += `<tr class="${rowClass}">
+      <td>${formatDateShort(date)}</td>
+      <td>${bDay.length} cases<br><span style="font-size:0.7rem;color:var(--text-dim)">${bPts.toFixed(1)} pts</span></td>
+      <td>${tDay.length} cases<br><span style="font-size:0.7rem;color:var(--text-dim)">${tPts.toFixed(1)} pts</span></td>
+      <td>${status}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+
+  // Per-case matching for days with both billing and tracker data
+  let detailHtml = '';
+  sortedDates.forEach(date => {
+    const bDay = bByDate[date] || [];
+    const tDay = tByDate[date] || [];
+    if (bDay.length === 0 || tDay.length === 0) return;
+
+    const shift = data.shifts[date];
+    detailHtml += `<div class="card"><h3>${formatDateShort(date)} - Case Match</h3>`;
+    detailHtml += '<table class="recon-table"><thead><tr><th>Billing</th><th>Tracker</th><th>Status</th></tr></thead><tbody>';
+
+    // Match by start time overlap
+    const usedTracker = new Set();
+    bDay.forEach(bc => {
+      const bStart = timeToMinutes(bc.startTime);
+      let bestMatch = null, bestDiff = 999;
+
+      tDay.forEach((tc, idx) => {
+        if (usedTracker.has(idx)) return;
+        const tStart = timeToMinutes(tc.startTime || '');
+        if (!tStart) return;
+        const diff = Math.abs(bStart - tStart);
+        if (diff < bestDiff && diff <= 30) { bestDiff = diff; bestMatch = idx; }
+      });
+
+      if (bestMatch !== null) {
+        usedTracker.add(bestMatch);
+        const tc = tDay[bestMatch];
+        const tcPts = calcCasePoints(tc, shift);
+        const ptsDiff = Math.abs(bc.totalPoints - tcPts);
+        const rc = ptsDiff < 3 ? 'match' : ptsDiff < 10 ? 'warn' : 'miss';
+
+        detailHtml += `<tr class="${rc}">
+          <td>${bc.startTime} ${bc.cptCode || ''}<br><span style="font-size:0.7rem">${bc.totalPoints.toFixed(1)} pts, ${bc.units}u</span></td>
+          <td>${tc.startTime || ''} ${escHtml(tc.procedure || tc.caseType)}<br><span style="font-size:0.7rem">${tcPts.toFixed(1)} pts, ${tc.baseUnits || '-'}u</span></td>
+          <td>${rc === 'match' ? 'Match' : ptsDiff.toFixed(1) + ' diff'}</td>
+        </tr>`;
+      } else {
+        detailHtml += `<tr class="miss">
+          <td>${bc.startTime} ${bc.cptCode || ''}<br><span style="font-size:0.7rem">${bc.totalPoints.toFixed(1)} pts</span></td>
+          <td>-</td>
+          <td>No match</td>
+        </tr>`;
+      }
+    });
+
+    // Unmatched tracker cases
+    tDay.forEach((tc, idx) => {
+      if (usedTracker.has(idx)) return;
+      const tcPts = calcCasePoints(tc, shift);
+      detailHtml += `<tr class="warn">
+        <td>-</td>
+        <td>${tc.startTime || ''} ${escHtml(tc.procedure || tc.caseType)}<br><span style="font-size:0.7rem">${tcPts.toFixed(1)} pts</span></td>
+        <td>Not in billing</td>
+      </tr>`;
+    });
+
+    detailHtml += '</tbody></table></div>';
+  });
+
+  // Summary
+  let summary = '<div class="card"><h2>Production Summary</h2><div class="summary-grid">';
+  summary += `<div class="summary-item"><div class="label">Billing Points</div><div class="value blue">${bTotalPts.toFixed(1)}</div></div>`;
+  summary += `<div class="summary-item"><div class="label">Tracker Points</div><div class="value green">${tTotalPts.toFixed(1)}</div></div>`;
+  summary += `<div class="summary-item"><div class="label">Billing Cases</div><div class="value blue">${bTotalCases}</div></div>`;
+  summary += `<div class="summary-item"><div class="label">Tracker Cases</div><div class="value green">${tTotalCases}</div></div>`;
+  summary += `<div class="summary-item"><div class="label">Days Matched</div><div class="value green">${matchCount}</div></div>`;
+  summary += `<div class="summary-item"><div class="label">Days w/ Issues</div><div class="value" style="color:var(--danger)">${issueCount}</div></div>`;
+  summary += '</div></div>';
+
+  container.innerHTML = summary + html + detailHtml;
+}
+
+// ================================================================
+// SERVICE WORKER REGISTRATION
+// ================================================================
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ================================================================
+// INIT
+// ================================================================
+setWorkingDate(todayStr());
+renderTemplates();
+updateHeaderPoints();
+updateReconMonthLabels();
+</script>
+
+</body>
+</html>
