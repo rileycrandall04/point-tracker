@@ -526,6 +526,49 @@ textarea { resize: vertical; min-height: 60px; }
 .divider { height: 1px; background: var(--border); margin: 16px 0; }
 .hidden { display: none !important; }
 
+/* ===== END TIME WARNING ===== */
+.end-time-warning {
+  background: rgba(245,158,11,0.15);
+  border: 1px solid var(--accent2);
+  color: var(--accent2);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+input.warn-empty {
+  border-color: var(--accent2) !important;
+  box-shadow: 0 0 0 1px var(--accent2);
+}
+
+/* ===== MONTHLY CASES ===== */
+.day-cases-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  cursor: pointer;
+  border-bottom: 1px solid var(--surface2);
+  min-height: 44px;
+}
+.day-cases-header .arrow { transition: transform 0.2s; color: var(--text-dim); font-size: 0.8rem; }
+.day-cases-header .arrow.open { transform: rotate(180deg); }
+.day-cases-body { overflow: hidden; transition: max-height 0.3s ease; max-height: 0; }
+.monthly-case-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0 8px 12px;
+  border-bottom: 1px solid rgba(71,85,105,0.3);
+  gap: 8px;
+}
+.monthly-case-item:last-child { border-bottom: none; }
+.monthly-case-item .info { flex: 1; min-width: 0; }
+.monthly-case-item .info h4 { font-size: 0.8rem; font-weight: 600; }
+.monthly-case-item .info p { font-size: 0.7rem; color: var(--text-dim); }
+.monthly-case-item .actions { display: flex; gap: 6px; flex-shrink: 0; }
+
 .settings-field {
   display: flex;
   align-items: center;
@@ -558,6 +601,9 @@ textarea { resize: vertical; min-height: 60px; }
 
 <!-- SHIFT PAGE -->
 <div class="page active" id="page-shift">
+  <div class="end-time-warning hidden" id="endTimeWarning">
+    Shift end time is missing — AR points will be 0 until an end time is entered.
+  </div>
   <div class="card">
     <div class="card-collapse-header" id="templateCollapseHeader">
       <h2>Quick Templates</h2>
@@ -645,6 +691,25 @@ textarea { resize: vertical; min-height: 60px; }
       </div>
     </div>
 
+    <div id="supervisionOverlaySection" class="hidden">
+      <div class="divider"></div>
+      <h3>CRNA Supervision</h3>
+      <div class="checkbox-group">
+        <input type="checkbox" id="supervisionOverlayCheck">
+        <label for="supervisionOverlayCheck">Add CRNA supervision period (7 pts/hr)</label>
+      </div>
+      <div class="form-row hidden" id="supervisionTimes">
+        <div class="form-group">
+          <label>Supervision Start</label>
+          <input type="time" id="supervisionStart">
+        </div>
+        <div class="form-group">
+          <label>Supervision End</label>
+          <input type="time" id="supervisionEnd">
+        </div>
+      </div>
+    </div>
+
     <div style="margin-top: 16px;">
       <button class="btn btn-primary" id="saveShiftBtn">Save Shift</button>
     </div>
@@ -653,6 +718,33 @@ textarea { resize: vertical; min-height: 60px; }
 
 <!-- CASES PAGE -->
 <div class="page" id="page-cases">
+  <div class="card">
+    <div class="card-collapse-header" id="quickProcCollapseHeader">
+      <h2>Quick Procedures</h2>
+      <span class="arrow" id="quickProcArrow">&#9660;</span>
+    </div>
+    <div class="card-collapse-body" id="quickProcCollapseBody" style="max-height:0;">
+      <div class="template-grid" style="padding-top:12px;">
+        <button class="template-btn" data-qproc="colonoscopy">
+          <span class="t-label">Colonoscopy</span>
+          <span class="t-time">4 base units</span>
+        </button>
+        <button class="template-btn" data-qproc="egd">
+          <span class="t-label">EGD</span>
+          <span class="t-time">5 base units</span>
+        </button>
+        <button class="template-btn" data-qproc="double">
+          <span class="t-label">Double / EGD+Colo</span>
+          <span class="t-time">5 base units</span>
+        </button>
+        <button class="template-btn" data-qproc="tonsils">
+          <span class="t-label">Tonsils</span>
+          <span class="t-time">5 base units</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <h2>Log a Case</h2>
 
@@ -730,6 +822,11 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="checkbox-group">
         <input type="checkbox" id="caseHighRiskPeds">
         <label for="caseHighRiskPeds">High Risk Pediatrics (1.33x time)</label>
+      </div>
+
+      <div class="checkbox-group hidden" id="orCaseRow">
+        <input type="checkbox" id="caseORCase">
+        <label for="caseORCase">OR Case (use OR rates, no OB doubling)</label>
       </div>
     </div>
 
@@ -914,6 +1011,14 @@ textarea { resize: vertical; min-height: 60px; }
     </div>
   </div>
 
+  <!-- Monthly Cases -->
+  <div class="card">
+    <h2>Monthly Cases</h2>
+    <div id="monthlyCasesList">
+      <div class="empty-state"><p>No cases for this month.</p></div>
+    </div>
+  </div>
+
   <!-- Export / Import -->
   <div class="card">
     <h2>Data Management</h2>
@@ -950,6 +1055,98 @@ textarea { resize: vertical; min-height: 60px; }
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" id="cancelDatePicker">Cancel</button>
       <button class="btn btn-primary btn-sm" id="applyDatePicker" style="width:auto;">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Case edit modal -->
+<div class="modal-overlay hidden" id="caseEditModal">
+  <div class="modal">
+    <h2>Edit Case</h2>
+    <div class="form-group">
+      <label>Case Type</label>
+      <div class="case-type-grid" id="editCaseTypeGrid">
+        <div class="case-type-btn selected" data-ecase="standard">Standard Case</div>
+        <div class="case-type-btn" data-ecase="epidural_blood_patch">Epidural Blood Patch</div>
+        <div class="case-type-btn" data-ecase="emergency_intubation">Emergency Intubation</div>
+        <div class="case-type-btn" data-ecase="01996">Epidural Rounding (01996)</div>
+        <div class="case-type-btn" data-ecase="99231">Pain Rounding (99231)</div>
+        <div class="case-type-btn" data-ecase="tee">TEE Exam</div>
+      </div>
+    </div>
+    <div id="editStandardFields">
+      <div class="form-group">
+        <label>Procedure Name</label>
+        <input type="text" id="editCaseProcedure" placeholder="e.g., Lap Chole">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>ASA Base Units</label>
+          <input type="number" id="editCaseBaseUnits" min="0" step="1" value="0">
+        </div>
+        <div class="form-group">
+          <label>Physical Status</label>
+          <select id="editCasePhysicalStatus">
+            <option value="P1">P1</option>
+            <option value="P2">P2</option>
+            <option value="P3" selected>P3</option>
+            <option value="P4">P4</option>
+            <option value="P5">P5</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Anesthesia Start</label>
+          <input type="time" id="editCaseStart">
+        </div>
+        <div class="form-group">
+          <label>Anesthesia End</label>
+          <input type="time" id="editCaseEnd">
+        </div>
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="editCaseEmergency">
+        <label for="editCaseEmergency">Emergency Case (+1 pt)</label>
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="editCaseMedicalProc">
+        <label for="editCaseMedicalProc">Medical Procedure</label>
+      </div>
+      <div class="form-group hidden" id="editMedicalUnitsRow">
+        <label>ASA Medical Procedure Units</label>
+        <input type="number" id="editCaseMedicalUnits" min="0" step="1" value="0">
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="editCaseAcutePain">
+        <label for="editCaseAcutePain">Acute Pain Procedure</label>
+      </div>
+      <div class="form-group hidden" id="editAcutePainUnitsRow">
+        <label>MWA Acute Pain Unit Value</label>
+        <input type="number" id="editCaseAcutePainUnits" min="0" step="0.1" value="0">
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="editCaseHighRiskPeds">
+        <label for="editCaseHighRiskPeds">High Risk Pediatrics (1.33x time)</label>
+      </div>
+      <div class="checkbox-group hidden" id="editORCaseRow">
+        <input type="checkbox" id="editCaseORCase">
+        <label for="editCaseORCase">OR Case (use OR rates, no OB doubling)</label>
+      </div>
+    </div>
+    <div id="editSimpleFields" class="hidden">
+      <div class="form-group">
+        <label>Procedure Notes (optional)</label>
+        <input type="text" id="editSimpleNotes" placeholder="Optional notes">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Notes (optional)</label>
+      <textarea id="editCaseNotes" placeholder="Notes"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" id="cancelCaseEdit">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="saveCaseEdit" style="width:auto;">Save</button>
     </div>
   </div>
 </div>
@@ -1034,6 +1231,13 @@ function migrateData(d) {
       s.assignmentType = 'OR';
       changed = true;
     }
+    // Ensure supervision overlay fields
+    if (s.supervisionStart === undefined) { s.supervisionStart = ''; changed = true; }
+    if (s.supervisionEnd === undefined) { s.supervisionEnd = ''; changed = true; }
+  });
+  // Ensure isORCase on all cases
+  d.cases.forEach(c => {
+    if (c.isORCase === undefined) { c.isORCase = false; changed = true; }
   });
   if (changed) saveData(d);
 }
@@ -1103,7 +1307,7 @@ function round2(n) {
 // POINT CALCULATION ENGINE (preserved from v1)
 // ================================================================
 function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
-  const isOB = assignmentType === 'OB_restricted';
+  const isOB = ['OB_restricted','SF1','SF2'].includes(assignmentType);
   const baseRate = isOB ? 13 : 20;
   if (isHol || isWknd) {
     if (timeMinutes >= 420 && timeMinutes < 1020) return baseRate * 1.10;
@@ -1117,18 +1321,41 @@ function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
 
 function calcARPoints(shift) {
   if (shift.forcedOff) return 56;
+  if (!shift.endTime) return 0;
   const startMin = timeToMinutes(shift.startTime);
   let endMin = timeToMinutes(shift.endTime);
   if (endMin <= startMin) endMin += 1440;
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
+  const isSF = ['SF1','SF2'].includes(shift.assignmentType);
+
+  // Build OR-case time ranges for SF1/SF2
+  let orRanges = [];
+  if (isSF) {
+    const shiftCases = data.cases.filter(c => c.shiftDate === shift.date && c.isORCase);
+    shiftCases.forEach(c => {
+      let cs = timeToMinutes(c.startTime);
+      let ce = timeToMinutes(c.endTime);
+      if (ce <= cs) ce += 1440;
+      orRanges.push({ start: cs, end: ce });
+    });
+  }
+
   let totalPoints = 0;
   for (let m = startMin; m < endMin; m++) {
     const normalizedMin = m % 1440;
-    totalPoints += getARRate(shift.assignmentType, isHol, isWknd, normalizedMin) / 60;
+    // For SF1/SF2, check if minute falls within an OR-case range
+    let rateType = shift.assignmentType;
+    if (isSF) {
+      for (const r of orRanges) {
+        if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
+      }
+    }
+    totalPoints += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
   }
   if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
-    const minPoints = (shift.assignmentType === 'OB_restricted') ? 13 * 4 : 20 * 4;
+    const isOBRate = ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
+    const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     return Math.max(round2(totalPoints), minPoints);
   }
   return round2(totalPoints);
@@ -1173,7 +1400,8 @@ function calcCasePoints(caseData, shift) {
   const acutePainPoints = caseData.isAcutePain ? 0.375 * (parseFloat(caseData.acutePainUnits) || 0) : 0;
   const emergencyPoints = caseData.isEmergency ? 1 : 0;
   let total = basePoints + timePoints + medicalPoints + acutePainPoints + emergencyPoints;
-  if (shift && shift.assignmentType === 'OB_restricted') total *= 2;
+  const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
+  if (isOBShift && !caseData.isORCase) total *= 2;
   return round2(total);
 }
 
@@ -1211,7 +1439,8 @@ function getCaseBreakdown(caseData, shift) {
     bd.push({label: `Acute Pain (37.5% x ${au})`, pts: round2(0.375 * au)});
   }
   if (caseData.isEmergency) bd.push({label: 'Emergency', pts: 1});
-  if (shift && shift.assignmentType === 'OB_restricted') {
+  const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
+  if (isOBShift && !caseData.isORCase) {
     const subtotal = bd.reduce((s,r) => s + r.pts, 0);
     bd.push({label: 'OB Doubled (x2)', pts: round2(subtotal)});
   }
@@ -1219,11 +1448,22 @@ function getCaseBreakdown(caseData, shift) {
 }
 
 function calcSupervisionPoints(shift) {
-  if (shift.assignmentType !== 'CRNA_supervision') return 0;
-  let startMin = timeToMinutes(shift.startTime);
-  let endMin = timeToMinutes(shift.endTime);
-  if (endMin <= startMin) endMin += 1440;
-  return round2((endMin - startMin) / 60 * 7);
+  // Standalone CRNA_supervision type
+  if (shift.assignmentType === 'CRNA_supervision') {
+    if (!shift.endTime) return 0;
+    let startMin = timeToMinutes(shift.startTime);
+    let endMin = timeToMinutes(shift.endTime);
+    if (endMin <= startMin) endMin += 1440;
+    return round2((endMin - startMin) / 60 * 7);
+  }
+  // Overlay on OR/SF1/SF2
+  if (shift.supervisionStart && shift.supervisionEnd) {
+    let startMin = timeToMinutes(shift.supervisionStart);
+    let endMin = timeToMinutes(shift.supervisionEnd);
+    if (endMin <= startMin) endMin += 1440;
+    return round2((endMin - startMin) / 60 * 7);
+  }
+  return 0;
 }
 
 function calcCallPoints(shift) {
@@ -1274,6 +1514,8 @@ function setWorkingDate(d) {
   document.getElementById('headerDateBtn').textContent = formatDateShort(d);
   loadShiftForDate();
   updateHeaderPoints();
+  updateEndTimeWarning();
+  updateORCaseVisibility();
 }
 
 // Header date picker
@@ -1306,7 +1548,8 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('page-' + btn.dataset.page).classList.add('active');
     if (btn.dataset.page === 'today') renderToday();
-    if (btn.dataset.page === 'more') { renderHistory(); renderDashboard(); }
+    if (btn.dataset.page === 'cases') updateORCaseVisibility();
+    if (btn.dataset.page === 'more') { renderHistory(); renderDashboard(); renderMonthlyCases(); }
     if (btn.dataset.page === 'reconcile') renderReconTabs();
   });
 });
@@ -1355,6 +1598,7 @@ function renderTemplates() {
       }
       document.getElementById('cardiacLiverOptions').classList.toggle('hidden', t.type !== 'cardiac_liver');
       updateUnrestrictedCallVisibility();
+      updateSupervisionOverlayVisibility();
       showToast('Template applied');
     });
   });
@@ -1373,6 +1617,42 @@ document.getElementById('templateCollapseHeader').addEventListener('click', () =
   }
 });
 
+// Quick Procedures collapse toggle
+document.getElementById('quickProcCollapseHeader').addEventListener('click', () => {
+  const body = document.getElementById('quickProcCollapseBody');
+  const arrow = document.getElementById('quickProcArrow');
+  if (body.style.maxHeight && body.style.maxHeight !== '0px') {
+    body.style.maxHeight = '0';
+    arrow.classList.remove('open');
+  } else {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    arrow.classList.add('open');
+  }
+});
+
+// Quick Procedure button clicks
+const quickProcs = {
+  colonoscopy: { name: 'Colonoscopy', units: 4 },
+  egd: { name: 'EGD', units: 5 },
+  double: { name: 'EGD + Colonoscopy', units: 5 },
+  tonsils: { name: 'Tonsillectomy', units: 5 }
+};
+
+document.querySelectorAll('[data-qproc]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const proc = quickProcs[btn.dataset.qproc];
+    if (!proc) return;
+    selectedCaseType = 'standard';
+    document.querySelectorAll('#page-cases .case-type-btn').forEach(b => b.classList.toggle('selected', b.dataset.case === 'standard'));
+    document.getElementById('standardFields').classList.remove('hidden');
+    document.getElementById('simpleFields').classList.add('hidden');
+    document.getElementById('caseProcedure').value = proc.name;
+    document.getElementById('caseBaseUnits').value = proc.units;
+    updatePointPreview();
+    showToast(proc.name + ' pre-filled');
+  });
+});
+
 // ================================================================
 // SHIFT PAGE
 // ================================================================
@@ -1389,17 +1669,83 @@ function updateUnrestrictedCallVisibility() {
   }
 }
 
+function updateEndTimeWarning() {
+  const shift = data.shifts[workingDate];
+  const banner = document.getElementById('endTimeWarning');
+  if (shift && !shift.endTime && !shift.forcedOff) {
+    banner.classList.remove('hidden');
+  } else {
+    banner.classList.add('hidden');
+  }
+  updateEndTimeValidation();
+}
+
+function updateEndTimeValidation() {
+  const endInput = document.getElementById('shiftEnd');
+  const shift = data.shifts[workingDate];
+  if (shift && !shift.endTime && !shift.forcedOff) {
+    endInput.classList.add('warn-empty');
+  } else {
+    endInput.classList.remove('warn-empty');
+  }
+}
+
+function updateORCaseVisibility() {
+  const shift = data.shifts[workingDate];
+  const isSF = shift && ['SF1','SF2'].includes(shift.assignmentType);
+  document.getElementById('orCaseRow').classList.toggle('hidden', !isSF);
+  if (!isSF) document.getElementById('caseORCase').checked = false;
+}
+
+function updateSupervisionOverlayVisibility() {
+  const type = getSelectedAssignmentType();
+  const eligible = ['OR','SF1','SF2'].includes(type);
+  document.getElementById('supervisionOverlaySection').classList.toggle('hidden', !eligible);
+  if (!eligible) {
+    document.getElementById('supervisionOverlayCheck').checked = false;
+    document.getElementById('supervisionTimes').classList.add('hidden');
+  }
+}
+
+function checkEndTimeNotification() {
+  const now = new Date();
+  if (now.getHours() < 7) return;
+  const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+  const missing = Object.values(data.shifts).filter(s => {
+    if (s.endTime || s.forcedOff) return false;
+    const sd = new Date(s.date + 'T12:00:00');
+    return sd >= twoDaysAgo && sd <= now;
+  });
+  if (missing.length === 0) return;
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+  if ('Notification' in window && Notification.permission === 'granted') {
+    const dates = missing.map(s => formatDateShort(s.date)).join(', ');
+    new Notification('MWA Point Tracker', {
+      body: `Missing end time for: ${dates}`,
+      icon: 'icons/icon-192.png'
+    });
+  }
+}
+
 document.querySelectorAll('.shift-type-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.shift-type-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     document.getElementById('cardiacLiverOptions').classList.toggle('hidden', btn.dataset.type !== 'cardiac_liver');
     updateUnrestrictedCallVisibility();
+    updateSupervisionOverlayVisibility();
+    updateORCaseVisibility();
   });
 });
 
 document.getElementById('shiftUnrestrictedCall').addEventListener('change', function() {
   document.getElementById('callTimeRow').classList.toggle('hidden', !this.checked);
+});
+
+document.getElementById('supervisionOverlayCheck').addEventListener('change', function() {
+  document.getElementById('supervisionTimes').classList.toggle('hidden', !this.checked);
 });
 
 shiftDateInput.addEventListener('change', function() {
@@ -1430,13 +1776,33 @@ function loadShiftForDate() {
     document.getElementById('cardiacLiverOptions').classList.toggle('hidden', shift.assignmentType !== 'cardiac_liver');
     document.getElementById('subspecCoverage').checked = shift.subspecCoverage || false;
     document.getElementById('teeCount').value = shift.teeCount || 0;
+    // Supervision overlay
+    if (shift.supervisionStart || shift.supervisionEnd) {
+      document.getElementById('supervisionOverlayCheck').checked = true;
+      document.getElementById('supervisionStart').value = shift.supervisionStart || '';
+      document.getElementById('supervisionEnd').value = shift.supervisionEnd || '';
+      document.getElementById('supervisionTimes').classList.remove('hidden');
+    } else {
+      document.getElementById('supervisionOverlayCheck').checked = false;
+      document.getElementById('supervisionStart').value = '';
+      document.getElementById('supervisionEnd').value = '';
+      document.getElementById('supervisionTimes').classList.add('hidden');
+    }
+  } else {
+    document.getElementById('supervisionOverlayCheck').checked = false;
+    document.getElementById('supervisionStart').value = '';
+    document.getElementById('supervisionEnd').value = '';
+    document.getElementById('supervisionTimes').classList.add('hidden');
   }
   updateUnrestrictedCallVisibility();
+  updateSupervisionOverlayVisibility();
+  updateEndTimeWarning();
 }
 
 document.getElementById('saveShiftBtn').addEventListener('click', () => {
   const date = workingDate;
   if (!date) { showToast('Please select a date'); return; }
+  const supervisionEnabled = document.getElementById('supervisionOverlayCheck')?.checked || false;
   data.shifts[date] = {
     date, assignmentType: getSelectedAssignmentType(),
     startTime: document.getElementById('shiftStart').value,
@@ -1447,10 +1813,14 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     callEnd: document.getElementById('callEnd').value,
     forcedOff: document.getElementById('shiftForcedOff').checked,
     subspecCoverage: document.getElementById('subspecCoverage').checked,
-    teeCount: parseInt(document.getElementById('teeCount').value) || 0
+    teeCount: parseInt(document.getElementById('teeCount').value) || 0,
+    supervisionStart: supervisionEnabled ? document.getElementById('supervisionStart').value : '',
+    supervisionEnd: supervisionEnabled ? document.getElementById('supervisionEnd').value : ''
   };
   saveData(data);
   updateHeaderPoints();
+  updateEndTimeWarning();
+  updateORCaseVisibility();
   showToast('Shift saved!');
 });
 
@@ -1459,9 +1829,9 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
 // ================================================================
 let selectedCaseType = 'standard';
 
-document.querySelectorAll('.case-type-btn').forEach(btn => {
+document.querySelectorAll('#page-cases .case-type-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.case-type-btn').forEach(b => b.classList.remove('selected'));
+    document.querySelectorAll('#page-cases .case-type-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     selectedCaseType = btn.dataset.case;
     document.getElementById('standardFields').classList.toggle('hidden', selectedCaseType !== 'standard');
@@ -1485,7 +1855,7 @@ document.getElementById('caseAcutePain').addEventListener('change', function() {
   if (el) { el.addEventListener('input', updatePointPreview); el.addEventListener('change', updatePointPreview); }
 });
 
-['caseEmergency','caseHighRiskPeds','caseMedicalProc','caseAcutePain'].forEach(id => {
+['caseEmergency','caseHighRiskPeds','caseMedicalProc','caseAcutePain','caseORCase'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', updatePointPreview);
 });
@@ -1514,6 +1884,7 @@ function buildCaseFromForm() {
     isAcutePain: document.getElementById('caseAcutePain')?.checked || false,
     acutePainUnits: document.getElementById('caseAcutePainUnits')?.value || 0,
     isHighRiskPeds: document.getElementById('caseHighRiskPeds')?.checked || false,
+    isORCase: document.getElementById('caseORCase')?.checked || false,
     notes: document.getElementById('caseNotes')?.value || ''
   };
 }
@@ -1551,6 +1922,7 @@ function resetCaseForm() {
   document.getElementById('caseAcutePainUnits').value = '0';
   document.getElementById('acutePainUnitsRow').classList.add('hidden');
   document.getElementById('caseHighRiskPeds').checked = false;
+  document.getElementById('caseORCase').checked = false;
   document.getElementById('caseNotes').value = '';
   document.getElementById('simpleNotes').value = '';
   document.getElementById('casePointPreview').classList.add('hidden');
@@ -1603,6 +1975,7 @@ function renderToday() {
   shiftCases.forEach(c => {
     const pts = calcCasePoints(c, shift);
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
+    const orTag = c.isORCase ? ' <span style="color:var(--accent2);font-size:0.75rem;">[OR]</span>' : '';
     const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : '';
     const details = [];
     if (c.physicalStatus && c.caseType === 'standard') details.push(c.physicalStatus);
@@ -1611,7 +1984,7 @@ function renderToday() {
     listHtml += `
       <div class="case-list-item">
         <div class="info">
-          <h4>${escHtml(name)}</h4>
+          <h4>${escHtml(name)}${orTag}</h4>
           <p>${escHtml(details.join(' | '))}</p>
           ${c.notes ? `<p style="margin-top:2px;font-style:italic;">${escHtml(c.notes)}</p>` : ''}
         </div>
@@ -1676,12 +2049,14 @@ document.getElementById('prevMonth').addEventListener('click', () => {
   historyMonth--;
   if (historyMonth < 0) { historyMonth = 11; historyYear--; }
   renderHistory();
+  renderMonthlyCases();
 });
 
 document.getElementById('nextMonth').addEventListener('click', () => {
   historyMonth++;
   if (historyMonth > 11) { historyMonth = 0; historyYear++; }
   renderHistory();
+  renderMonthlyCases();
 });
 
 function showDayDetail(dateStr) {
@@ -1789,6 +2164,183 @@ function renderStabilization() {
   const weighted = round2(0.10 * raw + 0.40 * (mt[mk(1)]||0) + 0.25 * (mt[mk(2)]||0) + 0.15 * (mt[mk(3)]||0) + 0.10 * (mt[mk(4)]||0));
   document.getElementById('stabRaw').textContent = raw.toFixed(1);
   document.getElementById('stabWeighted').textContent = weighted.toFixed(1);
+}
+
+// ================================================================
+// MONTHLY CASES (in More page)
+// ================================================================
+function renderMonthlyCases() {
+  const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
+  const monthCases = data.cases.filter(c => c.shiftDate && c.shiftDate.startsWith(prefix));
+  const container = document.getElementById('monthlyCasesList');
+
+  if (monthCases.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No cases for this month.</p></div>';
+    return;
+  }
+
+  // Group by date
+  const byDate = {};
+  monthCases.forEach(c => {
+    if (!byDate[c.shiftDate]) byDate[c.shiftDate] = [];
+    byDate[c.shiftDate].push(c);
+  });
+  const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+
+  let html = '';
+  sortedDates.forEach(date => {
+    const cases = byDate[date];
+    const shift = data.shifts[date];
+    const dayPts = cases.reduce((s, c) => s + calcCasePoints(c, shift), 0);
+    html += `<div>
+      <div class="day-cases-header" onclick="toggleDayCases('${date}')">
+        <div>
+          <strong style="font-size:0.85rem;">${formatDate(date)}</strong>
+          <span style="font-size:0.75rem;color:var(--text-dim);margin-left:8px;">${cases.length} case${cases.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="point-badge">${dayPts.toFixed(1)}</span>
+          <span class="arrow" id="dayCasesArrow-${date}">&#9660;</span>
+        </div>
+      </div>
+      <div class="day-cases-body" id="dayCasesBody-${date}">`;
+    cases.forEach(c => {
+      const pts = calcCasePoints(c, shift);
+      const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
+      const timeStr = c.startTime && c.endTime ? `${c.startTime}-${c.endTime}` : '';
+      html += `<div class="monthly-case-item">
+        <div class="info">
+          <h4>${escHtml(name)}${c.isORCase ? ' <span style="color:var(--accent2);font-size:0.7rem;">[OR]</span>' : ''}</h4>
+          <p>${timeStr ? timeStr + ' | ' : ''}${pts.toFixed(1)} pts${c.baseUnits ? ' | ' + c.baseUnits + 'u' : ''}</p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-outline btn-sm" onclick="openCaseEdit('${c.id}')" style="padding:6px 10px;font-size:0.75rem;">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteCaseFromList('${c.id}')" style="padding:6px 10px;font-size:0.75rem;">Del</button>
+        </div>
+      </div>`;
+    });
+    html += '</div></div>';
+  });
+  container.innerHTML = html;
+}
+
+function toggleDayCases(date) {
+  const body = document.getElementById('dayCasesBody-' + date);
+  const arrow = document.getElementById('dayCasesArrow-' + date);
+  if (!body || !arrow) return;
+  if (body.style.maxHeight && body.style.maxHeight !== '0px') {
+    body.style.maxHeight = '0';
+    arrow.classList.remove('open');
+  } else {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    arrow.classList.add('open');
+  }
+}
+
+let editingCaseId = null;
+let editCaseType = 'standard';
+
+// Edit modal case type grid
+document.querySelectorAll('#editCaseTypeGrid .case-type-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#editCaseTypeGrid .case-type-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    editCaseType = btn.dataset.ecase;
+    document.getElementById('editStandardFields').classList.toggle('hidden', editCaseType !== 'standard');
+    document.getElementById('editSimpleFields').classList.toggle('hidden', editCaseType === 'standard');
+  });
+});
+
+document.getElementById('editCaseMedicalProc').addEventListener('change', function() {
+  document.getElementById('editMedicalUnitsRow').classList.toggle('hidden', !this.checked);
+});
+
+document.getElementById('editCaseAcutePain').addEventListener('change', function() {
+  document.getElementById('editAcutePainUnitsRow').classList.toggle('hidden', !this.checked);
+});
+
+function openCaseEdit(caseId) {
+  const c = data.cases.find(x => x.id === caseId);
+  if (!c) return;
+  editingCaseId = caseId;
+  editCaseType = c.caseType || 'standard';
+
+  // Set case type
+  document.querySelectorAll('#editCaseTypeGrid .case-type-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.ecase === editCaseType);
+  });
+  document.getElementById('editStandardFields').classList.toggle('hidden', editCaseType !== 'standard');
+  document.getElementById('editSimpleFields').classList.toggle('hidden', editCaseType === 'standard');
+
+  // Fill fields
+  document.getElementById('editCaseProcedure').value = c.procedure || '';
+  document.getElementById('editCaseBaseUnits').value = c.baseUnits || 0;
+  document.getElementById('editCasePhysicalStatus').value = c.physicalStatus || 'P3';
+  document.getElementById('editCaseStart').value = c.startTime || '';
+  document.getElementById('editCaseEnd').value = c.endTime || '';
+  document.getElementById('editCaseEmergency').checked = c.isEmergency || false;
+  document.getElementById('editCaseMedicalProc').checked = c.isMedicalProc || false;
+  document.getElementById('editMedicalUnitsRow').classList.toggle('hidden', !c.isMedicalProc);
+  document.getElementById('editCaseMedicalUnits').value = c.medicalUnits || 0;
+  document.getElementById('editCaseAcutePain').checked = c.isAcutePain || false;
+  document.getElementById('editAcutePainUnitsRow').classList.toggle('hidden', !c.isAcutePain);
+  document.getElementById('editCaseAcutePainUnits').value = c.acutePainUnits || 0;
+  document.getElementById('editCaseHighRiskPeds').checked = c.isHighRiskPeds || false;
+  document.getElementById('editCaseNotes').value = c.notes || '';
+  document.getElementById('editSimpleNotes').value = c.notes || '';
+
+  // OR Case checkbox visibility
+  const shift = data.shifts[c.shiftDate];
+  const isSF = shift && ['SF1','SF2'].includes(shift.assignmentType);
+  document.getElementById('editORCaseRow').classList.toggle('hidden', !isSF);
+  document.getElementById('editCaseORCase').checked = c.isORCase || false;
+
+  document.getElementById('caseEditModal').classList.remove('hidden');
+}
+
+document.getElementById('saveCaseEdit').addEventListener('click', () => {
+  const c = data.cases.find(x => x.id === editingCaseId);
+  if (!c) return;
+  c.caseType = editCaseType;
+  if (editCaseType === 'standard') {
+    c.procedure = document.getElementById('editCaseProcedure').value;
+    c.baseUnits = document.getElementById('editCaseBaseUnits').value;
+    c.physicalStatus = document.getElementById('editCasePhysicalStatus').value;
+    c.startTime = document.getElementById('editCaseStart').value;
+    c.endTime = document.getElementById('editCaseEnd').value;
+    c.isEmergency = document.getElementById('editCaseEmergency').checked;
+    c.isMedicalProc = document.getElementById('editCaseMedicalProc').checked;
+    c.medicalUnits = document.getElementById('editCaseMedicalUnits').value;
+    c.isAcutePain = document.getElementById('editCaseAcutePain').checked;
+    c.acutePainUnits = document.getElementById('editCaseAcutePainUnits').value;
+    c.isHighRiskPeds = document.getElementById('editCaseHighRiskPeds').checked;
+    c.isORCase = document.getElementById('editCaseORCase').checked;
+    c.notes = document.getElementById('editCaseNotes').value;
+  } else {
+    c.notes = document.getElementById('editSimpleNotes').value || document.getElementById('editCaseNotes').value;
+  }
+  saveData(data);
+  updateHeaderPoints();
+  renderMonthlyCases();
+  document.getElementById('caseEditModal').classList.add('hidden');
+  showToast('Case updated');
+});
+
+document.getElementById('cancelCaseEdit').addEventListener('click', () => {
+  document.getElementById('caseEditModal').classList.add('hidden');
+});
+
+document.getElementById('caseEditModal').addEventListener('click', (e) => {
+  if (e.target.id === 'caseEditModal') document.getElementById('caseEditModal').classList.add('hidden');
+});
+
+function deleteCaseFromList(id) {
+  if (!confirm('Delete this case?')) return;
+  data.cases = data.cases.filter(c => c.id !== id);
+  saveData(data);
+  updateHeaderPoints();
+  renderMonthlyCases();
+  showToast('Case deleted');
 }
 
 // ================================================================
@@ -2434,6 +2986,8 @@ setWorkingDate(todayStr());
 renderTemplates();
 updateHeaderPoints();
 updateReconMonthLabels();
+updateSupervisionOverlayVisibility();
+checkEndTimeNotification();
 </script>
 
 </body>
