@@ -769,6 +769,7 @@ input.mil-time.invalid {
         <div class="case-type-btn" data-case="01996">Epidural Rounding (01996)</div>
         <div class="case-type-btn" data-case="99231">Pain Rounding (99231)</div>
         <div class="case-type-btn" data-case="tee">TEE Exam</div>
+        <div class="case-type-btn" data-case="aps_rounding">APS Rounding</div>
       </div>
     </div>
 
@@ -840,6 +841,37 @@ input.mil-time.invalid {
         <input type="checkbox" id="caseORCase">
         <label for="caseORCase">OR Case (use OR rates, no OB doubling)</label>
       </div>
+
+      <div class="divider"></div>
+      <h3>Add-Ons</h3>
+      <div class="form-group">
+        <label>Nerve Block</label>
+        <select id="caseNerveBlock">
+          <option value="none">None</option>
+          <option value="brachial_plexus">Brachial Plexus (3 pts)</option>
+          <option value="other">Other (2.6 pts)</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="checkbox-group">
+          <input type="checkbox" id="caseCentralLine">
+          <label for="caseCentralLine">Central Line (0.8 pts)</label>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="caseArterialLine">
+          <label for="caseArterialLine">Arterial Line (0.6 pts)</label>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="checkbox-group">
+          <input type="checkbox" id="casePAC">
+          <label for="casePAC">PAC (2 pts)</label>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="caseTEEAddOn">
+          <label for="caseTEEAddOn">TEE (0.4 pts)</label>
+        </div>
+      </div>
     </div>
 
     <div id="laborEpiduralFields" class="hidden">
@@ -851,6 +883,19 @@ input.mil-time.invalid {
         <div class="form-group">
           <label>Epidural End</label>
           <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="laborEnd">
+        </div>
+      </div>
+    </div>
+
+    <div id="apsRoundingFields" class="hidden">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Epidural Rounds (3 pts each)</label>
+          <input type="number" id="apsEpiduralCount" min="0" step="1" value="0">
+        </div>
+        <div class="form-group">
+          <label>Pain Rounds (2 pts each)</label>
+          <input type="number" id="apsPainCount" min="0" step="1" value="0">
         </div>
       </div>
     </div>
@@ -1098,6 +1143,7 @@ input.mil-time.invalid {
         <div class="case-type-btn" data-ecase="01996">Epidural Rounding (01996)</div>
         <div class="case-type-btn" data-ecase="99231">Pain Rounding (99231)</div>
         <div class="case-type-btn" data-ecase="tee">TEE Exam</div>
+        <div class="case-type-btn" data-ecase="aps_rounding">APS Rounding</div>
       </div>
     </div>
     <div id="editStandardFields">
@@ -1159,6 +1205,37 @@ input.mil-time.invalid {
         <input type="checkbox" id="editCaseORCase">
         <label for="editCaseORCase">OR Case (use OR rates, no OB doubling)</label>
       </div>
+
+      <div class="divider"></div>
+      <h3>Add-Ons</h3>
+      <div class="form-group">
+        <label>Nerve Block</label>
+        <select id="editNerveBlock">
+          <option value="none">None</option>
+          <option value="brachial_plexus">Brachial Plexus (3 pts)</option>
+          <option value="other">Other (2.6 pts)</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="checkbox-group">
+          <input type="checkbox" id="editCentralLine">
+          <label for="editCentralLine">Central Line (0.8 pts)</label>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="editArterialLine">
+          <label for="editArterialLine">Arterial Line (0.6 pts)</label>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="checkbox-group">
+          <input type="checkbox" id="editPAC">
+          <label for="editPAC">PAC (2 pts)</label>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="editTEEAddOn">
+          <label for="editTEEAddOn">TEE (0.4 pts)</label>
+        </div>
+      </div>
     </div>
     <div id="editLaborEpiduralFields" class="hidden">
       <div class="form-row">
@@ -1169,6 +1246,18 @@ input.mil-time.invalid {
         <div class="form-group">
           <label>Epidural End</label>
           <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="editLaborEnd">
+        </div>
+      </div>
+    </div>
+    <div id="editApsRoundingFields" class="hidden">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Epidural Rounds (3 pts each)</label>
+          <input type="number" id="editApsEpiduralCount" min="0" step="1" value="0">
+        </div>
+        <div class="form-group">
+          <label>Pain Rounds (2 pts each)</label>
+          <input type="number" id="editApsPainCount" min="0" step="1" value="0">
         </div>
       </div>
     </div>
@@ -1479,6 +1568,17 @@ function getTimeMultiplier(physicalStatus, isHol, isWknd, caseStartMin, isHighRi
   return multiplier;
 }
 
+function calcAddOnPoints(caseData) {
+  let pts = 0;
+  if (caseData.nerveBlock === 'brachial_plexus') pts += 3;
+  else if (caseData.nerveBlock === 'other') pts += 2.6;
+  if (caseData.hasCentralLine) pts += 0.8;
+  if (caseData.hasArterialLine) pts += 0.6;
+  if (caseData.hasPAC) pts += 2;
+  if (caseData.hasTEEAddOn) pts += 0.4;
+  return pts;
+}
+
 function calcCasePoints(caseData, shift) {
   const ct = caseData.caseType;
   if (ct === 'epidural_blood_patch') return 5;
@@ -1486,6 +1586,12 @@ function calcCasePoints(caseData, shift) {
   if (ct === '01996') return 3;
   if (ct === '99231') return 2;
   if (ct === 'tee') return 22;
+
+  if (ct === 'aps_rounding') {
+    const epi = (parseInt(caseData.epiduralRounds) || 0) * 3;
+    const pain = (parseInt(caseData.painRounds) || 0) * 2;
+    return round2(epi + pain);
+  }
 
   if (ct === 'labor_epidural') {
     let cs = timeToMinutes(caseData.startTime);
@@ -1499,6 +1605,7 @@ function calcCasePoints(caseData, shift) {
     return round2(pts * 2); // always OB doubled
   }
 
+  const addOnPts = calcAddOnPoints(caseData);
   const baseUnits = parseFloat(caseData.baseUnits) || 0;
   const basePoints = 0.5 * baseUnits;
   let caseStartMin = timeToMinutes(caseData.startTime);
@@ -1514,7 +1621,7 @@ function calcCasePoints(caseData, shift) {
   const medicalPoints = caseData.isMedicalProc ? 0.20 * (parseFloat(caseData.medicalUnits) || 0) : 0;
   const acutePainPoints = caseData.isAcutePain ? 0.375 * (parseFloat(caseData.acutePainUnits) || 0) : 0;
   const emergencyPoints = caseData.isEmergency ? 1 : 0;
-  let total = basePoints + timePoints + medicalPoints + acutePainPoints + emergencyPoints;
+  let total = basePoints + timePoints + medicalPoints + acutePainPoints + emergencyPoints + addOnPts;
   const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
   if (isOBShift && !caseData.isORCase) total *= 2;
   return round2(total);
@@ -1528,6 +1635,14 @@ function getCaseBreakdown(caseData, shift) {
   if (ct === '01996') { bd.push({label:'Epidural Rounding (01996)', pts:3}); return bd; }
   if (ct === '99231') { bd.push({label:'Pain Rounding (99231)', pts:2}); return bd; }
   if (ct === 'tee') { bd.push({label:'TEE Exam', pts:22}); return bd; }
+
+  if (ct === 'aps_rounding') {
+    const epiN = parseInt(caseData.epiduralRounds) || 0;
+    const painN = parseInt(caseData.painRounds) || 0;
+    if (epiN > 0) bd.push({label: `Epidural Rounds (${epiN} x 3)`, pts: round2(epiN * 3)});
+    if (painN > 0) bd.push({label: `Pain Rounds (${painN} x 2)`, pts: round2(painN * 2)});
+    return bd;
+  }
 
   if (ct === 'labor_epidural') {
     let cs = timeToMinutes(caseData.startTime);
@@ -1580,6 +1695,12 @@ function getCaseBreakdown(caseData, shift) {
     bd.push({label: `Acute Pain (37.5% x ${au})`, pts: round2(0.375 * au)});
   }
   if (caseData.isEmergency) bd.push({label: 'Emergency', pts: 1});
+  if (caseData.nerveBlock === 'brachial_plexus') bd.push({label: 'Nerve Block (Brachial Plexus)', pts: 3});
+  else if (caseData.nerveBlock === 'other') bd.push({label: 'Nerve Block (Other)', pts: 2.6});
+  if (caseData.hasCentralLine) bd.push({label: 'Central Line', pts: 0.8});
+  if (caseData.hasArterialLine) bd.push({label: 'Arterial Line', pts: 0.6});
+  if (caseData.hasPAC) bd.push({label: 'PAC', pts: 2});
+  if (caseData.hasTEEAddOn) bd.push({label: 'TEE', pts: 0.4});
   const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
   if (isOBShift && !caseData.isORCase) {
     const subtotal = bd.reduce((s,r) => s + r.pts, 0);
@@ -1638,7 +1759,7 @@ function calcShiftTotal(shift) {
 function getCaseTypeName(type) {
   const names = {
     standard: 'Standard Case', labor_epidural: 'Labor Epidural',
-    epidural_blood_patch: 'Epidural Blood Patch',
+    aps_rounding: 'APS Rounding', epidural_blood_patch: 'Epidural Blood Patch',
     emergency_intubation: 'Emergency Intubation', '01996': 'Epidural Rounding (01996)',
     '99231': 'Pain Rounding (99231)', tee: 'TEE Exam'
   };
@@ -1788,6 +1909,7 @@ document.querySelectorAll('[data-qproc]').forEach(btn => {
     document.querySelectorAll('#page-cases .case-type-btn').forEach(b => b.classList.toggle('selected', b.dataset.case === 'standard'));
     document.getElementById('standardFields').classList.remove('hidden');
     document.getElementById('laborEpiduralFields').classList.add('hidden');
+    document.getElementById('apsRoundingFields').classList.add('hidden');
     document.getElementById('simpleFields').classList.add('hidden');
     document.getElementById('caseProcedure').value = proc.name;
     document.getElementById('caseBaseUnits').value = proc.units;
@@ -1977,9 +2099,13 @@ document.querySelectorAll('#page-cases .case-type-btn').forEach(btn => {
     document.querySelectorAll('#page-cases .case-type-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     selectedCaseType = btn.dataset.case;
-    document.getElementById('standardFields').classList.toggle('hidden', selectedCaseType !== 'standard');
-    document.getElementById('laborEpiduralFields').classList.toggle('hidden', selectedCaseType !== 'labor_epidural');
-    document.getElementById('simpleFields').classList.toggle('hidden', selectedCaseType === 'standard' || selectedCaseType === 'labor_epidural');
+    const isStd = selectedCaseType === 'standard';
+    const isLabor = selectedCaseType === 'labor_epidural';
+    const isAPS = selectedCaseType === 'aps_rounding';
+    document.getElementById('standardFields').classList.toggle('hidden', !isStd);
+    document.getElementById('laborEpiduralFields').classList.toggle('hidden', !isLabor);
+    document.getElementById('apsRoundingFields').classList.toggle('hidden', !isAPS);
+    document.getElementById('simpleFields').classList.toggle('hidden', isStd || isLabor || isAPS);
     updatePointPreview();
   });
 });
@@ -1994,12 +2120,12 @@ document.getElementById('caseAcutePain').addEventListener('change', function() {
   updatePointPreview();
 });
 
-['caseBaseUnits','caseStart','caseEnd','casePhysicalStatus','caseMedicalUnits','caseAcutePainUnits','laborStart','laborEnd'].forEach(id => {
+['caseBaseUnits','caseStart','caseEnd','casePhysicalStatus','caseMedicalUnits','caseAcutePainUnits','laborStart','laborEnd','caseNerveBlock','apsEpiduralCount','apsPainCount'].forEach(id => {
   const el = document.getElementById(id);
   if (el) { el.addEventListener('input', updatePointPreview); el.addEventListener('change', updatePointPreview); }
 });
 
-['caseEmergency','caseHighRiskPeds','caseMedicalProc','caseAcutePain','caseORCase'].forEach(id => {
+['caseEmergency','caseHighRiskPeds','caseMedicalProc','caseAcutePain','caseORCase','caseCentralLine','caseArterialLine','casePAC','caseTEEAddOn'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', updatePointPreview);
 });
@@ -2016,9 +2142,10 @@ function updatePointPreview() {
 
 function buildCaseFromForm() {
   const isLabor = selectedCaseType === 'labor_epidural';
+  const isAPS = selectedCaseType === 'aps_rounding';
   return {
     caseType: selectedCaseType,
-    procedure: isLabor ? 'Labor Epidural' : (document.getElementById('caseProcedure')?.value || selectedCaseType),
+    procedure: isLabor ? 'Labor Epidural' : (isAPS ? 'APS Rounding' : (document.getElementById('caseProcedure')?.value || selectedCaseType)),
     baseUnits: document.getElementById('caseBaseUnits')?.value || 0,
     physicalStatus: document.getElementById('casePhysicalStatus')?.value || 'P3',
     startTime: isLabor ? (document.getElementById('laborStart')?.value || '') : (document.getElementById('caseStart')?.value || ''),
@@ -2030,6 +2157,13 @@ function buildCaseFromForm() {
     acutePainUnits: document.getElementById('caseAcutePainUnits')?.value || 0,
     isHighRiskPeds: document.getElementById('caseHighRiskPeds')?.checked || false,
     isORCase: document.getElementById('caseORCase')?.checked || false,
+    nerveBlock: document.getElementById('caseNerveBlock')?.value || 'none',
+    hasCentralLine: document.getElementById('caseCentralLine')?.checked || false,
+    hasArterialLine: document.getElementById('caseArterialLine')?.checked || false,
+    hasPAC: document.getElementById('casePAC')?.checked || false,
+    hasTEEAddOn: document.getElementById('caseTEEAddOn')?.checked || false,
+    epiduralRounds: document.getElementById('apsEpiduralCount')?.value || 0,
+    painRounds: document.getElementById('apsPainCount')?.value || 0,
     notes: document.getElementById('caseNotes')?.value || ''
   };
 }
@@ -2045,6 +2179,9 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   caseData.timestamp = new Date().toISOString();
   if (caseData.caseType === 'standard' || caseData.caseType === 'labor_epidural') {
     if (!caseData.startTime || !caseData.endTime) { showToast('Please enter start and end times'); return; }
+  }
+  if (caseData.caseType === 'aps_rounding') {
+    if (!(parseInt(caseData.epiduralRounds) > 0) && !(parseInt(caseData.painRounds) > 0)) { showToast('Enter at least one round count'); return; }
   }
   data.cases.push(caseData);
   saveData(data);
@@ -2068,9 +2205,17 @@ function resetCaseForm() {
   document.getElementById('acutePainUnitsRow').classList.add('hidden');
   document.getElementById('caseHighRiskPeds').checked = false;
   document.getElementById('caseORCase').checked = false;
+  document.getElementById('caseNerveBlock').value = 'none';
+  document.getElementById('caseCentralLine').checked = false;
+  document.getElementById('caseArterialLine').checked = false;
+  document.getElementById('casePAC').checked = false;
+  document.getElementById('caseTEEAddOn').checked = false;
   document.getElementById('laborStart').value = '';
   document.getElementById('laborEnd').value = '';
   document.getElementById('laborEpiduralFields').classList.add('hidden');
+  document.getElementById('apsEpiduralCount').value = '0';
+  document.getElementById('apsPainCount').value = '0';
+  document.getElementById('apsRoundingFields').classList.add('hidden');
   document.getElementById('caseNotes').value = '';
   document.getElementById('simpleNotes').value = '';
   document.getElementById('casePointPreview').classList.add('hidden');
@@ -2129,6 +2274,12 @@ function renderToday() {
     if (c.physicalStatus && c.caseType === 'standard') details.push(c.physicalStatus);
     if (c.baseUnits && c.caseType === 'standard') details.push(`${c.baseUnits} base`);
     if (timeStr) details.push(timeStr);
+    if (c.caseType === 'aps_rounding') {
+      const epi = parseInt(c.epiduralRounds) || 0;
+      const pain = parseInt(c.painRounds) || 0;
+      if (epi > 0) details.push(`${epi} epi`);
+      if (pain > 0) details.push(`${pain} pain`);
+    }
     listHtml += `
       <div class="case-list-item">
         <div class="info">
@@ -2394,9 +2545,13 @@ document.querySelectorAll('#editCaseTypeGrid .case-type-btn').forEach(btn => {
     document.querySelectorAll('#editCaseTypeGrid .case-type-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     editCaseType = btn.dataset.ecase;
-    document.getElementById('editStandardFields').classList.toggle('hidden', editCaseType !== 'standard');
-    document.getElementById('editLaborEpiduralFields').classList.toggle('hidden', editCaseType !== 'labor_epidural');
-    document.getElementById('editSimpleFields').classList.toggle('hidden', editCaseType === 'standard' || editCaseType === 'labor_epidural');
+    const isStd = editCaseType === 'standard';
+    const isLabor = editCaseType === 'labor_epidural';
+    const isAPS = editCaseType === 'aps_rounding';
+    document.getElementById('editStandardFields').classList.toggle('hidden', !isStd);
+    document.getElementById('editLaborEpiduralFields').classList.toggle('hidden', !isLabor);
+    document.getElementById('editApsRoundingFields').classList.toggle('hidden', !isAPS);
+    document.getElementById('editSimpleFields').classList.toggle('hidden', isStd || isLabor || isAPS);
   });
 });
 
@@ -2418,9 +2573,13 @@ function openCaseEdit(caseId) {
   document.querySelectorAll('#editCaseTypeGrid .case-type-btn').forEach(b => {
     b.classList.toggle('selected', b.dataset.ecase === editCaseType);
   });
-  document.getElementById('editStandardFields').classList.toggle('hidden', editCaseType !== 'standard');
-  document.getElementById('editLaborEpiduralFields').classList.toggle('hidden', editCaseType !== 'labor_epidural');
-  document.getElementById('editSimpleFields').classList.toggle('hidden', editCaseType === 'standard' || editCaseType === 'labor_epidural');
+  const isStd = editCaseType === 'standard';
+  const isLabor = editCaseType === 'labor_epidural';
+  const isAPS = editCaseType === 'aps_rounding';
+  document.getElementById('editStandardFields').classList.toggle('hidden', !isStd);
+  document.getElementById('editLaborEpiduralFields').classList.toggle('hidden', !isLabor);
+  document.getElementById('editApsRoundingFields').classList.toggle('hidden', !isAPS);
+  document.getElementById('editSimpleFields').classList.toggle('hidden', isStd || isLabor || isAPS);
 
   // Fill fields
   document.getElementById('editCaseProcedure').value = c.procedure || '';
@@ -2439,10 +2598,23 @@ function openCaseEdit(caseId) {
   document.getElementById('editCaseNotes').value = c.notes || '';
   document.getElementById('editSimpleNotes').value = c.notes || '';
 
+  // Add-ons
+  document.getElementById('editNerveBlock').value = c.nerveBlock || 'none';
+  document.getElementById('editCentralLine').checked = c.hasCentralLine || false;
+  document.getElementById('editArterialLine').checked = c.hasArterialLine || false;
+  document.getElementById('editPAC').checked = c.hasPAC || false;
+  document.getElementById('editTEEAddOn').checked = c.hasTEEAddOn || false;
+
   // Labor epidural fields
   if (editCaseType === 'labor_epidural') {
     document.getElementById('editLaborStart').value = c.startTime || '';
     document.getElementById('editLaborEnd').value = c.endTime || '';
+  }
+
+  // APS rounding fields
+  if (editCaseType === 'aps_rounding') {
+    document.getElementById('editApsEpiduralCount').value = c.epiduralRounds || 0;
+    document.getElementById('editApsPainCount').value = c.painRounds || 0;
   }
 
   // OR Case checkbox visibility
@@ -2471,11 +2643,21 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
     c.acutePainUnits = document.getElementById('editCaseAcutePainUnits').value;
     c.isHighRiskPeds = document.getElementById('editCaseHighRiskPeds').checked;
     c.isORCase = document.getElementById('editCaseORCase').checked;
+    c.nerveBlock = document.getElementById('editNerveBlock').value;
+    c.hasCentralLine = document.getElementById('editCentralLine').checked;
+    c.hasArterialLine = document.getElementById('editArterialLine').checked;
+    c.hasPAC = document.getElementById('editPAC').checked;
+    c.hasTEEAddOn = document.getElementById('editTEEAddOn').checked;
     c.notes = document.getElementById('editCaseNotes').value;
   } else if (editCaseType === 'labor_epidural') {
     c.procedure = 'Labor Epidural';
     c.startTime = document.getElementById('editLaborStart').value;
     c.endTime = document.getElementById('editLaborEnd').value;
+    c.notes = document.getElementById('editCaseNotes').value;
+  } else if (editCaseType === 'aps_rounding') {
+    c.procedure = 'APS Rounding';
+    c.epiduralRounds = document.getElementById('editApsEpiduralCount').value;
+    c.painRounds = document.getElementById('editApsPainCount').value;
     c.notes = document.getElementById('editCaseNotes').value;
   } else {
     c.notes = document.getElementById('editSimpleNotes').value || document.getElementById('editCaseNotes').value;
