@@ -974,12 +974,12 @@ input.mil-time.invalid {
     <div class="card">
       <h2>QGenda Time Reconciliation</h2>
       <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-        Upload your QGenda time punch export (.xlsx) to compare against your tracked shifts.
+        Upload your QGenda time punch export (.xlsx) or screenshot to compare against your tracked shifts.
       </p>
       <div class="upload-area" id="qgendaUploadArea">
         <div style="font-size:2rem;">&#128196;</div>
-        <p>Tap to upload QGenda .xlsx</p>
-        <input type="file" id="qgendaFile" accept=".xlsx,.xls">
+        <p>Tap to upload QGenda .xlsx or screenshot</p>
+        <input type="file" id="qgendaFile" accept=".xlsx,.xls,.png,.jpg,.jpeg">
       </div>
     </div>
 
@@ -990,6 +990,9 @@ input.mil-time.invalid {
     </div>
 
     <div id="qgendaResults"></div>
+    <div id="qgendaImportArea" class="hidden" style="margin-top:12px;">
+      <button class="btn btn-primary" id="importShiftsBtn" style="width:100%;">Import Shifts from QGenda</button>
+    </div>
   </div>
 
   <!-- Production Tab -->
@@ -997,12 +1000,12 @@ input.mil-time.invalid {
     <div class="card">
       <h2>Production Reconciliation</h2>
       <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-        Upload your Charge Detail PDF to compare billing production against your tracked cases.
+        Upload your Charge Detail PDF or screenshot to compare billing production against your tracked cases.
       </p>
       <div class="upload-area" id="prodUploadArea">
         <div style="font-size:2rem;">&#128196;</div>
-        <p>Tap to upload Charge Detail PDF</p>
-        <input type="file" id="prodFile" accept=".pdf">
+        <p>Tap to upload Charge Detail PDF or screenshot</p>
+        <input type="file" id="prodFile" accept=".pdf,.png,.jpg,.jpeg">
       </div>
     </div>
 
@@ -1097,6 +1100,20 @@ input.mil-time.invalid {
     <div id="monthlyCasesList">
       <div class="empty-state"><p>No cases for this month.</p></div>
     </div>
+  </div>
+
+  <!-- CSV Case Import -->
+  <div class="card">
+    <h2>Import Cases from CSV</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Export a tab from your Google Sheet as CSV and upload it to import cases.
+    </p>
+    <div class="upload-area" id="csvUploadArea">
+      <div style="font-size:2rem;">&#128196;</div>
+      <p>Tap to upload CSV</p>
+      <input type="file" id="csvFile" accept=".csv">
+    </div>
+    <div id="csvImportResults"></div>
   </div>
 
   <!-- Export / Import -->
@@ -1284,6 +1301,18 @@ input.mil-time.invalid {
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" id="cancelCaseEdit">Cancel</button>
       <button class="btn btn-primary btn-sm" id="saveCaseEdit" style="width:auto;">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import confirmation modal -->
+<div class="modal-overlay hidden" id="importConfirmModal">
+  <div class="modal">
+    <h2 id="importConfirmTitle">Confirm Import</h2>
+    <div id="importConfirmBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" id="cancelImport">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="confirmImport" style="width:auto;">Import</button>
     </div>
   </div>
 </div>
@@ -2873,46 +2902,64 @@ document.getElementById('qNextMonth').addEventListener('click', () => { qMonth++
 // Upload area
 document.getElementById('qgendaUploadArea').addEventListener('click', () => document.getElementById('qgendaFile').click());
 
-document.getElementById('qgendaFile').addEventListener('change', (e) => {
+document.getElementById('qgendaFile').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    try {
-      const wb = XLSX.read(ev.target.result, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-      qgendaData = rows.map(r => {
-        // Parse the date fields — handle Excel serial numbers and strings
-        let schedDate = parseExcelDate(r['Schedule Date']);
-        let clockInDate = parseExcelDate(r['Effective Clock In Date']);
-        let clockOutDate = parseExcelDate(r['Effective Clock Out Date']);
-        return {
-          scheduleDate: schedDate,
-          clockInDate: clockInDate,
-          clockInTime: parseExcelTime(r['Effective Clock In Time']),
-          clockOutDate: clockOutDate,
-          clockOutTime: parseExcelTime(r['Effective Clock Out Time']),
-          duration: parseFloat(r['Duration']) || 0,
-          task: String(r['Scheduled Task Abbreviation'] || ''),
-          location: String(r['Location Name'] || ''),
-          notes: String(r['Notes'] || '')
-        };
-      });
-      localStorage.setItem(QGENDA_KEY, JSON.stringify(qgendaData));
-      showToast(`Loaded ${qgendaData.length} QGenda entries`);
+  const isImage = /\.(png|jpg|jpeg)$/i.test(file.name);
 
-      // Auto-detect month from data
+  if (isImage) {
+    try {
+      showToast('Running OCR on image...');
+      const text = await ocrImage(file);
+      qgendaData = parseQgendaScreenshot(text);
+      localStorage.setItem(QGENDA_KEY, JSON.stringify(qgendaData));
+      showToast(`OCR found ${qgendaData.length} QGenda entries`);
       if (qgendaData.length > 0 && qgendaData[0].scheduleDate) {
         const d = new Date(qgendaData[0].scheduleDate + 'T12:00:00');
         if (!isNaN(d)) { qYear = d.getFullYear(); qMonth = d.getMonth(); updateReconMonthLabels(); }
       }
       renderQgendaRecon();
+      showQgendaImportButton();
     } catch(err) {
-      showToast('Error reading QGenda file: ' + err.message);
+      showToast('OCR error: ' + err.message);
     }
-  };
-  reader.readAsArrayBuffer(file);
+  } else {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        qgendaData = rows.map(r => {
+          let schedDate = parseExcelDate(r['Schedule Date']);
+          let clockInDate = parseExcelDate(r['Effective Clock In Date']);
+          let clockOutDate = parseExcelDate(r['Effective Clock Out Date']);
+          return {
+            scheduleDate: schedDate,
+            clockInDate: clockInDate,
+            clockInTime: parseExcelTime(r['Effective Clock In Time']),
+            clockOutDate: clockOutDate,
+            clockOutTime: parseExcelTime(r['Effective Clock Out Time']),
+            duration: parseFloat(r['Duration']) || 0,
+            task: String(r['Scheduled Task Abbreviation'] || ''),
+            location: String(r['Location Name'] || ''),
+            notes: String(r['Notes'] || '')
+          };
+        });
+        localStorage.setItem(QGENDA_KEY, JSON.stringify(qgendaData));
+        showToast(`Loaded ${qgendaData.length} QGenda entries`);
+        if (qgendaData.length > 0 && qgendaData[0].scheduleDate) {
+          const d = new Date(qgendaData[0].scheduleDate + 'T12:00:00');
+          if (!isNaN(d)) { qYear = d.getFullYear(); qMonth = d.getMonth(); updateReconMonthLabels(); }
+        }
+        renderQgendaRecon();
+        showQgendaImportButton();
+      } catch(err) {
+        showToast('Error reading QGenda file: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
   e.target.value = '';
 });
 
@@ -3067,49 +3114,51 @@ document.getElementById('prodUploadArea').addEventListener('click', () => docume
 document.getElementById('prodFile').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  showToast('Parsing PDF...');
+  const isImage = /\.(png|jpg|jpeg)$/i.test(file.name);
 
   try {
-    // Dynamically load pdf.js
-    if (!window.pdfjsLib) {
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs', true);
-    }
-
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
     let allText = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const items = textContent.items;
-      // Group by y-position to reconstruct rows
-      const rows = {};
-      items.forEach(item => {
-        const y = Math.round(item.transform[5]);
-        if (!rows[y]) rows[y] = [];
-        rows[y].push({ x: item.transform[4], text: item.str });
-      });
-      // Sort rows by y (descending = top to bottom in PDF coords)
-      const sortedYs = Object.keys(rows).map(Number).sort((a, b) => b - a);
-      sortedYs.forEach(y => {
-        const row = rows[y].sort((a, b) => a.x - b.x);
-        allText += row.map(r => r.text).join('\t') + '\n';
-      });
+    if (isImage) {
+      showToast('Running OCR on image...');
+      allText = await ocrImage(file);
+      // Normalize OCR output: replace multiple spaces with tab for parseProdText
+      allText = allText.split('\n').map(line => line.replace(/\s{2,}/g, '\t')).join('\n');
+    } else {
+      showToast('Parsing PDF...');
+      if (!window.pdfjsLib) {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs', true);
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const items = textContent.items;
+        const rows = {};
+        items.forEach(item => {
+          const y = Math.round(item.transform[5]);
+          if (!rows[y]) rows[y] = [];
+          rows[y].push({ x: item.transform[4], text: item.str });
+        });
+        const sortedYs = Object.keys(rows).map(Number).sort((a, b) => b - a);
+        sortedYs.forEach(y => {
+          const row = rows[y].sort((a, b) => a.x - b.x);
+          allText += row.map(r => r.text).join('\t') + '\n';
+        });
+      }
     }
 
     prodData = parseProdText(allText);
     localStorage.setItem(PROD_KEY, JSON.stringify(prodData));
     showToast(`Loaded ${prodData.length} billing cases`);
 
-    // Auto-detect month
     if (prodData.length > 0 && prodData[0].date) {
       const d = new Date(prodData[0].date + 'T12:00:00');
       if (!isNaN(d)) { pYear = d.getFullYear(); pMonth = d.getMonth(); updateReconMonthLabels(); }
     }
     renderProdRecon();
   } catch(err) {
-    showToast('Error reading PDF: ' + err.message);
+    showToast('Error reading file: ' + err.message);
     console.error(err);
   }
   e.target.value = '';
@@ -3135,6 +3184,377 @@ function loadScript(src, isModule) {
     s.onerror = reject;
     document.head.appendChild(s);
   });
+}
+
+// ================================================================
+// TESSERACT OCR
+// ================================================================
+function loadTesseract() {
+  if (window.Tesseract) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Failed to load Tesseract.js'));
+    document.head.appendChild(s);
+  });
+}
+
+async function ocrImage(file) {
+  await loadTesseract();
+  const worker = await Tesseract.createWorker('eng');
+  const { data } = await worker.recognize(file);
+  await worker.terminate();
+  return data.text;
+}
+
+// ================================================================
+// QGENDA SCREENSHOT PARSER
+// ================================================================
+function parseQgendaScreenshot(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  const entries = [];
+  let currentYear = new Date().getFullYear();
+
+  for (const line of lines) {
+    // Look for date patterns: M/D, M/D/YY, M/D/YYYY
+    const dateMatch = line.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+    if (!dateMatch) continue;
+
+    let [, month, day, year] = dateMatch;
+    month = parseInt(month); day = parseInt(day);
+    if (year) {
+      year = parseInt(year);
+      if (year < 100) year += 2000;
+    } else {
+      year = currentYear;
+    }
+    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+    currentYear = year; // remember year for subsequent lines
+
+    const dateStr = year + '-' + String(month).padStart(2,'0') + '-' + String(day).padStart(2,'0');
+
+    // Look for military time pairs (H:MM or HH:MM)
+    const times = line.match(/\d{1,2}:\d{2}/g);
+    if (!times || times.length < 2) continue;
+
+    // Parse time pairs
+    for (let i = 0; i < times.length - 1; i += 2) {
+      const clockIn = times[i].length === 4 ? '0' + times[i] : times[i];
+      const clockOut = times[i+1].length === 4 ? '0' + times[i+1] : times[i+1];
+      const inMin = timeToMinutes(clockIn);
+      let outMin = timeToMinutes(clockOut);
+      if (outMin <= inMin) outMin += 1440;
+      const duration = (outMin - inMin) / 60;
+
+      // Extract task abbreviation — text before or after the times
+      const afterTimes = line.substring(line.lastIndexOf(times[i+1]) + times[i+1].length).trim();
+      const beforeDate = line.substring(0, line.indexOf(dateMatch[0])).trim();
+      const betweenDateAndTime = line.substring(line.indexOf(dateMatch[0]) + dateMatch[0].length, line.indexOf(times[i])).trim();
+      const task = afterTimes || betweenDateAndTime || beforeDate || '';
+
+      entries.push({
+        scheduleDate: dateStr,
+        clockInDate: dateStr,
+        clockInTime: clockIn,
+        clockOutDate: dateStr,
+        clockOutTime: clockOut,
+        duration: round2(duration),
+        task: task.replace(/[^a-zA-Z0-9\s\/\-]/g, '').trim(),
+        location: '',
+        notes: ''
+      });
+    }
+  }
+  return entries;
+}
+
+// ================================================================
+// IMPORT SHIFTS FROM QGENDA
+// ================================================================
+function mapTaskToAssignmentType(task) {
+  const t = (task || '').toUpperCase();
+  if (t.includes('NORA')) return 'NORA';
+  if (t.includes('ACS') || t.includes('TOCR')) return 'ACS';
+  if (t.includes('C/L') || t.includes('CARDIAC')) return 'cardiac_liver';
+  if (t.includes('MOLE')) return 'mole';
+  if (t.includes('CRNA')) return 'CRNA_supervision';
+  if (t.includes('ENDO')) return 'endo';
+  if (t.includes('SF1') || t.includes('SF 1')) return 'SF1';
+  if (t.includes('SF2') || t.includes('SF 2')) return 'SF2';
+  if (t.includes('3RD') || t.includes('3C')) return '3rd_call';
+  if (t.includes('2ND') || t.includes('2C')) return '2nd_call';
+  if (t.includes('1ST') || t.includes('1C')) return '1st_call';
+  if (t.includes('OB') || t.includes('UVOC') || t.includes('UVH')) return 'OB_restricted';
+  if (t.includes('OR')) return 'OR';
+  return 'OR'; // fallback
+}
+
+function showQgendaImportButton() {
+  const area = document.getElementById('qgendaImportArea');
+  if (qgendaData.length > 0) {
+    area.classList.remove('hidden');
+  } else {
+    area.classList.add('hidden');
+  }
+}
+
+let pendingImportAction = null;
+
+document.getElementById('importShiftsBtn').addEventListener('click', () => {
+  // Group QGenda entries by date, pick earliest clock-in and latest clock-out
+  const byDate = {};
+  qgendaData.forEach(e => {
+    const d = e.scheduleDate;
+    if (!d) return;
+    if (!byDate[d]) byDate[d] = [];
+    byDate[d].push(e);
+  });
+
+  let toImport = 0, toSkip = 0;
+  const shiftsToCreate = [];
+
+  Object.keys(byDate).sort().forEach(date => {
+    if (data.shifts[date]) { toSkip++; return; }
+    const entries = byDate[date];
+    // Find earliest clock-in and latest clock-out
+    let earliest = '23:59', latest = '00:00', task = '';
+    entries.forEach(e => {
+      if (e.clockInTime && e.clockInTime < earliest) earliest = e.clockInTime;
+      if (e.clockOutTime && e.clockOutTime > latest) latest = e.clockOutTime;
+      if (!task && e.task) task = e.task;
+    });
+    shiftsToCreate.push({
+      date, assignmentType: mapTaskToAssignmentType(task),
+      startTime: earliest, endTime: latest, task
+    });
+    toImport++;
+  });
+
+  if (toImport === 0) {
+    showToast(toSkip > 0 ? `All ${toSkip} dates already have shifts` : 'No shifts to import');
+    return;
+  }
+
+  // Show confirmation modal
+  const body = document.getElementById('importConfirmBody');
+  body.innerHTML = `<p>Import <strong>${toImport}</strong> shift${toImport > 1 ? 's' : ''} from QGenda?</p>` +
+    (toSkip > 0 ? `<p style="font-size:0.8rem;color:var(--text-dim);">${toSkip} date${toSkip > 1 ? 's' : ''} already have shifts and will be skipped.</p>` : '') +
+    `<div style="max-height:200px;overflow-y:auto;margin-top:8px;font-size:0.8rem;">` +
+    shiftsToCreate.map(s => `<div style="padding:4px 0;border-bottom:1px solid var(--border);">${formatDateShort(s.date)} &mdash; ${getAssignmentTypeName(s.assignmentType)} (${s.startTime}-${s.endTime})</div>`).join('') +
+    `</div>`;
+  document.getElementById('importConfirmTitle').textContent = 'Import Shifts';
+
+  pendingImportAction = () => {
+    shiftsToCreate.forEach(s => {
+      data.shifts[s.date] = {
+        date: s.date,
+        assignmentType: s.assignmentType,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        isHoliday: false,
+        unrestrictedCall: false,
+        callStart: '', callEnd: '',
+        forcedOff: false,
+        subspecCoverage: false,
+        teeCount: 0,
+        supervisionStart: '',
+        supervisionEnd: ''
+      };
+    });
+    saveData(data);
+    updateHeaderPoints();
+    showToast(`Imported ${shiftsToCreate.length} shifts`);
+    renderQgendaRecon();
+  };
+
+  document.getElementById('importConfirmModal').classList.remove('hidden');
+});
+
+document.getElementById('confirmImport').addEventListener('click', () => {
+  document.getElementById('importConfirmModal').classList.add('hidden');
+  if (pendingImportAction) { pendingImportAction(); pendingImportAction = null; }
+});
+
+document.getElementById('cancelImport').addEventListener('click', () => {
+  document.getElementById('importConfirmModal').classList.add('hidden');
+  pendingImportAction = null;
+});
+
+// ================================================================
+// CSV CASE IMPORT (Google Sheet export)
+// ================================================================
+document.getElementById('csvUploadArea').addEventListener('click', () => document.getElementById('csvFile').click());
+
+document.getElementById('csvFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const text = ev.target.result;
+      const result = parseGoogleSheetCSV(text);
+      if (result.cases.length === 0) {
+        showToast('No cases found in CSV');
+        return;
+      }
+      showCSVImportConfirmation(result);
+    } catch(err) {
+      showToast('Error parsing CSV: ' + err.message);
+      console.error(err);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+function convertAMPMToMilitary(timeStr) {
+  if (!timeStr) return '';
+  const s = timeStr.trim().toUpperCase();
+  // Already military format?
+  if (s.match(/^\d{1,2}:\d{2}$/) && !s.includes('AM') && !s.includes('PM')) {
+    const [h, m] = s.split(':').map(Number);
+    return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  }
+  const match = s.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!match) return '';
+  let [, h, m, ampm] = match;
+  h = parseInt(h); m = parseInt(m);
+  if (ampm === 'PM' && h !== 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+}
+
+function parseGoogleSheetCSV(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  const cases = [];
+  let detectedYear = null, detectedMonth = null;
+
+  for (const line of lines) {
+    // Simple CSV split (handles basic cases, no quoted commas expected in this data)
+    const cols = line.split(',').map(c => c.trim());
+    if (cols.length < 5) continue;
+
+    // First column should be a date like M/D or M/D/YY
+    const dateMatch = cols[0].match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+    if (!dateMatch) continue;
+
+    let [, month, day, year] = dateMatch;
+    month = parseInt(month); day = parseInt(day);
+
+    if (year) {
+      year = parseInt(year);
+      if (year < 100) year += 2000;
+    } else {
+      // Infer year: if month >= 10, likely 2025; if month <= 6, likely 2026
+      year = month >= 7 ? 2025 : 2026;
+    }
+
+    if (!detectedYear) { detectedYear = year; detectedMonth = month; }
+
+    const dateStr = year + '-' + String(month).padStart(2,'0') + '-' + String(day).padStart(2,'0');
+
+    // Parse columns based on expected Google Sheet format:
+    // Date, Surgeon, Points, Day Start, Day End, pts/hr, Modifiers, Shared?, Notes/Procedure
+    const surgeon = cols[1] || '';
+    const baseUnits = parseFloat(cols[2]) || 0;
+    const startTime = convertAMPMToMilitary(cols[3]);
+    const endTime = convertAMPMToMilitary(cols[4]);
+    // cols[5] = pts/hr (skip)
+    const modifiers = cols[6] || '';
+    const shared = cols[7] || '';
+    const procedure = cols[8] || cols[cols.length - 1] || '';
+
+    // Parse modifiers
+    const isEmergency = /\bE\b/i.test(modifiers);
+    let physicalStatus = 'P3';
+    const psMatch = modifiers.match(/\b([45])\b/);
+    if (psMatch) physicalStatus = 'P' + psMatch[1];
+
+    if (baseUnits <= 0 && !startTime) continue; // skip non-case rows
+
+    cases.push({
+      id: genId(),
+      caseType: 'standard',
+      procedure: procedure,
+      baseUnits: baseUnits,
+      physicalStatus: physicalStatus,
+      startTime: startTime,
+      endTime: endTime,
+      shiftDate: dateStr,
+      isEmergency: isEmergency,
+      isMedicalProcedure: false,
+      medicalProcedureUnits: 0,
+      isAcutePain: false,
+      acutePainUnits: 0,
+      isHighRiskPeds: false,
+      isORCase: false,
+      nerveBlock: 'none',
+      centralLine: false,
+      arterialLine: false,
+      pac: false,
+      teeAddOn: false,
+      notes: surgeon + (shared && shared.toLowerCase() === 'y' ? ' (shared)' : ''),
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const label = detectedMonth ? `${mn[detectedMonth - 1]} ${detectedYear}` : 'Unknown';
+  return { cases, label, year: detectedYear, month: detectedMonth };
+}
+
+function showCSVImportConfirmation(result) {
+  const { cases, label } = result;
+
+  // Check for duplicates
+  const existingKeys = new Set(data.cases.map(c => c.shiftDate + '|' + c.startTime));
+  const newCases = cases.filter(c => !existingKeys.has(c.shiftDate + '|' + c.startTime));
+  const dupes = cases.length - newCases.length;
+
+  if (newCases.length === 0) {
+    showToast(`All ${cases.length} cases already exist`);
+    return;
+  }
+
+  const body = document.getElementById('importConfirmBody');
+  body.innerHTML = `<p>Found <strong>${cases.length}</strong> cases for <strong>${label}</strong>.</p>` +
+    (dupes > 0 ? `<p style="font-size:0.8rem;color:var(--text-dim);">${dupes} duplicate${dupes > 1 ? 's' : ''} will be skipped.</p>` : '') +
+    `<p>Import <strong>${newCases.length}</strong> new case${newCases.length > 1 ? 's' : ''}?</p>`;
+  document.getElementById('importConfirmTitle').textContent = 'Import Cases';
+
+  pendingImportAction = () => {
+    // Create placeholder shifts for dates without one
+    const caseDates = {};
+    newCases.forEach(c => {
+      if (!caseDates[c.shiftDate]) caseDates[c.shiftDate] = { earliest: '23:59', latest: '00:00' };
+      if (c.startTime && c.startTime < caseDates[c.shiftDate].earliest) caseDates[c.shiftDate].earliest = c.startTime;
+      if (c.endTime && c.endTime > caseDates[c.shiftDate].latest) caseDates[c.shiftDate].latest = c.endTime;
+    });
+
+    let shiftsCreated = 0;
+    Object.keys(caseDates).forEach(date => {
+      if (!data.shifts[date]) {
+        data.shifts[date] = {
+          date, assignmentType: 'OR',
+          startTime: caseDates[date].earliest || '07:00',
+          endTime: caseDates[date].latest || '17:00',
+          isHoliday: false, unrestrictedCall: false,
+          callStart: '', callEnd: '',
+          forcedOff: false, subspecCoverage: false,
+          teeCount: 0, supervisionStart: '', supervisionEnd: ''
+        };
+        shiftsCreated++;
+      }
+    });
+
+    data.cases.push(...newCases);
+    saveData(data);
+    updateHeaderPoints();
+    showToast(`Imported ${newCases.length} cases` + (shiftsCreated > 0 ? ` and created ${shiftsCreated} placeholder shifts` : ''));
+  };
+
+  document.getElementById('importConfirmModal').classList.remove('hidden');
 }
 
 function parseProdText(text) {
