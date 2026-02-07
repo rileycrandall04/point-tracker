@@ -559,8 +559,13 @@ textarea { resize: vertical; min-height: 60px; }
 <!-- SHIFT PAGE -->
 <div class="page active" id="page-shift">
   <div class="card">
-    <h2>Quick Templates</h2>
-    <div class="template-grid" id="templateGrid"></div>
+    <div class="card-collapse-header" id="templateCollapseHeader">
+      <h2>Quick Templates</h2>
+      <span class="arrow" id="templateArrow">&#9660;</span>
+    </div>
+    <div class="card-collapse-body" id="templateCollapseBody" style="max-height:0;">
+      <div class="template-grid" id="templateGrid" style="padding-top:12px;"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -584,6 +589,8 @@ textarea { resize: vertical; min-height: 60px; }
         <div class="shift-type-btn" data-type="endo">Endo</div>
         <div class="shift-type-btn" data-type="SF1">SF 1</div>
         <div class="shift-type-btn" data-type="SF2">SF 2</div>
+        <div class="shift-type-btn" data-type="ACS">ACS</div>
+        <div class="shift-type-btn" data-type="NORA">NORA</div>
         <div class="shift-type-btn" data-type="CRNA_supervision">CRNA Supervision</div>
       </div>
     </div>
@@ -1041,7 +1048,8 @@ function getAssignmentTypeName(type) {
   const names = {
     OR: 'OR / General', OB_restricted: 'UVH OB', cardiac_liver: 'Cardiac / Liver',
     mole: 'Mole', '1st_call': '1st Call', '2nd_call': '2nd Call', '3rd_call': '3rd Call',
-    endo: 'Endo', SF1: 'SF 1', SF2: 'SF 2', CRNA_supervision: 'CRNA Supervision'
+    endo: 'Endo', SF1: 'SF 1', SF2: 'SF 2', ACS: 'ACS', NORA: 'NORA',
+    CRNA_supervision: 'CRNA Supervision'
   };
   return names[type] || type;
 }
@@ -1119,8 +1127,11 @@ function calcARPoints(shift) {
     const normalizedMin = m % 1440;
     totalPoints += getARRate(shift.assignmentType, isHol, isWknd, normalizedMin) / 60;
   }
-  const minPoints = (shift.assignmentType === 'OB_restricted') ? 13 * 4 : 20 * 4;
-  return Math.max(round2(totalPoints), minPoints);
+  if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
+    const minPoints = (shift.assignmentType === 'OB_restricted') ? 13 * 4 : 20 * 4;
+    return Math.max(round2(totalPoints), minPoints);
+  }
+  return round2(totalPoints);
 }
 
 function getTimeMultiplier(physicalStatus, isHol, isWknd, caseStartMin, isHighRiskPeds) {
@@ -1313,6 +1324,8 @@ const defaultTemplates = [
   { name: 'Mole', type: 'mole', start: '07:00', end: '17:00', call: true, callStart: '17:00', callEnd: '07:00' },
   { name: '1st Call', type: '1st_call', start: '07:00', end: '17:00', call: true, callStart: '17:00', callEnd: '07:00' },
   { name: 'Endo', type: 'endo', start: '07:00', end: '17:00', call: true, callStart: '17:00', callEnd: '07:00' },
+  { name: 'ACS', type: 'ACS', start: '07:00', end: '17:00', call: false },
+  { name: 'NORA', type: 'NORA', start: '07:00', end: '17:00', call: false },
   { name: 'CRNA Supv', type: 'CRNA_supervision', start: '07:00', end: '17:00', call: false },
 ];
 
@@ -1346,6 +1359,19 @@ function renderTemplates() {
     });
   });
 }
+
+// Template collapse toggle
+document.getElementById('templateCollapseHeader').addEventListener('click', () => {
+  const body = document.getElementById('templateCollapseBody');
+  const arrow = document.getElementById('templateArrow');
+  if (body.style.maxHeight && body.style.maxHeight !== '0px') {
+    body.style.maxHeight = '0';
+    arrow.classList.remove('open');
+  } else {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    arrow.classList.add('open');
+  }
+});
 
 // ================================================================
 // SHIFT PAGE
