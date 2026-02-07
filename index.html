@@ -967,6 +967,7 @@ input.mil-time.invalid {
   <div class="tab-bar">
     <button class="tab-btn active" data-rtab="qgenda">QGenda Time</button>
     <button class="tab-btn" data-rtab="production">Production</button>
+    <button class="tab-btn" data-rtab="import">Import</button>
   </div>
 
   <!-- QGenda Tab -->
@@ -990,9 +991,6 @@ input.mil-time.invalid {
     </div>
 
     <div id="qgendaResults"></div>
-    <div id="qgendaImportArea" class="hidden" style="margin-top:12px;">
-      <button class="btn btn-primary" id="importShiftsBtn" style="width:100%;">Import Shifts from QGenda</button>
-    </div>
   </div>
 
   <!-- Production Tab -->
@@ -1016,6 +1014,49 @@ input.mil-time.invalid {
     </div>
 
     <div id="prodResults"></div>
+  </div>
+
+  <!-- Import Tab -->
+  <div id="rtab-import" class="hidden">
+    <div class="tab-bar" id="importSubTabs">
+      <button class="tab-btn active" data-itab="time">Time Punches</button>
+      <button class="tab-btn" data-itab="cases">Cases</button>
+    </div>
+
+    <!-- Time Punch Import -->
+    <div id="itab-time">
+      <div class="card">
+        <h2>Import Shifts from QGenda</h2>
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+          Upload a QGenda time punch export (.xlsx, .csv, or screenshot) to import shifts into the tracker.
+        </p>
+        <div class="upload-area" id="importTimeUploadArea">
+          <div style="font-size:2rem;">&#128197;</div>
+          <p>Tap to upload QGenda .xlsx, .csv, or screenshot</p>
+          <input type="file" id="importTimeFile" accept=".xlsx,.xls,.csv,.png,.jpg,.jpeg">
+        </div>
+      </div>
+      <div id="importTimePreview"></div>
+      <div id="importTimeAction" class="hidden" style="margin-top:12px;">
+        <button class="btn btn-primary" id="importShiftsBtn" style="width:100%;">Import Shifts</button>
+      </div>
+    </div>
+
+    <!-- Case Import -->
+    <div id="itab-cases" class="hidden">
+      <div class="card">
+        <h2>Import Cases from CSV</h2>
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+          Export a tab from your Google Sheet as CSV and upload it to import cases.
+        </p>
+        <div class="upload-area" id="csvUploadArea">
+          <div style="font-size:2rem;">&#128203;</div>
+          <p>Tap to upload CSV</p>
+          <input type="file" id="csvFile" accept=".csv">
+        </div>
+      </div>
+      <div id="csvImportResults"></div>
+    </div>
   </div>
 </div>
 
@@ -1100,20 +1141,6 @@ input.mil-time.invalid {
     <div id="monthlyCasesList">
       <div class="empty-state"><p>No cases for this month.</p></div>
     </div>
-  </div>
-
-  <!-- CSV Case Import -->
-  <div class="card">
-    <h2>Import Cases from CSV</h2>
-    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-      Export a tab from your Google Sheet as CSV and upload it to import cases.
-    </p>
-    <div class="upload-area" id="csvUploadArea">
-      <div style="font-size:2rem;">&#128196;</div>
-      <p>Tap to upload CSV</p>
-      <input type="file" id="csvFile" accept=".csv">
-    </div>
-    <div id="csvImportResults"></div>
   </div>
 
   <!-- Export / Import -->
@@ -2870,12 +2897,24 @@ function updateHeaderPoints() {
 // ================================================================
 // RECONCILE PAGE — Tab switching
 // ================================================================
-document.querySelectorAll('.tab-btn').forEach(btn => {
+// Main reconcile tabs
+document.querySelectorAll('#page-reconcile > .tab-bar > .tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#page-reconcile > .tab-bar > .tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('rtab-qgenda').classList.toggle('hidden', btn.dataset.rtab !== 'qgenda');
     document.getElementById('rtab-production').classList.toggle('hidden', btn.dataset.rtab !== 'production');
+    document.getElementById('rtab-import').classList.toggle('hidden', btn.dataset.rtab !== 'import');
+  });
+});
+
+// Import sub-tabs
+document.querySelectorAll('#importSubTabs .tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#importSubTabs .tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('itab-time').classList.toggle('hidden', btn.dataset.itab !== 'time');
+    document.getElementById('itab-cases').classList.toggle('hidden', btn.dataset.itab !== 'cases');
   });
 });
 
@@ -2926,7 +2965,6 @@ function processQgendaRows(rows) {
     if (!isNaN(d)) { qYear = d.getFullYear(); qMonth = d.getMonth(); updateReconMonthLabels(); }
   }
   renderQgendaRecon();
-  showQgendaImportButton();
 }
 
 function parseCSVRows(text) {
@@ -2974,7 +3012,6 @@ document.getElementById('qgendaFile').addEventListener('change', async (e) => {
         if (!isNaN(d)) { qYear = d.getFullYear(); qMonth = d.getMonth(); updateReconMonthLabels(); }
       }
       renderQgendaRecon();
-      showQgendaImportButton();
     } catch(err) {
       showToast('OCR error: ' + err.message);
     }
@@ -3333,21 +3370,117 @@ function mapTaskToAssignmentType(task) {
   return 'OR'; // fallback
 }
 
-function showQgendaImportButton() {
-  const area = document.getElementById('qgendaImportArea');
-  if (qgendaData.length > 0) {
-    area.classList.remove('hidden');
-  } else {
+let importTimeData = [];
+
+function showImportTimePreview() {
+  const area = document.getElementById('importTimeAction');
+  const preview = document.getElementById('importTimePreview');
+  if (importTimeData.length === 0) {
     area.classList.add('hidden');
+    preview.innerHTML = '';
+    return;
   }
+  area.classList.remove('hidden');
+
+  // Group by date for preview
+  const byDate = {};
+  importTimeData.forEach(e => {
+    const d = e.scheduleDate;
+    if (!d) return;
+    if (!byDate[d]) byDate[d] = [];
+    byDate[d].push(e);
+  });
+
+  const dates = Object.keys(byDate).sort();
+  const existing = dates.filter(d => data.shifts[d]).length;
+  const newDates = dates.filter(d => !data.shifts[d]).length;
+
+  let html = '<div class="card" style="margin-top:12px;"><h3>Preview</h3>';
+  html += `<p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">${dates.length} date${dates.length > 1 ? 's' : ''} found &mdash; ${newDates} new, ${existing} already exist</p>`;
+  html += '<div style="max-height:250px;overflow-y:auto;font-size:0.8rem;">';
+  dates.forEach(date => {
+    const entries = byDate[date];
+    const hasShift = data.shifts[date];
+    const task = entries[0].task || '';
+    const times = entries.map(e => `${e.clockInTime}-${e.clockOutTime}`).join(', ');
+    const assignType = getAssignmentTypeName(mapTaskToAssignmentType(task));
+    html += `<div style="padding:6px 0;border-bottom:1px solid var(--border);${hasShift ? 'opacity:0.5;' : ''}">`;
+    html += `<strong>${formatDateShort(date)}</strong> &mdash; ${assignType}`;
+    html += `<br><span style="color:var(--text-dim)">${times}${task ? ' (' + escHtml(task) + ')' : ''}${hasShift ? ' — already exists, will skip' : ''}</span>`;
+    html += '</div>';
+  });
+  html += '</div></div>';
+  preview.innerHTML = html;
 }
+
+// Import tab — time punch upload
+document.getElementById('importTimeUploadArea').addEventListener('click', () => document.getElementById('importTimeFile').click());
+
+document.getElementById('importTimeFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const isImage = /\.(png|jpg|jpeg)$/i.test(file.name);
+  const isCSV = /\.csv$/i.test(file.name);
+
+  try {
+    if (isImage) {
+      showToast('Running OCR on image...');
+      const text = await ocrImage(file);
+      importTimeData = parseQgendaScreenshot(text);
+      showToast(`OCR found ${importTimeData.length} entries`);
+    } else if (isCSV) {
+      const text = await file.text();
+      const rows = parseCSVRows(text);
+      importTimeData = rows.map(r => {
+        let schedDate = parseExcelDate(r['Schedule Date']);
+        return {
+          scheduleDate: schedDate,
+          clockInDate: parseExcelDate(r['Effective Clock In Date']),
+          clockInTime: parseExcelTime(r['Effective Clock In Time']),
+          clockOutDate: parseExcelDate(r['Effective Clock Out Date']),
+          clockOutTime: parseExcelTime(r['Effective Clock Out Time']),
+          duration: parseFloat(r['Duration']) || 0,
+          task: String(r['Scheduled Task Abbreviation'] || ''),
+          location: String(r['Location Name'] || ''),
+          notes: String(r['Notes'] || '')
+        };
+      });
+      showToast(`Loaded ${importTimeData.length} entries from CSV`);
+    } else {
+      const arrayBuffer = await file.arrayBuffer();
+      const wb = XLSX.read(arrayBuffer, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      importTimeData = rows.map(r => {
+        let schedDate = parseExcelDate(r['Schedule Date']);
+        return {
+          scheduleDate: schedDate,
+          clockInDate: parseExcelDate(r['Effective Clock In Date']),
+          clockInTime: parseExcelTime(r['Effective Clock In Time']),
+          clockOutDate: parseExcelDate(r['Effective Clock Out Date']),
+          clockOutTime: parseExcelTime(r['Effective Clock Out Time']),
+          duration: parseFloat(r['Duration']) || 0,
+          task: String(r['Scheduled Task Abbreviation'] || ''),
+          location: String(r['Location Name'] || ''),
+          notes: String(r['Notes'] || '')
+        };
+      });
+      showToast(`Loaded ${importTimeData.length} entries from xlsx`);
+    }
+    showImportTimePreview();
+  } catch(err) {
+    showToast('Error reading file: ' + err.message);
+    console.error(err);
+  }
+  e.target.value = '';
+});
 
 let pendingImportAction = null;
 
 document.getElementById('importShiftsBtn').addEventListener('click', () => {
-  // Group QGenda entries by date, pick earliest clock-in and latest clock-out
+  // Group entries by date, pick earliest clock-in and latest clock-out
   const byDate = {};
-  qgendaData.forEach(e => {
+  importTimeData.forEach(e => {
     const d = e.scheduleDate;
     if (!d) return;
     if (!byDate[d]) byDate[d] = [];
@@ -3408,6 +3541,7 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
     saveData(data);
     updateHeaderPoints();
     showToast(`Imported ${shiftsToCreate.length} shifts`);
+    showImportTimePreview();
     renderQgendaRecon();
   };
 
