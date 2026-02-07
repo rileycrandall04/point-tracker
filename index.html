@@ -542,6 +542,17 @@ input.warn-empty {
   box-shadow: 0 0 0 1px var(--accent2);
 }
 
+/* ===== MILITARY TIME INPUTS ===== */
+input.mil-time {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  text-align: center;
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+}
+input.mil-time.invalid {
+  border-color: var(--danger) !important;
+}
+
 /* ===== MONTHLY CASES ===== */
 .day-cases-header {
   display: flex;
@@ -644,11 +655,11 @@ input.warn-empty {
     <div class="form-row">
       <div class="form-group">
         <label>Shift Start</label>
-        <input type="time" id="shiftStart" value="07:00">
+        <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="shiftStart" value="07:00">
       </div>
       <div class="form-group">
         <label>Shift End</label>
-        <input type="time" id="shiftEnd" value="17:00">
+        <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="shiftEnd" value="17:00">
       </div>
     </div>
 
@@ -665,11 +676,11 @@ input.warn-empty {
     <div class="form-row hidden" id="callTimeRow">
       <div class="form-group">
         <label>Call Start</label>
-        <input type="time" id="callStart" value="17:00">
+        <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="callStart" value="17:00">
       </div>
       <div class="form-group">
         <label>Call End</label>
-        <input type="time" id="callEnd" value="07:00">
+        <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="callEnd" value="07:00">
       </div>
     </div>
 
@@ -701,11 +712,11 @@ input.warn-empty {
       <div class="form-row hidden" id="supervisionTimes">
         <div class="form-group">
           <label>Supervision Start</label>
-          <input type="time" id="supervisionStart">
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="supervisionStart">
         </div>
         <div class="form-group">
           <label>Supervision End</label>
-          <input type="time" id="supervisionEnd">
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="supervisionEnd">
         </div>
       </div>
     </div>
@@ -752,6 +763,7 @@ input.warn-empty {
       <label>Case Type</label>
       <div class="case-type-grid">
         <div class="case-type-btn selected" data-case="standard">Standard Case</div>
+        <div class="case-type-btn" data-case="labor_epidural">Labor Epidural</div>
         <div class="case-type-btn" data-case="epidural_blood_patch">Epidural Blood Patch</div>
         <div class="case-type-btn" data-case="emergency_intubation">Emergency Intubation</div>
         <div class="case-type-btn" data-case="01996">Epidural Rounding (01996)</div>
@@ -786,11 +798,11 @@ input.warn-empty {
       <div class="form-row">
         <div class="form-group">
           <label>Anesthesia Start</label>
-          <input type="time" id="caseStart">
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="caseStart">
         </div>
         <div class="form-group">
           <label>Anesthesia End</label>
-          <input type="time" id="caseEnd">
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="caseEnd">
         </div>
       </div>
 
@@ -827,6 +839,19 @@ input.warn-empty {
       <div class="checkbox-group hidden" id="orCaseRow">
         <input type="checkbox" id="caseORCase">
         <label for="caseORCase">OR Case (use OR rates, no OB doubling)</label>
+      </div>
+    </div>
+
+    <div id="laborEpiduralFields" class="hidden">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Epidural Start</label>
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="laborStart">
+        </div>
+        <div class="form-group">
+          <label>Epidural End</label>
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="laborEnd">
+        </div>
       </div>
     </div>
 
@@ -1067,6 +1092,7 @@ input.warn-empty {
       <label>Case Type</label>
       <div class="case-type-grid" id="editCaseTypeGrid">
         <div class="case-type-btn selected" data-ecase="standard">Standard Case</div>
+        <div class="case-type-btn" data-ecase="labor_epidural">Labor Epidural</div>
         <div class="case-type-btn" data-ecase="epidural_blood_patch">Epidural Blood Patch</div>
         <div class="case-type-btn" data-ecase="emergency_intubation">Emergency Intubation</div>
         <div class="case-type-btn" data-ecase="01996">Epidural Rounding (01996)</div>
@@ -1098,11 +1124,11 @@ input.warn-empty {
       <div class="form-row">
         <div class="form-group">
           <label>Anesthesia Start</label>
-          <input type="time" id="editCaseStart">
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="editCaseStart">
         </div>
         <div class="form-group">
           <label>Anesthesia End</label>
-          <input type="time" id="editCaseEnd">
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="editCaseEnd">
         </div>
       </div>
       <div class="checkbox-group">
@@ -1132,6 +1158,18 @@ input.warn-empty {
       <div class="checkbox-group hidden" id="editORCaseRow">
         <input type="checkbox" id="editCaseORCase">
         <label for="editCaseORCase">OR Case (use OR rates, no OB doubling)</label>
+      </div>
+    </div>
+    <div id="editLaborEpiduralFields" class="hidden">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Epidural Start</label>
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="editLaborStart">
+        </div>
+        <div class="form-group">
+          <label>Epidural End</label>
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="editLaborEnd">
+        </div>
       </div>
     </div>
     <div id="editSimpleFields" class="hidden">
@@ -1304,16 +1342,81 @@ function round2(n) {
 }
 
 // ================================================================
+// MILITARY TIME INPUT HANDLING
+// ================================================================
+function formatMilTimeInput(val) {
+  const digits = val.replace(/[^0-9]/g, '');
+  if (digits.length === 0) return '';
+  if (digits.length <= 2) {
+    const h = parseInt(digits);
+    if (h > 23) return '';
+    return digits;
+  }
+  let h, m;
+  if (digits.length === 3) {
+    h = parseInt(digits.substring(0, 1));
+    m = parseInt(digits.substring(1, 3));
+    if (h > 2 || m > 59) return digits.substring(0, 2) + ':' + digits.substring(2);
+    return '0' + digits.substring(0, 1) + ':' + digits.substring(1, 3);
+  }
+  h = parseInt(digits.substring(0, 2));
+  m = parseInt(digits.substring(2, 4));
+  if (h > 23) h = 23;
+  if (m > 59) m = 59;
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+
+function isValidMilTime(val) {
+  if (!val) return true; // empty is allowed
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(val);
+}
+
+function initMilTimeInputs() {
+  document.querySelectorAll('input.mil-time').forEach(input => {
+    input.addEventListener('input', function() {
+      const pos = this.selectionStart;
+      const digits = this.value.replace(/[^0-9]/g, '');
+      // Auto-insert colon after 2 digits while typing
+      if (digits.length >= 2 && !this.value.includes(':')) {
+        this.value = digits.substring(0, 2) + ':' + digits.substring(2, 4);
+        this.setSelectionRange(pos + 1, pos + 1);
+      }
+    });
+
+    input.addEventListener('blur', function() {
+      if (this.value) {
+        this.value = formatMilTimeInput(this.value);
+      }
+      this.classList.toggle('invalid', this.value && !isValidMilTime(this.value));
+    });
+
+    // Allow typing only digits and colon
+    input.addEventListener('keypress', function(e) {
+      if (e.key.length === 1 && !/[0-9:]/.test(e.key)) {
+        e.preventDefault();
+      }
+    });
+  });
+}
+
+// ================================================================
 // POINT CALCULATION ENGINE (preserved from v1)
 // ================================================================
 function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
-  const isOB = ['OB_restricted','SF1','SF2'].includes(assignmentType);
-  const baseRate = isOB ? 13 : 20;
+  const isDaytime = timeMinutes >= 420 && timeMinutes < 1020;
+  let baseRate;
+  if (assignmentType === 'SF1') {
+    // SF1: 13/hr during 0700-1700, General rate (20/hr) outside
+    baseRate = isDaytime ? 13 : 20;
+  } else {
+    const isOB = ['OB_restricted','SF2'].includes(assignmentType);
+    baseRate = isOB ? 13 : 20;
+  }
   if (isHol || isWknd) {
-    if (timeMinutes >= 420 && timeMinutes < 1020) return baseRate * 1.10;
+    if (isDaytime) return baseRate * 1.10;
     else return baseRate * 1.25;
   } else {
-    if (timeMinutes >= 420 && timeMinutes < 1020) return baseRate;
+    if (isDaytime) return baseRate;
     else if (timeMinutes >= 1020 && timeMinutes < 1380) return baseRate * 1.10;
     else return baseRate * 1.25;
   }
@@ -1384,6 +1487,18 @@ function calcCasePoints(caseData, shift) {
   if (ct === '99231') return 2;
   if (ct === 'tee') return 22;
 
+  if (ct === 'labor_epidural') {
+    let cs = timeToMinutes(caseData.startTime);
+    let ce = timeToMinutes(caseData.endTime);
+    if (ce <= cs) ce += 1440;
+    const durationHrs = Math.min((ce - cs) / 60, 24);
+    let pts = 0;
+    if (durationHrs > 0) pts += Math.min(durationHrs, 1) * 7.5;
+    if (durationHrs > 1) pts += Math.min(durationHrs - 1, 1) * 2.5;
+    if (durationHrs > 2) pts += (durationHrs - 2) * 1.25;
+    return round2(pts * 2); // always OB doubled
+  }
+
   const baseUnits = parseFloat(caseData.baseUnits) || 0;
   const basePoints = 0.5 * baseUnits;
   let caseStartMin = timeToMinutes(caseData.startTime);
@@ -1413,6 +1528,32 @@ function getCaseBreakdown(caseData, shift) {
   if (ct === '01996') { bd.push({label:'Epidural Rounding (01996)', pts:3}); return bd; }
   if (ct === '99231') { bd.push({label:'Pain Rounding (99231)', pts:2}); return bd; }
   if (ct === 'tee') { bd.push({label:'TEE Exam', pts:22}); return bd; }
+
+  if (ct === 'labor_epidural') {
+    let cs = timeToMinutes(caseData.startTime);
+    let ce = timeToMinutes(caseData.endTime);
+    if (ce <= cs) ce += 1440;
+    const durationHrs = Math.min((ce - cs) / 60, 24);
+    let subtotal = 0;
+    if (durationHrs > 0) {
+      const p = round2(Math.min(durationHrs, 1) * 7.5);
+      bd.push({label: `1st Hour (${round2(Math.min(durationHrs, 1))}h x 7.5)`, pts: p});
+      subtotal += p;
+    }
+    if (durationHrs > 1) {
+      const p = round2(Math.min(durationHrs - 1, 1) * 2.5);
+      bd.push({label: `2nd Hour (${round2(Math.min(durationHrs - 1, 1))}h x 2.5)`, pts: p});
+      subtotal += p;
+    }
+    if (durationHrs > 2) {
+      const hrs = round2(durationHrs - 2);
+      const p = round2(hrs * 1.25);
+      bd.push({label: `Additional (${hrs}h x 1.25)`, pts: p});
+      subtotal += p;
+    }
+    bd.push({label: 'OB Doubled (x2)', pts: round2(subtotal)});
+    return bd;
+  }
 
   const baseUnits = parseFloat(caseData.baseUnits) || 0;
   bd.push({label: `Half Base Units (${baseUnits} x 0.5)`, pts: round2(0.5 * baseUnits)});
@@ -1496,7 +1637,8 @@ function calcShiftTotal(shift) {
 
 function getCaseTypeName(type) {
   const names = {
-    standard: 'Standard Case', epidural_blood_patch: 'Epidural Blood Patch',
+    standard: 'Standard Case', labor_epidural: 'Labor Epidural',
+    epidural_blood_patch: 'Epidural Blood Patch',
     emergency_intubation: 'Emergency Intubation', '01996': 'Epidural Rounding (01996)',
     '99231': 'Pain Rounding (99231)', tee: 'TEE Exam'
   };
@@ -1645,6 +1787,7 @@ document.querySelectorAll('[data-qproc]').forEach(btn => {
     selectedCaseType = 'standard';
     document.querySelectorAll('#page-cases .case-type-btn').forEach(b => b.classList.toggle('selected', b.dataset.case === 'standard'));
     document.getElementById('standardFields').classList.remove('hidden');
+    document.getElementById('laborEpiduralFields').classList.add('hidden');
     document.getElementById('simpleFields').classList.add('hidden');
     document.getElementById('caseProcedure').value = proc.name;
     document.getElementById('caseBaseUnits').value = proc.units;
@@ -1835,7 +1978,8 @@ document.querySelectorAll('#page-cases .case-type-btn').forEach(btn => {
     btn.classList.add('selected');
     selectedCaseType = btn.dataset.case;
     document.getElementById('standardFields').classList.toggle('hidden', selectedCaseType !== 'standard');
-    document.getElementById('simpleFields').classList.toggle('hidden', selectedCaseType === 'standard');
+    document.getElementById('laborEpiduralFields').classList.toggle('hidden', selectedCaseType !== 'labor_epidural');
+    document.getElementById('simpleFields').classList.toggle('hidden', selectedCaseType === 'standard' || selectedCaseType === 'labor_epidural');
     updatePointPreview();
   });
 });
@@ -1850,7 +1994,7 @@ document.getElementById('caseAcutePain').addEventListener('change', function() {
   updatePointPreview();
 });
 
-['caseBaseUnits','caseStart','caseEnd','casePhysicalStatus','caseMedicalUnits','caseAcutePainUnits'].forEach(id => {
+['caseBaseUnits','caseStart','caseEnd','casePhysicalStatus','caseMedicalUnits','caseAcutePainUnits','laborStart','laborEnd'].forEach(id => {
   const el = document.getElementById(id);
   if (el) { el.addEventListener('input', updatePointPreview); el.addEventListener('change', updatePointPreview); }
 });
@@ -1871,13 +2015,14 @@ function updatePointPreview() {
 }
 
 function buildCaseFromForm() {
+  const isLabor = selectedCaseType === 'labor_epidural';
   return {
     caseType: selectedCaseType,
-    procedure: document.getElementById('caseProcedure')?.value || selectedCaseType,
+    procedure: isLabor ? 'Labor Epidural' : (document.getElementById('caseProcedure')?.value || selectedCaseType),
     baseUnits: document.getElementById('caseBaseUnits')?.value || 0,
     physicalStatus: document.getElementById('casePhysicalStatus')?.value || 'P3',
-    startTime: document.getElementById('caseStart')?.value || '',
-    endTime: document.getElementById('caseEnd')?.value || '',
+    startTime: isLabor ? (document.getElementById('laborStart')?.value || '') : (document.getElementById('caseStart')?.value || ''),
+    endTime: isLabor ? (document.getElementById('laborEnd')?.value || '') : (document.getElementById('caseEnd')?.value || ''),
     isEmergency: document.getElementById('caseEmergency')?.checked || false,
     isMedicalProc: document.getElementById('caseMedicalProc')?.checked || false,
     medicalUnits: document.getElementById('caseMedicalUnits')?.value || 0,
@@ -1898,7 +2043,7 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   caseData.id = genId();
   caseData.shiftDate = date;
   caseData.timestamp = new Date().toISOString();
-  if (caseData.caseType === 'standard') {
+  if (caseData.caseType === 'standard' || caseData.caseType === 'labor_epidural') {
     if (!caseData.startTime || !caseData.endTime) { showToast('Please enter start and end times'); return; }
   }
   data.cases.push(caseData);
@@ -1923,6 +2068,9 @@ function resetCaseForm() {
   document.getElementById('acutePainUnitsRow').classList.add('hidden');
   document.getElementById('caseHighRiskPeds').checked = false;
   document.getElementById('caseORCase').checked = false;
+  document.getElementById('laborStart').value = '';
+  document.getElementById('laborEnd').value = '';
+  document.getElementById('laborEpiduralFields').classList.add('hidden');
   document.getElementById('caseNotes').value = '';
   document.getElementById('simpleNotes').value = '';
   document.getElementById('casePointPreview').classList.add('hidden');
@@ -2247,7 +2395,8 @@ document.querySelectorAll('#editCaseTypeGrid .case-type-btn').forEach(btn => {
     btn.classList.add('selected');
     editCaseType = btn.dataset.ecase;
     document.getElementById('editStandardFields').classList.toggle('hidden', editCaseType !== 'standard');
-    document.getElementById('editSimpleFields').classList.toggle('hidden', editCaseType === 'standard');
+    document.getElementById('editLaborEpiduralFields').classList.toggle('hidden', editCaseType !== 'labor_epidural');
+    document.getElementById('editSimpleFields').classList.toggle('hidden', editCaseType === 'standard' || editCaseType === 'labor_epidural');
   });
 });
 
@@ -2270,7 +2419,8 @@ function openCaseEdit(caseId) {
     b.classList.toggle('selected', b.dataset.ecase === editCaseType);
   });
   document.getElementById('editStandardFields').classList.toggle('hidden', editCaseType !== 'standard');
-  document.getElementById('editSimpleFields').classList.toggle('hidden', editCaseType === 'standard');
+  document.getElementById('editLaborEpiduralFields').classList.toggle('hidden', editCaseType !== 'labor_epidural');
+  document.getElementById('editSimpleFields').classList.toggle('hidden', editCaseType === 'standard' || editCaseType === 'labor_epidural');
 
   // Fill fields
   document.getElementById('editCaseProcedure').value = c.procedure || '';
@@ -2288,6 +2438,12 @@ function openCaseEdit(caseId) {
   document.getElementById('editCaseHighRiskPeds').checked = c.isHighRiskPeds || false;
   document.getElementById('editCaseNotes').value = c.notes || '';
   document.getElementById('editSimpleNotes').value = c.notes || '';
+
+  // Labor epidural fields
+  if (editCaseType === 'labor_epidural') {
+    document.getElementById('editLaborStart').value = c.startTime || '';
+    document.getElementById('editLaborEnd').value = c.endTime || '';
+  }
 
   // OR Case checkbox visibility
   const shift = data.shifts[c.shiftDate];
@@ -2315,6 +2471,11 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
     c.acutePainUnits = document.getElementById('editCaseAcutePainUnits').value;
     c.isHighRiskPeds = document.getElementById('editCaseHighRiskPeds').checked;
     c.isORCase = document.getElementById('editCaseORCase').checked;
+    c.notes = document.getElementById('editCaseNotes').value;
+  } else if (editCaseType === 'labor_epidural') {
+    c.procedure = 'Labor Epidural';
+    c.startTime = document.getElementById('editLaborStart').value;
+    c.endTime = document.getElementById('editLaborEnd').value;
     c.notes = document.getElementById('editCaseNotes').value;
   } else {
     c.notes = document.getElementById('editSimpleNotes').value || document.getElementById('editCaseNotes').value;
@@ -2982,6 +3143,7 @@ if ('serviceWorker' in navigator) {
 // ================================================================
 // INIT
 // ================================================================
+initMilTimeInputs();
 setWorkingDate(todayStr());
 renderTemplates();
 updateHeaderPoints();
