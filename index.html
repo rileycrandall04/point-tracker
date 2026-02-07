@@ -974,12 +974,12 @@ input.mil-time.invalid {
     <div class="card">
       <h2>QGenda Time Reconciliation</h2>
       <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-        Upload your QGenda time punch export (.xlsx) or screenshot to compare against your tracked shifts.
+        Upload your QGenda time punch export (.xlsx or .csv) or screenshot to compare against your tracked shifts.
       </p>
       <div class="upload-area" id="qgendaUploadArea">
         <div style="font-size:2rem;">&#128196;</div>
-        <p>Tap to upload QGenda .xlsx or screenshot</p>
-        <input type="file" id="qgendaFile" accept=".xlsx,.xls,.png,.jpg,.jpeg">
+        <p>Tap to upload QGenda .xlsx, .csv, or screenshot</p>
+        <input type="file" id="qgendaFile" accept=".xlsx,.xls,.csv,.png,.jpg,.jpeg">
       </div>
     </div>
 
@@ -2902,10 +2902,65 @@ document.getElementById('qNextMonth').addEventListener('click', () => { qMonth++
 // Upload area
 document.getElementById('qgendaUploadArea').addEventListener('click', () => document.getElementById('qgendaFile').click());
 
+function processQgendaRows(rows) {
+  qgendaData = rows.map(r => {
+    let schedDate = parseExcelDate(r['Schedule Date']);
+    let clockInDate = parseExcelDate(r['Effective Clock In Date']);
+    let clockOutDate = parseExcelDate(r['Effective Clock Out Date']);
+    return {
+      scheduleDate: schedDate,
+      clockInDate: clockInDate,
+      clockInTime: parseExcelTime(r['Effective Clock In Time']),
+      clockOutDate: clockOutDate,
+      clockOutTime: parseExcelTime(r['Effective Clock Out Time']),
+      duration: parseFloat(r['Duration']) || 0,
+      task: String(r['Scheduled Task Abbreviation'] || ''),
+      location: String(r['Location Name'] || ''),
+      notes: String(r['Notes'] || '')
+    };
+  });
+  localStorage.setItem(QGENDA_KEY, JSON.stringify(qgendaData));
+  showToast(`Loaded ${qgendaData.length} QGenda entries`);
+  if (qgendaData.length > 0 && qgendaData[0].scheduleDate) {
+    const d = new Date(qgendaData[0].scheduleDate + 'T12:00:00');
+    if (!isNaN(d)) { qYear = d.getFullYear(); qMonth = d.getMonth(); updateReconMonthLabels(); }
+  }
+  renderQgendaRecon();
+  showQgendaImportButton();
+}
+
+function parseCSVRows(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  if (lines.length < 2) return [];
+  // Parse header row — handle quoted fields
+  const parseCSVLine = (line) => {
+    const fields = [];
+    let current = '', inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQuotes = !inQuotes; }
+      else if (ch === ',' && !inQuotes) { fields.push(current.trim()); current = ''; }
+      else { current += ch; }
+    }
+    fields.push(current.trim());
+    return fields;
+  };
+  const headers = parseCSVLine(lines[0]);
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = parseCSVLine(lines[i]);
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = vals[idx] || ''; });
+    rows.push(obj);
+  }
+  return rows;
+}
+
 document.getElementById('qgendaFile').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const isImage = /\.(png|jpg|jpeg)$/i.test(file.name);
+  const isCSV = /\.csv$/i.test(file.name);
 
   if (isImage) {
     try {
@@ -2923,6 +2978,17 @@ document.getElementById('qgendaFile').addEventListener('change', async (e) => {
     } catch(err) {
       showToast('OCR error: ' + err.message);
     }
+  } else if (isCSV) {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const rows = parseCSVRows(ev.target.result);
+        processQgendaRows(rows);
+      } catch(err) {
+        showToast('Error reading CSV: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
   } else {
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -2930,30 +2996,7 @@ document.getElementById('qgendaFile').addEventListener('change', async (e) => {
         const wb = XLSX.read(ev.target.result, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        qgendaData = rows.map(r => {
-          let schedDate = parseExcelDate(r['Schedule Date']);
-          let clockInDate = parseExcelDate(r['Effective Clock In Date']);
-          let clockOutDate = parseExcelDate(r['Effective Clock Out Date']);
-          return {
-            scheduleDate: schedDate,
-            clockInDate: clockInDate,
-            clockInTime: parseExcelTime(r['Effective Clock In Time']),
-            clockOutDate: clockOutDate,
-            clockOutTime: parseExcelTime(r['Effective Clock Out Time']),
-            duration: parseFloat(r['Duration']) || 0,
-            task: String(r['Scheduled Task Abbreviation'] || ''),
-            location: String(r['Location Name'] || ''),
-            notes: String(r['Notes'] || '')
-          };
-        });
-        localStorage.setItem(QGENDA_KEY, JSON.stringify(qgendaData));
-        showToast(`Loaded ${qgendaData.length} QGenda entries`);
-        if (qgendaData.length > 0 && qgendaData[0].scheduleDate) {
-          const d = new Date(qgendaData[0].scheduleDate + 'T12:00:00');
-          if (!isNaN(d)) { qYear = d.getFullYear(); qMonth = d.getMonth(); updateReconMonthLabels(); }
-        }
-        renderQgendaRecon();
-        showQgendaImportButton();
+        processQgendaRows(rows);
       } catch(err) {
         showToast('Error reading QGenda file: ' + err.message);
       }
