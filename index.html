@@ -272,6 +272,7 @@ textarea { resize: vertical; min-height: 60px; }
 
 .shift-type-btn.selected { border-color: var(--primary); background: rgba(59,130,246,0.15); }
 .shift-type-btn:hover { border-color: var(--primary); }
+.shift-type-grid .shift-type-btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
 .case-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
 
@@ -574,9 +575,16 @@ textarea { resize: vertical; min-height: 60px; }
       <label>Assignment Type</label>
       <div class="shift-type-grid">
         <div class="shift-type-btn selected" data-type="OR">OR / General</div>
-        <div class="shift-type-btn" data-type="OB_restricted">OB (Restricted)</div>
-        <div class="shift-type-btn" data-type="OB_unrestricted">OB (Unrestricted)</div>
+        <div class="shift-type-btn" data-type="OB_restricted">UVH OB</div>
         <div class="shift-type-btn" data-type="cardiac_liver">Cardiac / Liver</div>
+        <div class="shift-type-btn" data-type="mole">Mole</div>
+        <div class="shift-type-btn" data-type="1st_call">1st Call</div>
+        <div class="shift-type-btn" data-type="2nd_call">2nd Call</div>
+        <div class="shift-type-btn" data-type="3rd_call">3rd Call</div>
+        <div class="shift-type-btn" data-type="endo">Endo</div>
+        <div class="shift-type-btn" data-type="SF1">SF 1</div>
+        <div class="shift-type-btn" data-type="SF2">SF 2</div>
+        <div class="shift-type-btn" data-type="CRNA_supervision">CRNA Supervision</div>
       </div>
     </div>
 
@@ -690,11 +698,6 @@ textarea { resize: vertical; min-height: 60px; }
       <div class="checkbox-group">
         <input type="checkbox" id="caseEmergency">
         <label for="caseEmergency">Emergency Case (+1 pt)</label>
-      </div>
-
-      <div class="checkbox-group">
-        <input type="checkbox" id="caseEModifier">
-        <label for="caseEModifier">E-Modifier (+1 pt)</label>
       </div>
 
       <div class="checkbox-group">
@@ -1007,6 +1010,42 @@ function saveSettings(s) {
 let data = loadData();
 let settings = loadSettings();
 
+// Data migration (idempotent)
+function migrateData(d) {
+  let changed = false;
+  // Migrate eModifier → isEmergency on cases
+  d.cases.forEach(c => {
+    if (c.eModifier) {
+      c.isEmergency = true;
+      delete c.eModifier;
+      changed = true;
+    }
+  });
+  // Migrate OB_unrestricted → OR on shifts
+  Object.values(d.shifts).forEach(s => {
+    if (s.assignmentType === 'OB_unrestricted') {
+      s.assignmentType = 'OR';
+      changed = true;
+    }
+  });
+  if (changed) saveData(d);
+}
+migrateData(data);
+
+// ================================================================
+// CONSTANTS & HELPERS
+// ================================================================
+const UNRESTRICTED_CALL_TYPES = new Set(['mole','1st_call','2nd_call','3rd_call','endo','SF1','SF2']);
+
+function getAssignmentTypeName(type) {
+  const names = {
+    OR: 'OR / General', OB_restricted: 'UVH OB', cardiac_liver: 'Cardiac / Liver',
+    mole: 'Mole', '1st_call': '1st Call', '2nd_call': '2nd Call', '3rd_call': '3rd Call',
+    endo: 'Endo', SF1: 'SF 1', SF2: 'SF 2', CRNA_supervision: 'CRNA Supervision'
+  };
+  return names[type] || type;
+}
+
 // ================================================================
 // UTILITY
 // ================================================================
@@ -1121,9 +1160,8 @@ function calcCasePoints(caseData, shift) {
   const timePoints = adjustedHours * 6;
   const medicalPoints = caseData.isMedicalProc ? 0.20 * (parseFloat(caseData.medicalUnits) || 0) : 0;
   const acutePainPoints = caseData.isAcutePain ? 0.375 * (parseFloat(caseData.acutePainUnits) || 0) : 0;
-  const eModPoints = caseData.eModifier ? 1 : 0;
   const emergencyPoints = caseData.isEmergency ? 1 : 0;
-  let total = basePoints + timePoints + medicalPoints + acutePainPoints + eModPoints + emergencyPoints;
+  let total = basePoints + timePoints + medicalPoints + acutePainPoints + emergencyPoints;
   if (shift && shift.assignmentType === 'OB_restricted') total *= 2;
   return round2(total);
 }
@@ -1161,13 +1199,20 @@ function getCaseBreakdown(caseData, shift) {
     const au = parseFloat(caseData.acutePainUnits) || 0;
     bd.push({label: `Acute Pain (37.5% x ${au})`, pts: round2(0.375 * au)});
   }
-  if (caseData.eModifier) bd.push({label: 'E-Modifier', pts: 1});
   if (caseData.isEmergency) bd.push({label: 'Emergency', pts: 1});
   if (shift && shift.assignmentType === 'OB_restricted') {
     const subtotal = bd.reduce((s,r) => s + r.pts, 0);
     bd.push({label: 'OB Doubled (x2)', pts: round2(subtotal)});
   }
   return bd;
+}
+
+function calcSupervisionPoints(shift) {
+  if (shift.assignmentType !== 'CRNA_supervision') return 0;
+  let startMin = timeToMinutes(shift.startTime);
+  let endMin = timeToMinutes(shift.endTime);
+  if (endMin <= startMin) endMin += 1440;
+  return round2((endMin - startMin) / 60 * 7);
 }
 
 function calcCallPoints(shift) {
@@ -1189,10 +1234,13 @@ function calcShiftTotal(shift) {
   const shiftCases = data.cases.filter(c => c.shiftDate === shift.date);
   const arPts = calcARPoints(shift);
   let prodPts = 0;
-  shiftCases.forEach(c => { prodPts += calcCasePoints(c, shift); });
+  if (shift.assignmentType !== 'CRNA_supervision') {
+    shiftCases.forEach(c => { prodPts += calcCasePoints(c, shift); });
+  }
   const callPts = calcCallPoints(shift);
   const subspecPts = (shift.assignmentType === 'cardiac_liver') ? calcSubspecPoints(shift) : 0;
-  return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, total: round2(arPts + prodPts + callPts + subspecPts) };
+  const supervisionPts = calcSupervisionPoints(shift);
+  return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, supervision: supervisionPts, total: round2(arPts + prodPts + callPts + subspecPts + supervisionPts) };
 }
 
 function getCaseTypeName(type) {
@@ -1258,10 +1306,14 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
 const defaultTemplates = [
   { name: 'OR Day', type: 'OR', start: '07:00', end: '17:00', call: false },
   { name: 'OR + Call', type: 'OR', start: '07:00', end: '17:00', call: true, callStart: '17:00', callEnd: '07:00' },
-  { name: 'OB Day', type: 'OB_restricted', start: '07:00', end: '19:00', call: false },
+  { name: 'UVH OB Day', type: 'OB_restricted', start: '07:00', end: '19:00', call: false },
+  { name: 'UVH OB Night', type: 'OB_restricted', start: '19:00', end: '07:00', call: false },
   { name: 'Cardiac', type: 'cardiac_liver', start: '07:00', end: '17:00', call: false },
   { name: 'Weekend OR', type: 'OR', start: '07:00', end: '15:00', call: false },
-  { name: 'OB Night', type: 'OB_restricted', start: '19:00', end: '07:00', call: false },
+  { name: 'Mole', type: 'mole', start: '07:00', end: '17:00', call: true, callStart: '17:00', callEnd: '07:00' },
+  { name: '1st Call', type: '1st_call', start: '07:00', end: '17:00', call: true, callStart: '17:00', callEnd: '07:00' },
+  { name: 'Endo', type: 'endo', start: '07:00', end: '17:00', call: true, callStart: '17:00', callEnd: '07:00' },
+  { name: 'CRNA Supv', type: 'CRNA_supervision', start: '07:00', end: '17:00', call: false },
 ];
 
 function renderTemplates() {
@@ -1289,6 +1341,7 @@ function renderTemplates() {
         document.getElementById('callEnd').value = t.callEnd || '07:00';
       }
       document.getElementById('cardiacLiverOptions').classList.toggle('hidden', t.type !== 'cardiac_liver');
+      updateUnrestrictedCallVisibility();
       showToast('Template applied');
     });
   });
@@ -1299,11 +1352,23 @@ function renderTemplates() {
 // ================================================================
 const shiftDateInput = document.getElementById('shiftDate');
 
+function updateUnrestrictedCallVisibility() {
+  const type = getSelectedAssignmentType();
+  const row = document.getElementById('shiftUnrestrictedCall').closest('.checkbox-group');
+  const eligible = UNRESTRICTED_CALL_TYPES.has(type);
+  row.classList.toggle('hidden', !eligible);
+  if (!eligible) {
+    document.getElementById('shiftUnrestrictedCall').checked = false;
+    document.getElementById('callTimeRow').classList.add('hidden');
+  }
+}
+
 document.querySelectorAll('.shift-type-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.shift-type-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     document.getElementById('cardiacLiverOptions').classList.toggle('hidden', btn.dataset.type !== 'cardiac_liver');
+    updateUnrestrictedCallVisibility();
   });
 });
 
@@ -1340,6 +1405,7 @@ function loadShiftForDate() {
     document.getElementById('subspecCoverage').checked = shift.subspecCoverage || false;
     document.getElementById('teeCount').value = shift.teeCount || 0;
   }
+  updateUnrestrictedCallVisibility();
 }
 
 document.getElementById('saveShiftBtn').addEventListener('click', () => {
@@ -1393,7 +1459,7 @@ document.getElementById('caseAcutePain').addEventListener('change', function() {
   if (el) { el.addEventListener('input', updatePointPreview); el.addEventListener('change', updatePointPreview); }
 });
 
-['caseEmergency','caseEModifier','caseHighRiskPeds','caseMedicalProc','caseAcutePain'].forEach(id => {
+['caseEmergency','caseHighRiskPeds','caseMedicalProc','caseAcutePain'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', updatePointPreview);
 });
@@ -1417,7 +1483,6 @@ function buildCaseFromForm() {
     startTime: document.getElementById('caseStart')?.value || '',
     endTime: document.getElementById('caseEnd')?.value || '',
     isEmergency: document.getElementById('caseEmergency')?.checked || false,
-    eModifier: document.getElementById('caseEModifier')?.checked || false,
     isMedicalProc: document.getElementById('caseMedicalProc')?.checked || false,
     medicalUnits: document.getElementById('caseMedicalUnits')?.value || 0,
     isAcutePain: document.getElementById('caseAcutePain')?.checked || false,
@@ -1431,6 +1496,7 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   const date = workingDate;
   if (!date) { showToast('Set shift date first'); return; }
   if (!data.shifts[date]) { showToast('Please save a shift for this date first'); return; }
+  if (data.shifts[date].assignmentType === 'CRNA_supervision') { showToast('CRNA Supervision shifts do not have cases'); return; }
   const caseData = buildCaseFromForm();
   caseData.id = genId();
   caseData.shiftDate = date;
@@ -1452,7 +1518,6 @@ function resetCaseForm() {
   document.getElementById('caseStart').value = '';
   document.getElementById('caseEnd').value = '';
   document.getElementById('caseEmergency').checked = false;
-  document.getElementById('caseEModifier').checked = false;
   document.getElementById('caseMedicalProc').checked = false;
   document.getElementById('caseMedicalUnits').value = '0';
   document.getElementById('medicalUnitsRow').classList.add('hidden');
@@ -1488,7 +1553,7 @@ function renderToday() {
   const totals = calcShiftTotal(shift);
   document.getElementById('todayAR').textContent = totals.ar.toFixed(1);
   document.getElementById('todayProd').textContent = totals.prod.toFixed(1);
-  document.getElementById('todayCall').textContent = (totals.call + totals.subspec).toFixed(1);
+  document.getElementById('todayCall').textContent = (totals.call + totals.subspec + totals.supervision).toFixed(1);
   document.getElementById('todayTotal').textContent = totals.total.toFixed(1);
 
   let bdHtml = '<div class="point-breakdown">';
@@ -1496,6 +1561,7 @@ function renderToday() {
   bdHtml += `<div class="row"><span>Productivity (${shiftCases.length} cases)</span><span>${totals.prod.toFixed(2)}</span></div>`;
   if (totals.call > 0) bdHtml += `<div class="row"><span>Unrestricted Call</span><span>${totals.call.toFixed(2)}</span></div>`;
   if (totals.subspec > 0) bdHtml += `<div class="row"><span>Subspecialty</span><span>${totals.subspec.toFixed(2)}</span></div>`;
+  if (totals.supervision > 0) bdHtml += `<div class="row"><span>CRNA Supervision</span><span>${totals.supervision.toFixed(2)}</span></div>`;
   bdHtml += `<div class="row total"><span>Total</span><span>${totals.total.toFixed(2)} pts</span></div>`;
   bdHtml += '</div>';
   document.getElementById('todayBreakdown').innerHTML = bdHtml;
@@ -1568,7 +1634,7 @@ function renderHistory() {
       <div class="day-list-item" onclick="showDayDetail('${shift.date}')">
         <div>
           <div class="date">${formatDate(shift.date)}</div>
-          <div class="meta">${shift.assignmentType.replace(/_/g,' ')} | ${caseCount} cases</div>
+          <div class="meta">${getAssignmentTypeName(shift.assignmentType)} | ${caseCount} cases</div>
         </div>
         <span class="point-badge large">${totals.total.toFixed(1)}</span>
       </div>`;
@@ -1602,7 +1668,7 @@ function showDayDetail(dateStr) {
     <div class="summary-grid" style="margin-bottom:12px;">
       <div class="summary-item"><div class="label">AR</div><div class="value blue">${totals.ar.toFixed(1)}</div></div>
       <div class="summary-item"><div class="label">Prod</div><div class="value green">${totals.prod.toFixed(1)}</div></div>
-      <div class="summary-item"><div class="label">Call/Other</div><div class="value yellow">${(totals.call + totals.subspec).toFixed(1)}</div></div>
+      <div class="summary-item"><div class="label">Call/Other</div><div class="value yellow">${(totals.call + totals.subspec + totals.supervision).toFixed(1)}</div></div>
       <div class="summary-item"><div class="label">Total</div><div class="value">${totals.total.toFixed(1)}</div></div>
     </div>
     <h3 style="margin-bottom:8px;">Cases (${shiftCases.length})</h3>`;
@@ -1675,15 +1741,15 @@ function renderMonthlyChart() {
 function renderBreakdownChart() {
   const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
   const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix));
-  let totalAR = 0, totalProd = 0, totalCall = 0, totalSubspec = 0;
-  monthShifts.forEach(shift => { const t = calcShiftTotal(shift); totalAR += t.ar; totalProd += t.prod; totalCall += t.call; totalSubspec += t.subspec; });
+  let totalAR = 0, totalProd = 0, totalCall = 0, totalSubspec = 0, totalSupervision = 0;
+  monthShifts.forEach(shift => { const t = calcShiftTotal(shift); totalAR += t.ar; totalProd += t.prod; totalCall += t.call; totalSubspec += t.subspec; totalSupervision += t.supervision; });
   const ctx = document.getElementById('breakdownChart').getContext('2d');
   if (breakdownChart) breakdownChart.destroy();
   breakdownChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: ['Availability','Productivity','Call','Subspecialty'],
-      datasets: [{ data: [round2(totalAR), round2(totalProd), round2(totalCall), round2(totalSubspec)], backgroundColor: ['#3b82f6','#10b981','#f59e0b','#8b5cf6'], borderWidth: 0 }]
+      labels: ['Availability','Productivity','Call','Subspecialty','Supervision'],
+      datasets: [{ data: [round2(totalAR), round2(totalProd), round2(totalCall), round2(totalSubspec), round2(totalSupervision)], backgroundColor: ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899'], borderWidth: 0 }]
     },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 16 } } } }
   });
@@ -1705,11 +1771,11 @@ function renderStabilization() {
 document.getElementById('exportCSVBtn').addEventListener('click', () => {
   const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
   const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix)).sort((a,b) => a.date.localeCompare(b.date));
-  let csv = 'Date,Assignment,Shift Start,Shift End,AR Points,Productivity Points,Call Points,Subspec Points,Total Points,Cases\n';
+  let csv = 'Date,Assignment,Shift Start,Shift End,AR Points,Productivity Points,Call Points,Subspec Points,Supervision Points,Total Points,Cases\n';
   monthShifts.forEach(shift => {
     const totals = calcShiftTotal(shift);
     const cc = data.cases.filter(c => c.shiftDate === shift.date).length;
-    csv += `${shift.date},${shift.assignmentType},${shift.startTime},${shift.endTime},${totals.ar.toFixed(2)},${totals.prod.toFixed(2)},${totals.call.toFixed(2)},${totals.subspec.toFixed(2)},${totals.total.toFixed(2)},${cc}\n`;
+    csv += `${shift.date},${getAssignmentTypeName(shift.assignmentType)},${shift.startTime},${shift.endTime},${totals.ar.toFixed(2)},${totals.prod.toFixed(2)},${totals.call.toFixed(2)},${totals.subspec.toFixed(2)},${totals.supervision.toFixed(2)},${totals.total.toFixed(2)},${cc}\n`;
   });
   const namePrefix = settings.name ? settings.name.replace(/\s+/g, '_') + '_' : '';
   downloadFile(csv, `${namePrefix}mwa-points-${prefix}.csv`, 'text/csv');
@@ -1732,6 +1798,7 @@ document.getElementById('importFile').addEventListener('change', (e) => {
       if (imported.shifts && imported.cases) {
         if (confirm('This will replace all existing data. Continue?')) {
           data = imported;
+          migrateData(data);
           saveData(data);
           updateHeaderPoints();
           showToast('Data imported!');
