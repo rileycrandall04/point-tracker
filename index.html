@@ -612,6 +612,7 @@ input.mil-time.invalid {
 
 <!-- SHIFT PAGE -->
 <div class="page active" id="page-shift">
+  <div class="hidden" id="editShiftBanner" style="background:rgba(59,130,246,0.15); border:1px solid var(--primary); border-radius:var(--radius); padding:10px 14px; margin-bottom:12px; font-size:0.82rem; color:var(--primary); font-weight:600;"></div>
   <div class="end-time-warning hidden" id="endTimeWarning">
     Shift end time is missing — AR points will be 0 until an end time is entered.
   </div>
@@ -1024,6 +1025,10 @@ input.mil-time.invalid {
       <label>Name</label>
       <input type="text" id="settingsName" placeholder="Your name (labels exports)">
     </div>
+    <div class="settings-field" style="margin-top:12px;">
+      <label>Point Value ($/pt)</label>
+      <input type="number" id="settingsPointValue" min="0" step="0.01" style="max-width:140px;">
+    </div>
   </div>
 
   <!-- Dashboard Charts -->
@@ -1032,6 +1037,7 @@ input.mil-time.invalid {
     <div class="chart-container">
       <canvas id="monthlyChart"></canvas>
     </div>
+    <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
   </div>
 
   <div class="card">
@@ -1055,6 +1061,10 @@ input.mil-time.invalid {
         <div class="label">Stabilized</div>
         <div class="value green" id="stabWeighted">0</div>
       </div>
+    </div>
+    <div id="stabPaycheckRow" style="margin-top:12px; text-align:center;">
+      <div style="font-size:1.3rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
+      <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px;">Projected next month's paycheck</div>
     </div>
   </div>
 
@@ -1810,6 +1820,7 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('page-' + btn.dataset.page).classList.add('active');
+    if (btn.dataset.page === 'shift') loadShiftForDate();
     if (btn.dataset.page === 'today') renderToday();
     if (btn.dataset.page === 'cases') updateORCaseVisibility();
     if (btn.dataset.page === 'more') { renderHistory(); renderDashboard(); renderMonthlyCases(); }
@@ -1821,18 +1832,12 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
 // SHIFT TEMPLATES
 // ================================================================
 const defaultTemplates = [
-  { name: 'OR Day', type: 'OR', start: '07:00', end: '17:00', call: false },
-  { name: 'OR + Call', type: 'OR', start: '07:00', end: '17:00', call: true, callStart: '17:00', callEnd: '07:00' },
+  { name: 'OR Day', type: 'OR', start: '07:10', end: '17:00', call: false },
   { name: 'UVH OB Day', type: 'OB_restricted', start: '07:00', end: '19:00', call: false },
   { name: 'UVH OB Night', type: 'OB_restricted', start: '19:00', end: '07:00', call: false },
-  { name: 'Cardiac', type: 'cardiac_liver', start: '07:00', end: '17:00', call: false },
-  { name: 'Weekend OR', type: 'OR', start: '07:00', end: '15:00', call: false },
-  { name: 'Mole', type: 'mole', start: '07:00', end: '17:00', call: true, callStart: '17:00', callEnd: '07:00' },
-  { name: '1st Call', type: '1st_call', start: '07:00', end: '17:00', call: true, callStart: '17:00', callEnd: '07:00' },
-  { name: 'Endo', type: 'endo', start: '07:00', end: '17:00', call: true, callStart: '17:00', callEnd: '07:00' },
+  { name: 'UVH OB Weekend', type: 'OB_restricted', start: '07:00', end: '07:00', call: false },
+  { name: 'NORA', type: 'NORA', start: '07:00', end: '14:00', call: false },
   { name: 'ACS', type: 'ACS', start: '07:00', end: '17:00', call: false },
-  { name: 'NORA', type: 'NORA', start: '07:00', end: '17:00', call: false },
-  { name: 'CRNA Supv', type: 'CRNA_supervision', start: '07:00', end: '17:00', call: false },
 ];
 
 function renderTemplates() {
@@ -2026,7 +2031,10 @@ function getSelectedAssignmentType() {
 function loadShiftForDate() {
   const date = workingDate;
   const shift = data.shifts[date];
+  const banner = document.getElementById('editShiftBanner');
   if (shift) {
+    banner.textContent = 'Editing shift for ' + formatDate(date);
+    banner.classList.remove('hidden');
     document.querySelectorAll('.shift-type-btn').forEach(b => {
       b.classList.toggle('selected', b.dataset.type === shift.assignmentType);
     });
@@ -2041,7 +2049,6 @@ function loadShiftForDate() {
     document.getElementById('cardiacLiverOptions').classList.toggle('hidden', shift.assignmentType !== 'cardiac_liver');
     document.getElementById('subspecCoverage').checked = shift.subspecCoverage || false;
     document.getElementById('teeCount').value = shift.teeCount || 0;
-    // Supervision overlay
     if (shift.supervisionStart || shift.supervisionEnd) {
       document.getElementById('supervisionOverlayCheck').checked = true;
       document.getElementById('supervisionStart').value = shift.supervisionStart || '';
@@ -2054,6 +2061,21 @@ function loadShiftForDate() {
       document.getElementById('supervisionTimes').classList.add('hidden');
     }
   } else {
+    banner.classList.add('hidden');
+    document.querySelectorAll('.shift-type-btn').forEach(b => {
+      b.classList.toggle('selected', b.dataset.type === 'OR');
+    });
+    document.getElementById('shiftStart').value = '07:00';
+    document.getElementById('shiftEnd').value = '';
+    document.getElementById('shiftHoliday').checked = false;
+    document.getElementById('shiftUnrestrictedCall').checked = false;
+    document.getElementById('callTimeRow').classList.add('hidden');
+    document.getElementById('callStart').value = '17:00';
+    document.getElementById('callEnd').value = '07:00';
+    document.getElementById('shiftForcedOff').checked = false;
+    document.getElementById('cardiacLiverOptions').classList.add('hidden');
+    document.getElementById('subspecCoverage').checked = false;
+    document.getElementById('teeCount').value = 0;
     document.getElementById('supervisionOverlayCheck').checked = false;
     document.getElementById('supervisionStart').value = '';
     document.getElementById('supervisionEnd').value = '';
@@ -2422,20 +2444,40 @@ function renderMonthlyChart() {
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const labels = last6.map(k => { const [y,m] = k.split('-'); return monthNames[parseInt(m)-1] + ' ' + y; });
   const values = last6.map(k => round2(totals[k]));
+  const avg = values.length > 0 ? round2(values.reduce((a, b) => a + b, 0) / values.length) : 0;
   const ctx = document.getElementById('monthlyChart').getContext('2d');
   if (monthlyChart) monthlyChart.destroy();
+  const datasets = [
+    { label: 'Total Points', data: values, backgroundColor: 'rgba(59,130,246,0.7)', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 4 }
+  ];
+  if (values.length > 1) {
+    datasets.push({
+      label: 'Average', data: values.map(() => avg), type: 'line',
+      borderColor: '#f59e0b', borderWidth: 2, borderDash: [6, 3],
+      pointRadius: 0, fill: false
+    });
+  }
   monthlyChart = new Chart(ctx, {
     type: 'bar',
-    data: { labels, datasets: [{ label: 'Total Points', data: values, backgroundColor: 'rgba(59,130,246,0.7)', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 4 }] },
+    data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: values.length > 1, labels: { color: '#94a3b8' } } },
       scales: {
         y: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(71,85,105,0.3)' } },
         x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
       }
     }
   });
+  // Summary text below chart
+  const summaryEl = document.getElementById('monthlyChartSummary');
+  let summaryText = values.length > 0 ? `6-Month Avg: ${avg.toFixed(1)} pts` : '';
+  const pv = settings.pointValue;
+  if (pv && pv > 0 && avg > 0) {
+    const projected = avg * pv;
+    summaryText += ` &nbsp;|&nbsp; Projected Monthly: $${projected.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  summaryEl.innerHTML = summaryText;
 }
 
 function renderBreakdownChart() {
@@ -2463,6 +2505,13 @@ function renderStabilization() {
   const weighted = round2(0.10 * raw + 0.40 * (mt[mk(1)]||0) + 0.25 * (mt[mk(2)]||0) + 0.15 * (mt[mk(3)]||0) + 0.10 * (mt[mk(4)]||0));
   document.getElementById('stabRaw').textContent = raw.toFixed(1);
   document.getElementById('stabWeighted').textContent = weighted.toFixed(1);
+  const pv = settings.pointValue;
+  if (pv && pv > 0) {
+    const paycheck = weighted * pv;
+    document.getElementById('stabPaycheck').textContent = '$' + paycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  } else {
+    document.getElementById('stabPaycheck').innerHTML = '&mdash;';
+  }
 }
 
 // ================================================================
@@ -2763,6 +2812,16 @@ nameInput.addEventListener('change', () => {
   settings.name = nameInput.value;
   saveSettings(settings);
   showToast('Name saved');
+});
+
+const pointValueInput = document.getElementById('settingsPointValue');
+pointValueInput.value = settings.pointValue || '';
+pointValueInput.addEventListener('change', () => {
+  settings.pointValue = parseFloat(pointValueInput.value) || 0;
+  saveSettings(settings);
+  renderStabilization();
+  renderMonthlyChart();
+  showToast('Point value saved');
 });
 
 // ================================================================
