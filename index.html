@@ -553,33 +553,6 @@ input.mil-time.invalid {
   border-color: var(--danger) !important;
 }
 
-/* ===== MONTHLY CASES ===== */
-.day-cases-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
-  cursor: pointer;
-  border-bottom: 1px solid var(--surface2);
-  min-height: 44px;
-}
-.day-cases-header .arrow { transition: transform 0.2s; color: var(--text-dim); font-size: 0.8rem; }
-.day-cases-header .arrow.open { transform: rotate(180deg); }
-.day-cases-body { overflow: hidden; transition: max-height 0.3s ease; max-height: 0; }
-.monthly-case-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0 8px 12px;
-  border-bottom: 1px solid rgba(71,85,105,0.3);
-  gap: 8px;
-}
-.monthly-case-item:last-child { border-bottom: none; }
-.monthly-case-item .info { flex: 1; min-width: 0; }
-.monthly-case-item .info h4 { font-size: 0.8rem; font-weight: 600; }
-.monthly-case-item .info p { font-size: 0.7rem; color: var(--text-dim); }
-.monthly-case-item .actions { display: flex; gap: 6px; flex-shrink: 0; }
-
 .settings-field {
   display: flex;
   align-items: center;
@@ -589,6 +562,146 @@ input.mil-time.invalid {
 }
 
 .settings-field label { font-size: 0.85rem; color: var(--text-dim); white-space: nowrap; min-width: 60px; }
+
+/* ===== DASHBOARD SUB-TABS ===== */
+.dash-tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+  overflow-x: auto;
+  gap: 0;
+}
+.dash-tab-btn {
+  flex: 1;
+  padding: 10px 6px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 44px;
+  transition: all 0.2s;
+  text-align: center;
+}
+.dash-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* ===== CASE LOG TABLE ===== */
+.case-log-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -12px; padding: 0 12px; }
+.case-log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+  min-width: 580px;
+}
+.case-log-table thead { position: sticky; top: 0; z-index: 2; }
+.case-log-table th {
+  background: var(--surface);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  padding: 8px 6px;
+  text-align: left;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+.case-log-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--surface2);
+  vertical-align: middle;
+}
+.case-log-table tr { cursor: pointer; transition: background 0.15s; }
+.case-log-table tbody tr:hover { background: rgba(59,130,246,0.08); }
+.case-log-table tbody tr:active { background: rgba(59,130,246,0.15); }
+
+.case-log-search {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+  margin-bottom: 12px;
+  outline: none;
+  min-height: 44px;
+}
+.case-log-search:focus { border-color: var(--primary); }
+
+/* ===== EFFICIENCY ITEMS ===== */
+.efficiency-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(71,85,105,0.3);
+  font-size: 0.82rem;
+}
+.efficiency-item:last-child { border-bottom: none; }
+.efficiency-item .eff-label { flex: 1; min-width: 0; }
+.efficiency-item .eff-value { font-weight: 700; margin-left: 8px; white-space: nowrap; }
+.efficiency-item .eff-value.good { color: var(--accent); }
+.efficiency-item .eff-value.bad { color: var(--danger); }
+
+/* ===== TREND ARROWS ===== */
+.trend-up { color: var(--accent); font-weight: 700; }
+.trend-down { color: var(--danger); font-weight: 700; }
+.trend-flat { color: var(--text-dim); font-weight: 700; }
+
+/* ===== HEATMAP BARS ===== */
+.heatmap-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.8rem;
+}
+.heatmap-row .hm-label { width: 36px; color: var(--text-dim); font-size: 0.75rem; flex-shrink: 0; }
+.heatmap-bar {
+  height: 20px;
+  background: var(--primary);
+  border-radius: 3px;
+  min-width: 2px;
+  transition: width 0.3s;
+}
+.heatmap-bar.green { background: var(--accent); }
+.heatmap-row .hm-value { font-size: 0.75rem; color: var(--text-dim); min-width: 40px; text-align: right; }
+
+/* ===== CASE MIX ITEMS ===== */
+.case-mix-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 0.8rem;
+}
+.case-mix-item .cm-label { width: 110px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.case-mix-bar-wrap { flex: 1; height: 16px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+.case-mix-bar { height: 100%; background: var(--primary); border-radius: 3px; transition: width 0.3s; }
+.case-mix-item .cm-count { min-width: 32px; text-align: right; font-size: 0.75rem; color: var(--text-dim); }
+
+/* ===== COLLAPSIBLE SECTIONS ===== */
+.collapse-section { margin-bottom: 8px; }
+.collapse-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--surface2);
+}
+.collapse-header h3 { font-size: 0.88rem; margin: 0; }
+.collapse-header .arrow { transition: transform 0.2s; color: var(--text-dim); }
+.collapse-header .arrow.open { transform: rotate(180deg); }
+.collapse-body { overflow: hidden; transition: max-height 0.3s ease; max-height: 0; }
+
+/* ===== BOTTOM NAV — 6 items ===== */
+.bottom-nav button { font-size: 0.58rem; }
+.bottom-nav button .nav-icon { font-size: 1.15rem; }
 
 @media (max-width: 480px) {
   .form-row { grid-template-columns: 1fr; }
@@ -1060,8 +1173,241 @@ input.mil-time.invalid {
   </div>
 </div>
 
-<!-- MORE PAGE (Settings / Dashboard / Export) -->
-<div class="page" id="page-more">
+<!-- DASHBOARD PAGE -->
+<div class="page" id="page-dashboard">
+  <div class="dash-tab-bar">
+    <button class="dash-tab-btn active" data-dtab="caselogs">Case Logs</button>
+    <button class="dash-tab-btn" data-dtab="projections">Projections</button>
+    <button class="dash-tab-btn" data-dtab="time">Time</button>
+    <button class="dash-tab-btn" data-dtab="analytics">Analytics</button>
+  </div>
+
+  <!-- Case Logs Tab -->
+  <div id="dtab-caselogs">
+    <div class="month-nav">
+      <button id="clPrevMonth">&larr;</button>
+      <span id="clMonthLabel">January 2026</span>
+      <button id="clNextMonth">&rarr;</button>
+    </div>
+    <input type="text" class="case-log-search" id="caseLogSearch" placeholder="Search cases...">
+    <div class="case-log-wrap">
+      <div id="caseLogTableContainer">
+        <div class="empty-state"><p>No cases for this month.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Projections Tab -->
+  <div id="dtab-projections" class="hidden">
+    <!-- Stabilization Card -->
+    <div class="card">
+      <h2>Stabilization-Weighted Points</h2>
+      <p style="font-size:0.8rem; color:var(--text-dim); margin-bottom:12px;">
+        Weighted: 10% current + 40% prior + 25% 2-mo + 15% 3-mo + 10% 4-mo
+      </p>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <div class="label">Raw This Month</div>
+          <div class="value blue" id="stabRaw">0</div>
+        </div>
+        <div class="summary-item">
+          <div class="label">Stabilized</div>
+          <div class="value green" id="stabWeighted">0</div>
+        </div>
+      </div>
+      <div id="stabPaycheckRow" style="margin-top:12px; text-align:center;">
+        <div style="font-size:1.3rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
+        <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px;">Projected next month's paycheck</div>
+      </div>
+    </div>
+
+    <!-- Monthly Trend Chart -->
+    <div class="card">
+      <h2>Monthly Trend</h2>
+      <div class="chart-container">
+        <canvas id="monthlyChart"></canvas>
+      </div>
+      <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
+    </div>
+
+    <!-- Projected Annual Income -->
+    <div class="card">
+      <h2>Projected Annual Income</h2>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <div class="label">3-Month Rolling Avg</div>
+          <div class="value blue" id="projRollingAvg">0</div>
+        </div>
+        <div class="summary-item">
+          <div class="label">Annual Projection</div>
+          <div class="value green" id="projAnnualIncome">&mdash;</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collapsible: Breakdown Chart -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('projBreakdown')">
+        <h3>Points Breakdown (This Month)</h3>
+        <span class="arrow" id="projBreakdownArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="projBreakdownBody">
+        <div class="chart-container" style="margin-top:12px;">
+          <canvas id="breakdownChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collapsible: Shift Efficiency -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('projEfficiency')">
+        <h3>Most / Least Efficient Shifts</h3>
+        <span class="arrow" id="projEfficiencyArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="projEfficiencyBody">
+        <div id="efficiencyContent" style="padding-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- Collapsible: Month-over-Month -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('projMoM')">
+        <h3>Month-over-Month Change</h3>
+        <span class="arrow" id="projMoMArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="projMoMBody">
+        <div id="momContent" style="padding-top:12px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Time Tab -->
+  <div id="dtab-time" class="hidden">
+    <!-- Summary Cards -->
+    <div class="card">
+      <h2>Time Summary (Past 3 Months)</h2>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <div class="label">Avg Hours/Month</div>
+          <div class="value blue" id="timeAvgMonth">0</div>
+        </div>
+        <div class="summary-item">
+          <div class="label">Avg Hours/Week</div>
+          <div class="value green" id="timeAvgWeek">0</div>
+        </div>
+        <div class="summary-item">
+          <div class="label">Avg Shift Start</div>
+          <div class="value yellow" id="timeAvgStart">--:--</div>
+        </div>
+        <div class="summary-item">
+          <div class="label">Avg Shift End</div>
+          <div class="value purple" id="timeAvgEnd">--:--</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Production Trend -->
+    <div class="card">
+      <h2>Monthly Production Trend</h2>
+      <div class="chart-container">
+        <canvas id="productionTrendChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Collapsible: Day-of-Week Breakdown -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('timeDOW')">
+        <h3>Day-of-Week Breakdown</h3>
+        <span class="arrow" id="timeDOWArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="timeDOWBody">
+        <div id="dowContent" style="padding-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- Collapsible: Weekend vs Weekday -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('timeWknd')">
+        <h3>Weekend vs Weekday</h3>
+        <span class="arrow" id="timeWkndArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="timeWkndBody">
+        <div id="wkndContent" style="padding-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- Collapsible: Night & Call Frequency -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('timeNight')">
+        <h3>Night &amp; Call Shift Frequency</h3>
+        <span class="arrow" id="timeNightArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="timeNightBody">
+        <div id="nightContent" style="padding-top:12px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytics Tab -->
+  <div id="dtab-analytics" class="hidden">
+    <!-- Case Mix -->
+    <div class="card">
+      <h2>Case Mix</h2>
+      <div id="caseMixContent">
+        <div class="empty-state"><p>No case data.</p></div>
+      </div>
+    </div>
+
+    <!-- Collapsible: Add-on Utilization -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('analAddOns')">
+        <h3>Add-On Utilization</h3>
+        <span class="arrow" id="analAddOnsArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="analAddOnsBody">
+        <div id="addOnContent" style="padding-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- Collapsible: Top Procedures by Points -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('analTopProc')">
+        <h3>Top Procedures by Points</h3>
+        <span class="arrow" id="analTopProcArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="analTopProcBody">
+        <div id="topProcContent" style="padding-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- Collapsible: Average Units per Case -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('analAvgUnits')">
+        <h3>Average Units per Case</h3>
+        <span class="arrow" id="analAvgUnitsArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="analAvgUnitsBody">
+        <div id="avgUnitsContent" style="padding-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- Shift Type Distribution -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('analShiftDist')">
+        <h3>Shift Type Distribution</h3>
+        <span class="arrow" id="analShiftDistArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="analShiftDistBody">
+        <div class="chart-container" style="margin-top:12px;">
+          <canvas id="shiftDistChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS PAGE -->
+<div class="page" id="page-settings">
   <!-- Settings -->
   <div class="card">
     <h2>Settings</h2>
@@ -1072,43 +1418,6 @@ input.mil-time.invalid {
     <div class="settings-field" style="margin-top:12px;">
       <label>Point Value ($/pt)</label>
       <input type="number" id="settingsPointValue" min="0" step="0.01" style="max-width:140px;">
-    </div>
-  </div>
-
-  <!-- Dashboard Charts -->
-  <div class="card">
-    <h2>Monthly Trend</h2>
-    <div class="chart-container">
-      <canvas id="monthlyChart"></canvas>
-    </div>
-    <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
-  </div>
-
-  <div class="card">
-    <h2>Points Breakdown (This Month)</h2>
-    <div class="chart-container">
-      <canvas id="breakdownChart"></canvas>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Stabilization-Weighted Points</h2>
-    <p style="font-size:0.8rem; color:var(--text-dim); margin-bottom:12px;">
-      Weighted: 10% current + 40% prior + 25% 2-mo + 15% 3-mo + 10% 4-mo
-    </p>
-    <div class="summary-grid">
-      <div class="summary-item">
-        <div class="label">Raw This Month</div>
-        <div class="value blue" id="stabRaw">0</div>
-      </div>
-      <div class="summary-item">
-        <div class="label">Stabilized</div>
-        <div class="value green" id="stabWeighted">0</div>
-      </div>
-    </div>
-    <div id="stabPaycheckRow" style="margin-top:12px; text-align:center;">
-      <div style="font-size:1.3rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
-      <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px;">Projected next month's paycheck</div>
     </div>
   </div>
 
@@ -1132,14 +1441,6 @@ input.mil-time.invalid {
     </div>
     <div id="historyList">
       <div class="empty-state"><p>No shifts recorded for this month.</p></div>
-    </div>
-  </div>
-
-  <!-- Monthly Cases -->
-  <div class="card">
-    <h2>Monthly Cases</h2>
-    <div id="monthlyCasesList">
-      <div class="empty-state"><p>No cases for this month.</p></div>
     </div>
   </div>
 
@@ -1365,9 +1666,13 @@ input.mil-time.invalid {
     <span class="nav-icon">&#128260;</span>
     <span>Reconcile</span>
   </button>
-  <button data-page="more">
-    <span class="nav-icon">&#9776;</span>
-    <span>More</span>
+  <button data-page="dashboard">
+    <span class="nav-icon">&#128202;</span>
+    <span>Dashboard</span>
+  </button>
+  <button data-page="settings">
+    <span class="nav-icon">&#9881;</span>
+    <span>Settings</span>
   </button>
 </div>
 
@@ -1879,7 +2184,8 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
     if (btn.dataset.page === 'shift') loadShiftForDate();
     if (btn.dataset.page === 'today') renderToday();
     if (btn.dataset.page === 'cases') updateORCaseVisibility();
-    if (btn.dataset.page === 'more') { renderHistory(); renderDashboard(); renderMonthlyCases(); }
+    if (btn.dataset.page === 'dashboard') switchDashboardTab(activeDashTab);
+    if (btn.dataset.page === 'settings') renderHistory();
     if (btn.dataset.page === 'reconcile') renderReconTabs();
   });
 });
@@ -2426,14 +2732,12 @@ document.getElementById('prevMonth').addEventListener('click', () => {
   historyMonth--;
   if (historyMonth < 0) { historyMonth = 11; historyYear--; }
   renderHistory();
-  renderMonthlyCases();
 });
 
 document.getElementById('nextMonth').addEventListener('click', () => {
   historyMonth++;
   if (historyMonth > 11) { historyMonth = 0; historyYear++; }
   renderHistory();
-  renderMonthlyCases();
 });
 
 function showDayDetail(dateStr) {
@@ -2472,15 +2776,156 @@ document.getElementById('dayModal').addEventListener('click', (e) => {
 });
 
 // ================================================================
-// DASHBOARD (in More page)
+// DASHBOARD — Tabs & Rendering
 // ================================================================
 let monthlyChart = null;
 let breakdownChart = null;
+let productionTrendChart = null;
+let shiftDistChart = null;
+let activeDashTab = 'caselogs';
 
-function renderDashboard() {
+// Dashboard sub-tab switching
+document.querySelectorAll('.dash-tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchDashboardTab(btn.dataset.dtab));
+});
+
+function switchDashboardTab(tabName) {
+  activeDashTab = tabName;
+  document.querySelectorAll('.dash-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.dtab === tabName));
+  document.getElementById('dtab-caselogs').classList.toggle('hidden', tabName !== 'caselogs');
+  document.getElementById('dtab-projections').classList.toggle('hidden', tabName !== 'projections');
+  document.getElementById('dtab-time').classList.toggle('hidden', tabName !== 'time');
+  document.getElementById('dtab-analytics').classList.toggle('hidden', tabName !== 'analytics');
+  if (tabName === 'caselogs') renderCaseLogTable();
+  if (tabName === 'projections') renderProjections();
+  if (tabName === 'time') renderTimeTab();
+  if (tabName === 'analytics') renderAnalyticsTab();
+}
+
+// Generic collapsible toggle
+function toggleCollapse(sectionId) {
+  const bodyMap = {
+    projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projMoM: 'projMoMBody',
+    timeDOW: 'timeDOWBody', timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
+    analAddOns: 'analAddOnsBody', analTopProc: 'analTopProcBody', analAvgUnits: 'analAvgUnitsBody',
+    analShiftDist: 'analShiftDistBody'
+  };
+  const arrowMap = {
+    projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projMoM: 'projMoMArrow',
+    timeDOW: 'timeDOWArrow', timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
+    analAddOns: 'analAddOnsArrow', analTopProc: 'analTopProcArrow', analAvgUnits: 'analAvgUnitsArrow',
+    analShiftDist: 'analShiftDistArrow'
+  };
+  const body = document.getElementById(bodyMap[sectionId]);
+  const arrow = document.getElementById(arrowMap[sectionId]);
+  if (!body || !arrow) return;
+  if (body.style.maxHeight && body.style.maxHeight !== '0px') {
+    body.style.maxHeight = '0';
+    arrow.classList.remove('open');
+  } else {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    arrow.classList.add('open');
+  }
+}
+
+// Shared helper: shift duration in hours
+function calcShiftHours(shift) {
+  if (!shift || !shift.endTime) return 0;
+  let start = timeToMinutes(shift.startTime);
+  let end = timeToMinutes(shift.endTime);
+  if (end <= start) end += 1440;
+  return (end - start) / 60;
+}
+
+// ================================================================
+// CASE LOGS TAB
+// ================================================================
+let clYear = new Date().getFullYear();
+let clMonth = new Date().getMonth();
+
+function updateCLMonthLabel() {
+  const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('clMonthLabel').textContent = `${mn[clMonth]} ${clYear}`;
+}
+
+document.getElementById('clPrevMonth').addEventListener('click', () => {
+  clMonth--; if (clMonth < 0) { clMonth = 11; clYear--; }
+  updateCLMonthLabel(); renderCaseLogTable();
+});
+document.getElementById('clNextMonth').addEventListener('click', () => {
+  clMonth++; if (clMonth > 11) { clMonth = 0; clYear++; }
+  updateCLMonthLabel(); renderCaseLogTable();
+});
+
+document.getElementById('caseLogSearch').addEventListener('input', () => filterCaseLog());
+
+function getCaseAddOnSummary(c) {
+  const parts = [];
+  if (c.nerveBlock === 'brachial_plexus') parts.push('NB-BP');
+  else if (c.nerveBlock === 'other') parts.push('NB');
+  if (c.hasCentralLine) parts.push('CL');
+  if (c.hasArterialLine) parts.push('AL');
+  if (c.hasPAC) parts.push('PAC');
+  if (c.hasTEEAddOn) parts.push('TEE');
+  return parts.join(', ');
+}
+
+function renderCaseLogTable() {
+  updateCLMonthLabel();
+  const prefix = `${clYear}-${String(clMonth+1).padStart(2,'0')}`;
+  const monthCases = data.cases.filter(c => c.shiftDate && c.shiftDate.startsWith(prefix))
+    .sort((a, b) => (b.shiftDate + (b.startTime || '')).localeCompare(a.shiftDate + (a.startTime || '')));
+  const container = document.getElementById('caseLogTableContainer');
+  if (monthCases.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No cases for this month.</p></div>';
+    return;
+  }
+  let html = '<table class="case-log-table" id="caseLogTable"><thead><tr>';
+  html += '<th>Date</th><th>Procedure</th><th>Type</th><th>Start</th><th>End</th><th>Units</th><th>PS</th><th>E</th><th>Add-ons</th><th>Pts</th>';
+  html += '</tr></thead><tbody>';
+  monthCases.forEach(c => {
+    const shift = data.shifts[c.shiftDate];
+    const pts = calcCasePoints(c, shift);
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
+    const addOns = getCaseAddOnSummary(c);
+    html += `<tr data-caseid="${c.id}" onclick="openCaseEdit('${c.id}')">`;
+    html += `<td>${formatDateShort(c.shiftDate)}</td>`;
+    html += `<td>${escHtml(name)}</td>`;
+    html += `<td>${c.caseType === 'standard' ? 'Std' : (c.caseType === 'labor_epidural' ? 'LE' : (c.caseType === 'aps_rounding' ? 'APS' : c.caseType))}</td>`;
+    html += `<td>${c.startTime || '-'}</td>`;
+    html += `<td>${c.endTime || '-'}</td>`;
+    html += `<td>${c.baseUnits || '-'}</td>`;
+    html += `<td>${c.physicalStatus || '-'}</td>`;
+    html += `<td>${c.isEmergency ? 'Y' : ''}</td>`;
+    html += `<td>${addOns || '-'}</td>`;
+    html += `<td><strong>${pts.toFixed(1)}</strong></td>`;
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function filterCaseLog() {
+  const query = (document.getElementById('caseLogSearch').value || '').toLowerCase();
+  const table = document.getElementById('caseLogTable');
+  if (!table) return;
+  const rows = table.querySelectorAll('tbody tr');
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(query) ? '' : 'none';
+  });
+}
+
+// ================================================================
+// PROJECTIONS TAB
+// ================================================================
+function renderProjections() {
   renderMonthlyChart();
   renderBreakdownChart();
   renderStabilization();
+  renderProjectedAnnual();
+  renderShiftEfficiency();
+  renderMoMChange();
 }
 
 function getMonthlyTotals() {
@@ -2537,17 +2982,26 @@ function renderMonthlyChart() {
 }
 
 function renderBreakdownChart() {
-  const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
+  const now = new Date();
+  const prefix = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
   const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix));
-  let totalAR = 0, totalProd = 0, totalCall = 0, totalSubspec = 0, totalSupervision = 0;
-  monthShifts.forEach(shift => { const t = calcShiftTotal(shift); totalAR += t.ar; totalProd += t.prod; totalCall += t.call; totalSubspec += t.subspec; totalSupervision += t.supervision; });
+  let obProd = 0, orProd = 0, totalAR = 0, totalCall = 0, totalSupervision = 0;
+  monthShifts.forEach(shift => {
+    const t = calcShiftTotal(shift);
+    totalAR += t.ar;
+    totalCall += t.call + t.subspec;
+    totalSupervision += t.supervision;
+    // Split prod by OB vs OR shift type
+    if (['OB_restricted','SF1','SF2'].includes(shift.assignmentType)) obProd += t.prod;
+    else orProd += t.prod;
+  });
   const ctx = document.getElementById('breakdownChart').getContext('2d');
   if (breakdownChart) breakdownChart.destroy();
   breakdownChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: ['Availability','Productivity','Call','Subspecialty','Supervision'],
-      datasets: [{ data: [round2(totalAR), round2(totalProd), round2(totalCall), round2(totalSubspec), round2(totalSupervision)], backgroundColor: ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899'], borderWidth: 0 }]
+      labels: ['OB','OR','Supervision','Availability','Call'],
+      datasets: [{ data: [round2(obProd), round2(orProd), round2(totalSupervision), round2(totalAR), round2(totalCall)], backgroundColor: ['#ec4899','#10b981','#8b5cf6','#3b82f6','#f59e0b'], borderWidth: 0 }]
     },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 16 } } } }
   });
@@ -2571,74 +3025,322 @@ function renderStabilization() {
 }
 
 // ================================================================
-// MONTHLY CASES (in More page)
+// PROJECTED ANNUAL, SHIFT EFFICIENCY, MOM CHANGE
 // ================================================================
-function renderMonthlyCases() {
-  const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
-  const monthCases = data.cases.filter(c => c.shiftDate && c.shiftDate.startsWith(prefix));
-  const container = document.getElementById('monthlyCasesList');
-
-  if (monthCases.length === 0) {
-    container.innerHTML = '<div class="empty-state"><p>No cases for this month.</p></div>';
-    return;
+function renderProjectedAnnual() {
+  const mt = getMonthlyTotals();
+  const now = new Date();
+  function mk(offset) { const d = new Date(now.getFullYear(), now.getMonth() - offset, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+  const last3 = [mt[mk(0)]||0, mt[mk(1)]||0, mt[mk(2)]||0].filter(v => v > 0);
+  const avg = last3.length > 0 ? last3.reduce((a,b)=>a+b,0) / last3.length : 0;
+  document.getElementById('projRollingAvg').textContent = avg.toFixed(1);
+  const pv = settings.pointValue;
+  if (pv && pv > 0 && avg > 0) {
+    const annual = avg * 12 * pv;
+    document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  } else {
+    document.getElementById('projAnnualIncome').innerHTML = '&mdash;';
   }
-
-  // Group by date
-  const byDate = {};
-  monthCases.forEach(c => {
-    if (!byDate[c.shiftDate]) byDate[c.shiftDate] = [];
-    byDate[c.shiftDate].push(c);
-  });
-  const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
-
-  let html = '';
-  sortedDates.forEach(date => {
-    const cases = byDate[date];
-    const shift = data.shifts[date];
-    const dayPts = cases.reduce((s, c) => s + calcCasePoints(c, shift), 0);
-    html += `<div>
-      <div class="day-cases-header" onclick="toggleDayCases('${date}')">
-        <div>
-          <strong style="font-size:0.85rem;">${formatDate(date)}</strong>
-          <span style="font-size:0.75rem;color:var(--text-dim);margin-left:8px;">${cases.length} case${cases.length !== 1 ? 's' : ''}</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="point-badge">${dayPts.toFixed(1)}</span>
-          <span class="arrow" id="dayCasesArrow-${date}">&#9660;</span>
-        </div>
-      </div>
-      <div class="day-cases-body" id="dayCasesBody-${date}">`;
-    cases.forEach(c => {
-      const pts = calcCasePoints(c, shift);
-      const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
-      const timeStr = c.startTime && c.endTime ? `${c.startTime}-${c.endTime}` : '';
-      html += `<div class="monthly-case-item">
-        <div class="info">
-          <h4>${escHtml(name)}${c.isORCase ? ' <span style="color:var(--accent2);font-size:0.7rem;">[OR]</span>' : ''}</h4>
-          <p>${timeStr ? timeStr + ' | ' : ''}${pts.toFixed(1)} pts${c.baseUnits ? ' | ' + c.baseUnits + 'u' : ''}</p>
-        </div>
-        <div class="actions">
-          <button class="btn btn-outline btn-sm" onclick="openCaseEdit('${c.id}')" style="padding:6px 10px;font-size:0.75rem;">Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteCaseFromList('${c.id}')" style="padding:6px 10px;font-size:0.75rem;">Del</button>
-        </div>
-      </div>`;
-    });
-    html += '</div></div>';
-  });
-  container.innerHTML = html;
 }
 
-function toggleDayCases(date) {
-  const body = document.getElementById('dayCasesBody-' + date);
-  const arrow = document.getElementById('dayCasesArrow-' + date);
-  if (!body || !arrow) return;
-  if (body.style.maxHeight && body.style.maxHeight !== '0px') {
-    body.style.maxHeight = '0';
-    arrow.classList.remove('open');
-  } else {
-    body.style.maxHeight = body.scrollHeight + 'px';
-    arrow.classList.add('open');
+function renderShiftEfficiency() {
+  const allShifts = Object.values(data.shifts);
+  const efficiencies = [];
+  allShifts.forEach(shift => {
+    const hrs = calcShiftHours(shift);
+    if (hrs <= 0) return;
+    const total = calcShiftTotal(shift).total;
+    efficiencies.push({ date: shift.date, type: shift.assignmentType, ptsPerHr: round2(total / hrs), total, hrs });
+  });
+  efficiencies.sort((a, b) => b.ptsPerHr - a.ptsPerHr);
+  const best5 = efficiencies.slice(0, 5);
+  const worst5 = efficiencies.length > 5 ? efficiencies.slice(-5).reverse() : [];
+  let html = '';
+  if (best5.length > 0) {
+    html += '<h4 style="font-size:0.82rem;color:var(--accent);margin-bottom:6px;">Top 5 (pts/hr)</h4>';
+    best5.forEach(e => {
+      html += `<div class="efficiency-item"><span class="eff-label">${formatDateShort(e.date)} — ${getAssignmentTypeName(e.type)}</span><span class="eff-value good">${e.ptsPerHr.toFixed(1)}</span></div>`;
+    });
   }
+  if (worst5.length > 0) {
+    html += '<h4 style="font-size:0.82rem;color:var(--danger);margin-top:12px;margin-bottom:6px;">Bottom 5 (pts/hr)</h4>';
+    worst5.forEach(e => {
+      html += `<div class="efficiency-item"><span class="eff-label">${formatDateShort(e.date)} — ${getAssignmentTypeName(e.type)}</span><span class="eff-value bad">${e.ptsPerHr.toFixed(1)}</span></div>`;
+    });
+  }
+  if (!html) html = '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet.</p>';
+  document.getElementById('efficiencyContent').innerHTML = html;
+}
+
+function renderMoMChange() {
+  const mt = getMonthlyTotals();
+  const now = new Date();
+  function mk(offset) { const d = new Date(now.getFullYear(), now.getMonth() - offset, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let html = '';
+  for (let i = 0; i < 3; i++) {
+    const key = mk(i);
+    const prevKey = mk(i + 1);
+    const curr = mt[key] || 0;
+    const prev = mt[prevKey] || 0;
+    const [y, m] = key.split('-');
+    const label = monthNames[parseInt(m)-1] + ' ' + y;
+    let change = '', cls = 'trend-flat';
+    if (prev > 0) {
+      const pct = round2(((curr - prev) / prev) * 100);
+      if (pct > 0) { change = `+${pct.toFixed(1)}%`; cls = 'trend-up'; }
+      else if (pct < 0) { change = `${pct.toFixed(1)}%`; cls = 'trend-down'; }
+      else { change = '0%'; }
+    } else {
+      change = curr > 0 ? 'New' : '-';
+    }
+    html += `<div class="efficiency-item"><span class="eff-label">${label}: ${curr.toFixed(0)} pts</span><span class="eff-value ${cls}">${change}</span></div>`;
+  }
+  document.getElementById('momContent').innerHTML = html || '<p style="font-size:0.85rem;color:var(--text-dim);">Not enough data.</p>';
+}
+
+// ================================================================
+// TIME TAB
+// ================================================================
+function renderTimeTab() {
+  renderTimeSummary();
+  renderProductionTrend();
+  renderDayOfWeekHeatmap();
+  renderWeekendVsWeekday();
+  renderNightCallFreq();
+}
+
+function getRecentShifts(months) {
+  const now = new Date();
+  const cutoff = new Date(now.getFullYear(), now.getMonth() - months, 1);
+  const cutoffStr = cutoff.getFullYear() + '-' + String(cutoff.getMonth()+1).padStart(2,'0') + '-01';
+  return Object.values(data.shifts).filter(s => s.date >= cutoffStr);
+}
+
+function renderTimeSummary() {
+  const recent = getRecentShifts(3);
+  if (recent.length === 0) {
+    document.getElementById('timeAvgMonth').textContent = '0';
+    document.getElementById('timeAvgWeek').textContent = '0';
+    document.getElementById('timeAvgStart').textContent = '--:--';
+    document.getElementById('timeAvgEnd').textContent = '--:--';
+    return;
+  }
+  let totalHours = 0, totalStartMin = 0, totalEndMin = 0, count = 0;
+  recent.forEach(s => {
+    const hrs = calcShiftHours(s);
+    if (hrs > 0) {
+      totalHours += hrs;
+      totalStartMin += timeToMinutes(s.startTime);
+      totalEndMin += timeToMinutes(s.endTime);
+      count++;
+    }
+  });
+  const avgMonthHrs = count > 0 ? round2(totalHours / 3) : 0;
+  const avgWeekHrs = count > 0 ? round2(totalHours / 13) : 0; // ~13 weeks in 3 months
+  document.getElementById('timeAvgMonth').textContent = avgMonthHrs.toFixed(0);
+  document.getElementById('timeAvgWeek').textContent = avgWeekHrs.toFixed(0);
+  if (count > 0) {
+    const avgSM = Math.round(totalStartMin / count);
+    const avgEM = Math.round(totalEndMin / count);
+    document.getElementById('timeAvgStart').textContent = String(Math.floor(avgSM/60)).padStart(2,'0') + ':' + String(avgSM%60).padStart(2,'0');
+    document.getElementById('timeAvgEnd').textContent = String(Math.floor(avgEM/60)).padStart(2,'0') + ':' + String(avgEM%60).padStart(2,'0');
+  }
+}
+
+function renderProductionTrend() {
+  const mt = getMonthlyTotals();
+  const sortedKeys = Object.keys(mt).sort();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const labels = sortedKeys.map(k => { const [y,m] = k.split('-'); return monthNames[parseInt(m)-1] + ' ' + y; });
+  const values = sortedKeys.map(k => round2(mt[k]));
+  const ctx = document.getElementById('productionTrendChart').getContext('2d');
+  if (productionTrendChart) productionTrendChart.destroy();
+  productionTrendChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{ label: 'Monthly Points', data: values, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.15)', fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#3b82f6' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(71,85,105,0.3)' } },
+        x: { ticks: { color: '#94a3b8', maxRotation: 45, minRotation: 45 }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderDayOfWeekHeatmap() {
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const hoursByDay = [0,0,0,0,0,0,0];
+  const ptsByDay = [0,0,0,0,0,0,0];
+  const countByDay = [0,0,0,0,0,0,0];
+  Object.values(data.shifts).forEach(s => {
+    const d = new Date(s.date + 'T12:00:00');
+    const dow = d.getDay();
+    const hrs = calcShiftHours(s);
+    hoursByDay[dow] += hrs;
+    ptsByDay[dow] += calcShiftTotal(s).total;
+    countByDay[dow]++;
+  });
+  const maxHrs = Math.max(...hoursByDay, 1);
+  let html = '';
+  for (let i = 1; i <= 7; i++) {
+    const idx = i % 7; // Mon first, Sun last
+    const pct = maxHrs > 0 ? (hoursByDay[idx] / maxHrs * 100) : 0;
+    html += `<div class="heatmap-row">
+      <span class="hm-label">${days[idx]}</span>
+      <div style="flex:1;display:flex;gap:4px;align-items:center;">
+        <div class="heatmap-bar" style="width:${pct}%"></div>
+        <div class="heatmap-bar green" style="width:${maxHrs > 0 ? (ptsByDay[idx] / Math.max(...ptsByDay, 1) * 100) : 0}%"></div>
+      </div>
+      <span class="hm-value">${hoursByDay[idx].toFixed(0)}h / ${ptsByDay[idx].toFixed(0)}pts</span>
+    </div>`;
+  }
+  document.getElementById('dowContent').innerHTML = html || '<p style="color:var(--text-dim);font-size:0.85rem;">No data.</p>';
+}
+
+function renderWeekendVsWeekday() {
+  let wdHrs = 0, wdPts = 0, wdN = 0, weHrs = 0, wePts = 0, weN = 0;
+  Object.values(data.shifts).forEach(s => {
+    const hrs = calcShiftHours(s);
+    const pts = calcShiftTotal(s).total;
+    if (isWeekend(s.date)) { weHrs += hrs; wePts += pts; weN++; }
+    else { wdHrs += hrs; wdPts += pts; wdN++; }
+  });
+  let html = '<div class="summary-grid">';
+  html += `<div class="summary-item"><div class="label">Weekday Avg Pts</div><div class="value blue">${wdN > 0 ? (wdPts/wdN).toFixed(1) : '0'}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Weekend Avg Pts</div><div class="value green">${weN > 0 ? (wePts/weN).toFixed(1) : '0'}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Weekday Avg Hrs</div><div class="value blue">${wdN > 0 ? (wdHrs/wdN).toFixed(1) : '0'}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Weekend Avg Hrs</div><div class="value green">${weN > 0 ? (weHrs/weN).toFixed(1) : '0'}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Weekday Shifts</div><div class="value">${wdN}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Weekend Shifts</div><div class="value">${weN}</div></div>`;
+  html += '</div>';
+  document.getElementById('wkndContent').innerHTML = html;
+}
+
+function renderNightCallFreq() {
+  const allShifts = Object.values(data.shifts);
+  const total = allShifts.length;
+  let nightCount = 0, callCount = 0;
+  allShifts.forEach(s => {
+    const start = timeToMinutes(s.startTime);
+    if (start >= 1020) nightCount++; // starts at 5pm or later
+    if (s.unrestrictedCall) callCount++;
+  });
+  let html = `<div class="efficiency-item"><span class="eff-label">Night Shifts (start >= 17:00)</span><span class="eff-value">${nightCount} (${total > 0 ? round2(nightCount/total*100).toFixed(0) : 0}%)</span></div>`;
+  html += `<div class="efficiency-item"><span class="eff-label">Unrestricted Call Shifts</span><span class="eff-value">${callCount} (${total > 0 ? round2(callCount/total*100).toFixed(0) : 0}%)</span></div>`;
+  html += `<div class="efficiency-item"><span class="eff-label">Total Shifts</span><span class="eff-value">${total}</span></div>`;
+  document.getElementById('nightContent').innerHTML = html;
+}
+
+// ================================================================
+// ANALYTICS TAB
+// ================================================================
+function renderAnalyticsTab() {
+  renderCaseMix();
+  renderAddOnUtil();
+  renderTopProcedures();
+  renderAvgUnits();
+  renderShiftDistChart();
+}
+
+function renderCaseMix() {
+  const freq = {};
+  data.cases.forEach(c => {
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
+    freq[name] = (freq[name] || 0) + 1;
+  });
+  const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+  const maxCount = sorted.length > 0 ? sorted[0][1] : 1;
+  if (sorted.length === 0) {
+    document.getElementById('caseMixContent').innerHTML = '<div class="empty-state"><p>No case data.</p></div>';
+    return;
+  }
+  let html = '';
+  sorted.slice(0, 20).forEach(([name, count]) => {
+    const pct = (count / maxCount * 100);
+    html += `<div class="case-mix-item"><span class="cm-label" title="${escHtml(name)}">${escHtml(name)}</span><div class="case-mix-bar-wrap"><div class="case-mix-bar" style="width:${pct}%"></div></div><span class="cm-count">${count}</span></div>`;
+  });
+  document.getElementById('caseMixContent').innerHTML = html;
+}
+
+function renderAddOnUtil() {
+  const stdCases = data.cases.filter(c => c.caseType === 'standard');
+  const total = stdCases.length;
+  if (total === 0) { document.getElementById('addOnContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No standard cases.</p>'; return; }
+  const counts = { 'Nerve Block': 0, 'Central Line': 0, 'Arterial Line': 0, 'PAC': 0, 'TEE': 0 };
+  stdCases.forEach(c => {
+    if (c.nerveBlock && c.nerveBlock !== 'none') counts['Nerve Block']++;
+    if (c.hasCentralLine) counts['Central Line']++;
+    if (c.hasArterialLine) counts['Arterial Line']++;
+    if (c.hasPAC) counts['PAC']++;
+    if (c.hasTEEAddOn) counts['TEE']++;
+  });
+  let html = '';
+  Object.entries(counts).forEach(([name, count]) => {
+    const pct = round2(count / total * 100);
+    html += `<div class="efficiency-item"><span class="eff-label">${name}</span><span class="eff-value">${count} (${pct.toFixed(0)}%)</span></div>`;
+  });
+  document.getElementById('addOnContent').innerHTML = html;
+}
+
+function renderTopProcedures() {
+  const ptsByProc = {};
+  data.cases.forEach(c => {
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
+    const shift = data.shifts[c.shiftDate];
+    const pts = calcCasePoints(c, shift);
+    ptsByProc[name] = (ptsByProc[name] || 0) + pts;
+  });
+  const sorted = Object.entries(ptsByProc).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  if (sorted.length === 0) { document.getElementById('topProcContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No data.</p>'; return; }
+  let html = '';
+  sorted.forEach(([name, pts], i) => {
+    html += `<div class="efficiency-item"><span class="eff-label">${i+1}. ${escHtml(name)}</span><span class="eff-value">${pts.toFixed(1)} pts</span></div>`;
+  });
+  document.getElementById('topProcContent').innerHTML = html;
+}
+
+function renderAvgUnits() {
+  const stdCases = data.cases.filter(c => c.caseType === 'standard' && parseFloat(c.baseUnits) > 0);
+  if (stdCases.length === 0) { document.getElementById('avgUnitsContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No standard cases with units.</p>'; return; }
+  const totalUnits = stdCases.reduce((s, c) => s + (parseFloat(c.baseUnits) || 0), 0);
+  const avg = round2(totalUnits / stdCases.length);
+  const maxUnits = Math.max(...stdCases.map(c => parseFloat(c.baseUnits) || 0));
+  const minUnits = Math.min(...stdCases.map(c => parseFloat(c.baseUnits) || 0));
+  let html = '<div class="summary-grid">';
+  html += `<div class="summary-item"><div class="label">Average</div><div class="value blue">${avg.toFixed(1)}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Cases</div><div class="value green">${stdCases.length}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Min</div><div class="value">${minUnits}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Max</div><div class="value">${maxUnits}</div></div>`;
+  html += '</div>';
+  document.getElementById('avgUnitsContent').innerHTML = html;
+}
+
+function renderShiftDistChart() {
+  const counts = {};
+  Object.values(data.shifts).forEach(s => {
+    const name = getAssignmentTypeName(s.assignmentType);
+    counts[name] = (counts[name] || 0) + 1;
+  });
+  const labels = Object.keys(counts);
+  const values = Object.values(counts);
+  if (labels.length === 0) return;
+  const ctx = document.getElementById('shiftDistChart').getContext('2d');
+  if (shiftDistChart) shiftDistChart.destroy();
+  const colors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#ef4444','#06b6d4','#84cc16','#f97316','#6366f1','#14b8a6','#e11d48','#a855f7'];
+  shiftDistChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: colors.slice(0, labels.length), borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 12, font: { size: 11 } } } } }
+  });
 }
 
 let editingCaseId = null;
@@ -2769,7 +3471,7 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
   }
   saveData(data);
   updateHeaderPoints();
-  renderMonthlyCases();
+  renderCaseLogTable();
   document.getElementById('caseEditModal').classList.add('hidden');
   showToast('Case updated');
 });
@@ -2787,7 +3489,7 @@ function deleteCaseFromList(id) {
   data.cases = data.cases.filter(c => c.id !== id);
   saveData(data);
   updateHeaderPoints();
-  renderMonthlyCases();
+  renderCaseLogTable();
   showToast('Case deleted');
 }
 
@@ -2875,8 +3577,6 @@ pointValueInput.value = settings.pointValue || '';
 pointValueInput.addEventListener('change', () => {
   settings.pointValue = parseFloat(pointValueInput.value) || 0;
   saveSettings(settings);
-  renderStabilization();
-  renderMonthlyChart();
   showToast('Point value saved');
 });
 
@@ -3986,6 +4686,7 @@ setWorkingDate(todayStr());
 renderTemplates();
 updateHeaderPoints();
 updateReconMonthLabels();
+updateCLMonthLabel();
 updateSupervisionOverlayVisibility();
 checkEndTimeNotification();
 </script>
