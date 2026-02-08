@@ -757,6 +757,7 @@ input.mil-time.invalid {
         <div class="shift-type-btn" data-type="1st_call">1st Call</div>
         <div class="shift-type-btn" data-type="2nd_call">2nd Call</div>
         <div class="shift-type-btn" data-type="3rd_call">3rd Call</div>
+        <div class="shift-type-btn" data-type="4th_call">4th Call</div>
         <div class="shift-type-btn" data-type="endo">Endo</div>
         <div class="shift-type-btn" data-type="SF1">SF 1</div>
         <div class="shift-type-btn" data-type="SF2">SF 2</div>
@@ -1744,12 +1745,12 @@ migrateData(data);
 // ================================================================
 // CONSTANTS & HELPERS
 // ================================================================
-const UNRESTRICTED_CALL_TYPES = new Set(['mole','1st_call','2nd_call','3rd_call','endo','SF1','SF2']);
+const UNRESTRICTED_CALL_TYPES = new Set(['mole','1st_call','2nd_call','3rd_call','4th_call','endo','SF1','SF2']);
 
 function getAssignmentTypeName(type) {
   const names = {
     OR: 'OR / General', OB_restricted: 'UVH OB', cardiac_liver: 'Cardiac / Liver',
-    mole: 'Mole', '1st_call': '1st Call', '2nd_call': '2nd Call', '3rd_call': '3rd Call',
+    mole: 'Mole', '1st_call': '1st Call', '2nd_call': '2nd Call', '3rd_call': '3rd Call', '4th_call': '4th Call',
     endo: 'Endo', SF1: 'SF 1', SF2: 'SF 2', ACS: 'ACS', NORA: 'NORA',
     CRNA_supervision: 'CRNA Supervision'
   };
@@ -4063,9 +4064,9 @@ function mapTaskToAssignmentType(task, dateStr) {
   // "SFH" + 1 or 2 → SF1 / SF2
   if (/\bSFH\s*1\b/.test(t)) return 'SF1';
   if (/\bSFH\s*2\b/.test(t)) return 'SF2';
-  // 4th call → OB on weekend, ACS on weekday
+  // 4th call → 4th_call on weekend, ACS on weekday
   if (/4TH|4C/.test(t)) {
-    return (dateStr && isWeekend(dateStr)) ? 'OB_restricted' : 'ACS';
+    return (dateStr && isWeekend(dateStr)) ? '4th_call' : 'ACS';
   }
   if (t.includes('NORA')) return 'NORA';
   if (t.includes('ACS') || t.includes('TOCR')) return 'ACS';
