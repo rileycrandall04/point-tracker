@@ -4059,16 +4059,16 @@ function mapTaskToAssignmentType(task, dateStr) {
   if (/UVH\/SFH\s*WORK/.test(t)) return 'OR';
   // "Post" anything → always general OR (Post 1-4, Post SF 1/2, etc.)
   if (/\bPOST\b/.test(t)) return 'OR';
+  // SFH prefix → SF1 or SF2 (check before call keywords so "SFH 1st Call" → SF1)
+  if (/\bSFH\b/.test(t)) {
+    if (/2/.test(t)) return 'SF2';
+    return 'SF1';
+  }
   // Call shifts: check for 1st-4th call keywords (may be prefixed with "UVH")
   if (/4TH|4C/.test(t)) return (dateStr && isWeekend(dateStr)) ? '4th_call' : 'ACS';
   if (/3RD|3C/.test(t)) return '3rd_call';
   if (/2ND|2C/.test(t)) return '2nd_call';
   if (/1ST|1C/.test(t)) return '1st_call';
-  // SFH prefix → SF1 or SF2 (e.g. "SFH 1", "SFH 1st", "SFH SF 1")
-  if (/\bSFH\b/.test(t)) {
-    if (/2/.test(t)) return 'SF2';
-    return 'SF1'; // default SFH to SF1
-  }
   // "UVH" + number (without call keyword) → general OR (e.g. "UVH 3", "UVH 7")
   if (/\bUVH\s*\d/.test(t)) return 'OR';
   if (t.includes('NORA')) return 'NORA';
