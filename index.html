@@ -4056,18 +4056,21 @@ function parseQgendaScreenshot(text) {
 function mapTaskToAssignmentType(task, dateStr) {
   const t = (task || '').toUpperCase();
   // "UVH/SFH Work" → general OR
-  if (/UVH\/SFH\s*WORK/i.test(t)) return 'OR';
-  // 4th call → 4th_call on weekend, ACS on weekday (check before UVH+number)
-  if (/4TH|4C/.test(t)) {
-    return (dateStr && isWeekend(dateStr)) ? '4th_call' : 'ACS';
+  if (/UVH\/SFH\s*WORK/.test(t)) return 'OR';
+  // "Post" anything → always general OR (Post 1-4, Post SF 1/2, etc.)
+  if (/\bPOST\b/.test(t)) return 'OR';
+  // Call shifts: check for 1st-4th call keywords (may be prefixed with "UVH")
+  if (/4TH|4C/.test(t)) return (dateStr && isWeekend(dateStr)) ? '4th_call' : 'ACS';
+  if (/3RD|3C/.test(t)) return '3rd_call';
+  if (/2ND|2C/.test(t)) return '2nd_call';
+  if (/1ST|1C/.test(t)) return '1st_call';
+  // SFH prefix → SF1 or SF2 (e.g. "SFH 1", "SFH 1st", "SFH SF 1")
+  if (/\bSFH\b/.test(t)) {
+    if (/2/.test(t)) return 'SF2';
+    return 'SF1'; // default SFH to SF1
   }
-  // "Post" + number → general OR
-  if (/\bPOST\s*\d/.test(t)) return 'OR';
-  // "UVH" + number → general OR (e.g. "UVH 3")
+  // "UVH" + number (without call keyword) → general OR (e.g. "UVH 3", "UVH 7")
   if (/\bUVH\s*\d/.test(t)) return 'OR';
-  // "SFH" + 1 or 2 → SF1 / SF2
-  if (/\bSFH\s*1\b/.test(t)) return 'SF1';
-  if (/\bSFH\s*2\b/.test(t)) return 'SF2';
   if (t.includes('NORA')) return 'NORA';
   if (t.includes('ACS') || t.includes('TOCR')) return 'ACS';
   if (t.includes('C/L') || t.includes('CARDIAC')) return 'cardiac_liver';
@@ -4076,9 +4079,6 @@ function mapTaskToAssignmentType(task, dateStr) {
   if (t.includes('ENDO')) return 'endo';
   if (t.includes('SF1') || t.includes('SF 1')) return 'SF1';
   if (t.includes('SF2') || t.includes('SF 2')) return 'SF2';
-  if (t.includes('3RD') || t.includes('3C')) return '3rd_call';
-  if (t.includes('2ND') || t.includes('2C')) return '2nd_call';
-  if (t.includes('1ST') || t.includes('1C')) return '1st_call';
   if (t.includes('OB') || t.includes('UVOC')) return 'OB_restricted';
   if (t.includes('OR')) return 'OR';
   return 'OR'; // fallback
