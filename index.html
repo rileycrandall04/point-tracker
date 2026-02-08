@@ -4052,8 +4052,21 @@ function parseQgendaScreenshot(text) {
 // ================================================================
 // IMPORT SHIFTS FROM QGENDA
 // ================================================================
-function mapTaskToAssignmentType(task) {
+function mapTaskToAssignmentType(task, dateStr) {
   const t = (task || '').toUpperCase();
+  // "UVH/SFH Work" → general OR
+  if (/UVH\/SFH\s*WORK/i.test(t)) return 'OR';
+  // "Post" + number → general OR
+  if (/\bPOST\s*\d/.test(t)) return 'OR';
+  // "UVH" + number → general OR (e.g. "UVH 3")
+  if (/\bUVH\s*\d/.test(t)) return 'OR';
+  // "SFH" + 1 or 2 → SF1 / SF2
+  if (/\bSFH\s*1\b/.test(t)) return 'SF1';
+  if (/\bSFH\s*2\b/.test(t)) return 'SF2';
+  // 4th call → OB on weekend, ACS on weekday
+  if (/4TH|4C/.test(t)) {
+    return (dateStr && isWeekend(dateStr)) ? 'OB_restricted' : 'ACS';
+  }
   if (t.includes('NORA')) return 'NORA';
   if (t.includes('ACS') || t.includes('TOCR')) return 'ACS';
   if (t.includes('C/L') || t.includes('CARDIAC')) return 'cardiac_liver';
@@ -4065,7 +4078,7 @@ function mapTaskToAssignmentType(task) {
   if (t.includes('3RD') || t.includes('3C')) return '3rd_call';
   if (t.includes('2ND') || t.includes('2C')) return '2nd_call';
   if (t.includes('1ST') || t.includes('1C')) return '1st_call';
-  if (t.includes('OB') || t.includes('UVOC') || t.includes('UVH')) return 'OB_restricted';
+  if (t.includes('OB') || t.includes('UVOC')) return 'OB_restricted';
   if (t.includes('OR')) return 'OR';
   return 'OR'; // fallback
 }
@@ -4103,7 +4116,7 @@ function showImportTimePreview() {
     const hasShift = data.shifts[date];
     const task = entries[0].task || '';
     const times = entries.map(e => `${e.clockInTime}-${e.clockOutTime}`).join(', ');
-    const assignType = getAssignmentTypeName(mapTaskToAssignmentType(task));
+    const assignType = getAssignmentTypeName(mapTaskToAssignmentType(task, date));
     html += `<div style="padding:6px 0;border-bottom:1px solid var(--border);${hasShift ? 'opacity:0.5;' : ''}">`;
     html += `<strong>${formatDateShort(date)}</strong> &mdash; ${assignType}`;
     html += `<br><span style="color:var(--text-dim)">${times}${task ? ' (' + escHtml(task) + ')' : ''}${hasShift ? ' — already exists, will skip' : ''}</span>`;
@@ -4201,7 +4214,7 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
       if (!task && e.task) task = e.task;
     });
     shiftsToCreate.push({
-      date, assignmentType: mapTaskToAssignmentType(task),
+      date, assignmentType: mapTaskToAssignmentType(task, date),
       startTime: earliest, endTime: latest, task
     });
     toImport++;
