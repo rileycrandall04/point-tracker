@@ -251,29 +251,6 @@ textarea { resize: vertical; min-height: 60px; }
 .summary-item .value.purple { color: var(--purple); }
 
 /* ===== TYPE SELECT GRIDS ===== */
-.shift-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
-
-.shift-type-btn {
-  padding: 14px 10px;
-  background: var(--surface2);
-  border: 2px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: center;
-  transition: all 0.2s;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.shift-type-btn.selected { border-color: var(--primary); background: rgba(59,130,246,0.15); }
-.shift-type-btn:hover { border-color: var(--primary); }
-.shift-type-grid .shift-type-btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
-
 .case-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
 
 .case-type-btn {
@@ -699,6 +676,46 @@ input.mil-time.invalid {
 .collapse-header .arrow.open { transform: rotate(180deg); }
 .collapse-body { overflow: hidden; transition: max-height 0.3s ease; max-height: 0; }
 
+/* ===== TIME ENTRY ROWS ===== */
+.time-entry-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.time-entry-row input { flex: 1; }
+.time-entry-row .te-label { font-size: 0.8rem; color: var(--text-dim); flex-shrink: 0; }
+.remove-entry-btn {
+  background: var(--danger);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+}
+.remove-entry-btn:disabled { opacity: 0.3; cursor: default; }
+.add-entry-btn {
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--primary);
+  padding: 8px;
+  width: 100%;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-bottom: 12px;
+  min-height: 38px;
+  transition: border-color 0.2s;
+}
+.add-entry-btn:hover { border-color: var(--primary); }
+
 /* ===== BOTTOM NAV — 6 items ===== */
 .bottom-nav button { font-size: 0.58rem; }
 .bottom-nav button .nav-icon { font-size: 1.15rem; }
@@ -749,54 +766,40 @@ input.mil-time.invalid {
 
     <div class="form-group">
       <label>Assignment Type</label>
-      <div class="shift-type-grid">
-        <div class="shift-type-btn selected" data-type="OR">OR / General</div>
-        <div class="shift-type-btn" data-type="OB_restricted">UVH OB</div>
-        <div class="shift-type-btn" data-type="cardiac_liver">Cardiac / Liver</div>
-        <div class="shift-type-btn" data-type="mole">Mole</div>
-        <div class="shift-type-btn" data-type="1st_call">1st Call</div>
-        <div class="shift-type-btn" data-type="2nd_call">2nd Call</div>
-        <div class="shift-type-btn" data-type="3rd_call">3rd Call</div>
-        <div class="shift-type-btn" data-type="4th_call">4th Call</div>
-        <div class="shift-type-btn" data-type="endo">Endo</div>
-        <div class="shift-type-btn" data-type="SF1">SF 1</div>
-        <div class="shift-type-btn" data-type="SF2">SF 2</div>
-        <div class="shift-type-btn" data-type="ACS">ACS</div>
-        <div class="shift-type-btn" data-type="NORA">NORA</div>
-        <div class="shift-type-btn" data-type="CRNA_supervision">CRNA Supervision</div>
-      </div>
+      <select id="shiftAssignmentType">
+        <option value="OR">OR / General</option>
+        <option value="OB_restricted">UVH OB</option>
+        <option value="cardiac_liver">Cardiac / Liver</option>
+        <option value="mole">Mole</option>
+        <option value="1st_call">1st Call</option>
+        <option value="2nd_call">2nd Call</option>
+        <option value="3rd_call">3rd Call</option>
+        <option value="4th_call">4th Call</option>
+        <option value="endo">Endo</option>
+        <option value="SF1">SF 1</option>
+        <option value="SF2">SF 2</option>
+        <option value="ACS">ACS</option>
+        <option value="NORA">NORA</option>
+        <option value="CRNA_supervision">CRNA Supervision</option>
+      </select>
     </div>
 
-    <div class="form-row">
-      <div class="form-group">
-        <label>Shift Start</label>
-        <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="shiftStart" value="07:00">
+    <div class="form-group">
+      <label>Time Entries</label>
+      <div id="timeEntriesContainer">
+        <div class="time-entry-row">
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="07:00">
+          <span class="te-label">to</span>
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-end" value="17:00">
+          <button type="button" class="remove-entry-btn" disabled>&times;</button>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Shift End</label>
-        <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="shiftEnd" value="17:00">
-      </div>
+      <button type="button" class="add-entry-btn" id="addTimeEntryBtn">+ Add Time Entry</button>
     </div>
 
     <div class="checkbox-group">
       <input type="checkbox" id="shiftHoliday">
       <label for="shiftHoliday">Holiday</label>
-    </div>
-
-    <div class="checkbox-group">
-      <input type="checkbox" id="shiftUnrestrictedCall">
-      <label for="shiftUnrestrictedCall">Unrestricted Call (Home/Beeper)</label>
-    </div>
-
-    <div class="form-row hidden" id="callTimeRow">
-      <div class="form-group">
-        <label>Call Start</label>
-        <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="callStart" value="17:00">
-      </div>
-      <div class="form-group">
-        <label>Call End</label>
-        <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="callEnd" value="07:00">
-      </div>
     </div>
 
     <div class="checkbox-group">
@@ -1738,6 +1741,16 @@ function migrateData(d) {
   d.cases.forEach(c => {
     if (c.isORCase === undefined) { c.isORCase = false; changed = true; }
   });
+  // Migrate shifts to timeEntries array
+  Object.values(d.shifts).forEach(s => {
+    if (!s.timeEntries) {
+      s.timeEntries = [];
+      if (s.startTime) {
+        s.timeEntries.push({ start: s.startTime, end: s.endTime || '' });
+      }
+      changed = true;
+    }
+  });
   if (changed) saveData(d);
 }
 migrateData(data);
@@ -1746,6 +1759,27 @@ migrateData(data);
 // CONSTANTS & HELPERS
 // ================================================================
 const UNRESTRICTED_CALL_TYPES = new Set(['mole','1st_call','2nd_call','3rd_call','4th_call','endo','SF1','SF2']);
+
+// Returns true if the given minute is eligible for unrestricted call pay (3.5 pts/hr)
+// minuteOfDay: 0-1439, isWeekendOrHoliday: boolean
+function isUnrestrictedCallEligible(assignmentType, minuteOfDay, isWeekendOrHoliday) {
+  switch (assignmentType) {
+    case 'SF1':
+    case 'SF2':
+    case '1st_call':
+    case '2nd_call':
+    case '3rd_call':
+      return isWeekendOrHoliday ? true : (minuteOfDay >= 1020); // after 17:00
+    case '4th_call':
+      return isWeekendOrHoliday; // weekend only shift
+    case 'mole':
+      return isWeekendOrHoliday ? true : (minuteOfDay >= 1140); // after 19:00
+    case 'endo':
+      return !isWeekendOrHoliday && (minuteOfDay >= 1020); // weekday after 17:00 only
+    default:
+      return false; // OR, OB, Cardiac/Liver, NORA, ACS, CRNA Supervision
+  }
+}
 
 function getAssignmentTypeName(type) {
   const names = {
@@ -1832,33 +1866,101 @@ function isValidMilTime(val) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(val);
 }
 
-function initMilTimeInputs() {
-  document.querySelectorAll('input.mil-time').forEach(input => {
-    input.addEventListener('input', function() {
+function bindMilTimeInput(input) {
+  input.addEventListener('input', function() {
+    const digits = this.value.replace(/[^0-9]/g, '');
+    // When 4+ digits entered (e.g. "1900"), format immediately to "19:00"
+    if (digits.length >= 4 && !this.value.includes(':')) {
+      this.value = formatMilTimeInput(this.value);
+      this.setSelectionRange(this.value.length, this.value.length);
+      return;
+    }
+    // Auto-insert colon after 2 digits while typing
+    if (digits.length >= 2 && !this.value.includes(':')) {
       const pos = this.selectionStart;
-      const digits = this.value.replace(/[^0-9]/g, '');
-      // Auto-insert colon after 2 digits while typing
-      if (digits.length >= 2 && !this.value.includes(':')) {
-        this.value = digits.substring(0, 2) + ':' + digits.substring(2, 4);
-        this.setSelectionRange(pos + 1, pos + 1);
-      }
-    });
+      this.value = digits.substring(0, 2) + ':' + digits.substring(2, 4);
+      this.setSelectionRange(pos + 1, pos + 1);
+    }
+  });
 
-    input.addEventListener('blur', function() {
-      if (this.value) {
-        this.value = formatMilTimeInput(this.value);
-      }
-      this.classList.toggle('invalid', this.value && !isValidMilTime(this.value));
-    });
+  input.addEventListener('blur', function() {
+    if (this.value) {
+      this.value = formatMilTimeInput(this.value);
+    }
+    this.classList.toggle('invalid', this.value && !isValidMilTime(this.value));
+  });
 
-    // Allow typing only digits and colon
-    input.addEventListener('keypress', function(e) {
-      if (e.key.length === 1 && !/[0-9:]/.test(e.key)) {
-        e.preventDefault();
-      }
-    });
+  // Allow typing only digits and colon
+  input.addEventListener('keypress', function(e) {
+    if (e.key.length === 1 && !/[0-9:]/.test(e.key)) {
+      e.preventDefault();
+    }
   });
 }
+
+function initMilTimeInputs() {
+  document.querySelectorAll('input.mil-time').forEach(input => bindMilTimeInput(input));
+}
+
+// ================================================================
+// DYNAMIC TIME ENTRIES
+// ================================================================
+function createTimeEntryRow(start, end) {
+  const row = document.createElement('div');
+  row.className = 'time-entry-row';
+  row.innerHTML = `
+    <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="${start || ''}">
+    <span class="te-label">to</span>
+    <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-end" value="${end || ''}">
+    <button type="button" class="remove-entry-btn">&times;</button>
+  `;
+  row.querySelectorAll('input.mil-time').forEach(input => bindMilTimeInput(input));
+  row.querySelector('.remove-entry-btn').addEventListener('click', function() {
+    row.remove();
+    updateRemoveButtons();
+  });
+  return row;
+}
+
+function addTimeEntry() {
+  const container = document.getElementById('timeEntriesContainer');
+  const row = createTimeEntryRow('', '');
+  container.appendChild(row);
+  updateRemoveButtons();
+  // Focus the new start input
+  row.querySelector('.te-start').focus();
+}
+
+function updateRemoveButtons() {
+  const rows = document.querySelectorAll('#timeEntriesContainer .time-entry-row');
+  rows.forEach(row => {
+    const btn = row.querySelector('.remove-entry-btn');
+    btn.disabled = rows.length <= 1;
+  });
+}
+
+function collectTimeEntries() {
+  const rows = document.querySelectorAll('#timeEntriesContainer .time-entry-row');
+  const entries = [];
+  rows.forEach(row => {
+    const start = row.querySelector('.te-start').value.trim();
+    const end = row.querySelector('.te-end').value.trim();
+    if (start || end) entries.push({ start, end });
+  });
+  return entries;
+}
+
+function populateTimeEntries(entries) {
+  const container = document.getElementById('timeEntriesContainer');
+  container.innerHTML = '';
+  if (!entries || entries.length === 0) entries = [{ start: '07:00', end: '' }];
+  entries.forEach(e => {
+    container.appendChild(createTimeEntryRow(e.start, e.end));
+  });
+  updateRemoveButtons();
+}
+
+document.getElementById('addTimeEntryBtn').addEventListener('click', addTimeEntry);
 
 // ================================================================
 // POINT CALCULATION ENGINE (preserved from v1)
@@ -1885,12 +1987,15 @@ function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
 
 function calcARPoints(shift) {
   if (shift.forcedOff) return 56;
-  if (!shift.endTime) return 0;
-  const startMin = timeToMinutes(shift.startTime);
-  let endMin = timeToMinutes(shift.endTime);
-  if (endMin <= startMin) endMin += 1440;
+  const entries = shift.timeEntries || [];
+  if (entries.length === 0) return 0;
+  // Check if any entry has an end time
+  const lastEntry = entries[entries.length - 1];
+  if (!lastEntry.end && entries.length === 1) return 0;
+
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
+  const isWkndOrHol = isHol || isWknd;
   const isSF = ['SF1','SF2'].includes(shift.assignmentType);
 
   // Build OR-case time ranges for SF1/SF2
@@ -1905,24 +2010,132 @@ function calcARPoints(shift) {
     });
   }
 
-  let totalPoints = 0;
-  for (let m = startMin; m < endMin; m++) {
+  // Build clocked-in ranges from timeEntries
+  const clockedRanges = [];
+  entries.forEach(e => {
+    if (!e.start) return;
+    const s = timeToMinutes(e.start);
+    let en = e.end ? timeToMinutes(e.end) : s; // no end = zero duration
+    if (en <= s && e.end) en += 1440;
+    clockedRanges.push({ start: s, end: en });
+  });
+
+  if (clockedRanges.length === 0) return 0;
+
+  // Full span: first entry start → last entry end
+  const spanStart = clockedRanges[0].start;
+  const spanEnd = clockedRanges[clockedRanges.length - 1].end;
+  if (spanEnd <= spanStart) return 0;
+
+  let arPoints = 0;
+  let callPoints = 0;
+
+  for (let m = spanStart; m < spanEnd; m++) {
     const normalizedMin = m % 1440;
-    // For SF1/SF2, check if minute falls within an OR-case range
-    let rateType = shift.assignmentType;
-    if (isSF) {
-      for (const r of orRanges) {
-        if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
+
+    // Is this minute within a clocked-in range?
+    let clockedIn = false;
+    for (const r of clockedRanges) {
+      if (m >= r.start && m < r.end) { clockedIn = true; break; }
+    }
+
+    if (clockedIn) {
+      // Normal AR rate
+      let rateType = shift.assignmentType;
+      if (isSF) {
+        for (const r of orRanges) {
+          if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
+        }
+      }
+      arPoints += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
+    } else {
+      // Gap minute — check unrestricted call eligibility
+      if (isUnrestrictedCallEligible(shift.assignmentType, normalizedMin, isWkndOrHol)) {
+        callPoints += 3.5 / 60; // flat 3.5 pts/hr, no multipliers
       }
     }
-    totalPoints += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
   }
+
+  // Guaranteed minimums for clocked-in time (weekday, non-mole)
   if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
     const isOBRate = ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
-    return Math.max(round2(totalPoints), minPoints);
+    arPoints = Math.max(arPoints, minPoints);
   }
-  return round2(totalPoints);
+
+  return round2(arPoints + callPoints);
+}
+
+// Separate getter for breakdown display purposes
+function calcARBreakdown(shift) {
+  if (shift.forcedOff) return { ar: 56, call: 0 };
+  const entries = shift.timeEntries || [];
+  if (entries.length === 0) return { ar: 0, call: 0 };
+  const lastEntry = entries[entries.length - 1];
+  if (!lastEntry.end && entries.length === 1) return { ar: 0, call: 0 };
+
+  const isHol = shift.isHoliday;
+  const isWknd = isWeekend(shift.date);
+  const isWkndOrHol = isHol || isWknd;
+  const isSF = ['SF1','SF2'].includes(shift.assignmentType);
+
+  let orRanges = [];
+  if (isSF) {
+    const shiftCases = data.cases.filter(c => c.shiftDate === shift.date && c.isORCase);
+    shiftCases.forEach(c => {
+      let cs = timeToMinutes(c.startTime);
+      let ce = timeToMinutes(c.endTime);
+      if (ce <= cs) ce += 1440;
+      orRanges.push({ start: cs, end: ce });
+    });
+  }
+
+  const clockedRanges = [];
+  entries.forEach(e => {
+    if (!e.start) return;
+    const s = timeToMinutes(e.start);
+    let en = e.end ? timeToMinutes(e.end) : s;
+    if (en <= s && e.end) en += 1440;
+    clockedRanges.push({ start: s, end: en });
+  });
+
+  if (clockedRanges.length === 0) return { ar: 0, call: 0 };
+
+  const spanStart = clockedRanges[0].start;
+  const spanEnd = clockedRanges[clockedRanges.length - 1].end;
+  if (spanEnd <= spanStart) return { ar: 0, call: 0 };
+
+  let arPoints = 0;
+  let callPoints = 0;
+
+  for (let m = spanStart; m < spanEnd; m++) {
+    const normalizedMin = m % 1440;
+    let clockedIn = false;
+    for (const r of clockedRanges) {
+      if (m >= r.start && m < r.end) { clockedIn = true; break; }
+    }
+    if (clockedIn) {
+      let rateType = shift.assignmentType;
+      if (isSF) {
+        for (const r of orRanges) {
+          if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
+        }
+      }
+      arPoints += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
+    } else {
+      if (isUnrestrictedCallEligible(shift.assignmentType, normalizedMin, isWkndOrHol)) {
+        callPoints += 3.5 / 60;
+      }
+    }
+  }
+
+  if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
+    const isOBRate = ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
+    const minPoints = isOBRate ? 13 * 4 : 20 * 4;
+    arPoints = Math.max(arPoints, minPoints);
+  }
+
+  return { ar: round2(arPoints), call: round2(callPoints) };
 }
 
 function getTimeMultiplier(physicalStatus, isHol, isWknd, caseStartMin, isHighRiskPeds) {
@@ -2082,13 +2295,24 @@ function getCaseBreakdown(caseData, shift) {
 }
 
 function calcSupervisionPoints(shift) {
-  // Standalone CRNA_supervision type
+  // Standalone CRNA_supervision type: sum clocked-in time from entries
   if (shift.assignmentType === 'CRNA_supervision') {
-    if (!shift.endTime) return 0;
-    let startMin = timeToMinutes(shift.startTime);
-    let endMin = timeToMinutes(shift.endTime);
-    if (endMin <= startMin) endMin += 1440;
-    return round2((endMin - startMin) / 60 * 7);
+    const entries = shift.timeEntries || [];
+    let totalMinutes = 0;
+    entries.forEach(e => {
+      if (!e.start || !e.end) return;
+      let s = timeToMinutes(e.start);
+      let en = timeToMinutes(e.end);
+      if (en <= s) en += 1440;
+      totalMinutes += (en - s);
+    });
+    if (totalMinutes === 0 && shift.endTime) {
+      let startMin = timeToMinutes(shift.startTime);
+      let endMin = timeToMinutes(shift.endTime);
+      if (endMin <= startMin) endMin += 1440;
+      totalMinutes = endMin - startMin;
+    }
+    return round2(totalMinutes / 60 * 7);
   }
   // Overlay on OR/SF1/SF2
   if (shift.supervisionStart && shift.supervisionEnd) {
@@ -2101,11 +2325,8 @@ function calcSupervisionPoints(shift) {
 }
 
 function calcCallPoints(shift) {
-  if (!shift.unrestrictedCall) return 0;
-  let startMin = timeToMinutes(shift.callStart || '17:00');
-  let endMin = timeToMinutes(shift.callEnd || '07:00');
-  if (endMin <= startMin) endMin += 1440;
-  return round2((endMin - startMin) / 60 * 3.5);
+  // Unrestricted call is now automatically calculated inside calcARPoints via gap detection
+  return 0;
 }
 
 function calcSubspecPoints(shift) {
@@ -2117,12 +2338,13 @@ function calcSubspecPoints(shift) {
 
 function calcShiftTotal(shift) {
   const shiftCases = data.cases.filter(c => c.shiftDate === shift.date);
-  const arPts = calcARPoints(shift);
+  const breakdown = calcARBreakdown(shift);
+  const arPts = breakdown.ar;
+  const callPts = breakdown.call;
   let prodPts = 0;
   if (shift.assignmentType !== 'CRNA_supervision') {
     shiftCases.forEach(c => { prodPts += calcCasePoints(c, shift); });
   }
-  const callPts = calcCallPoints(shift);
   const subspecPts = (shift.assignmentType === 'cardiac_liver') ? calcSubspecPoints(shift) : 0;
   const supervisionPts = calcSupervisionPoints(shift);
   return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, supervision: supervisionPts, total: round2(arPts + prodPts + callPts + subspecPts + supervisionPts) };
@@ -2195,12 +2417,12 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
 // SHIFT TEMPLATES
 // ================================================================
 const defaultTemplates = [
-  { name: 'OR Day', type: 'OR', start: '07:10', end: '17:00', call: false },
-  { name: 'UVH OB Day', type: 'OB_restricted', start: '07:00', end: '19:00', call: false },
-  { name: 'UVH OB Night', type: 'OB_restricted', start: '19:00', end: '07:00', call: false },
-  { name: 'UVH OB Weekend', type: 'OB_restricted', start: '07:00', end: '07:00', call: false },
-  { name: 'NORA', type: 'NORA', start: '07:00', end: '14:00', call: false },
-  { name: 'ACS', type: 'ACS', start: '07:00', end: '17:00', call: false },
+  { name: 'OR Day', type: 'OR', start: '07:10', end: '17:00' },
+  { name: 'UVH OB Day', type: 'OB_restricted', start: '07:00', end: '19:00' },
+  { name: 'UVH OB Night', type: 'OB_restricted', start: '19:00', end: '07:00' },
+  { name: 'UVH OB Weekend', type: 'OB_restricted', start: '07:00', end: '07:00' },
+  { name: 'NORA', type: 'NORA', start: '07:00', end: '14:00' },
+  { name: 'ACS', type: 'ACS', start: '07:00', end: '17:00' },
 ];
 
 function renderTemplates() {
@@ -2216,19 +2438,9 @@ function renderTemplates() {
   grid.querySelectorAll('.template-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const t = templates[parseInt(btn.dataset.tidx)];
-      document.querySelectorAll('.shift-type-btn').forEach(b => {
-        b.classList.toggle('selected', b.dataset.type === t.type);
-      });
-      document.getElementById('shiftStart').value = t.start;
-      document.getElementById('shiftEnd').value = t.end;
-      document.getElementById('shiftUnrestrictedCall').checked = t.call || false;
-      document.getElementById('callTimeRow').classList.toggle('hidden', !t.call);
-      if (t.call) {
-        document.getElementById('callStart').value = t.callStart || '17:00';
-        document.getElementById('callEnd').value = t.callEnd || '07:00';
-      }
+      document.getElementById('shiftAssignmentType').value = t.type;
+      populateTimeEntries([{ start: t.start, end: t.end }]);
       document.getElementById('cardiacLiverOptions').classList.toggle('hidden', t.type !== 'cardiac_liver');
-      updateUnrestrictedCallVisibility();
       updateSupervisionOverlayVisibility();
       showToast('Template applied');
     });
@@ -2292,34 +2504,18 @@ document.querySelectorAll('[data-qproc]').forEach(btn => {
 const shiftDateInput = document.getElementById('shiftDate');
 
 function updateUnrestrictedCallVisibility() {
-  const type = getSelectedAssignmentType();
-  const row = document.getElementById('shiftUnrestrictedCall').closest('.checkbox-group');
-  const eligible = UNRESTRICTED_CALL_TYPES.has(type);
-  row.classList.toggle('hidden', !eligible);
-  if (!eligible) {
-    document.getElementById('shiftUnrestrictedCall').checked = false;
-    document.getElementById('callTimeRow').classList.add('hidden');
-  }
+  // Unrestricted call is now automatic based on shift type + gaps — no manual UI needed
 }
 
 function updateEndTimeWarning() {
   const shift = data.shifts[workingDate];
   const banner = document.getElementById('endTimeWarning');
-  if (shift && !shift.endTime && !shift.forcedOff) {
+  const hasNoEnd = shift && !shift.forcedOff && shift.timeEntries &&
+    shift.timeEntries.length > 0 && !shift.timeEntries[shift.timeEntries.length - 1].end;
+  if (hasNoEnd) {
     banner.classList.remove('hidden');
   } else {
     banner.classList.add('hidden');
-  }
-  updateEndTimeValidation();
-}
-
-function updateEndTimeValidation() {
-  const endInput = document.getElementById('shiftEnd');
-  const shift = data.shifts[workingDate];
-  if (shift && !shift.endTime && !shift.forcedOff) {
-    endInput.classList.add('warn-empty');
-  } else {
-    endInput.classList.remove('warn-empty');
   }
 }
 
@@ -2345,7 +2541,11 @@ function checkEndTimeNotification() {
   if (now.getHours() < 7) return;
   const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
   const missing = Object.values(data.shifts).filter(s => {
-    if (s.endTime || s.forcedOff) return false;
+    if (s.forcedOff) return false;
+    // Check if last entry has an end time
+    const entries = s.timeEntries || [];
+    const lastEnd = entries.length > 0 ? entries[entries.length - 1].end : s.endTime;
+    if (lastEnd) return false;
     const sd = new Date(s.date + 'T12:00:00');
     return sd >= twoDaysAgo && sd <= now;
   });
@@ -2362,19 +2562,12 @@ function checkEndTimeNotification() {
   }
 }
 
-document.querySelectorAll('.shift-type-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.shift-type-btn').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-    document.getElementById('cardiacLiverOptions').classList.toggle('hidden', btn.dataset.type !== 'cardiac_liver');
-    updateUnrestrictedCallVisibility();
-    updateSupervisionOverlayVisibility();
-    updateORCaseVisibility();
-  });
-});
-
-document.getElementById('shiftUnrestrictedCall').addEventListener('change', function() {
-  document.getElementById('callTimeRow').classList.toggle('hidden', !this.checked);
+document.getElementById('shiftAssignmentType').addEventListener('change', function() {
+  const type = this.value;
+  document.getElementById('cardiacLiverOptions').classList.toggle('hidden', type !== 'cardiac_liver');
+  updateUnrestrictedCallVisibility();
+  updateSupervisionOverlayVisibility();
+  updateORCaseVisibility();
 });
 
 document.getElementById('supervisionOverlayCheck').addEventListener('change', function() {
@@ -2388,7 +2581,7 @@ shiftDateInput.addEventListener('change', function() {
 });
 
 function getSelectedAssignmentType() {
-  return document.querySelector('.shift-type-btn.selected')?.dataset.type || 'OR';
+  return document.getElementById('shiftAssignmentType').value || 'OR';
 }
 
 function loadShiftForDate() {
@@ -2398,16 +2591,9 @@ function loadShiftForDate() {
   if (shift) {
     banner.textContent = 'Editing shift for ' + formatDate(date);
     banner.classList.remove('hidden');
-    document.querySelectorAll('.shift-type-btn').forEach(b => {
-      b.classList.toggle('selected', b.dataset.type === shift.assignmentType);
-    });
-    document.getElementById('shiftStart').value = shift.startTime || '07:00';
-    document.getElementById('shiftEnd').value = shift.endTime || '17:00';
+    document.getElementById('shiftAssignmentType').value = shift.assignmentType;
+    populateTimeEntries(shift.timeEntries || [{ start: shift.startTime || '07:00', end: shift.endTime || '' }]);
     document.getElementById('shiftHoliday').checked = shift.isHoliday || false;
-    document.getElementById('shiftUnrestrictedCall').checked = shift.unrestrictedCall || false;
-    document.getElementById('callTimeRow').classList.toggle('hidden', !shift.unrestrictedCall);
-    document.getElementById('callStart').value = shift.callStart || '17:00';
-    document.getElementById('callEnd').value = shift.callEnd || '07:00';
     document.getElementById('shiftForcedOff').checked = shift.forcedOff || false;
     document.getElementById('cardiacLiverOptions').classList.toggle('hidden', shift.assignmentType !== 'cardiac_liver');
     document.getElementById('subspecCoverage').checked = shift.subspecCoverage || false;
@@ -2425,16 +2611,9 @@ function loadShiftForDate() {
     }
   } else {
     banner.classList.add('hidden');
-    document.querySelectorAll('.shift-type-btn').forEach(b => {
-      b.classList.toggle('selected', b.dataset.type === 'OR');
-    });
-    document.getElementById('shiftStart').value = '07:00';
-    document.getElementById('shiftEnd').value = '';
+    document.getElementById('shiftAssignmentType').value = 'OR';
+    populateTimeEntries([{ start: '07:00', end: '' }]);
     document.getElementById('shiftHoliday').checked = false;
-    document.getElementById('shiftUnrestrictedCall').checked = false;
-    document.getElementById('callTimeRow').classList.add('hidden');
-    document.getElementById('callStart').value = '17:00';
-    document.getElementById('callEnd').value = '07:00';
     document.getElementById('shiftForcedOff').checked = false;
     document.getElementById('cardiacLiverOptions').classList.add('hidden');
     document.getElementById('subspecCoverage').checked = false;
@@ -2453,14 +2632,26 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
   const date = workingDate;
   if (!date) { showToast('Please select a date'); return; }
   const supervisionEnabled = document.getElementById('supervisionOverlayCheck')?.checked || false;
+  const timeEntries = collectTimeEntries();
+  if (timeEntries.length === 0 || !timeEntries[0].start) {
+    showToast('Please enter at least one start time');
+    return;
+  }
+  // Validate: entries should be in chronological order, no overlaps
+  for (let i = 1; i < timeEntries.length; i++) {
+    const prevEnd = timeToMinutes(timeEntries[i-1].end);
+    const currStart = timeToMinutes(timeEntries[i].start);
+    if (timeEntries[i-1].end && currStart <= prevEnd) {
+      showToast('Time entries must be in chronological order with no overlaps');
+      return;
+    }
+  }
   data.shifts[date] = {
     date, assignmentType: getSelectedAssignmentType(),
-    startTime: document.getElementById('shiftStart').value,
-    endTime: document.getElementById('shiftEnd').value,
+    startTime: timeEntries[0].start,
+    endTime: timeEntries[timeEntries.length - 1].end || '',
+    timeEntries: timeEntries,
     isHoliday: document.getElementById('shiftHoliday').checked,
-    unrestrictedCall: document.getElementById('shiftUnrestrictedCall').checked,
-    callStart: document.getElementById('callStart').value,
-    callEnd: document.getElementById('callEnd').value,
     forcedOff: document.getElementById('shiftForcedOff').checked,
     subspecCoverage: document.getElementById('subspecCoverage').checked,
     teeCount: parseInt(document.getElementById('teeCount').value) || 0,
@@ -2633,9 +2824,24 @@ function renderToday() {
   document.getElementById('todayTotal').textContent = totals.total.toFixed(1);
 
   let bdHtml = '<div class="point-breakdown">';
+  // Show time entries
+  const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
+  if (entries.length > 1) {
+    const isWkndOrHol = shift.isHoliday || isWeekend(shift.date);
+    bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:4px;"><span>Time Entries (${entries.length})</span><span></span></div>`;
+    for (let i = 0; i < entries.length; i++) {
+      bdHtml += `<div class="row" style="font-size:0.75rem;"><span>Clocked in: ${entries[i].start} - ${entries[i].end || '?'}</span><span></span></div>`;
+      if (i < entries.length - 1 && entries[i].end && entries[i+1].start) {
+        const gapEligible = isUnrestrictedCallEligible(shift.assignmentType, timeToMinutes(entries[i].end), isWkndOrHol);
+        bdHtml += `<div class="row" style="font-size:0.75rem;color:${gapEligible ? 'var(--accent2)' : 'var(--text-dim)'}"><span>Gap: ${entries[i].end} - ${entries[i+1].start}${gapEligible ? ' (unrestricted)' : ''}</span><span></span></div>`;
+      }
+    }
+  } else if (entries.length === 1) {
+    bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim);"><span>${entries[0].start} - ${entries[0].end || '?'}</span><span></span></div>`;
+  }
   bdHtml += `<div class="row"><span>Availability Rate</span><span>${totals.ar.toFixed(2)}</span></div>`;
   bdHtml += `<div class="row"><span>Productivity (${shiftCases.length} cases)</span><span>${totals.prod.toFixed(2)}</span></div>`;
-  if (totals.call > 0) bdHtml += `<div class="row"><span>Unrestricted Call</span><span>${totals.call.toFixed(2)}</span></div>`;
+  if (totals.call > 0) bdHtml += `<div class="row"><span>Unrestricted Call (auto)</span><span>${totals.call.toFixed(2)}</span></div>`;
   if (totals.subspec > 0) bdHtml += `<div class="row"><span>Subspecialty</span><span>${totals.subspec.toFixed(2)}</span></div>`;
   if (totals.supervision > 0) bdHtml += `<div class="row"><span>CRNA Supervision</span><span>${totals.supervision.toFixed(2)}</span></div>`;
   bdHtml += `<div class="row total"><span>Total</span><span>${totals.total.toFixed(2)} pts</span></div>`;
@@ -2713,11 +2919,13 @@ function renderHistory() {
     const totals = calcShiftTotal(shift);
     monthTotalPts += totals.total;
     const caseCount = data.cases.filter(c => c.shiftDate === shift.date).length;
+    const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
+    const timeStr = entries.map(e => `${e.start}-${e.end || '?'}`).join(', ');
     listHtml += `
       <div class="day-list-item" onclick="showDayDetail('${shift.date}')">
         <div>
           <div class="date">${formatDate(shift.date)}</div>
-          <div class="meta">${getAssignmentTypeName(shift.assignmentType)} | ${caseCount} cases</div>
+          <div class="meta">${getAssignmentTypeName(shift.assignmentType)} | ${timeStr} | ${caseCount} cases</div>
         </div>
         <span class="point-badge large">${totals.total.toFixed(1)}</span>
       </div>`;
@@ -2747,7 +2955,10 @@ function showDayDetail(dateStr) {
   const totals = calcShiftTotal(shift);
   const shiftCases = data.cases.filter(c => c.shiftDate === dateStr);
   document.getElementById('dayModalTitle').textContent = formatDate(dateStr);
+  const detailEntries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
+  const detailTimeStr = detailEntries.map(e => `${e.start}-${e.end || '?'}`).join(', ');
   let html = `
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">${getAssignmentTypeName(shift.assignmentType)} | ${detailTimeStr}${detailEntries.length > 1 ? ' (' + detailEntries.length + ' entries)' : ''}</p>
     <div class="summary-grid" style="margin-bottom:12px;">
       <div class="summary-item"><div class="label">AR</div><div class="value blue">${totals.ar.toFixed(1)}</div></div>
       <div class="summary-item"><div class="label">Prod</div><div class="value green">${totals.prod.toFixed(1)}</div></div>
@@ -2829,9 +3040,23 @@ function toggleCollapse(sectionId) {
   }
 }
 
-// Shared helper: shift duration in hours
+// Shared helper: shift clocked-in hours (sum of time entries, not gaps)
 function calcShiftHours(shift) {
-  if (!shift || !shift.endTime) return 0;
+  if (!shift) return 0;
+  const entries = shift.timeEntries || [];
+  if (entries.length > 0) {
+    let totalMin = 0;
+    entries.forEach(e => {
+      if (!e.start || !e.end) return;
+      let s = timeToMinutes(e.start);
+      let en = timeToMinutes(e.end);
+      if (en <= s) en += 1440;
+      totalMin += (en - s);
+    });
+    if (totalMin > 0) return totalMin / 60;
+  }
+  // Fallback for legacy shifts without timeEntries
+  if (!shift.endTime) return 0;
   let start = timeToMinutes(shift.startTime);
   let end = timeToMinutes(shift.endTime);
   if (end <= start) end += 1440;
@@ -3132,8 +3357,10 @@ function renderTimeSummary() {
     const hrs = calcShiftHours(s);
     if (hrs > 0) {
       totalHours += hrs;
-      totalStartMin += timeToMinutes(s.startTime);
-      totalEndMin += timeToMinutes(s.endTime);
+      const entries = s.timeEntries || [{ start: s.startTime, end: s.endTime }];
+      totalStartMin += timeToMinutes(entries[0].start);
+      const lastEnd = entries[entries.length - 1].end;
+      totalEndMin += timeToMinutes(lastEnd || entries[0].start);
       count++;
     }
   });
@@ -3226,14 +3453,16 @@ function renderWeekendVsWeekday() {
 function renderNightCallFreq() {
   const allShifts = Object.values(data.shifts);
   const total = allShifts.length;
-  let nightCount = 0, callCount = 0;
+  let nightCount = 0, callEligibleCount = 0, multiEntryCount = 0;
   allShifts.forEach(s => {
     const start = timeToMinutes(s.startTime);
-    if (start >= 1020) nightCount++; // starts at 5pm or later
-    if (s.unrestrictedCall) callCount++;
+    if (start >= 1020) nightCount++;
+    if (UNRESTRICTED_CALL_TYPES.has(s.assignmentType)) callEligibleCount++;
+    if (s.timeEntries && s.timeEntries.length > 1) multiEntryCount++;
   });
   let html = `<div class="efficiency-item"><span class="eff-label">Night Shifts (start >= 17:00)</span><span class="eff-value">${nightCount} (${total > 0 ? round2(nightCount/total*100).toFixed(0) : 0}%)</span></div>`;
-  html += `<div class="efficiency-item"><span class="eff-label">Unrestricted Call Shifts</span><span class="eff-value">${callCount} (${total > 0 ? round2(callCount/total*100).toFixed(0) : 0}%)</span></div>`;
+  html += `<div class="efficiency-item"><span class="eff-label">Call-Eligible Shifts</span><span class="eff-value">${callEligibleCount} (${total > 0 ? round2(callEligibleCount/total*100).toFixed(0) : 0}%)</span></div>`;
+  html += `<div class="efficiency-item"><span class="eff-label">Multi-Entry Shifts</span><span class="eff-value">${multiEntryCount}</span></div>`;
   html += `<div class="efficiency-item"><span class="eff-label">Total Shifts</span><span class="eff-value">${total}</span></div>`;
   document.getElementById('nightContent').innerHTML = html;
 }
@@ -3500,11 +3729,13 @@ function deleteCaseFromList(id) {
 document.getElementById('exportCSVBtn').addEventListener('click', () => {
   const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
   const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix)).sort((a,b) => a.date.localeCompare(b.date));
-  let csv = 'Date,Assignment,Shift Start,Shift End,AR Points,Productivity Points,Call Points,Subspec Points,Supervision Points,Total Points,Cases\n';
+  let csv = 'Date,Assignment,Time Entries,Entries Count,AR Points,Productivity Points,Call Points,Subspec Points,Supervision Points,Total Points,Cases\n';
   monthShifts.forEach(shift => {
     const totals = calcShiftTotal(shift);
     const cc = data.cases.filter(c => c.shiftDate === shift.date).length;
-    csv += `${shift.date},${getAssignmentTypeName(shift.assignmentType)},${shift.startTime},${shift.endTime},${totals.ar.toFixed(2)},${totals.prod.toFixed(2)},${totals.call.toFixed(2)},${totals.subspec.toFixed(2)},${totals.supervision.toFixed(2)},${totals.total.toFixed(2)},${cc}\n`;
+    const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
+    const timeStr = entries.map(e => `${e.start}-${e.end || '?'}`).join('; ');
+    csv += `${shift.date},${getAssignmentTypeName(shift.assignmentType)},"${timeStr}",${entries.length},${totals.ar.toFixed(2)},${totals.prod.toFixed(2)},${totals.call.toFixed(2)},${totals.subspec.toFixed(2)},${totals.supervision.toFixed(2)},${totals.total.toFixed(2)},${cc}\n`;
   });
   const namePrefix = settings.name ? settings.name.replace(/\s+/g, '_') + '_' : '';
   downloadFile(csv, `${namePrefix}mwa-points-${prefix}.csv`, 'text/csv');
@@ -3527,8 +3758,7 @@ document.getElementById('importFile').addEventListener('change', (e) => {
       if (imported.shifts && imported.cases) {
         if (confirm('This will replace all existing data. Continue?')) {
           data = imported;
-          migrateData(data);
-          saveData(data);
+          migrateData(data); // handles timeEntries migration for old format
           updateHeaderPoints();
           showToast('Data imported!');
           renderHistory();
@@ -3834,13 +4064,10 @@ function renderQgendaRecon() {
     const qHours = qDay.reduce((s, e) => s + e.duration, 0);
     qTotalHours += qHours;
 
-    // Tracker hours
+    // Tracker hours (clocked-in only)
     let tHours = 0;
     if (tShift) {
-      let start = timeToMinutes(tShift.startTime);
-      let end = timeToMinutes(tShift.endTime);
-      if (end <= start) end += 1440;
-      tHours = (end - start) / 60;
+      tHours = calcShiftHours(tShift);
       tTotalHours += tHours;
     }
 
@@ -3857,7 +4084,8 @@ function renderQgendaRecon() {
     }
 
     const qDetail = qDay.map(e => `${e.clockInTime}-${e.clockOutTime}`).join(', ');
-    const tDetail = tShift ? `${tShift.startTime}-${tShift.endTime}` : '-';
+    const tEntries = tShift && tShift.timeEntries ? tShift.timeEntries : (tShift ? [{ start: tShift.startTime, end: tShift.endTime }] : []);
+    const tDetail = tEntries.length > 0 ? tEntries.map(e => `${e.start}-${e.end || '?'}`).join(', ') : '-';
 
     html += `<tr class="${rowClass}">
       <td>${formatDateShort(date)}</td>
@@ -4187,7 +4415,9 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
   Object.keys(byDate).sort().forEach(date => {
     if (data.shifts[date]) { toSkip++; return; }
     const entries = byDate[date];
-    // Find earliest clock-in and latest clock-out
+    // Build time entries from QGenda punches, sorted by clock-in time
+    const sortedEntries = [...entries].filter(e => e.clockInTime).sort((a, b) => a.clockInTime.localeCompare(b.clockInTime));
+    const timeEntries = sortedEntries.map(e => ({ start: e.clockInTime, end: e.clockOutTime || '' }));
     let earliest = '23:59', latest = '00:00', task = '';
     entries.forEach(e => {
       if (e.clockInTime && e.clockInTime < earliest) earliest = e.clockInTime;
@@ -4196,7 +4426,9 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
     });
     shiftsToCreate.push({
       date, assignmentType: mapTaskToAssignmentType(task, date),
-      startTime: earliest, endTime: latest, task
+      startTime: earliest, endTime: latest,
+      timeEntries: timeEntries.length > 0 ? timeEntries : [{ start: earliest, end: latest }],
+      task
     });
     toImport++;
   });
@@ -4222,9 +4454,8 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
         assignmentType: s.assignmentType,
         startTime: s.startTime,
         endTime: s.endTime,
+        timeEntries: s.timeEntries || [{ start: s.startTime, end: s.endTime }],
         isHoliday: false,
-        unrestrictedCall: false,
-        callStart: '', callEnd: '',
         forcedOff: false,
         subspecCoverage: false,
         teeCount: 0,
@@ -4406,12 +4637,13 @@ function showCSVImportConfirmation(result) {
     let shiftsCreated = 0;
     Object.keys(caseDates).forEach(date => {
       if (!data.shifts[date]) {
+        const st = caseDates[date].earliest || '07:00';
+        const en = caseDates[date].latest || '17:00';
         data.shifts[date] = {
           date, assignmentType: 'OR',
-          startTime: caseDates[date].earliest || '07:00',
-          endTime: caseDates[date].latest || '17:00',
-          isHoliday: false, unrestrictedCall: false,
-          callStart: '', callEnd: '',
+          startTime: st, endTime: en,
+          timeEntries: [{ start: st, end: en }],
+          isHoliday: false,
           forcedOff: false, subspecCoverage: false,
           teeCount: 0, supervisionStart: '', supervisionEnd: ''
         };
