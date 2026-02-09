@@ -1233,6 +1233,49 @@ input.mil-time.invalid {
           <div class="value green" id="projAnnualIncome">&mdash;</div>
         </div>
       </div>
+      <div class="summary-grid" style="margin-top:8px;">
+        <div class="summary-item">
+          <div class="label">YTD Revenue</div>
+          <div class="value yellow" id="projYTDRevenue">&mdash;</div>
+        </div>
+        <div class="summary-item">
+          <div class="label">Projected Remaining</div>
+          <div class="value purple" id="projRemaining">&mdash;</div>
+        </div>
+      </div>
+      <div id="projYTDDetail" style="margin-top:8px; font-size:0.78rem; color:var(--text-dim); text-align:center;"></div>
+    </div>
+
+    <!-- Pace Tracker -->
+    <div class="card">
+      <h2>Monthly Pace</h2>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <div class="label">This Month So Far</div>
+          <div class="value blue" id="paceCurrentPts">0</div>
+        </div>
+        <div class="summary-item">
+          <div class="label">Projected End-of-Month</div>
+          <div class="value green" id="paceProjected">0</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;">
+        <div style="background:var(--surface2); border-radius:6px; height:10px; overflow:hidden;">
+          <div id="paceBar" style="height:100%; background:var(--primary); border-radius:6px; transition:width 0.3s; width:0%;"></div>
+        </div>
+        <div id="paceLabel" style="font-size:0.75rem; color:var(--text-dim); margin-top:4px; text-align:center;"></div>
+      </div>
+    </div>
+
+    <!-- Points Per Shift Type -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('projPtsPerType')">
+        <h3>Avg Points by Shift Type</h3>
+        <span class="arrow" id="projPtsPerTypeArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="projPtsPerTypeBody">
+        <div id="ptsPerTypeContent" style="padding-top:12px;"></div>
+      </div>
     </div>
 
     <!-- Collapsible: Breakdown Chart -->
@@ -3015,13 +3058,13 @@ function switchDashboardTab(tabName) {
 // Generic collapsible toggle
 function toggleCollapse(sectionId) {
   const bodyMap = {
-    projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projCaseEff: 'projCaseEffBody', projMoM: 'projMoMBody',
+    projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projCaseEff: 'projCaseEffBody', projMoM: 'projMoMBody', projPtsPerType: 'projPtsPerTypeBody',
     timeDOW: 'timeDOWBody', timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
     analAddOns: 'analAddOnsBody', analTopProc: 'analTopProcBody', analAvgUnits: 'analAvgUnitsBody',
     analShiftDist: 'analShiftDistBody'
   };
   const arrowMap = {
-    projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projCaseEff: 'projCaseEffArrow', projMoM: 'projMoMArrow',
+    projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projCaseEff: 'projCaseEffArrow', projMoM: 'projMoMArrow', projPtsPerType: 'projPtsPerTypeArrow',
     timeDOW: 'timeDOWArrow', timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
     analAddOns: 'analAddOnsArrow', analTopProc: 'analTopProcArrow', analAvgUnits: 'analAvgUnitsArrow',
     analShiftDist: 'analShiftDistArrow'
@@ -3148,6 +3191,8 @@ function renderProjections() {
   renderBreakdownChart();
   renderStabilization();
   renderProjectedAnnual();
+  renderMonthlyPace();
+  renderPtsPerShiftType();
   renderShiftEfficiency();
   renderCaseTypeEfficiency();
   renderMoMChange();
@@ -3255,17 +3300,100 @@ function renderStabilization() {
 function renderProjectedAnnual() {
   const mt = getMonthlyTotals();
   const now = new Date();
+  const thisYear = now.getFullYear();
   function mk(offset) { const d = new Date(now.getFullYear(), now.getMonth() - offset, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
   const last3 = [mt[mk(0)]||0, mt[mk(1)]||0, mt[mk(2)]||0].filter(v => v > 0);
   const avg = last3.length > 0 ? last3.reduce((a,b)=>a+b,0) / last3.length : 0;
   document.getElementById('projRollingAvg').textContent = avg.toFixed(1);
   const pv = settings.pointValue;
+
+  // YTD points: sum all months in current year
+  let ytdPts = 0;
+  let ytdMonths = 0;
+  for (let m = 0; m <= now.getMonth(); m++) {
+    const key = thisYear + '-' + String(m + 1).padStart(2, '0');
+    if (mt[key]) { ytdPts += mt[key]; ytdMonths++; }
+  }
+  const remainingMonths = 12 - now.getMonth() - 1; // full months left after current
+
   if (pv && pv > 0 && avg > 0) {
     const annual = avg * 12 * pv;
-    document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    const ytdRevenue = ytdPts * pv;
+    const projRemaining = avg * remainingMonths * pv;
+    document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    document.getElementById('projYTDRevenue').textContent = '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    document.getElementById('projRemaining').textContent = '$' + projRemaining.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    document.getElementById('projYTDDetail').textContent = `${ytdPts.toFixed(0)} pts earned YTD across ${ytdMonths} month${ytdMonths !== 1 ? 's' : ''} \u2022 ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''} remaining`;
   } else {
     document.getElementById('projAnnualIncome').innerHTML = '&mdash;';
+    document.getElementById('projYTDRevenue').innerHTML = '&mdash;';
+    document.getElementById('projRemaining').innerHTML = '&mdash;';
+    document.getElementById('projYTDDetail').textContent = pv ? '' : 'Set $/point above to see revenue projections';
   }
+}
+
+function renderMonthlyPace() {
+  const now = new Date();
+  const prefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix));
+  let currentPts = 0;
+  monthShifts.forEach(s => { currentPts += calcShiftTotal(s).total; });
+  currentPts = round2(currentPts);
+
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const fractionElapsed = dayOfMonth / daysInMonth;
+
+  // Use 3-month avg as the target, or just project linearly from current pace
+  const mt = getMonthlyTotals();
+  function mk(offset) { const d = new Date(now.getFullYear(), now.getMonth() - offset, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+  const last3 = [mt[mk(1)]||0, mt[mk(2)]||0, mt[mk(3)]||0].filter(v => v > 0);
+  const target = last3.length > 0 ? last3.reduce((a,b)=>a+b,0) / last3.length : 0;
+
+  const projected = fractionElapsed > 0 ? round2(currentPts / fractionElapsed) : 0;
+
+  document.getElementById('paceCurrentPts').textContent = currentPts.toFixed(1) + ' pts';
+  document.getElementById('paceProjected').textContent = projected.toFixed(1) + ' pts';
+
+  // Progress bar: % of target reached (cap at 100%)
+  let pct = 0;
+  let label = '';
+  if (target > 0) {
+    pct = Math.min(100, round2(currentPts / target * 100));
+    const diff = currentPts - (target * fractionElapsed);
+    label = `${pct.toFixed(0)}% of avg (${target.toFixed(0)} pts) \u2022 ${diff >= 0 ? '+' : ''}${diff.toFixed(0)} pts vs pace`;
+  } else {
+    pct = Math.min(100, fractionElapsed * 100);
+    label = `Day ${dayOfMonth} of ${daysInMonth}`;
+  }
+  document.getElementById('paceBar').style.width = pct + '%';
+  document.getElementById('paceBar').style.background = (target > 0 && currentPts >= target * fractionElapsed) ? 'var(--accent)' : 'var(--primary)';
+  document.getElementById('paceLabel').textContent = label;
+}
+
+function renderPtsPerShiftType() {
+  const groups = {};
+  Object.values(data.shifts).forEach(shift => {
+    const t = calcShiftTotal(shift).total;
+    const type = shift.assignmentType;
+    if (!groups[type]) groups[type] = { totalPts: 0, count: 0 };
+    groups[type].totalPts += t;
+    groups[type].count++;
+  });
+
+  const ranked = Object.entries(groups)
+    .map(([type, g]) => ({ type, name: getAssignmentTypeName(type), avgPts: round2(g.totalPts / g.count), count: g.count, totalPts: round2(g.totalPts) }))
+    .sort((a, b) => b.avgPts - a.avgPts);
+
+  let html = '';
+  if (ranked.length > 0) {
+    html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Average total points per shift (AR + production + call)</div>';
+    ranked.forEach(r => {
+      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count} shift${r.count !== 1 ? 's' : ''})</span></span><span class="eff-value" style="color:var(--primary);">${r.avgPts.toFixed(1)}</span></div>`;
+    });
+  }
+  if (!html) html = '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet.</p>';
+  document.getElementById('ptsPerTypeContent').innerHTML = html;
 }
 
 function renderShiftEfficiency() {
@@ -4191,6 +4319,7 @@ function syncPointValue(source) {
   // Re-render projections that depend on $/pt
   renderStabilization();
   renderProjectedAnnual();
+  renderMonthlyPace();
   renderMonthlyChart();
 }
 
