@@ -3432,8 +3432,8 @@ function renderPipelineChart() {
   // For each of the next 5 months, compute the full stabilization-weighted paycheck
   // using real data where available; projected avg only when toggle is on
   const labels = [];
-  const ptValues = [];
-  const dollarValues = [];
+  const realValues = [];      // solid portion (from recorded data)
+  const projectedValues = []; // translucent portion (from rolling avg)
   const breakdowns = [];
 
   for (let target = 0; target < 5; target++) {
@@ -3442,34 +3442,36 @@ function renderPipelineChart() {
     labels.push(target === 0 ? label + ' (current)' : label);
 
     // For this target month's paycheck, we need months: target, target-1, target-2, target-3, target-4
-    let weighted = 0;
+    let realPts = 0;
+    let projPts = 0;
     const bd = [];
     for (let w = 0; w < 5; w++) {
       const srcDate = new Date(now.getFullYear(), now.getMonth() + target - w, 1);
       const srcKey = mkKey(srcDate.getFullYear(), srcDate.getMonth());
       const srcLabel = monthNames[srcDate.getMonth()] + ' ' + srcDate.getFullYear().toString().slice(2);
 
-      let srcPts;
       const isCurrentOrPast = srcDate <= now || srcKey === mkKey(now.getFullYear(), now.getMonth());
+      const isProjected = !mt[srcKey] && !isCurrentOrPast;
+      let srcPts;
       if (mt[srcKey] !== undefined) {
-        // We have real data
         srcPts = mt[srcKey];
       } else if (isCurrentOrPast) {
-        // Past month with no data = 0
         srcPts = 0;
       } else {
-        // Future month = project using rolling avg
         srcPts = avgProjection;
       }
 
       const contribution = round2(srcPts * weights[w]);
-      weighted += contribution;
-      bd.push({ label: srcLabel, weight: weights[w], pts: round2(srcPts), contribution, isProjected: !mt[srcKey] && !isCurrentOrPast });
+      if (isProjected) {
+        projPts += contribution;
+      } else {
+        realPts += contribution;
+      }
+      bd.push({ label: srcLabel, weight: weights[w], pts: round2(srcPts), contribution, isProjected });
     }
 
-    weighted = round2(weighted);
-    ptValues.push(weighted);
-    dollarValues.push(pv > 0 ? round2(weighted * pv) : 0);
+    realValues.push(round2(realPts));
+    projectedValues.push(round2(projPts));
     breakdowns.push(bd);
   }
 
@@ -3477,42 +3479,51 @@ function renderPipelineChart() {
   if (pipelineChart) pipelineChart.destroy();
 
   const useDollars = pv > 0;
-  const chartData = useDollars ? dollarValues : ptValues;
+  const realData = useDollars ? realValues.map(v => round2(v * pv)) : realValues;
+  const projData = useDollars ? projectedValues.map(v => round2(v * pv)) : projectedValues;
+  const hasAnyProjections = projectedValues.some(v => v > 0);
 
-  // Color bars: current = blue, future with all real data = green, future with projections = amber
-  const barColors = ptValues.map((_, i) => {
-    if (i === 0) return '#3b82f6';
-    const hasProjected = breakdowns[i].some(b => b.isProjected);
-    return hasProjected ? 'rgba(245,158,11,0.4)' : '#10b981';
-  });
+  const datasets = [{
+    label: useDollars ? 'Recorded ($)' : 'Recorded Data',
+    data: realData,
+    backgroundColor: '#10b981',
+    borderWidth: 0,
+    borderRadius: hasAnyProjections ? 0 : 4
+  }];
+
+  if (hasAnyProjections) {
+    datasets.push({
+      label: useDollars ? 'Projected ($)' : 'Projected (3-mo avg)',
+      data: projData,
+      backgroundColor: 'rgba(245,158,11,0.35)',
+      borderWidth: 0,
+      borderRadius: 4
+    });
+  }
 
   pipelineChart = new Chart(ctx, {
     type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: useDollars ? 'Paycheck ($)' : 'Weighted Points',
-        data: chartData,
-        backgroundColor: barColors,
-        borderWidth: 0,
-        borderRadius: 4
-      }]
-    },
+    data: { labels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: { display: hasAnyProjections, labels: { color: '#94a3b8', boxWidth: 12, padding: 12 } },
         tooltip: {
           callbacks: {
             title: ctx => ctx[0].label,
             afterBody: function(ctx) {
               const bd = breakdowns[ctx[0].dataIndex];
-              return bd.map(b => {
+              const lines = bd.map(b => {
                 const pct = (b.weight * 100).toFixed(0);
                 const proj = b.isProjected ? ' (est)' : '';
                 return `  ${pct}% \u00d7 ${b.pts.toFixed(0)} pts${proj} (${b.label}) = ${b.contribution.toFixed(1)}`;
               });
+              const total = round2(realValues[ctx[0].dataIndex] + projectedValues[ctx[0].dataIndex]);
+              if (useDollars) {
+                lines.push(`  Total: ${total.toFixed(1)} pts \u2192 $${round2(total * pv).toLocaleString('en-US', {maximumFractionDigits:0})}`);
+              }
+              return lines;
             }
           }
         }
@@ -3520,13 +3531,11 @@ function renderPipelineChart() {
       scales: {
         y: {
           beginAtZero: true,
-          ticks: {
-            color: '#94a3b8',
-            callback: v => useDollars ? '$' + v.toLocaleString() : v
-          },
+          stacked: true,
+          ticks: { color: '#94a3b8', callback: v => useDollars ? '$' + v.toLocaleString() : v },
           grid: { color: 'rgba(71,85,105,0.3)' }
         },
-        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } }
+        x: { stacked: true, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } }
       }
     }
   });
@@ -3535,10 +3544,9 @@ function renderPipelineChart() {
   const currentPts = mt[mkKey(now.getFullYear(), now.getMonth())] || 0;
   let summary = `Current month: ${currentPts.toFixed(0)} pts`;
   if (useDollars) {
-    summary += ` \u2022 Next paycheck: $${dollarValues[0].toLocaleString('en-US', {maximumFractionDigits: 0})}`;
+    const nextPaycheck = round2((realValues[0] + projectedValues[0]) * pv);
+    summary += ` \u2022 Next paycheck: $${nextPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
   }
-  const hasProjections = breakdowns.some(bd => bd.some(b => b.isProjected));
-  if (hasProjections) summary += ' \u2022 Amber bars include projected months';
   document.getElementById('pipelineSummary').textContent = summary;
 }
 
