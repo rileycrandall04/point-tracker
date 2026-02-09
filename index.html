@@ -1253,6 +1253,17 @@ input.mil-time.invalid {
       </div>
     </div>
 
+    <!-- Collapsible: Case Type Efficiency -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('projCaseEff')">
+        <h3>Most Efficient Case Types</h3>
+        <span class="arrow" id="projCaseEffArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="projCaseEffBody">
+        <div id="caseEffContent" style="padding-top:12px;"></div>
+      </div>
+    </div>
+
     <!-- Collapsible: Month-over-Month -->
     <div class="card collapse-section">
       <div class="collapse-header" onclick="toggleCollapse('projMoM')">
@@ -2998,13 +3009,13 @@ function switchDashboardTab(tabName) {
 // Generic collapsible toggle
 function toggleCollapse(sectionId) {
   const bodyMap = {
-    projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projMoM: 'projMoMBody',
+    projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projCaseEff: 'projCaseEffBody', projMoM: 'projMoMBody',
     timeDOW: 'timeDOWBody', timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
     analAddOns: 'analAddOnsBody', analTopProc: 'analTopProcBody', analAvgUnits: 'analAvgUnitsBody',
     analShiftDist: 'analShiftDistBody'
   };
   const arrowMap = {
-    projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projMoM: 'projMoMArrow',
+    projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projCaseEff: 'projCaseEffArrow', projMoM: 'projMoMArrow',
     timeDOW: 'timeDOWArrow', timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
     analAddOns: 'analAddOnsArrow', analTopProc: 'analTopProcArrow', analAvgUnits: 'analAvgUnitsArrow',
     analShiftDist: 'analShiftDistArrow'
@@ -3132,6 +3143,7 @@ function renderProjections() {
   renderStabilization();
   renderProjectedAnnual();
   renderShiftEfficiency();
+  renderCaseTypeEfficiency();
   renderMoMChange();
 }
 
@@ -3277,6 +3289,44 @@ function renderShiftEfficiency() {
   }
   if (!html) html = '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet.</p>';
   document.getElementById('efficiencyContent').innerHTML = html;
+}
+
+function renderCaseTypeEfficiency() {
+  const groups = {};
+  data.cases.forEach(c => {
+    const shift = data.shifts[c.shiftDate];
+    if (!shift) return;
+    const pts = calcCasePoints(c, shift);
+    // Group standard cases by procedure name, others by case type
+    const key = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
+    if (!groups[key]) groups[key] = { totalPts: 0, count: 0 };
+    groups[key].totalPts += pts;
+    groups[key].count++;
+  });
+
+  const ranked = Object.entries(groups)
+    .map(([name, g]) => ({ name, avgPts: round2(g.totalPts / g.count), totalPts: round2(g.totalPts), count: g.count }))
+    .filter(r => r.count >= 2)
+    .sort((a, b) => b.avgPts - a.avgPts);
+
+  let html = '';
+  if (ranked.length > 0) {
+    const top = ranked.slice(0, 8);
+    html += '<h4 style="font-size:0.82rem;color:var(--accent);margin-bottom:6px;">Highest Avg Points Per Case</h4>';
+    top.forEach(r => {
+      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count}x)</span></span><span class="eff-value good">${r.avgPts.toFixed(1)}</span></div>`;
+    });
+
+    const bottom = ranked.slice(-Math.min(5, Math.max(0, ranked.length - 8))).reverse();
+    if (bottom.length > 0) {
+      html += '<h4 style="font-size:0.82rem;color:var(--danger);margin-top:12px;margin-bottom:6px;">Lowest Avg Points Per Case</h4>';
+      bottom.forEach(r => {
+        html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count}x)</span></span><span class="eff-value bad">${r.avgPts.toFixed(1)}</span></div>`;
+      });
+    }
+  }
+  if (!html) html = '<p style="font-size:0.85rem;color:var(--text-dim);">Not enough case data yet (need 2+ of a type).</p>';
+  document.getElementById('caseEffContent').innerHTML = html;
 }
 
 function renderMoMChange() {
