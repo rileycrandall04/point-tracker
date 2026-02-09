@@ -632,6 +632,74 @@ input.mil-time.invalid {
 }
 .case-log-search:focus { border-color: var(--primary); }
 
+/* ===== SHIFT LOG TABLE ===== */
+.shift-log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+  min-width: 900px;
+}
+.shift-log-table thead { position: sticky; top: 0; z-index: 2; }
+.shift-log-table th {
+  background: var(--surface);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  padding: 8px 6px;
+  text-align: left;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+.shift-log-table td {
+  padding: 6px 6px;
+  border-bottom: 1px solid var(--surface2);
+  vertical-align: middle;
+}
+.shift-log-table tr { cursor: pointer; transition: background 0.15s; }
+.shift-log-table tbody tr:hover { background: rgba(59,130,246,0.08); }
+.shift-log-table tbody tr:active { background: rgba(59,130,246,0.15); }
+.sl-sub-row td { border-top: none; }
+.sl-sub-row td:empty, .sl-sub-row td[data-blank] { color: transparent; }
+.sl-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sl-badge-or { background: rgba(16,185,129,0.2); color: #34d399; }
+.sl-badge-ob { background: rgba(59,130,246,0.2); color: #60a5fa; }
+.sl-badge-call { background: rgba(245,158,11,0.2); color: #fbbf24; }
+.sl-badge-endo { background: rgba(139,92,246,0.2); color: #a78bfa; }
+.sl-badge-sf { background: rgba(236,72,153,0.2); color: #f472b6; }
+.sl-badge-other { background: rgba(148,163,184,0.2); color: #94a3b8; }
+.sl-badge-vac { background: rgba(100,116,139,0.15); color: #64748b; }
+.sl-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+.sl-summary-table th {
+  text-align: left;
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 0.7rem;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.sl-summary-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--surface2);
+}
+.sl-summary-table tr:last-child td {
+  font-weight: 700;
+  border-top: 2px solid var(--border);
+  border-bottom: none;
+}
+.sl-pager-row { background: rgba(245,158,11,0.06); }
+
 /* ===== TOGGLE SWITCH ===== */
 .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-dim); }
 .toggle-switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
@@ -1129,7 +1197,6 @@ input.mil-time.invalid {
   <div class="tab-bar">
     <button class="tab-btn active" data-rtab="qgenda">QGenda Time</button>
     <button class="tab-btn" data-rtab="production">Production</button>
-    <button class="tab-btn" data-rtab="import">Import</button>
   </div>
 
   <!-- QGenda Tab -->
@@ -1178,54 +1245,13 @@ input.mil-time.invalid {
     <div id="prodResults"></div>
   </div>
 
-  <!-- Import Tab -->
-  <div id="rtab-import" class="hidden">
-    <div class="tab-bar" id="importSubTabs">
-      <button class="tab-btn active" data-itab="time">Time Punches</button>
-      <button class="tab-btn" data-itab="cases">Cases</button>
-    </div>
-
-    <!-- Time Punch Import -->
-    <div id="itab-time">
-      <div class="card">
-        <h2>Import Shifts from QGenda</h2>
-        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-          Upload a QGenda time punch export (.xlsx, .csv, or screenshot) to import shifts into the tracker.
-        </p>
-        <div class="upload-area" id="importTimeUploadArea">
-          <div style="font-size:2rem;">&#128197;</div>
-          <p>Tap to upload QGenda .xlsx, .csv, or screenshot</p>
-          <input type="file" id="importTimeFile" accept=".xlsx,.xls,.csv,.png,.jpg,.jpeg">
-        </div>
-      </div>
-      <div id="importTimePreview"></div>
-      <div id="importTimeAction" class="hidden" style="margin-top:12px;">
-        <button class="btn btn-primary" id="importShiftsBtn" style="width:100%;">Import Shifts</button>
-      </div>
-    </div>
-
-    <!-- Case Import -->
-    <div id="itab-cases" class="hidden">
-      <div class="card">
-        <h2>Import Cases from CSV</h2>
-        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-          Export a tab from your Google Sheet as CSV and upload it to import cases.
-        </p>
-        <div class="upload-area" id="csvUploadArea">
-          <div style="font-size:2rem;">&#128203;</div>
-          <p>Tap to upload CSV</p>
-          <input type="file" id="csvFile" accept=".csv">
-        </div>
-      </div>
-      <div id="csvImportResults"></div>
-    </div>
-  </div>
 </div>
 
 <!-- DASHBOARD PAGE -->
 <div class="page" id="page-dashboard">
   <div class="dash-tab-bar">
     <button class="dash-tab-btn active" data-dtab="caselogs">Case Logs</button>
+    <button class="dash-tab-btn" data-dtab="shiftlogs">Shift Logs</button>
     <button class="dash-tab-btn" data-dtab="projections">Projections</button>
     <button class="dash-tab-btn" data-dtab="time">Time</button>
     <button class="dash-tab-btn" data-dtab="analytics">Analytics</button>
@@ -1242,6 +1268,22 @@ input.mil-time.invalid {
     <div class="case-log-wrap">
       <div id="caseLogTableContainer">
         <div class="empty-state"><p>No cases for this month.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shift Logs Tab -->
+  <div id="dtab-shiftlogs" class="hidden">
+    <div class="month-nav">
+      <button id="slPrevMonth">&larr;</button>
+      <span id="slMonthLabel">January 2026</span>
+      <button id="slNextMonth">&rarr;</button>
+    </div>
+    <div class="card" id="shiftLogSummary"></div>
+    <input type="text" class="case-log-search" id="shiftLogSearch" placeholder="Search shifts...">
+    <div class="case-log-wrap">
+      <div id="shiftLogTableContainer">
+        <div class="empty-state"><p>No shifts for this month.</p></div>
       </div>
     </div>
   </div>
@@ -1574,6 +1616,96 @@ input.mil-time.invalid {
     </div>
   </div>
 
+  <!-- Monthly Override -->
+  <div class="card">
+    <h2>Monthly Point Override</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Override calculated points for a month to match QGenda or billing records.
+    </p>
+    <div class="month-nav">
+      <button id="ovPrevMonth">&larr;</button>
+      <span id="ovMonthLabel">January 2026</span>
+      <button id="ovNextMonth">&rarr;</button>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:12px;">
+      <div class="settings-field" style="flex:1;">
+        <label>Total Time Points</label>
+        <input type="number" id="overrideTimePoints" min="0" step="0.01" placeholder="Calculated: —">
+      </div>
+      <div class="settings-field" style="flex:1;">
+        <label>Total Production Points</label>
+        <input type="number" id="overrideProdPoints" min="0" step="0.01" placeholder="Calculated: —">
+      </div>
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <button class="btn btn-primary btn-sm" id="saveOverrideBtn">Save Override</button>
+      <button class="btn btn-outline btn-sm" id="clearOverrideBtn">Clear</button>
+    </div>
+    <div id="overrideStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
+  </div>
+
+  <!-- Import Data -->
+  <div class="card">
+    <h2>Import Shifts from QGenda</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Upload a QGenda time punch export (.xlsx, .csv, or screenshot) to import shifts into the tracker.
+      Dates with existing shifts will be skipped.
+    </p>
+    <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
+      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">Required CSV/Excel format</summary>
+      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;line-height:1.6;">
+        <strong>Required columns (exact header names):</strong><br>
+        Schedule Date, Effective Clock In Date, Effective Clock In Time,
+        Effective Clock Out Date, Effective Clock Out Time, Duration,
+        Scheduled Task Abbreviation<br><br>
+        <strong>Optional columns:</strong> Location Name, Notes<br><br>
+        <strong>Example row:</strong><br>
+        <code style="font-size:0.7rem;">1/5/2026 | 7:40 | 1/5/2026 | 17:03 | 9.38 | UVH 15</code><br><br>
+        Times should be in 24-hour format (7:00, 17:03) or Excel time values.
+        Dates should be M/D/YYYY or YYYY-MM-DD.
+        Multiple entries per date are grouped into one shift with multiple time entries.
+      </div>
+    </details>
+    <div class="upload-area" id="importTimeUploadArea">
+      <div style="font-size:2rem;">&#128197;</div>
+      <p>Tap to upload QGenda .xlsx, .csv, or screenshot</p>
+      <input type="file" id="importTimeFile" accept=".xlsx,.xls,.csv,.png,.jpg,.jpeg">
+    </div>
+    <div id="importTimePreview"></div>
+    <div id="importTimeAction" class="hidden" style="margin-top:12px;">
+      <button class="btn btn-primary" id="importShiftsBtn" style="width:100%;">Import Shifts</button>
+    </div>
+    <hr style="border-color:var(--border);margin:16px 0;">
+    <h2>Import Cases</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Upload cases from Excel (.xlsx), CSV (Google Sheet export), PDF (Charge Detail), or screenshot.
+      Duplicate cases (same date + start time) will be skipped.
+    </p>
+    <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
+      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">Required CSV format</summary>
+      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;line-height:1.6;">
+        <strong>Columns (in order, comma-separated):</strong><br>
+        Date, Surgeon, Startup (base units), Start, End, Time (min),
+        Modifiers, Block, Shared?, Points Earned<br><br>
+        <strong>Example row:</strong><br>
+        <code style="font-size:0.7rem;">1/5,A Hill,6,8:02:00 AM,11:08:00 AM,186.00,,,,21.6</code><br><br>
+        <strong>Date:</strong> M/D or M/D/YYYY (year inferred from current date if omitted)<br>
+        <strong>Start/End:</strong> H:MM AM/PM or H:MM:SS AM/PM or 24-hour HH:MM<br>
+        <strong>Modifiers:</strong> "E" for emergency, or numeric modifier point value<br>
+        <strong>Block:</strong> Nerve block point value (2.6 = other, 3.0 = brachial plexus)<br>
+        <strong>Shared?:</strong> "Y" if shared/split case<br>
+        Header row is optional and will be auto-skipped.
+        Shifts are auto-created for dates without an existing shift.
+      </div>
+    </details>
+    <div class="upload-area" id="csvUploadArea">
+      <div style="font-size:2rem;">&#128203;</div>
+      <p>Tap to upload .xlsx, .csv, .pdf, or screenshot</p>
+      <input type="file" id="csvFile" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg">
+    </div>
+    <div id="csvImportResults"></div>
+  </div>
+
   <!-- Export / Import -->
   <div class="card">
     <h2>Data Management</h2>
@@ -1779,6 +1911,43 @@ input.mil-time.invalid {
   </div>
 </div>
 
+<!-- Shift edit modal -->
+<div class="modal-overlay hidden" id="shiftEditModal">
+  <div class="modal">
+    <h2 id="shiftEditTitle">Edit Shift</h2>
+    <div class="form-group">
+      <label>Assignment Type</label>
+      <select id="editShiftType">
+        <option value="OR">OR / General</option>
+        <option value="OB_restricted">UVH OB</option>
+        <option value="cardiac_liver">Cardiac / Liver</option>
+        <option value="mole">Mole</option>
+        <option value="1st_call">1st Call</option>
+        <option value="2nd_call">2nd Call</option>
+        <option value="3rd_call">3rd Call</option>
+        <option value="4th_call">4th Call</option>
+        <option value="endo">Endo</option>
+        <option value="SF1">SF 1</option>
+        <option value="SF2">SF 2</option>
+        <option value="ACS">ACS</option>
+        <option value="NORA">NORA</option>
+        <option value="CRNA_supervision">CRNA Supervision</option>
+        <option value="vacation">Vacation / Off</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="editShiftHoliday"> Holiday</label>
+    </div>
+    <div id="editShiftTimeEntries"></div>
+    <button class="btn btn-outline btn-sm" id="editShiftAddEntry" style="margin-top:8px;">+ Add Time Entry</button>
+    <div class="modal-actions">
+      <button class="btn btn-danger btn-sm" id="deleteShiftBtn">Delete</button>
+      <button class="btn btn-outline btn-sm" id="cancelShiftEdit">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="saveShiftEdit">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Import confirmation modal -->
 <div class="modal-overlay hidden" id="importConfirmModal">
   <div class="modal">
@@ -1831,13 +2000,18 @@ const SETTINGS_KEY = 'mwa_settings';
 const QGENDA_KEY = 'mwa_qgenda';
 const PROD_KEY = 'mwa_production';
 const RECON_DECISIONS_KEY = 'mwa_recon_decisions';
+const SHIFT_RECON_DECISIONS_KEY = 'mwa_shift_recon_decisions';
 
 function loadData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (!d.overrides) d.overrides = {};
+      return d;
+    }
   } catch(e) {}
-  return { shifts: {}, cases: [] };
+  return { shifts: {}, cases: [], overrides: {} };
 }
 
 function saveData(d) {
@@ -1894,6 +2068,8 @@ function migrateData(d) {
       changed = true;
     }
   });
+  // Ensure overrides object exists
+  if (!d.overrides) { d.overrides = {}; changed = true; }
   if (changed) saveData(d);
 }
 migrateData(data);
@@ -2566,7 +2742,7 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
     if (btn.dataset.page === 'today') renderToday();
     if (btn.dataset.page === 'cases') updateORCaseVisibility();
     if (btn.dataset.page === 'dashboard') switchDashboardTab(activeDashTab);
-    if (btn.dataset.page === 'settings') renderHistory();
+    if (btn.dataset.page === 'settings') { renderHistory(); loadOverrideUI(); }
     if (btn.dataset.page === 'reconcile') renderReconTabs();
   });
 });
@@ -3180,10 +3356,12 @@ function switchDashboardTab(tabName) {
   activeDashTab = tabName;
   document.querySelectorAll('.dash-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.dtab === tabName));
   document.getElementById('dtab-caselogs').classList.toggle('hidden', tabName !== 'caselogs');
+  document.getElementById('dtab-shiftlogs').classList.toggle('hidden', tabName !== 'shiftlogs');
   document.getElementById('dtab-projections').classList.toggle('hidden', tabName !== 'projections');
   document.getElementById('dtab-time').classList.toggle('hidden', tabName !== 'time');
   document.getElementById('dtab-analytics').classList.toggle('hidden', tabName !== 'analytics');
   if (tabName === 'caselogs') renderCaseLogTable();
+  if (tabName === 'shiftlogs') renderShiftLogTable();
   if (tabName === 'projections') renderProjections();
   if (tabName === 'time') renderTimeTab();
   if (tabName === 'analytics') renderAnalyticsTab();
@@ -3285,9 +3463,11 @@ function renderCaseLogTable() {
   let html = '<table class="case-log-table" id="caseLogTable"><thead><tr>';
   html += '<th>Date</th><th>Procedure</th><th>Type</th><th>Start</th><th>End</th><th>Units</th><th>PS</th><th>E</th><th>Add-ons</th><th>Pts</th>';
   html += '</tr></thead><tbody>';
+  let totalPts = 0;
   monthCases.forEach(c => {
     const shift = data.shifts[c.shiftDate];
     const pts = calcCasePoints(c, shift);
+    totalPts += pts;
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
     const sharedMark = c.isSharedCase ? ' [S]' : '';
     const addOns = getCaseAddOnSummary(c);
@@ -3304,7 +3484,10 @@ function renderCaseLogTable() {
     html += `<td><strong>${pts.toFixed(1)}</strong></td>`;
     html += '</tr>';
   });
-  html += '</tbody></table>';
+  html += '</tbody><tfoot><tr style="border-top:2px solid var(--accent);">';
+  html += `<td colspan="9" style="text-align:right;font-weight:600;">Monthly Total (${monthCases.length} cases)</td>`;
+  html += `<td><strong>${round2(totalPts).toFixed(1)}</strong></td>`;
+  html += '</tr></tfoot></table>';
   container.innerHTML = html;
 }
 
@@ -3318,6 +3501,489 @@ function filterCaseLog() {
     row.style.display = text.includes(query) ? '' : 'none';
   });
 }
+
+// ================================================================
+// SHIFT LOGS TAB
+// ================================================================
+let slYear = new Date().getFullYear();
+let slMonth = new Date().getMonth();
+
+function updateSLMonthLabel() {
+  const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('slMonthLabel').textContent = `${mn[slMonth]} ${slYear}`;
+}
+
+document.getElementById('slPrevMonth').addEventListener('click', () => {
+  slMonth--; if (slMonth < 0) { slMonth = 11; slYear--; }
+  updateSLMonthLabel(); renderShiftLogTable();
+});
+document.getElementById('slNextMonth').addEventListener('click', () => {
+  slMonth++; if (slMonth > 11) { slMonth = 0; slYear++; }
+  updateSLMonthLabel(); renderShiftLogTable();
+});
+
+document.getElementById('shiftLogSearch').addEventListener('input', () => filterShiftLog());
+
+function getPayCodeName(normalizedMin, assignmentType, isWknd, isHol) {
+  const isOB = ['OB_restricted','SF1','SF2'].includes(assignmentType);
+  const isDaytime = normalizedMin >= 420 && normalizedMin < 1020;
+  const isEvening = normalizedMin >= 1020 && normalizedMin < 1380;
+  if (isWknd || isHol) {
+    if (isDaytime) return isOB ? 'Restricted OB Weekend Day' : 'Weekend Day';
+    return isOB ? 'Restricted OB Weekend Night' : 'Weekend Night';
+  }
+  if (isDaytime) return isOB ? 'Restricted OB Hours' : 'MD Hourly';
+  if (isEvening) return isOB ? 'Restricted OB Evening' : 'Evening Diff';
+  return isOB ? 'Restricted OB Night' : 'Night Diff';
+}
+
+function getShiftPayBreakdown(shift) {
+  if (shift.assignmentType === 'vacation') return [];
+  if (shift.forcedOff) return [{ clockIn: '', clockOut: '', payCode: 'Forced Off', durationMin: 0, payRate: 0, amount: 56 }];
+  const entries = shift.timeEntries || [];
+  if (entries.length === 0) return [];
+  const lastEntry = entries[entries.length - 1];
+  if (!lastEntry.end && entries.length === 1) return [];
+
+  const isHol = shift.isHoliday;
+  const isWknd = isWeekend(shift.date);
+  const isWkndOrHol = isHol || isWknd;
+  const isSF = ['SF1','SF2'].includes(shift.assignmentType);
+
+  let orRanges = [];
+  if (isSF) {
+    const shiftCases = data.cases.filter(c => c.shiftDate === shift.date && c.isORCase);
+    shiftCases.forEach(c => {
+      let cs = timeToMinutes(c.startTime);
+      let ce = timeToMinutes(c.endTime);
+      if (ce <= cs) ce += 1440;
+      orRanges.push({ start: cs, end: ce });
+    });
+  }
+
+  const clockedRanges = [];
+  entries.forEach(e => {
+    if (!e.start) return;
+    const s = timeToMinutes(e.start);
+    let en = e.end ? timeToMinutes(e.end) : s;
+    if (en <= s && e.end) en += 1440;
+    clockedRanges.push({ start: s, end: en, startStr: e.start, endStr: e.end || '' });
+  });
+
+  if (clockedRanges.length === 0) return [];
+  const spanStart = clockedRanges[0].start;
+  const spanEnd = clockedRanges[clockedRanges.length - 1].end;
+  if (spanEnd <= spanStart) return [];
+
+  const rows = [];
+
+  // Rate-change boundaries (minute of day)
+  function getBoundaries() {
+    if (isWknd || isHol) return [420, 1020]; // 0700, 1700
+    return [420, 1020, 1380]; // 0700, 1700, 2300
+  }
+  const bounds = getBoundaries();
+
+  // For each clocked range, segment at rate boundaries
+  clockedRanges.forEach((cr, idx) => {
+    let segStart = cr.start;
+    while (segStart < cr.end) {
+      const normStart = segStart % 1440;
+      // Find next boundary after normStart
+      let nextBound = cr.end;
+      for (const b of bounds) {
+        // Calculate the actual minute where this boundary hits within the shift span
+        const base = segStart - normStart;
+        let boundMin = base + b;
+        if (boundMin <= segStart) boundMin += 1440;
+        if (boundMin < nextBound) nextBound = boundMin;
+      }
+      const segEnd = Math.min(nextBound, cr.end);
+      const normSeg = segStart % 1440;
+      let rateType = shift.assignmentType;
+      if (isSF) {
+        for (const r of orRanges) {
+          if (segStart >= r.start && segStart < r.end) { rateType = 'OR'; break; }
+        }
+      }
+      const payCode = getPayCodeName(normSeg, rateType, isWknd, isHol);
+      const payRate = getARRate(rateType, isHol, isWknd, normSeg);
+      const durMin = segEnd - segStart;
+      rows.push({
+        clockIn: segStart === cr.start ? cr.startStr : '',
+        clockOut: segEnd === cr.end ? cr.endStr : '',
+        payCode,
+        durationMin: durMin,
+        payRate,
+        amount: round2((durMin / 60) * payRate),
+        entryIdx: idx,
+        isSubRow: segStart !== cr.start
+      });
+      segStart = segEnd;
+    }
+  });
+
+  // Compute gap-based pager pay
+  for (let g = 0; g < clockedRanges.length - 1; g++) {
+    const gapStart = clockedRanges[g].end;
+    const gapEnd = clockedRanges[g + 1].start;
+    let eligibleMin = 0;
+    for (let m = gapStart; m < gapEnd; m++) {
+      if (isUnrestrictedCallEligible(shift.assignmentType, m % 1440, isWkndOrHol)) {
+        eligibleMin++;
+      }
+    }
+    if (eligibleMin > 0) {
+      rows.push({
+        clockIn: clockedRanges[g].endStr,
+        clockOut: clockedRanges[g + 1].startStr,
+        payCode: 'Pager Pay',
+        durationMin: eligibleMin,
+        payRate: 3.5,
+        amount: round2((eligibleMin / 60) * 3.5),
+        isPager: true,
+        isSubRow: false
+      });
+    }
+  }
+
+  // Merge consecutive same-payCode segments within the same entry
+  const merged = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (merged.length > 0) {
+      const prev = merged[merged.length - 1];
+      if (prev.payCode === r.payCode && prev.entryIdx === r.entryIdx && !r.isPager && !prev.isPager) {
+        prev.durationMin += r.durationMin;
+        prev.amount = round2(prev.amount + r.amount);
+        if (r.clockOut) prev.clockOut = r.clockOut;
+        continue;
+      }
+    }
+    merged.push({ ...r });
+  }
+
+  return merged;
+}
+
+function getShiftBadgeClass(type) {
+  if (type === 'OR' || type === 'cardiac_liver' || type === 'NORA' || type === 'ACS') return 'sl-badge-or';
+  if (type === 'OB_restricted') return 'sl-badge-ob';
+  if (type.includes('call')) return 'sl-badge-call';
+  if (type === 'endo') return 'sl-badge-endo';
+  if (type === 'SF1' || type === 'SF2') return 'sl-badge-sf';
+  if (type === 'vacation') return 'sl-badge-vac';
+  return 'sl-badge-other';
+}
+
+function minutesToTimeStr(m) {
+  const norm = ((m % 1440) + 1440) % 1440;
+  return String(Math.floor(norm / 60)).padStart(2, '0') + ':' + String(norm % 60).padStart(2, '0');
+}
+
+function renderShiftLogTable() {
+  updateSLMonthLabel();
+  const prefix = `${slYear}-${String(slMonth + 1).padStart(2, '0')}`;
+  const monthShifts = Object.values(data.shifts)
+    .filter(s => s.date && s.date.startsWith(prefix))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const container = document.getElementById('shiftLogTableContainer');
+  const summaryEl = document.getElementById('shiftLogSummary');
+
+  if (monthShifts.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No shifts for this month.</p></div>';
+    summaryEl.innerHTML = '';
+    return;
+  }
+
+  // Build breakdowns for all shifts
+  const allBreakdowns = [];
+  monthShifts.forEach(shift => {
+    const rows = getShiftPayBreakdown(shift);
+    allBreakdowns.push({ shift, rows });
+  });
+
+  // Summary card: aggregate by payCode
+  const payCodeTotals = {};
+  allBreakdowns.forEach(({ rows }) => {
+    rows.forEach(r => {
+      if (!payCodeTotals[r.payCode]) payCodeTotals[r.payCode] = { hours: 0, amount: 0 };
+      payCodeTotals[r.payCode].hours += r.durationMin / 60;
+      payCodeTotals[r.payCode].amount += r.amount;
+    });
+  });
+
+  let totalHours = 0, totalAmount = 0;
+  let summaryHtml = '<table class="sl-summary-table"><thead><tr><th>Pay Code</th><th>Hours</th><th>Amount</th></tr></thead><tbody>';
+  const sortedCodes = Object.keys(payCodeTotals).sort((a, b) => payCodeTotals[b].amount - payCodeTotals[a].amount);
+  sortedCodes.forEach(code => {
+    const t = payCodeTotals[code];
+    totalHours += t.hours;
+    totalAmount += t.amount;
+    const cls = code === 'Pager Pay' ? ' class="sl-pager-row"' : '';
+    summaryHtml += `<tr${cls}><td>${code}</td><td>${t.hours.toFixed(1)}</td><td>${t.amount.toFixed(1)}</td></tr>`;
+  });
+  summaryHtml += `<tr><td><strong>Total</strong></td><td><strong>${totalHours.toFixed(1)}</strong></td><td><strong>${totalAmount.toFixed(1)}</strong></td></tr>`;
+  summaryHtml += '</tbody></table>';
+  summaryEl.innerHTML = summaryHtml;
+
+  // Detail table
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html = '<table class="shift-log-table" id="shiftLogTable"><thead><tr>';
+  html += '<th>Date</th><th>Assignment</th><th>Time</th><th>Duration</th><th>Clock In</th><th>Clock Out</th><th>Pay Code</th><th>Hours</th><th>Pay Rate</th><th>Amount</th>';
+  html += '</tr></thead><tbody>';
+
+  let grandTotal = 0;
+
+  allBreakdowns.forEach(({ shift, rows }) => {
+    const d = new Date(shift.date + 'T12:00:00');
+    const dayName = dayNames[d.getDay()];
+    const month = d.getMonth() + 1;
+    const day = d.getDate();
+    const dateLabel = `${dayName} ${month}/${day}`;
+    const typeName = getAssignmentTypeName(shift.assignmentType);
+    const badgeClass = getShiftBadgeClass(shift.assignmentType);
+    const totalHrs = calcShiftHours(shift);
+    const entries = shift.timeEntries || [];
+    const timeStr = entries.length > 0 && entries[0].start
+      ? entries[0].start + (entries[entries.length - 1].end ? ' - ' + entries[entries.length - 1].end : '')
+      : '-';
+    const shiftTotal = rows.reduce((s, r) => s + r.amount, 0);
+    grandTotal += shiftTotal;
+
+    if (shift.assignmentType === 'vacation') {
+      html += `<tr data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      html += `<td>${dateLabel}</td>`;
+      html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
+      html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>Vacation</td><td>-</td><td>-</td><td>0.0</td>`;
+      html += '</tr>';
+      return;
+    }
+
+    if (rows.length === 0) {
+      html += `<tr data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      html += `<td>${dateLabel}</td>`;
+      html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
+      html += `<td>${timeStr}</td><td>${totalHrs.toFixed(1)}h</td>`;
+      html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
+      html += '</tr>';
+      return;
+    }
+
+    rows.forEach((r, i) => {
+      const subClass = i > 0 ? ' class="sl-sub-row"' : '';
+      html += `<tr${subClass} data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      if (i === 0) {
+        html += `<td>${dateLabel}</td>`;
+        html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
+        html += `<td>${timeStr}</td>`;
+        html += `<td>${totalHrs.toFixed(1)}h</td>`;
+      } else {
+        html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>';
+      }
+      html += `<td>${r.clockIn || ''}</td>`;
+      html += `<td>${r.clockOut || ''}</td>`;
+      html += `<td>${r.payCode}</td>`;
+      html += `<td>${(r.durationMin / 60).toFixed(1)}</td>`;
+      html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
+      html += `<td><strong>${r.amount.toFixed(1)}</strong></td>`;
+      html += '</tr>';
+    });
+  });
+
+  html += `<tr style="border-top:2px solid var(--border);"><td colspan="9" style="text-align:right;font-weight:700;">Monthly Total</td><td><strong>${grandTotal.toFixed(1)}</strong></td></tr>`;
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function filterShiftLog() {
+  const query = (document.getElementById('shiftLogSearch').value || '').toLowerCase();
+  const table = document.getElementById('shiftLogTable');
+  if (!table) return;
+  const rows = table.querySelectorAll('tbody tr');
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(query) ? '' : 'none';
+  });
+}
+
+// ================================================================
+// SHIFT EDIT MODAL
+// ================================================================
+let editingShiftDate = null;
+
+function openShiftEdit(dateStr) {
+  editingShiftDate = dateStr;
+  const shift = data.shifts[dateStr];
+  if (!shift) return;
+
+  document.getElementById('shiftEditTitle').textContent = 'Edit Shift - ' + formatDate(dateStr);
+  document.getElementById('editShiftType').value = shift.assignmentType;
+  document.getElementById('editShiftHoliday').checked = !!shift.isHoliday;
+
+  renderEditShiftTimeEntries(shift.timeEntries || []);
+  document.getElementById('shiftEditModal').classList.remove('hidden');
+}
+
+function renderEditShiftTimeEntries(entries) {
+  const container = document.getElementById('editShiftTimeEntries');
+  if (!entries || entries.length === 0) entries = [{ start: '', end: '' }];
+  let html = '';
+  entries.forEach((e, i) => {
+    html += `<div class="form-row" style="align-items:end;gap:8px;margin-top:8px;">
+      <div class="form-group" style="flex:1;">
+        <label>Start${entries.length > 1 ? ' #' + (i + 1) : ''}</label>
+        <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time edit-shift-start" value="${e.start || ''}">
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label>End${entries.length > 1 ? ' #' + (i + 1) : ''}</label>
+        <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time edit-shift-end" value="${e.end || ''}">
+      </div>
+      ${entries.length > 1 ? `<button class="btn btn-danger btn-sm" onclick="removeEditShiftEntry(${i})" style="margin-bottom:4px;padding:4px 8px;">x</button>` : ''}
+    </div>`;
+  });
+  container.innerHTML = html;
+  container.querySelectorAll('.mil-time').forEach(inp => bindMilTimeInput(inp));
+}
+
+function getEditShiftEntries() {
+  const starts = document.querySelectorAll('#editShiftTimeEntries .edit-shift-start');
+  const ends = document.querySelectorAll('#editShiftTimeEntries .edit-shift-end');
+  const entries = [];
+  starts.forEach((s, i) => {
+    entries.push({ start: s.value.trim(), end: (ends[i] ? ends[i].value.trim() : '') });
+  });
+  return entries;
+}
+
+function removeEditShiftEntry(idx) {
+  const entries = getEditShiftEntries();
+  entries.splice(idx, 1);
+  renderEditShiftTimeEntries(entries);
+}
+
+document.getElementById('editShiftAddEntry').addEventListener('click', () => {
+  const entries = getEditShiftEntries();
+  entries.push({ start: '', end: '' });
+  renderEditShiftTimeEntries(entries);
+});
+
+document.getElementById('saveShiftEdit').addEventListener('click', () => {
+  if (!editingShiftDate) return;
+  const shift = data.shifts[editingShiftDate];
+  if (!shift) return;
+  shift.assignmentType = document.getElementById('editShiftType').value;
+  shift.isHoliday = document.getElementById('editShiftHoliday').checked;
+  shift.timeEntries = getEditShiftEntries();
+  // Also sync legacy startTime/endTime
+  if (shift.timeEntries.length > 0) {
+    shift.startTime = shift.timeEntries[0].start;
+    shift.endTime = shift.timeEntries[shift.timeEntries.length - 1].end;
+  }
+  saveData(data);
+  document.getElementById('shiftEditModal').classList.add('hidden');
+  editingShiftDate = null;
+  renderShiftLogTable();
+  showToast('Shift updated');
+});
+
+document.getElementById('deleteShiftBtn').addEventListener('click', () => {
+  if (!editingShiftDate) return;
+  if (!confirm('Delete this shift? This cannot be undone.')) return;
+  delete data.shifts[editingShiftDate];
+  saveData(data);
+  document.getElementById('shiftEditModal').classList.add('hidden');
+  editingShiftDate = null;
+  renderShiftLogTable();
+  showToast('Shift deleted');
+});
+
+document.getElementById('cancelShiftEdit').addEventListener('click', () => {
+  document.getElementById('shiftEditModal').classList.add('hidden');
+  editingShiftDate = null;
+});
+
+// ================================================================
+// MONTHLY OVERRIDE
+// ================================================================
+let ovYear = new Date().getFullYear();
+let ovMonth = new Date().getMonth();
+
+function updateOVMonthLabel() {
+  const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('ovMonthLabel').textContent = `${mn[ovMonth]} ${ovYear}`;
+}
+
+function getOVKey() {
+  return ovYear + '-' + String(ovMonth + 1).padStart(2, '0');
+}
+
+function loadOverrideUI() {
+  updateOVMonthLabel();
+  const mk = getOVKey();
+  if (!data.overrides) data.overrides = {};
+  const ov = data.overrides[mk];
+
+  // Calculate current values to show as placeholders
+  const monthShifts = Object.values(data.shifts).filter(s => s.date && s.date.startsWith(mk));
+  let calcTime = 0, calcProd = 0;
+  monthShifts.forEach(shift => {
+    const t = calcShiftTotal(shift);
+    calcTime += t.ar + t.call + t.subspec + t.supervision;
+    calcProd += t.prod;
+  });
+
+  const timeInput = document.getElementById('overrideTimePoints');
+  const prodInput = document.getElementById('overrideProdPoints');
+  timeInput.placeholder = `Calculated: ${calcTime.toFixed(1)}`;
+  prodInput.placeholder = `Calculated: ${calcProd.toFixed(1)}`;
+  timeInput.value = ov && ov.timePoints != null ? ov.timePoints : '';
+  prodInput.value = ov && ov.prodPoints != null ? ov.prodPoints : '';
+
+  const status = document.getElementById('overrideStatus');
+  if (ov && (ov.timePoints != null || ov.prodPoints != null)) {
+    status.innerHTML = '<span style="color:var(--accent2);font-weight:600;">Override active for this month</span>';
+  } else {
+    status.textContent = '';
+  }
+}
+
+document.getElementById('ovPrevMonth').addEventListener('click', () => {
+  ovMonth--; if (ovMonth < 0) { ovMonth = 11; ovYear--; }
+  loadOverrideUI();
+});
+document.getElementById('ovNextMonth').addEventListener('click', () => {
+  ovMonth++; if (ovMonth > 11) { ovMonth = 0; ovYear++; }
+  loadOverrideUI();
+});
+
+document.getElementById('saveOverrideBtn').addEventListener('click', () => {
+  if (!data.overrides) data.overrides = {};
+  const mk = getOVKey();
+  const timeVal = document.getElementById('overrideTimePoints').value;
+  const prodVal = document.getElementById('overrideProdPoints').value;
+  const ov = {};
+  if (timeVal !== '') ov.timePoints = parseFloat(timeVal);
+  if (prodVal !== '') ov.prodPoints = parseFloat(prodVal);
+  if (Object.keys(ov).length > 0) {
+    data.overrides[mk] = ov;
+  } else {
+    delete data.overrides[mk];
+  }
+  saveData(data);
+  loadOverrideUI();
+  showToast('Override saved');
+});
+
+document.getElementById('clearOverrideBtn').addEventListener('click', () => {
+  if (!data.overrides) data.overrides = {};
+  const mk = getOVKey();
+  delete data.overrides[mk];
+  saveData(data);
+  loadOverrideUI();
+  showToast('Override cleared');
+});
 
 // ================================================================
 // PROJECTIONS TAB
@@ -3337,10 +4003,33 @@ function renderProjections() {
 
 function getMonthlyTotals() {
   const months = {};
+  // First compute from shift data
+  const monthBreakdowns = {};
   Object.values(data.shifts).forEach(shift => {
     const mk = shift.date.substring(0, 7);
-    if (!months[mk]) months[mk] = 0;
-    months[mk] += calcShiftTotal(shift).total;
+    if (!monthBreakdowns[mk]) monthBreakdowns[mk] = { time: 0, prod: 0 };
+    const t = calcShiftTotal(shift);
+    monthBreakdowns[mk].time += t.ar + t.call + t.subspec + t.supervision;
+    monthBreakdowns[mk].prod += t.prod;
+  });
+  // Apply overrides where present
+  const overrides = (data.overrides || {});
+  Object.keys(monthBreakdowns).forEach(mk => {
+    const ov = overrides[mk];
+    let time = monthBreakdowns[mk].time;
+    let prod = monthBreakdowns[mk].prod;
+    if (ov) {
+      if (ov.timePoints != null) time = ov.timePoints;
+      if (ov.prodPoints != null) prod = ov.prodPoints;
+    }
+    months[mk] = round2(time + prod);
+  });
+  // Also include override-only months (where no shifts exist but override was set)
+  Object.keys(overrides).forEach(mk => {
+    if (!months[mk]) {
+      const ov = overrides[mk];
+      months[mk] = round2((ov.timePoints || 0) + (ov.prodPoints || 0));
+    }
   });
   return months;
 }
@@ -4724,19 +5413,9 @@ document.querySelectorAll('#page-reconcile > .tab-bar > .tab-btn').forEach(btn =
     btn.classList.add('active');
     document.getElementById('rtab-qgenda').classList.toggle('hidden', btn.dataset.rtab !== 'qgenda');
     document.getElementById('rtab-production').classList.toggle('hidden', btn.dataset.rtab !== 'production');
-    document.getElementById('rtab-import').classList.toggle('hidden', btn.dataset.rtab !== 'import');
   });
 });
 
-// Import sub-tabs
-document.querySelectorAll('#importSubTabs .tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#importSubTabs .tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('itab-time').classList.toggle('hidden', btn.dataset.itab !== 'time');
-    document.getElementById('itab-cases').classList.toggle('hidden', btn.dataset.itab !== 'cases');
-  });
-});
 
 function renderReconTabs() {
   updateReconMonthLabels();
@@ -4748,6 +5427,19 @@ function renderReconTabs() {
 let qgendaData = [];
 let qYear = new Date().getFullYear();
 let qMonth = new Date().getMonth();
+let shiftReconDiffs = [];
+let shiftReconCurrentDiff = 0;
+let shiftReconDecisions = {};
+
+function loadShiftReconDecisions() {
+  try {
+    const raw = localStorage.getItem(SHIFT_RECON_DECISIONS_KEY);
+    if (raw) shiftReconDecisions = JSON.parse(raw);
+  } catch(e) { shiftReconDecisions = {}; }
+}
+function saveShiftReconDecisions() {
+  localStorage.setItem(SHIFT_RECON_DECISIONS_KEY, JSON.stringify(shiftReconDecisions));
+}
 
 function updateReconMonthLabels() {
   const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -4908,6 +5600,7 @@ function renderQgendaRecon() {
       if (cached) qgendaData = JSON.parse(cached);
     } catch(e) {}
   }
+  loadShiftReconDecisions();
 
   const container = document.getElementById('qgendaResults');
   const prefix = `${qYear}-${String(qMonth+1).padStart(2,'0')}`;
@@ -4937,64 +5630,385 @@ function renderQgendaRecon() {
   const allDates = new Set([...Object.keys(qByDate), ...trackerShifts.map(s => s.date)]);
   const sortedDates = [...allDates].sort();
 
-  // Totals
+  // Build diffs and totals
   let qTotalHours = 0;
   let tTotalHours = 0;
-  let matchCount = 0, warnCount = 0, missCount = 0;
-
-  let html = '<div class="card"><h2>QGenda vs Tracker</h2>';
-  html += '<table class="recon-table"><thead><tr><th>Date</th><th>QGenda</th><th>Tracker</th><th>Status</th></tr></thead><tbody>';
+  let matchCount = 0;
+  shiftReconDiffs = [];
 
   sortedDates.forEach(date => {
     const qDay = qByDate[date] || [];
     const tShift = data.shifts[date];
 
-    // QGenda total hours for the day
     const qHours = qDay.reduce((s, e) => s + e.duration, 0);
     qTotalHours += qHours;
 
-    // Tracker hours (clocked-in only)
     let tHours = 0;
     if (tShift) {
       tHours = calcShiftHours(tShift);
       tTotalHours += tHours;
     }
 
-    let status = '', rowClass = '';
+    // Determine QGenda assignment info
+    const qTask = qDay.length > 0 ? qDay[0].task : '';
+    const qAssignType = qTask ? mapTaskToAssignmentType(qTask, date) : '';
+    const tAssignType = tShift ? tShift.assignmentType : '';
+
+    // Build QGenda time entries for potential shift creation/update
+    const sortedQ = [...qDay].filter(e => e.clockInTime).sort((a, b) => a.clockInTime.localeCompare(b.clockInTime));
+    const qTimeEntries = sortedQ.map(e => ({ start: e.clockInTime, end: e.clockOutTime || '' }));
+
     if (qDay.length > 0 && tShift) {
-      const diff = Math.abs(qHours - tHours);
-      if (diff <= 0.25) { status = 'Match'; rowClass = 'match'; matchCount++; }
-      else if (diff <= 1) { status = 'Close'; rowClass = 'warn'; warnCount++; }
-      else { status = `${diff.toFixed(1)}h diff`; rowClass = 'miss'; missCount++; }
+      const hourDiff = Math.abs(qHours - tHours);
+      if (hourDiff <= 0.25 && qAssignType === tAssignType) {
+        matchCount++;
+      } else if (hourDiff > 0.25) {
+        shiftReconDiffs.push({
+          date, type: 'hour_mismatch',
+          qgendaEntries: qDay, qgendaHours: qHours, qgendaTask: qTask,
+          qgendaAssignmentType: qAssignType, qgendaTimeEntries: qTimeEntries,
+          trackerShift: tShift, trackerHours: tHours, trackerAssignmentType: tAssignType,
+          hourDiff
+        });
+      } else {
+        shiftReconDiffs.push({
+          date, type: 'type_mismatch',
+          qgendaEntries: qDay, qgendaHours: qHours, qgendaTask: qTask,
+          qgendaAssignmentType: qAssignType, qgendaTimeEntries: qTimeEntries,
+          trackerShift: tShift, trackerHours: tHours, trackerAssignmentType: tAssignType,
+          hourDiff: hourDiff
+        });
+      }
     } else if (qDay.length > 0 && !tShift) {
-      status = 'Missing in Tracker'; rowClass = 'miss'; missCount++;
+      shiftReconDiffs.push({
+        date, type: 'missing_tracker',
+        qgendaEntries: qDay, qgendaHours: qHours, qgendaTask: qTask,
+        qgendaAssignmentType: qAssignType, qgendaTimeEntries: qTimeEntries,
+        trackerShift: null, trackerHours: 0, trackerAssignmentType: '',
+        hourDiff: qHours
+      });
     } else if (qDay.length === 0 && tShift) {
-      status = 'Missing in QGenda'; rowClass = 'warn'; warnCount++;
+      shiftReconDiffs.push({
+        date, type: 'missing_qgenda',
+        qgendaEntries: [], qgendaHours: 0, qgendaTask: '',
+        qgendaAssignmentType: '', qgendaTimeEntries: [],
+        trackerShift: tShift, trackerHours: tHours, trackerAssignmentType: tAssignType,
+        hourDiff: tHours
+      });
     }
-
-    const qDetail = qDay.map(e => `${e.clockInTime}-${e.clockOutTime}`).join(', ');
-    const tEntries = tShift && tShift.timeEntries ? tShift.timeEntries : (tShift ? [{ start: tShift.startTime, end: tShift.endTime }] : []);
-    const tDetail = tEntries.length > 0 ? tEntries.map(e => `${e.start}-${e.end || '?'}`).join(', ') : '-';
-
-    html += `<tr class="${rowClass}">
-      <td>${formatDateShort(date)}</td>
-      <td>${qHours.toFixed(1)}h<br><span style="font-size:0.65rem;color:var(--text-dim)">${escHtml(qDetail)}</span></td>
-      <td>${tHours > 0 ? tHours.toFixed(1) + 'h' : '-'}<br><span style="font-size:0.65rem;color:var(--text-dim)">${tDetail}</span></td>
-      <td>${status}</td>
-    </tr>`;
   });
 
-  html += '</tbody></table></div>';
+  // Clamp stepper index
+  if (shiftReconCurrentDiff >= shiftReconDiffs.length) shiftReconCurrentDiff = Math.max(0, shiftReconDiffs.length - 1);
+
+  // Calculate tracker points for the month
+  let tTotalPoints = 0;
+  trackerShifts.forEach(s => {
+    const t = calcShiftTotal(s);
+    tTotalPoints += t.total;
+  });
+  tTotalPoints = round2(tTotalPoints);
 
   // Summary card
-  let summary = '<div class="card"><h2>Summary</h2><div class="summary-grid">';
-  summary += `<div class="summary-item"><div class="label">QGenda Hours</div><div class="value blue">${qTotalHours.toFixed(1)}</div></div>`;
-  summary += `<div class="summary-item"><div class="label">Tracker Hours</div><div class="value green">${tTotalHours.toFixed(1)}</div></div>`;
-  summary += `<div class="summary-item"><div class="label">Matched</div><div class="value green">${matchCount}</div></div>`;
-  summary += `<div class="summary-item"><div class="label">Issues</div><div class="value" style="color:var(--danger)">${warnCount + missCount}</div></div>`;
-  summary += '</div></div>';
+  const issueCount = shiftReconDiffs.length;
+  let html = '<div class="card"><h2>Summary</h2><div class="summary-grid">';
+  html += `<div class="summary-item"><div class="label">QGenda Hours</div><div class="value blue">${qTotalHours.toFixed(1)}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Tracker Hours</div><div class="value green">${tTotalHours.toFixed(1)}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Tracker Points</div><div class="value green">${tTotalPoints.toFixed(1)}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Matched</div><div class="value green">${matchCount}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Issues</div><div class="value" style="color:var(--danger)">${issueCount}</div></div>`;
+  html += '</div></div>';
 
-  container.innerHTML = summary + html;
+  if (issueCount === 0) {
+    html += '<div class="card" style="text-align:center;padding:24px;"><p style="color:var(--accent);font-size:1.1rem;font-weight:600;">All shifts match!</p></div>';
+  } else {
+    html += '<div id="shiftReconStepperContainer"></div>';
+    html += '<div id="shiftReconFlaggedSection"></div>';
+  }
+
+  container.innerHTML = html;
+
+  if (issueCount > 0) {
+    renderShiftReconStepper();
+    renderShiftReconFlagged();
+  }
+}
+
+// ================================================================
+// QGENDA SHIFT RECON — INTERACTIVE DIFFERENCE REVIEWER
+// ================================================================
+function renderShiftReconStepper() {
+  const container = document.getElementById('shiftReconStepperContainer');
+  if (!container || shiftReconDiffs.length === 0) return;
+
+  const d = shiftReconDiffs[shiftReconCurrentDiff];
+  const key = d.date;
+  const decision = shiftReconDecisions[key];
+  const isResolved = decision && (decision.accepted === 'qgenda' || decision.accepted === 'app');
+  const isFlagged = decision && decision.flagged;
+
+  let html = `<div class="diff-stepper${isResolved ? ' resolved' : ''}${isFlagged ? ' flagged' : ''}">`;
+  html += '<div class="diff-stepper-header">';
+  html += `<span class="counter">Difference ${shiftReconCurrentDiff + 1} of ${shiftReconDiffs.length}</span>`;
+  html += '<div class="diff-stepper-nav">';
+  html += `<button onclick="shiftReconNav(-1)"${shiftReconCurrentDiff === 0 ? ' disabled' : ''}>&larr;</button>`;
+  html += `<button onclick="shiftReconNav(1)"${shiftReconCurrentDiff >= shiftReconDiffs.length - 1 ? ' disabled' : ''}>&rarr;</button>`;
+  html += '</div></div>';
+
+  html += '<div class="diff-stepper-body">';
+  html += `<div class="diff-date">${formatDateShort(d.date)}</div>`;
+
+  // Type label
+  const typeLabels = {
+    hour_mismatch: 'Hour Mismatch',
+    type_mismatch: 'Assignment Type Mismatch',
+    missing_tracker: 'Missing from Tracker',
+    missing_qgenda: 'Missing from QGenda'
+  };
+  html += `<div style="font-size:0.75rem;color:var(--accent2);margin-bottom:8px;">${typeLabels[d.type] || d.type}</div>`;
+
+  if (isResolved) {
+    html += `<p style="color:var(--accent);font-size:0.85rem;font-weight:600;">Accepted: ${decision.accepted === 'qgenda' ? 'QGenda' : 'App'} value</p>`;
+  } else if (isFlagged) {
+    html += `<p style="color:var(--accent2);font-size:0.85rem;font-weight:600;">Flagged for office</p>`;
+  }
+
+  html += '<div class="diff-compare">';
+
+  // QGenda column
+  html += '<div class="diff-col">';
+  html += '<h4>QGenda</h4>';
+  if (d.qgendaEntries.length > 0) {
+    html += `<div class="detail">${escHtml(d.qgendaTask || '-')}</div>`;
+    html += `<div class="val">${getAssignmentTypeName(d.qgendaAssignmentType)}</div>`;
+    d.qgendaEntries.forEach(e => {
+      html += `<div class="detail">${e.clockInTime || '?'} - ${e.clockOutTime || '?'}</div>`;
+    });
+    html += `<div class="val">${d.qgendaHours.toFixed(1)}h</div>`;
+  } else {
+    html += '<div class="val" style="color:var(--danger)">No QGenda entry</div>';
+  }
+  html += '</div>';
+
+  // App column
+  html += '<div class="diff-col">';
+  html += '<h4>App</h4>';
+  if (d.trackerShift) {
+    html += `<div class="val">${getAssignmentTypeName(d.trackerAssignmentType)}</div>`;
+    const tEntries = d.trackerShift.timeEntries || [{ start: d.trackerShift.startTime, end: d.trackerShift.endTime }];
+    tEntries.forEach(e => {
+      html += `<div class="detail">${e.start || '?'} - ${e.end || '?'}</div>`;
+    });
+    html += `<div class="val">${d.trackerHours.toFixed(1)}h</div>`;
+    const shiftTotals = calcShiftTotal(d.trackerShift);
+    html += `<div class="val" style="font-size:0.8rem;color:var(--accent)">${shiftTotals.total.toFixed(1)} pts</div>`;
+  } else {
+    html += '<div class="val" style="color:var(--danger)">No shift</div>';
+  }
+  html += '</div></div>';
+
+  // Action buttons
+  if (!isResolved && !isFlagged) {
+    html += '<div class="diff-actions">';
+    html += `<button class="btn btn-accept-billing" onclick="shiftReconAcceptQgenda(${shiftReconCurrentDiff})">Accept QGenda</button>`;
+    if (d.trackerShift) {
+      html += `<button class="btn btn-accept-app" onclick="shiftReconAcceptApp(${shiftReconCurrentDiff})">Accept App</button>`;
+    }
+    html += `<button class="btn btn-flag" onclick="shiftReconFlag(${shiftReconCurrentDiff})">Flag for Office</button>`;
+    html += '</div>';
+  }
+
+  html += '</div></div>';
+
+  // Progress
+  const reviewed = Object.keys(shiftReconDecisions).filter(k => {
+    return shiftReconDiffs.some(diff => diff.date === k);
+  }).length;
+  html += `<p style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;text-align:center;">${reviewed} of ${shiftReconDiffs.length} reviewed</p>`;
+
+  container.innerHTML = html;
+}
+
+function shiftReconNav(dir) {
+  shiftReconCurrentDiff = Math.max(0, Math.min(shiftReconDiffs.length - 1, shiftReconCurrentDiff + dir));
+  renderShiftReconStepper();
+}
+
+function shiftReconAcceptQgenda(idx) {
+  const d = shiftReconDiffs[idx];
+
+  if (d.type === 'missing_tracker') {
+    // Create new shift from QGenda data
+    const entries = d.qgendaEntries;
+    const sortedEntries = [...entries].filter(e => e.clockInTime).sort((a, b) => a.clockInTime.localeCompare(b.clockInTime));
+    const timeEntries = sortedEntries.map(e => ({ start: e.clockInTime, end: e.clockOutTime || '' }));
+    let earliest = '23:59', latest = '00:00';
+    entries.forEach(e => {
+      if (e.clockInTime && e.clockInTime < earliest) earliest = e.clockInTime;
+      if (e.clockOutTime && e.clockOutTime > latest) latest = e.clockOutTime;
+    });
+    data.shifts[d.date] = {
+      date: d.date,
+      assignmentType: d.qgendaAssignmentType || 'OR',
+      startTime: earliest,
+      endTime: latest,
+      timeEntries: timeEntries.length > 0 ? timeEntries : [{ start: earliest, end: latest }],
+      isHoliday: false,
+      forcedOff: false,
+      subspecCoverage: false,
+      teeCount: 0,
+      supervisionStart: '',
+      supervisionEnd: ''
+    };
+    showToast(`Created shift for ${formatDateShort(d.date)}`);
+  } else if (d.type === 'hour_mismatch' || d.type === 'type_mismatch') {
+    // Update existing shift to match QGenda
+    const shift = data.shifts[d.date];
+    if (shift) {
+      if (d.qgendaTimeEntries.length > 0) {
+        shift.timeEntries = d.qgendaTimeEntries;
+        let earliest = '23:59', latest = '00:00';
+        d.qgendaEntries.forEach(e => {
+          if (e.clockInTime && e.clockInTime < earliest) earliest = e.clockInTime;
+          if (e.clockOutTime && e.clockOutTime > latest) latest = e.clockOutTime;
+        });
+        shift.startTime = earliest;
+        shift.endTime = latest;
+      }
+      if (d.type === 'type_mismatch' && d.qgendaAssignmentType) {
+        shift.assignmentType = d.qgendaAssignmentType;
+      }
+      showToast(`Updated shift for ${formatDateShort(d.date)}`);
+    }
+  } else if (d.type === 'missing_qgenda') {
+    // QGenda has nothing — accepting QGenda means removing app shift
+    delete data.shifts[d.date];
+    showToast(`Removed shift for ${formatDateShort(d.date)}`);
+  }
+
+  saveData(data);
+  updateHeaderPoints();
+  shiftReconDecisions[d.date] = { accepted: 'qgenda', flagged: false };
+  saveShiftReconDecisions();
+  if (shiftReconCurrentDiff < shiftReconDiffs.length - 1) shiftReconCurrentDiff++;
+  renderShiftReconStepper();
+  renderShiftReconFlagged();
+}
+
+function shiftReconAcceptApp(idx) {
+  const d = shiftReconDiffs[idx];
+  shiftReconDecisions[d.date] = { accepted: 'app', flagged: true };
+  saveShiftReconDecisions();
+  if (shiftReconCurrentDiff < shiftReconDiffs.length - 1) shiftReconCurrentDiff++;
+  renderShiftReconStepper();
+  renderShiftReconFlagged();
+}
+
+function shiftReconFlag(idx) {
+  const d = shiftReconDiffs[idx];
+  shiftReconDecisions[d.date] = { accepted: '', flagged: true };
+  saveShiftReconDecisions();
+  if (shiftReconCurrentDiff < shiftReconDiffs.length - 1) shiftReconCurrentDiff++;
+  renderShiftReconStepper();
+  renderShiftReconFlagged();
+}
+
+function renderShiftReconFlagged() {
+  const section = document.getElementById('shiftReconFlaggedSection');
+  if (!section) return;
+
+  const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const monthLabel = `${mn[qMonth]} ${qYear}`;
+
+  // Collect all flagged from decisions
+  const allFlagged = [];
+  shiftReconDiffs.forEach(d => {
+    const dec = shiftReconDecisions[d.date];
+    if (dec && dec.flagged) {
+      allFlagged.push(d);
+    }
+  });
+
+  if (allFlagged.length === 0) {
+    section.innerHTML = '';
+    return;
+  }
+
+  let html = '<div class="card"><h2>Flagged Issues (' + allFlagged.length + ')</h2>';
+  html += '<ul class="flagged-list">';
+  allFlagged.forEach(f => {
+    const qTimes = f.qgendaEntries.map(e => `${e.clockInTime || '?'}-${e.clockOutTime || '?'}`).join(', ');
+    const tEntries = f.trackerShift && f.trackerShift.timeEntries ? f.trackerShift.timeEntries : (f.trackerShift ? [{ start: f.trackerShift.startTime, end: f.trackerShift.endTime }] : []);
+    const tTimes = tEntries.map(e => `${e.start || '?'}-${e.end || '?'}`).join(', ');
+
+    if (f.type === 'missing_tracker') {
+      html += `<li>${formatDateShort(f.date)} — Missing from Tracker (QGenda: ${f.qgendaHours.toFixed(1)}h, ${qTimes})</li>`;
+    } else if (f.type === 'missing_qgenda') {
+      html += `<li>${formatDateShort(f.date)} — Missing from QGenda (App: ${getAssignmentTypeName(f.trackerAssignmentType)}, ${f.trackerHours.toFixed(1)}h)</li>`;
+    } else if (f.type === 'type_mismatch') {
+      html += `<li>${formatDateShort(f.date)} — Type mismatch: QGenda=${getAssignmentTypeName(f.qgendaAssignmentType)}, App=${getAssignmentTypeName(f.trackerAssignmentType)}</li>`;
+    } else {
+      html += `<li>${formatDateShort(f.date)} — QGenda: ${f.qgendaHours.toFixed(1)}h, App: ${f.trackerHours.toFixed(1)}h (${f.hourDiff.toFixed(1)}h diff)</li>`;
+    }
+  });
+  html += '</ul>';
+
+  html += '<div style="margin-top:16px;">';
+  html += '<button class="btn btn-primary" onclick="generateShiftReconEmail()" style="width:100%;margin-bottom:8px;">Generate Email</button>';
+  html += '<div id="shiftReconEmailPreview"></div>';
+  html += '</div></div>';
+
+  section.innerHTML = html;
+}
+
+function generateShiftReconEmail() {
+  const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const monthLabel = `${mn[qMonth]} ${qYear}`;
+  const userName = settings.name || '[Your Name]';
+
+  const allFlagged = [];
+  shiftReconDiffs.forEach(d => {
+    const dec = shiftReconDecisions[d.date];
+    if (dec && dec.flagged) {
+      allFlagged.push(d);
+    }
+  });
+
+  let emailText = `Subject: QGenda Time Discrepancies — ${monthLabel}\n\nHi,\n\nI found the following time discrepancies during QGenda reconciliation for ${monthLabel}:\n\n`;
+
+  allFlagged.forEach((f, i) => {
+    const dateFormatted = f.date.replace(/(\d{4})-(\d{2})-(\d{2})/, '$2/$3/$1');
+    const qTimes = f.qgendaEntries.map(e => `${e.clockInTime || '?'}-${e.clockOutTime || '?'}`).join(', ');
+    const tEntries = f.trackerShift && f.trackerShift.timeEntries ? f.trackerShift.timeEntries : (f.trackerShift ? [{ start: f.trackerShift.startTime, end: f.trackerShift.endTime }] : []);
+    const tTimes = tEntries.map(e => `${e.start || '?'}-${e.end || '?'}`).join(', ');
+
+    if (f.type === 'missing_tracker') {
+      emailText += `${i + 1}. Date: ${dateFormatted} — QGenda: ${f.qgendaHours.toFixed(1)}h (${qTimes}), not in app\n   Please verify this shift was recorded\n\n`;
+    } else if (f.type === 'missing_qgenda') {
+      emailText += `${i + 1}. Date: ${dateFormatted} — Shift missing from QGenda (App: ${getAssignmentTypeName(f.trackerAssignmentType)}, ${f.trackerHours.toFixed(1)}h)\n   Please verify this shift was recorded\n\n`;
+    } else if (f.type === 'type_mismatch') {
+      emailText += `${i + 1}. Date: ${dateFormatted} — Assignment type mismatch: QGenda=${getAssignmentTypeName(f.qgendaAssignmentType)}, App=${getAssignmentTypeName(f.trackerAssignmentType)}\n   App times are correct\n\n`;
+    } else {
+      emailText += `${i + 1}. Date: ${dateFormatted} — QGenda: ${f.qgendaHours.toFixed(1)}h (${qTimes}), App: ${f.trackerHours.toFixed(1)}h (${tTimes})\n   ${f.hourDiff.toFixed(1)}h difference — app times are correct\n\n`;
+    }
+  });
+
+  emailText += `Please review and advise.\n\nThanks,\n${userName}`;
+
+  const preview = document.getElementById('shiftReconEmailPreview');
+  preview.innerHTML = `<div class="email-preview">${escHtml(emailText)}</div>`;
+  preview.innerHTML += '<button class="btn btn-primary" onclick="copyShiftReconEmail()" style="width:100%;margin-top:8px;">Copy to Clipboard</button>';
+  preview.dataset.emailText = emailText;
+}
+
+function copyShiftReconEmail() {
+  const preview = document.getElementById('shiftReconEmailPreview');
+  const text = preview.dataset.emailText || '';
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Email copied to clipboard!');
+  }).catch(() => {
+    showToast('Failed to copy — try selecting and copying manually');
+  });
 }
 
 // ================================================================
@@ -5023,29 +6037,7 @@ document.getElementById('prodFile').addEventListener('change', async (e) => {
       allText = allText.split('\n').map(line => line.replace(/\s{2,}/g, '\t')).join('\n');
     } else {
       showToast('Parsing PDF...');
-      if (!window.pdfjsLib) {
-        const pdfjs = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.mjs');
-        window.pdfjsLib = pdfjs;
-        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.mjs';
-      }
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const items = textContent.items;
-        const rows = {};
-        items.forEach(item => {
-          const y = Math.round(item.transform[5]);
-          if (!rows[y]) rows[y] = [];
-          rows[y].push({ x: item.transform[4], text: item.str });
-        });
-        const sortedYs = Object.keys(rows).map(Number).sort((a, b) => b - a);
-        sortedYs.forEach(y => {
-          const row = rows[y].sort((a, b) => a.x - b.x);
-          allText += row.map(r => r.text).join('\t') + '\n';
-        });
-      }
+      allText = await extractPDFText(file);
     }
 
     prodData = parseProdText(allText);
@@ -5084,6 +6076,63 @@ async function ocrImage(file) {
   const { data } = await worker.recognize(file);
   await worker.terminate();
   return data.text;
+}
+
+async function extractPDFText(file) {
+  if (!window.pdfjsLib) {
+    const pdfjs = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.mjs');
+    window.pdfjsLib = pdfjs;
+    pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.mjs';
+  }
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  // First try native text extraction
+  let allText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const items = textContent.items;
+    const rows = {};
+    items.forEach(item => {
+      const y = Math.round(item.transform[5]);
+      if (!rows[y]) rows[y] = [];
+      rows[y].push({ x: item.transform[4], text: item.str });
+    });
+    const sortedYs = Object.keys(rows).map(Number).sort((a, b) => b - a);
+    sortedYs.forEach(y => {
+      const row = rows[y].sort((a, b) => a.x - b.x);
+      allText += row.map(r => r.text).join('\t') + '\n';
+    });
+  }
+
+  // Check if we got meaningful text (at least one date-like pattern)
+  const hasContent = /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(allText);
+  if (hasContent) return allText;
+
+  // Fallback: render pages to canvas and OCR each one
+  showToast('Image-based PDF detected, running OCR...');
+  await loadTesseract();
+  const worker = await Tesseract.createWorker('eng');
+  let ocrText = '';
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    showToast(`OCR page ${i} of ${pdf.numPages}...`);
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2.0 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const { data } = await worker.recognize(canvas);
+    ocrText += data.text + '\n';
+  }
+
+  await worker.terminate();
+  // Normalize OCR output: replace multiple spaces with tab
+  ocrText = ocrText.split('\n').map(line => line.replace(/\s{2,}/g, '\t')).join('\n');
+  return ocrText;
 }
 
 // ================================================================
@@ -5377,25 +6426,38 @@ document.getElementById('cancelImport').addEventListener('click', () => {
 // ================================================================
 document.getElementById('csvUploadArea').addEventListener('click', () => document.getElementById('csvFile').click());
 
-document.getElementById('csvFile').addEventListener('change', (e) => {
+document.getElementById('csvFile').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    try {
-      const text = ev.target.result;
-      const result = parseGoogleSheetCSV(text);
-      if (result.cases.length === 0) {
-        showToast('No cases found in CSV');
-        return;
-      }
-      showCSVImportConfirmation(result);
-    } catch(err) {
-      showToast('Error parsing CSV: ' + err.message);
-      console.error(err);
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  try {
+    let result;
+    if (ext === 'xlsx' || ext === 'xls') {
+      showToast('Parsing Excel file...');
+      result = await parseCaseExcel(file);
+    } else if (ext === 'pdf') {
+      showToast('Parsing PDF...');
+      result = await parseCasePDF(file);
+    } else if (/^(png|jpg|jpeg)$/.test(ext)) {
+      showToast('Running OCR on image...');
+      const text = await ocrImage(file);
+      result = parseGoogleSheetCSV(text);
+    } else {
+      // CSV (default)
+      const text = await file.text();
+      result = parseGoogleSheetCSV(text);
     }
-  };
-  reader.readAsText(file);
+
+    if (result.cases.length === 0) {
+      showToast('No cases found in file');
+      return;
+    }
+    showCSVImportConfirmation(result);
+  } catch(err) {
+    showToast('Error parsing file: ' + err.message);
+    console.error(err);
+  }
   e.target.value = '';
 });
 
@@ -5407,7 +6469,7 @@ function convertAMPMToMilitary(timeStr) {
     const [h, m] = s.split(':').map(Number);
     return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
   }
-  const match = s.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  const match = s.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)/i);
   if (!match) return '';
   let [, h, m, ampm] = match;
   h = parseInt(h); m = parseInt(m);
@@ -5416,17 +6478,30 @@ function convertAMPMToMilitary(timeStr) {
   return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
 }
 
+function buildCaseMonthSummary(cases) {
+  const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const buckets = {};
+  cases.forEach(c => {
+    if (!c.shiftDate) return;
+    const [y, m] = c.shiftDate.split('-').map(Number);
+    const key = y + '-' + String(m).padStart(2,'0');
+    if (!buckets[key]) buckets[key] = { year: y, month: m, label: mn[m - 1] + ' ' + y, count: 0 };
+    buckets[key].count++;
+  });
+  return Object.values(buckets).sort((a, b) => (a.year - b.year) || (a.month - b.month));
+}
+
 function parseGoogleSheetCSV(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l);
   const cases = [];
-  let detectedYear = null, detectedMonth = null;
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth() + 1;
 
   for (const line of lines) {
-    // Simple CSV split (handles basic cases, no quoted commas expected in this data)
     const cols = line.split(',').map(c => c.trim());
     if (cols.length < 5) continue;
 
-    // First column should be a date like M/D or M/D/YY
     const dateMatch = cols[0].match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
     if (!dateMatch) continue;
 
@@ -5437,37 +6512,41 @@ function parseGoogleSheetCSV(text) {
       year = parseInt(year);
       if (year < 100) year += 2000;
     } else {
-      // Infer year: if month >= 10, likely 2025; if month <= 6, likely 2026
-      year = month >= 7 ? 2025 : 2026;
+      // Infer year based on current date: if month is far ahead of current, likely previous year
+      if (month > curMonth + 3) year = curYear - 1;
+      else year = curYear;
     }
-
-    if (!detectedYear) { detectedYear = year; detectedMonth = month; }
 
     const dateStr = year + '-' + String(month).padStart(2,'0') + '-' + String(day).padStart(2,'0');
 
-    // Parse columns based on expected Google Sheet format:
-    // Date, Surgeon, Points, Day Start, Day End, pts/hr, Modifiers, Shared?, Notes/Procedure
     const surgeon = cols[1] || '';
     const baseUnits = parseFloat(cols[2]) || 0;
     const startTime = convertAMPMToMilitary(cols[3]);
     const endTime = convertAMPMToMilitary(cols[4]);
-    // cols[5] = pts/hr (skip)
     const modifiers = cols[6] || '';
-    const shared = cols[7] || '';
-    const procedure = cols[8] || cols[cols.length - 1] || '';
+    const blockVal = parseFloat(cols[7]) || 0;
+    const shared = (cols[8] || '').trim();
 
-    // Parse modifiers
-    const isEmergency = /\bE\b/i.test(modifiers);
-    let physicalStatus = 'P3';
+    // Modifiers: text like "E" / "ASA 4", or numeric modifier point value (nonzero = emergency)
+    const isEmergency = /\bE\b/i.test(modifiers) || (parseFloat(modifiers) > 0);
+    let physicalStatus = 'P2';
     const psMatch = modifiers.match(/\b([45])\b/);
     if (psMatch) physicalStatus = 'P' + psMatch[1];
 
-    if (baseUnits <= 0 && !startTime) continue; // skip non-case rows
+    // Nerve block: detect from block point value
+    let nerveBlock = 'none';
+    if (blockVal >= 3) nerveBlock = 'brachial_plexus';
+    else if (blockVal > 0) nerveBlock = 'other_nerve';
+
+    // Shared case
+    const isShared = shared.toUpperCase() === 'Y';
+
+    if (baseUnits <= 0 && !startTime) continue;
 
     cases.push({
       id: genId(),
       caseType: 'standard',
-      procedure: procedure,
+      procedure: surgeon,
       baseUnits: baseUnits,
       physicalStatus: physicalStatus,
       startTime: startTime,
@@ -5480,23 +6559,23 @@ function parseGoogleSheetCSV(text) {
       acutePainUnits: 0,
       isHighRiskPeds: false,
       isORCase: false,
-      nerveBlock: 'none',
+      nerveBlock: nerveBlock,
       centralLine: false,
       arterialLine: false,
       pac: false,
       teeAddOn: false,
-      notes: surgeon + (shared && shared.toLowerCase() === 'y' ? ' (shared)' : ''),
+      isSharedCase: isShared,
+      sharedStartupPct: isShared ? 50 : 100,
+      notes: surgeon,
       timestamp: new Date().toISOString()
     });
   }
 
-  const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const label = detectedMonth ? `${mn[detectedMonth - 1]} ${detectedYear}` : 'Unknown';
-  return { cases, label, year: detectedYear, month: detectedMonth };
+  return { cases, months: buildCaseMonthSummary(cases) };
 }
 
 function showCSVImportConfirmation(result) {
-  const { cases, label } = result;
+  const { cases, months } = result;
 
   // Check for duplicates
   const existingKeys = new Set(data.cases.map(c => c.shiftDate + '|' + c.startTime));
@@ -5508,8 +6587,16 @@ function showCSVImportConfirmation(result) {
     return;
   }
 
+  const monthLabel = months.length === 1 ? months[0].label : months.length + ' months';
+  let monthBreakdown = '';
+  if (months.length > 1) {
+    monthBreakdown = '<ul style="margin:8px 0;padding-left:20px;font-size:0.85rem;">' +
+      months.map(m => `<li>${m.label}: ${m.count} case${m.count > 1 ? 's' : ''}</li>`).join('') + '</ul>';
+  }
+
   const body = document.getElementById('importConfirmBody');
-  body.innerHTML = `<p>Found <strong>${cases.length}</strong> cases for <strong>${label}</strong>.</p>` +
+  body.innerHTML = `<p>Found <strong>${cases.length}</strong> cases across <strong>${monthLabel}</strong>.</p>` +
+    monthBreakdown +
     (dupes > 0 ? `<p style="font-size:0.8rem;color:var(--text-dim);">${dupes} duplicate${dupes > 1 ? 's' : ''} will be skipped.</p>` : '') +
     `<p>Import <strong>${newCases.length}</strong> new case${newCases.length > 1 ? 's' : ''}?</p>`;
   document.getElementById('importConfirmTitle').textContent = 'Import Cases';
@@ -5547,6 +6634,113 @@ function showCSVImportConfirmation(result) {
   };
 
   document.getElementById('importConfirmModal').classList.remove('hidden');
+}
+
+async function parseCaseExcel(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const wb = XLSX.read(arrayBuffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  if (rows.length === 0) return { cases: [], months: [] };
+
+  // Flexible column header matching
+  const headers = Object.keys(rows[0]);
+  const findCol = (...patterns) => headers.find(h => patterns.some(p => h.toLowerCase().includes(p.toLowerCase()))) || '';
+  const dateCol = findCol('date', 'dos', 'Date');
+  const surgeonCol = findCol('surgeon', 'provider', 'attending');
+  const unitsCol = findCol('units', 'points', 'base');
+  const startCol = findCol('start', 'begin');
+  const endCol = findCol('end', 'stop', 'finish');
+  const modCol = findCol('modifier', 'mod');
+  const sharedCol = findCol('shared', 'split');
+  const procCol = findCol('procedure', 'proc', 'description', 'case');
+
+  if (!dateCol) throw new Error('No date column found. Expected: Date, DOS, or similar.');
+
+  const cases = [];
+  for (const row of rows) {
+    const dateVal = row[dateCol];
+    if (!dateVal && dateVal !== 0) continue;
+    const dateStr = parseExcelDate(dateVal);
+    if (!dateStr || dateStr.length !== 10) continue;
+
+    const baseUnits = parseFloat(row[unitsCol]) || 0;
+    const startTime = startCol ? parseExcelTime(row[startCol]) : '';
+    const endTime = endCol ? parseExcelTime(row[endCol]) : '';
+    if (baseUnits <= 0 && !startTime) continue;
+
+    const surgeon = surgeonCol ? String(row[surgeonCol]) : '';
+    const modifiers = modCol ? String(row[modCol]) : '';
+    const shared = sharedCol ? String(row[sharedCol]) : '';
+    const procedure = procCol ? String(row[procCol]) : '';
+
+    const isEmergency = /\bE\b/i.test(modifiers);
+    let physicalStatus = 'P3';
+    const psMatch = modifiers.match(/\b([45])\b/);
+    if (psMatch) physicalStatus = 'P' + psMatch[1];
+
+    cases.push({
+      id: genId(),
+      caseType: 'standard',
+      procedure: procedure,
+      baseUnits: baseUnits,
+      physicalStatus: physicalStatus,
+      startTime: startTime,
+      endTime: endTime,
+      shiftDate: dateStr,
+      isEmergency: isEmergency,
+      isMedicalProcedure: false,
+      medicalProcedureUnits: 0,
+      isAcutePain: false,
+      acutePainUnits: 0,
+      isHighRiskPeds: false,
+      isORCase: false,
+      nerveBlock: 'none',
+      centralLine: false,
+      arterialLine: false,
+      pac: false,
+      teeAddOn: false,
+      notes: surgeon + (shared && /^y/i.test(shared) ? ' (shared)' : ''),
+      timestamp: new Date().toISOString()
+    });
+  }
+  return { cases, months: buildCaseMonthSummary(cases) };
+}
+
+async function parseCasePDF(file) {
+  const allText = await extractPDFText(file);
+
+  const prodCases = parseProdText(allText);
+  // Convert production format to case import format, skipping add-on rows
+  const cases = [];
+  for (const pc of prodCases) {
+    if (pc.isAddOn) continue;
+    cases.push({
+      id: genId(),
+      caseType: 'standard',
+      procedure: pc.cptCode || '',
+      baseUnits: pc.units || 0,
+      physicalStatus: 'P2',
+      startTime: pc.startTime || '',
+      endTime: pc.endTime || '',
+      shiftDate: pc.date,
+      isEmergency: false,
+      isMedicalProcedure: false,
+      medicalProcedureUnits: 0,
+      isAcutePain: false,
+      acutePainUnits: 0,
+      isHighRiskPeds: false,
+      isORCase: false,
+      nerveBlock: 'none',
+      centralLine: false,
+      arterialLine: false,
+      pac: false,
+      teeAddOn: false,
+      notes: pc.cptCode ? 'CPT ' + pc.cptCode : '',
+      timestamp: new Date().toISOString()
+    });
+  }
+  return { cases, months: buildCaseMonthSummary(cases) };
 }
 
 const CPT_ADDON_MAP = {
