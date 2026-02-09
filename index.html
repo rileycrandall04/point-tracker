@@ -590,6 +590,15 @@ input.mil-time.invalid {
 }
 .case-log-search:focus { border-color: var(--primary); }
 
+/* ===== TOGGLE SWITCH ===== */
+.toggle-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-dim); }
+.toggle-switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-switch .slider { position: absolute; inset: 0; background: var(--surface2); border-radius: 10px; cursor: pointer; transition: 0.2s; border: 1px solid var(--border); }
+.toggle-switch .slider::before { content: ''; position: absolute; width: 14px; height: 14px; left: 2px; top: 2px; background: var(--text-dim); border-radius: 50%; transition: 0.2s; }
+.toggle-switch input:checked + .slider { background: var(--primary); border-color: var(--primary); }
+.toggle-switch input:checked + .slider::before { transform: translateX(16px); background: #fff; }
+
 /* ===== EFFICIENCY ITEMS ===== */
 .efficiency-item {
   display: flex;
@@ -1270,9 +1279,18 @@ input.mil-time.invalid {
     <!-- Stabilization Pipeline -->
     <div class="card">
       <h2>Income Pipeline</h2>
-      <p style="font-size:0.78rem; color:var(--text-dim); margin-bottom:12px;">
-        Estimated paychecks using recorded data + 3-month avg for future months
-      </p>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <p style="font-size:0.78rem; color:var(--text-dim); margin:0;">
+          Estimated paychecks from recorded data
+        </p>
+        <label class="toggle-row">
+          <span>Include projections</span>
+          <span class="toggle-switch">
+            <input type="checkbox" id="pipelineProjectToggle">
+            <span class="slider"></span>
+          </span>
+        </label>
+      </div>
       <div class="chart-container">
         <canvas id="pipelineChart"></canvas>
       </div>
@@ -3401,16 +3419,18 @@ function renderPipelineChart() {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
   }
 
-  // Calculate rolling avg from recent known months for projecting future unknowns
+  // Calculate rolling avg from recent known months for optional projections
+  const includeProjections = document.getElementById('pipelineProjectToggle').checked;
   const recentKnown = [];
   for (let i = 0; i < 3; i++) {
     const k = mkKey(now.getFullYear(), now.getMonth() - i);
     if (mt[k]) recentKnown.push(mt[k]);
   }
-  const avgProjection = recentKnown.length > 0 ? recentKnown.reduce((a, b) => a + b, 0) / recentKnown.length : 0;
+  const avgProjection = includeProjections && recentKnown.length > 0
+    ? recentKnown.reduce((a, b) => a + b, 0) / recentKnown.length : 0;
 
   // For each of the next 5 months, compute the full stabilization-weighted paycheck
-  // using real data where available, rolling avg for future months
+  // using real data where available; projected avg only when toggle is on
   const labels = [];
   const ptValues = [];
   const dollarValues = [];
@@ -4483,6 +4503,10 @@ pointValueInput.addEventListener('change', () => {
 dashPointValueInput.addEventListener('change', () => {
   syncPointValue(dashPointValueInput);
   showToast('Point value saved');
+});
+
+document.getElementById('pipelineProjectToggle').addEventListener('change', () => {
+  renderPipelineChart();
 });
 
 // ================================================================
