@@ -770,6 +770,7 @@ input.mil-time.invalid {
         <option value="ACS">ACS</option>
         <option value="NORA">NORA</option>
         <option value="CRNA_supervision">CRNA Supervision</option>
+        <option value="vacation">Vacation / Off</option>
       </select>
     </div>
 
@@ -1859,7 +1860,8 @@ function getAssignmentTypeName(type) {
     OR: 'OR / General', OB_restricted: 'UVH OB', cardiac_liver: 'Cardiac / Liver',
     mole: 'Mole', '1st_call': '1st Call', '2nd_call': '2nd Call', '3rd_call': '3rd Call', '4th_call': '4th Call',
     endo: 'Endo', SF1: 'SF 1', SF2: 'SF 2', ACS: 'ACS', NORA: 'NORA',
-    CRNA_supervision: 'CRNA Supervision'
+    CRNA_supervision: 'CRNA Supervision',
+    vacation: 'Vacation / Off'
   };
   return names[type] || type;
 }
@@ -2059,6 +2061,7 @@ function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
 }
 
 function calcARPoints(shift) {
+  if (shift.assignmentType === 'vacation') return 0;
   if (shift.forcedOff) return 56;
   const entries = shift.timeEntries || [];
   if (entries.length === 0) return 0;
@@ -2141,6 +2144,7 @@ function calcARPoints(shift) {
 
 // Separate getter for breakdown display purposes
 function calcARBreakdown(shift) {
+  if (shift.assignmentType === 'vacation') return { ar: 0, call: 0 };
   if (shift.forcedOff) return { ar: 56, call: 0 };
   const entries = shift.timeEntries || [];
   if (entries.length === 0) return { ar: 0, call: 0 };
@@ -2704,24 +2708,28 @@ function loadShiftForDate() {
 document.getElementById('saveShiftBtn').addEventListener('click', () => {
   const date = workingDate;
   if (!date) { showToast('Please select a date'); return; }
+  const assignmentType = getSelectedAssignmentType();
   const supervisionEnabled = document.getElementById('supervisionOverlayCheck')?.checked || false;
-  const timeEntries = collectTimeEntries();
-  if (timeEntries.length === 0 || !timeEntries[0].start) {
+  const isVacation = assignmentType === 'vacation';
+  const timeEntries = isVacation ? [{ start: '', end: '' }] : collectTimeEntries();
+  if (!isVacation && (timeEntries.length === 0 || !timeEntries[0].start)) {
     showToast('Please enter at least one start time');
     return;
   }
   // Validate: entries should be in chronological order, no overlaps
-  for (let i = 1; i < timeEntries.length; i++) {
-    const prevEnd = timeToMinutes(timeEntries[i-1].end);
-    const currStart = timeToMinutes(timeEntries[i].start);
-    if (timeEntries[i-1].end && currStart <= prevEnd) {
-      showToast('Time entries must be in chronological order with no overlaps');
-      return;
+  if (!isVacation) {
+    for (let i = 1; i < timeEntries.length; i++) {
+      const prevEnd = timeToMinutes(timeEntries[i-1].end);
+      const currStart = timeToMinutes(timeEntries[i].start);
+      if (timeEntries[i-1].end && currStart <= prevEnd) {
+        showToast('Time entries must be in chronological order with no overlaps');
+        return;
+      }
     }
   }
   data.shifts[date] = {
-    date, assignmentType: getSelectedAssignmentType(),
-    startTime: timeEntries[0].start,
+    date, assignmentType,
+    startTime: timeEntries[0].start || '',
     endTime: timeEntries[timeEntries.length - 1].end || '',
     timeEntries: timeEntries,
     isHoliday: document.getElementById('shiftHoliday').checked,
@@ -2818,6 +2826,7 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   if (!date) { showToast('Set shift date first'); return; }
   if (!data.shifts[date]) { showToast('Please save a shift for this date first'); return; }
   if (data.shifts[date].assignmentType === 'CRNA_supervision') { showToast('CRNA Supervision shifts do not have cases'); return; }
+  if (data.shifts[date].assignmentType === 'vacation') { showToast('Vacation days do not have cases'); return; }
   const caseData = buildCaseFromForm();
   caseData.id = genId();
   caseData.shiftDate = date;
@@ -3114,7 +3123,7 @@ function toggleCollapse(sectionId) {
 
 // Shared helper: shift clocked-in hours (sum of time entries, not gaps)
 function calcShiftHours(shift) {
-  if (!shift) return 0;
+  if (!shift || shift.assignmentType === 'vacation') return 0;
   const entries = shift.timeEntries || [];
   if (entries.length > 0) {
     let totalMin = 0;
@@ -3370,34 +3379,38 @@ function renderMonthlyPace() {
   const dayOfMonth = now.getDate();
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 
-  // Current month's points so far
+  // Current month's shifts
   const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(thisPrefix));
   let currentPts = 0;
   monthShifts.forEach(s => { currentPts += calcShiftTotal(s).total; });
   currentPts = round2(currentPts);
 
+  // Count vacation days this month
+  const vacationDays = monthShifts.filter(s => s.assignmentType === 'vacation');
+  const totalVacDays = vacationDays.length;
+  const vacDaysPassed = vacationDays.filter(s => parseInt(s.date.split('-')[2]) <= dayOfMonth).length;
+  const workingDaysInMonth = daysInMonth - totalVacDays;
+  const workingDaysElapsed = dayOfMonth - vacDaysPassed;
+  const vacationRatio = workingDaysInMonth / daysInMonth; // fraction of month that's working
+
   // Build cumulative-by-day curves for prior months
-  // For each prior month, compute cumulative points through each day of that month
   const priorMonthCurves = [];
   const mt = getMonthlyTotals();
   for (let offset = 1; offset <= 6; offset++) {
     const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
     const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-    if (!mt[key]) continue; // skip months with no data
+    if (!mt[key]) continue;
 
     const mDays = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
     const shifts = Object.values(data.shifts).filter(s => s.date.startsWith(key));
     if (shifts.length === 0) continue;
 
-    // Build daily points array
-    const dailyPts = new Array(mDays + 1).fill(0); // index 1..mDays
+    const dailyPts = new Array(mDays + 1).fill(0);
     shifts.forEach(s => {
       const day = parseInt(s.date.split('-')[2]);
       dailyPts[day] += calcShiftTotal(s).total;
     });
 
-    // Convert to cumulative, normalized to current month's day count
-    // So we can compare "by day X" across months of different lengths
     const cumulative = new Array(mDays + 1).fill(0);
     for (let i = 1; i <= mDays; i++) {
       cumulative[i] = cumulative[i - 1] + dailyPts[i];
@@ -3406,16 +3419,16 @@ function renderMonthlyPace() {
     priorMonthCurves.push({ key, days: mDays, cumulative, total: round2(cumulative[mDays]) });
   }
 
-  // Calculate what prior months had earned by proportionally the same point in the month
-  // Use fractional day mapping: day 8 of 28 → day 8.57 of 30, interpolate
+  // Calculate expected points by now and target end-of-month
+  // Use working-day fraction instead of calendar fraction to account for vacation
   let expectedByNow = 0;
   let avgMonthEnd = 0;
   if (priorMonthCurves.length > 0) {
     let sumAtDay = 0;
     let sumTotal = 0;
     priorMonthCurves.forEach(curve => {
-      // Map current day/daysInMonth fraction to the prior month's scale
-      const fraction = dayOfMonth / daysInMonth;
+      // Map effective working-day fraction to prior month's timeline
+      const fraction = workingDaysInMonth > 0 ? workingDaysElapsed / workingDaysInMonth : 0;
       const mappedDay = fraction * curve.days;
       const lower = Math.floor(mappedDay);
       const upper = Math.min(Math.ceil(mappedDay), curve.days);
@@ -3426,31 +3439,32 @@ function renderMonthlyPace() {
       sumAtDay += interpolated;
       sumTotal += curve.total;
     });
-    expectedByNow = round2(sumAtDay / priorMonthCurves.length);
-    avgMonthEnd = round2(sumTotal / priorMonthCurves.length);
+    // Scale prior month averages by vacation ratio (fewer working days = lower expected total)
+    avgMonthEnd = round2((sumTotal / priorMonthCurves.length) * vacationRatio);
+    expectedByNow = round2((sumAtDay / priorMonthCurves.length) * vacationRatio);
   }
 
-  // Project end-of-month: if we have prior curve data, scale based on typical earning pattern
-  // projected = currentPts × (avgTotal / avgAtThisPoint)
+  // Project end-of-month
   let projected;
   if (expectedByNow > 0) {
     projected = round2(currentPts * (avgMonthEnd / expectedByNow));
   } else {
-    const fractionElapsed = dayOfMonth / daysInMonth;
+    const fractionElapsed = workingDaysInMonth > 0 ? workingDaysElapsed / workingDaysInMonth : 0;
     projected = fractionElapsed > 0 ? round2(currentPts / fractionElapsed) : 0;
   }
 
   document.getElementById('paceCurrentPts').textContent = currentPts.toFixed(1) + ' pts';
   document.getElementById('paceProjected').textContent = projected.toFixed(1) + ' pts';
 
-  // Progress bar: compare current vs expected at this point
+  // Progress bar
   let pct = 0;
   let label = '';
   if (expectedByNow > 0) {
     pct = Math.min(100, round2(currentPts / avgMonthEnd * 100));
     const diff = round2(currentPts - expectedByNow);
     const nMonths = priorMonthCurves.length;
-    label = `${pct.toFixed(0)}% of avg (${avgMonthEnd.toFixed(0)} pts) \u2022 ${diff >= 0 ? '+' : ''}${diff.toFixed(0)} pts vs day-${dayOfMonth} avg (${nMonths}-mo)`;
+    let vacNote = totalVacDays > 0 ? ` \u2022 ${totalVacDays}d vacation` : '';
+    label = `${pct.toFixed(0)}% of adj avg (${avgMonthEnd.toFixed(0)} pts) \u2022 ${diff >= 0 ? '+' : ''}${diff.toFixed(0)} pts vs pace (${nMonths}-mo)${vacNote}`;
   } else {
     pct = Math.min(100, (dayOfMonth / daysInMonth) * 100);
     label = `Day ${dayOfMonth} of ${daysInMonth} \u2022 No prior data for comparison`;
