@@ -3366,40 +3366,97 @@ function renderProjectedAnnual() {
 
 function renderMonthlyPace() {
   const now = new Date();
-  const prefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-  const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix));
+  const thisPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+  // Current month's points so far
+  const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(thisPrefix));
   let currentPts = 0;
   monthShifts.forEach(s => { currentPts += calcShiftTotal(s).total; });
   currentPts = round2(currentPts);
 
-  const dayOfMonth = now.getDate();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const fractionElapsed = dayOfMonth / daysInMonth;
-
-  // Use 3-month avg as the target, or just project linearly from current pace
+  // Build cumulative-by-day curves for prior months
+  // For each prior month, compute cumulative points through each day of that month
+  const priorMonthCurves = [];
   const mt = getMonthlyTotals();
-  function mk(offset) { const d = new Date(now.getFullYear(), now.getMonth() - offset, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
-  const last3 = [mt[mk(1)]||0, mt[mk(2)]||0, mt[mk(3)]||0].filter(v => v > 0);
-  const target = last3.length > 0 ? last3.reduce((a,b)=>a+b,0) / last3.length : 0;
+  for (let offset = 1; offset <= 6; offset++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    if (!mt[key]) continue; // skip months with no data
 
-  const projected = fractionElapsed > 0 ? round2(currentPts / fractionElapsed) : 0;
+    const mDays = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    const shifts = Object.values(data.shifts).filter(s => s.date.startsWith(key));
+    if (shifts.length === 0) continue;
+
+    // Build daily points array
+    const dailyPts = new Array(mDays + 1).fill(0); // index 1..mDays
+    shifts.forEach(s => {
+      const day = parseInt(s.date.split('-')[2]);
+      dailyPts[day] += calcShiftTotal(s).total;
+    });
+
+    // Convert to cumulative, normalized to current month's day count
+    // So we can compare "by day X" across months of different lengths
+    const cumulative = new Array(mDays + 1).fill(0);
+    for (let i = 1; i <= mDays; i++) {
+      cumulative[i] = cumulative[i - 1] + dailyPts[i];
+    }
+
+    priorMonthCurves.push({ key, days: mDays, cumulative, total: round2(cumulative[mDays]) });
+  }
+
+  // Calculate what prior months had earned by proportionally the same point in the month
+  // Use fractional day mapping: day 8 of 28 → day 8.57 of 30, interpolate
+  let expectedByNow = 0;
+  let avgMonthEnd = 0;
+  if (priorMonthCurves.length > 0) {
+    let sumAtDay = 0;
+    let sumTotal = 0;
+    priorMonthCurves.forEach(curve => {
+      // Map current day/daysInMonth fraction to the prior month's scale
+      const fraction = dayOfMonth / daysInMonth;
+      const mappedDay = fraction * curve.days;
+      const lower = Math.floor(mappedDay);
+      const upper = Math.min(Math.ceil(mappedDay), curve.days);
+      const frac = mappedDay - lower;
+      const interpolated = lower >= 1
+        ? curve.cumulative[lower] * (1 - frac) + curve.cumulative[upper] * frac
+        : curve.cumulative[upper] * frac;
+      sumAtDay += interpolated;
+      sumTotal += curve.total;
+    });
+    expectedByNow = round2(sumAtDay / priorMonthCurves.length);
+    avgMonthEnd = round2(sumTotal / priorMonthCurves.length);
+  }
+
+  // Project end-of-month: if we have prior curve data, scale based on typical earning pattern
+  // projected = currentPts × (avgTotal / avgAtThisPoint)
+  let projected;
+  if (expectedByNow > 0) {
+    projected = round2(currentPts * (avgMonthEnd / expectedByNow));
+  } else {
+    const fractionElapsed = dayOfMonth / daysInMonth;
+    projected = fractionElapsed > 0 ? round2(currentPts / fractionElapsed) : 0;
+  }
 
   document.getElementById('paceCurrentPts').textContent = currentPts.toFixed(1) + ' pts';
   document.getElementById('paceProjected').textContent = projected.toFixed(1) + ' pts';
 
-  // Progress bar: % of target reached (cap at 100%)
+  // Progress bar: compare current vs expected at this point
   let pct = 0;
   let label = '';
-  if (target > 0) {
-    pct = Math.min(100, round2(currentPts / target * 100));
-    const diff = currentPts - (target * fractionElapsed);
-    label = `${pct.toFixed(0)}% of avg (${target.toFixed(0)} pts) \u2022 ${diff >= 0 ? '+' : ''}${diff.toFixed(0)} pts vs pace`;
+  if (expectedByNow > 0) {
+    pct = Math.min(100, round2(currentPts / avgMonthEnd * 100));
+    const diff = round2(currentPts - expectedByNow);
+    const nMonths = priorMonthCurves.length;
+    label = `${pct.toFixed(0)}% of avg (${avgMonthEnd.toFixed(0)} pts) \u2022 ${diff >= 0 ? '+' : ''}${diff.toFixed(0)} pts vs day-${dayOfMonth} avg (${nMonths}-mo)`;
   } else {
-    pct = Math.min(100, fractionElapsed * 100);
-    label = `Day ${dayOfMonth} of ${daysInMonth}`;
+    pct = Math.min(100, (dayOfMonth / daysInMonth) * 100);
+    label = `Day ${dayOfMonth} of ${daysInMonth} \u2022 No prior data for comparison`;
   }
   document.getElementById('paceBar').style.width = pct + '%';
-  document.getElementById('paceBar').style.background = (target > 0 && currentPts >= target * fractionElapsed) ? 'var(--accent)' : 'var(--primary)';
+  document.getElementById('paceBar').style.background = (expectedByNow > 0 && currentPts >= expectedByNow) ? 'var(--accent)' : 'var(--primary)';
   document.getElementById('paceLabel').textContent = label;
 }
 
