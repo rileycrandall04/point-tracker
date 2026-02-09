@@ -253,28 +253,7 @@ textarea { resize: vertical; min-height: 60px; }
 .summary-item .value.yellow { color: var(--accent2); }
 .summary-item .value.purple { color: var(--purple); }
 
-/* ===== TYPE SELECT GRIDS ===== */
-.case-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
-
-.case-type-btn {
-  padding: 12px 8px;
-  background: var(--surface2);
-  border: 2px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 0.8rem;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: center;
-  transition: all 0.2s;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.case-type-btn.selected { border-color: var(--accent); background: rgba(16,185,129,0.15); }
-.case-type-btn:hover { border-color: var(--accent); }
+/* (case type grids removed — now using select dropdowns) */
 
 /* ===== LISTS ===== */
 .case-list-item {
@@ -880,16 +859,16 @@ input.mil-time.invalid {
 
     <div class="form-group">
       <label>Case Type</label>
-      <div class="case-type-grid">
-        <div class="case-type-btn selected" data-case="standard">Standard Case</div>
-        <div class="case-type-btn" data-case="labor_epidural">Labor Epidural</div>
-        <div class="case-type-btn" data-case="epidural_blood_patch">Epidural Blood Patch</div>
-        <div class="case-type-btn" data-case="emergency_intubation">Emergency Intubation</div>
-        <div class="case-type-btn" data-case="01996">Epidural Rounding (01996)</div>
-        <div class="case-type-btn" data-case="99231">Pain Rounding (99231)</div>
-        <div class="case-type-btn" data-case="tee">TEE Exam</div>
-        <div class="case-type-btn" data-case="aps_rounding">APS Rounding</div>
-      </div>
+      <select id="caseTypeSelect">
+        <option value="standard" selected>Standard Case</option>
+        <option value="labor_epidural">Labor Epidural</option>
+        <option value="epidural_blood_patch">Epidural Blood Patch</option>
+        <option value="emergency_intubation">Emergency Intubation</option>
+        <option value="01996">Epidural Rounding (01996)</option>
+        <option value="99231">Pain Rounding (99231)</option>
+        <option value="tee">TEE Exam</option>
+        <option value="aps_rounding">APS Rounding</option>
+      </select>
     </div>
 
     <div id="standardFields">
@@ -901,14 +880,14 @@ input.mil-time.invalid {
       <div class="form-row">
         <div class="form-group">
           <label>ASA Base Units</label>
-          <input type="number" id="caseBaseUnits" min="0" step="1" value="0">
+          <input type="number" id="caseBaseUnits" min="0" step="1" placeholder="Units">
         </div>
         <div class="form-group">
           <label>Physical Status</label>
           <select id="casePhysicalStatus">
             <option value="P1">P1</option>
-            <option value="P2">P2</option>
-            <option value="P3" selected>P3</option>
+            <option value="P2" selected>P2</option>
+            <option value="P3">P3</option>
             <option value="P4">P4</option>
             <option value="P5">P5</option>
           </select>
@@ -1495,16 +1474,16 @@ input.mil-time.invalid {
     <h2>Edit Case</h2>
     <div class="form-group">
       <label>Case Type</label>
-      <div class="case-type-grid" id="editCaseTypeGrid">
-        <div class="case-type-btn selected" data-ecase="standard">Standard Case</div>
-        <div class="case-type-btn" data-ecase="labor_epidural">Labor Epidural</div>
-        <div class="case-type-btn" data-ecase="epidural_blood_patch">Epidural Blood Patch</div>
-        <div class="case-type-btn" data-ecase="emergency_intubation">Emergency Intubation</div>
-        <div class="case-type-btn" data-ecase="01996">Epidural Rounding (01996)</div>
-        <div class="case-type-btn" data-ecase="99231">Pain Rounding (99231)</div>
-        <div class="case-type-btn" data-ecase="tee">TEE Exam</div>
-        <div class="case-type-btn" data-ecase="aps_rounding">APS Rounding</div>
-      </div>
+      <select id="editCaseTypeSelect">
+        <option value="standard" selected>Standard Case</option>
+        <option value="labor_epidural">Labor Epidural</option>
+        <option value="epidural_blood_patch">Epidural Blood Patch</option>
+        <option value="emergency_intubation">Emergency Intubation</option>
+        <option value="01996">Epidural Rounding (01996)</option>
+        <option value="99231">Pain Rounding (99231)</option>
+        <option value="tee">TEE Exam</option>
+        <option value="aps_rounding">APS Rounding</option>
+      </select>
     </div>
     <div id="editStandardFields">
       <div class="form-group">
@@ -1514,14 +1493,14 @@ input.mil-time.invalid {
       <div class="form-row">
         <div class="form-group">
           <label>ASA Base Units</label>
-          <input type="number" id="editCaseBaseUnits" min="0" step="1" value="0">
+          <input type="number" id="editCaseBaseUnits" min="0" step="1" placeholder="Units">
         </div>
         <div class="form-group">
           <label>Physical Status</label>
           <select id="editCasePhysicalStatus">
             <option value="P1">P1</option>
-            <option value="P2">P2</option>
-            <option value="P3" selected>P3</option>
+            <option value="P2" selected>P2</option>
+            <option value="P3">P3</option>
             <option value="P4">P4</option>
             <option value="P5">P5</option>
           </select>
@@ -2487,7 +2466,7 @@ document.querySelectorAll('[data-qproc]').forEach(btn => {
     const proc = quickProcs[btn.dataset.qproc];
     if (!proc) return;
     selectedCaseType = 'standard';
-    document.querySelectorAll('#page-cases .case-type-btn').forEach(b => b.classList.toggle('selected', b.dataset.case === 'standard'));
+    document.getElementById('caseTypeSelect').value = 'standard';
     document.getElementById('standardFields').classList.remove('hidden');
     document.getElementById('laborEpiduralFields').classList.add('hidden');
     document.getElementById('apsRoundingFields').classList.add('hidden');
@@ -2671,20 +2650,16 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
 // ================================================================
 let selectedCaseType = 'standard';
 
-document.querySelectorAll('#page-cases .case-type-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#page-cases .case-type-btn').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-    selectedCaseType = btn.dataset.case;
-    const isStd = selectedCaseType === 'standard';
-    const isLabor = selectedCaseType === 'labor_epidural';
-    const isAPS = selectedCaseType === 'aps_rounding';
-    document.getElementById('standardFields').classList.toggle('hidden', !isStd);
-    document.getElementById('laborEpiduralFields').classList.toggle('hidden', !isLabor);
-    document.getElementById('apsRoundingFields').classList.toggle('hidden', !isAPS);
-    document.getElementById('simpleFields').classList.toggle('hidden', isStd || isLabor || isAPS);
-    updatePointPreview();
-  });
+document.getElementById('caseTypeSelect').addEventListener('change', function() {
+  selectedCaseType = this.value;
+  const isStd = selectedCaseType === 'standard';
+  const isLabor = selectedCaseType === 'labor_epidural';
+  const isAPS = selectedCaseType === 'aps_rounding';
+  document.getElementById('standardFields').classList.toggle('hidden', !isStd);
+  document.getElementById('laborEpiduralFields').classList.toggle('hidden', !isLabor);
+  document.getElementById('apsRoundingFields').classList.toggle('hidden', !isAPS);
+  document.getElementById('simpleFields').classList.toggle('hidden', isStd || isLabor || isAPS);
+  updatePointPreview();
 });
 
 document.getElementById('caseMedicalProc').addEventListener('change', function() {
@@ -2723,8 +2698,8 @@ function buildCaseFromForm() {
   return {
     caseType: selectedCaseType,
     procedure: isLabor ? 'Labor Epidural' : (isAPS ? 'APS Rounding' : (document.getElementById('caseProcedure')?.value || selectedCaseType)),
-    baseUnits: document.getElementById('caseBaseUnits')?.value || 0,
-    physicalStatus: document.getElementById('casePhysicalStatus')?.value || 'P3',
+    baseUnits: document.getElementById('caseBaseUnits')?.value || '',
+    physicalStatus: document.getElementById('casePhysicalStatus')?.value || 'P2',
     startTime: isLabor ? (document.getElementById('laborStart')?.value || '') : (document.getElementById('caseStart')?.value || ''),
     endTime: isLabor ? (document.getElementById('laborEnd')?.value || '') : (document.getElementById('caseEnd')?.value || ''),
     isEmergency: document.getElementById('caseEmergency')?.checked || false,
@@ -2768,9 +2743,11 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
 });
 
 function resetCaseForm() {
+  selectedCaseType = 'standard';
+  document.getElementById('caseTypeSelect').value = 'standard';
   document.getElementById('caseProcedure').value = '';
-  document.getElementById('caseBaseUnits').value = '0';
-  document.getElementById('casePhysicalStatus').value = 'P3';
+  document.getElementById('caseBaseUnits').value = '';
+  document.getElementById('casePhysicalStatus').value = 'P2';
   document.getElementById('caseStart').value = '';
   document.getElementById('caseEnd').value = '';
   document.getElementById('caseEmergency').checked = false;
@@ -3577,20 +3554,16 @@ function renderShiftDistChart() {
 let editingCaseId = null;
 let editCaseType = 'standard';
 
-// Edit modal case type grid
-document.querySelectorAll('#editCaseTypeGrid .case-type-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#editCaseTypeGrid .case-type-btn').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-    editCaseType = btn.dataset.ecase;
-    const isStd = editCaseType === 'standard';
-    const isLabor = editCaseType === 'labor_epidural';
-    const isAPS = editCaseType === 'aps_rounding';
-    document.getElementById('editStandardFields').classList.toggle('hidden', !isStd);
-    document.getElementById('editLaborEpiduralFields').classList.toggle('hidden', !isLabor);
-    document.getElementById('editApsRoundingFields').classList.toggle('hidden', !isAPS);
-    document.getElementById('editSimpleFields').classList.toggle('hidden', isStd || isLabor || isAPS);
-  });
+// Edit modal case type select
+document.getElementById('editCaseTypeSelect').addEventListener('change', function() {
+  editCaseType = this.value;
+  const isStd = editCaseType === 'standard';
+  const isLabor = editCaseType === 'labor_epidural';
+  const isAPS = editCaseType === 'aps_rounding';
+  document.getElementById('editStandardFields').classList.toggle('hidden', !isStd);
+  document.getElementById('editLaborEpiduralFields').classList.toggle('hidden', !isLabor);
+  document.getElementById('editApsRoundingFields').classList.toggle('hidden', !isAPS);
+  document.getElementById('editSimpleFields').classList.toggle('hidden', isStd || isLabor || isAPS);
 });
 
 document.getElementById('editCaseMedicalProc').addEventListener('change', function() {
@@ -3608,9 +3581,7 @@ function openCaseEdit(caseId) {
   editCaseType = c.caseType || 'standard';
 
   // Set case type
-  document.querySelectorAll('#editCaseTypeGrid .case-type-btn').forEach(b => {
-    b.classList.toggle('selected', b.dataset.ecase === editCaseType);
-  });
+  document.getElementById('editCaseTypeSelect').value = editCaseType;
   const isStd = editCaseType === 'standard';
   const isLabor = editCaseType === 'labor_epidural';
   const isAPS = editCaseType === 'aps_rounding';
@@ -3621,8 +3592,8 @@ function openCaseEdit(caseId) {
 
   // Fill fields
   document.getElementById('editCaseProcedure').value = c.procedure || '';
-  document.getElementById('editCaseBaseUnits').value = c.baseUnits || 0;
-  document.getElementById('editCasePhysicalStatus').value = c.physicalStatus || 'P3';
+  document.getElementById('editCaseBaseUnits').value = c.baseUnits || '';
+  document.getElementById('editCasePhysicalStatus').value = c.physicalStatus || 'P2';
   document.getElementById('editCaseStart').value = c.startTime || '';
   document.getElementById('editCaseEnd').value = c.endTime || '';
   document.getElementById('editCaseEmergency').checked = c.isEmergency || false;
