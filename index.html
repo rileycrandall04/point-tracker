@@ -55,21 +55,24 @@ header {
   right: 0;
   z-index: 100;
 }
+header > * { flex: 1; }
+header > .header-date-btn { flex: 0 0 auto; }
 
-header h1 { font-size: 1.1rem; font-weight: 700; color: var(--primary); }
-.header-right { display: flex; align-items: center; gap: 12px; }
-.header-pts { font-size: 0.95rem; color: var(--accent); font-weight: 700; }
+header h1 { font-size: 1.1rem; font-weight: 700; color: var(--primary); min-width: 0; }
+.header-pts { font-size: 0.95rem; color: var(--accent); font-weight: 700; text-align: right; }
 .header-date-btn {
   background: var(--surface2);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text);
-  padding: 6px 10px;
-  font-size: 0.8rem;
+  padding: 8px 18px;
+  font-size: 1.05rem;
+  font-weight: 600;
   cursor: pointer;
   min-height: 44px;
   display: flex;
   align-items: center;
+  justify-content: center;
 }
 
 /* ===== BOTTOM NAV ===== */
@@ -732,10 +735,8 @@ input.mil-time.invalid {
 <!-- ===== HEADER ===== -->
 <header>
   <h1>MWA Points</h1>
-  <div class="header-right">
-    <span class="header-pts" id="headerPoints">0 pts</span>
-    <button class="header-date-btn" id="headerDateBtn"></button>
-  </div>
+  <button class="header-date-btn" id="headerDateBtn"></button>
+  <span class="header-pts" id="headerPoints">0 pts</span>
 </header>
 
 <!-- ===== PAGES ===== -->
