@@ -1505,7 +1505,7 @@ input.mil-time.invalid {
       </div>
       <div id="stabPaycheckRow" style="margin-top:12px; text-align:center;">
         <div style="font-size:1.3rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
-        <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px;">Projected next month's paycheck</div>
+        <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px;" id="stabPaycheckLabel">Projected next month's paycheck</div>
       </div>
     </div>
 
@@ -1793,6 +1793,16 @@ input.mil-time.invalid {
       <label>Point Value ($/pt)</label>
       <input type="number" id="settingsPointValue" min="0" step="0.01" style="max-width:140px;">
     </div>
+    <label class="toggle-row" style="margin-top:12px;">
+      <span>December advance paycheck</span>
+      <span class="toggle-switch">
+        <input type="checkbox" id="decAdvanceToggle" checked>
+        <span class="slider"></span>
+      </span>
+    </label>
+    <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
+      December includes January's paycheck advance; January shows $0.
+    </p>
   </div>
 
   <!-- History -->
@@ -4774,13 +4784,32 @@ function renderStabilization() {
   document.getElementById('stabRaw').textContent = raw.toFixed(1);
   document.getElementById('stabWeighted').textContent = weighted.toFixed(1);
   const pv = settings.pointValue;
-  if (pv && pv > 0) {
-    // Stipend from current month is attributed to next month's paycheck
+  const decAdv = settings.decemberAdvance !== false;
+  const paycheckLabel = document.getElementById('stabPaycheckLabel');
+
+  if (decAdv && now.getMonth() === 0) {
+    // January: paycheck was already received in December
+    document.getElementById('stabPaycheck').textContent = '$0.00';
+    paycheckLabel.textContent = 'January paycheck received in December';
+  } else if (pv && pv > 0) {
     const currentStipend = getMonthlyStipendTotal(mk(0));
-    const paycheck = weighted * pv + currentStipend;
+    let paycheck = weighted * pv + currentStipend;
+
+    if (decAdv && now.getMonth() === 11) {
+      // December: add January's advance paycheck
+      function mkFwd(month) { const d = new Date(now.getFullYear() + 1, month, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+      const janWeighted = round2(0.10 * (mt[mkFwd(0)]||0) + 0.40 * raw + 0.25 * (mt[mk(1)]||0) + 0.15 * (mt[mk(2)]||0) + 0.10 * (mt[mk(3)]||0));
+      const decStipend = getMonthlyStipendTotal(mk(0)); // Dec stipend → Jan paycheck
+      paycheck += janWeighted * pv + decStipend;
+      paycheckLabel.textContent = "Projected Dec paycheck + Jan advance";
+    } else {
+      paycheckLabel.textContent = "Projected next month\u2019s paycheck";
+    }
+
     document.getElementById('stabPaycheck').textContent = '$' + paycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   } else {
     document.getElementById('stabPaycheck').innerHTML = '&mdash;';
+    paycheckLabel.textContent = "Projected next month\u2019s paycheck";
   }
 }
 
@@ -5017,6 +5046,42 @@ function renderPipelineChart() {
     stipendValues.push(getMonthlyStipendTotal(stipKey));
   }
 
+  // December advance: December gets January's paycheck added, January becomes $0
+  const decAdv = settings.decemberAdvance !== false;
+  const decAdvFlags = []; // track which months are affected for tooltip
+  for (let target = 0; target < 5; target++) {
+    const targetDate = new Date(now.getFullYear(), now.getMonth() + target, 1);
+    const targetMonth = targetDate.getMonth();
+    decAdvFlags.push({ isDec: targetMonth === 11, isJan: targetMonth === 0 });
+
+    if (decAdv && targetMonth === 0) {
+      // January: $0 (already received in December)
+      realValues[target] = 0;
+      projectedValues[target] = 0;
+      stipendValues[target] = 0;
+    }
+
+    if (decAdv && targetMonth === 11) {
+      // December: add January's paycheck as advance
+      const janDate = new Date(targetDate.getFullYear() + 1, 0, 1);
+      let janReal = 0, janProj = 0;
+      for (let w = 0; w < 5; w++) {
+        const srcDate = new Date(janDate.getFullYear(), janDate.getMonth() - w, 1);
+        const srcKey = mkKey(srcDate.getFullYear(), srcDate.getMonth());
+        const isCurrentOrPast = srcDate <= now || srcKey === mkKey(now.getFullYear(), now.getMonth());
+        const isProjected = !mt[srcKey] && !isCurrentOrPast;
+        const srcPts = mt[srcKey] !== undefined ? mt[srcKey] : (isCurrentOrPast ? 0 : avgProjection);
+        const contribution = round2(srcPts * weights[w]);
+        if (isProjected) janProj += contribution; else janReal += contribution;
+      }
+      realValues[target] += round2(janReal);
+      projectedValues[target] += round2(janProj);
+      // Add December's stipend → January paycheck (now included in December)
+      const janStipKey = mkKey(targetDate.getFullYear(), 11); // Dec stipend → Jan paycheck
+      stipendValues[target] += getMonthlyStipendTotal(janStipKey);
+    }
+  }
+
   const ctx = document.getElementById('pipelineChart').getContext('2d');
   if (pipelineChart) pipelineChart.destroy();
 
@@ -5056,6 +5121,8 @@ function renderPipelineChart() {
             title: ctx => ctx[0].label,
             afterBody: function(ctx) {
               const idx = ctx[0].dataIndex;
+              const flags = decAdvFlags[idx];
+              if (decAdv && flags.isJan) return ['  $0 \u2014 advanced in December'];
               const bd = breakdowns[idx];
               const lines = bd.map(b => {
                 const pct = (b.weight * 100).toFixed(0);
@@ -5067,6 +5134,7 @@ function renderPipelineChart() {
               if (useDollars) {
                 let line = `  Total: ${total.toFixed(1)} pts \u2192 $${round2(total * pv).toLocaleString('en-US', {maximumFractionDigits:0})}`;
                 if (stip > 0) line += ` + $${stip.toLocaleString('en-US', {maximumFractionDigits:0})} stipend`;
+                if (flags.isDec) line += ' (incl. Jan advance)';
                 lines.push(line);
               }
               return lines;
@@ -5090,8 +5158,14 @@ function renderPipelineChart() {
   const currentPts = mt[mkKey(now.getFullYear(), now.getMonth())] || 0;
   let summary = `Current month: ${currentPts.toFixed(0)} pts`;
   if (useDollars) {
-    const nextPaycheck = round2((realValues[0] + projectedValues[0]) * pv);
-    summary += ` \u2022 Next paycheck: $${nextPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
+    const nextPaycheck = round2((realValues[0] + projectedValues[0]) * pv + stipendValues[0]);
+    const isCurrentJan = decAdv && now.getMonth() === 0;
+    if (isCurrentJan) {
+      summary += ' \u2022 Next paycheck: $0 (advanced in Dec)';
+    } else {
+      summary += ` \u2022 Next paycheck: $${nextPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
+      if (decAdv && now.getMonth() === 11) summary += ' (incl. Jan)';
+    }
   }
   document.getElementById('pipelineSummary').textContent = summary;
 }
@@ -6272,6 +6346,16 @@ pointValueInput.addEventListener('change', () => {
 dashPointValueInput.addEventListener('change', () => {
   syncPointValue(dashPointValueInput);
   showToast('Point value saved');
+});
+
+// December advance paycheck toggle
+const decAdvToggle = document.getElementById('decAdvanceToggle');
+decAdvToggle.checked = settings.decemberAdvance !== false;
+decAdvToggle.addEventListener('change', () => {
+  settings.decemberAdvance = decAdvToggle.checked;
+  saveSettings(settings);
+  renderStabilization();
+  renderPipelineChart();
 });
 
 document.getElementById('pipelineProjectToggle').addEventListener('change', () => {
