@@ -817,6 +817,7 @@ input.mil-time.invalid {
   vertical-align: middle;
 }
 .shift-log-table tr { cursor: pointer; transition: background 0.15s; }
+.shift-log-table tbody tr.sl-alt { background: rgba(148,163,184,0.06); }
 .shift-log-table tbody tr:hover { background: rgba(59,130,246,0.08); }
 .shift-log-table tbody tr:active { background: rgba(59,130,246,0.15); }
 .sl-sub-row td { border-top: none; }
@@ -4459,8 +4460,11 @@ function renderShiftLogTable() {
   html += '</tr></thead><tbody>';
 
   let grandTotal = 0;
+  let shiftIdx = 0;
 
   allBreakdowns.forEach(({ shift, rows }) => {
+    const altClass = shiftIdx % 2 === 1 ? ' sl-alt' : '';
+    shiftIdx++;
     const d = new Date(shift.date + 'T12:00:00');
     const dayName = dayNames[d.getDay()];
     const month = d.getMonth() + 1;
@@ -4477,7 +4481,7 @@ function renderShiftLogTable() {
     grandTotal += shiftTotal;
 
     if (shift.assignmentType === 'vacation') {
-      html += `<tr data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      html += `<tr class="${altClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       html += `<td>${dateLabel}</td>`;
       html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
       html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>Vacation</td><td>-</td><td>-</td><td>0.0</td>`;
@@ -4486,7 +4490,7 @@ function renderShiftLogTable() {
     }
 
     if (rows.length === 0) {
-      html += `<tr data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      html += `<tr class="${altClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       html += `<td>${dateLabel}</td>`;
       html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
       html += `<td>${timeStr}</td><td>${totalHrs.toFixed(1)}h</td>`;
@@ -4496,8 +4500,8 @@ function renderShiftLogTable() {
     }
 
     rows.forEach((r, i) => {
-      const subClass = i > 0 ? ' class="sl-sub-row"' : '';
-      html += `<tr${subClass} data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      const rowClass = i > 0 ? `sl-sub-row${altClass}` : altClass.trim();
+      html += `<tr class="${rowClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       if (i === 0) {
         html += `<td>${dateLabel}</td>`;
         html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
