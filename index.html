@@ -755,25 +755,25 @@ input.mil-time.invalid {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.68rem;
-  min-width: 420px;
 }
 .case-log-table thead { position: sticky; top: 0; z-index: 2; }
 .case-log-table th {
   background: var(--surface);
   color: var(--text-dim);
   font-weight: 600;
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   text-transform: uppercase;
-  padding: 4px 4px;
+  padding: 3px 3px;
   text-align: left;
   border-bottom: 2px solid var(--border);
   white-space: nowrap;
 }
 .case-log-table td {
-  padding: 4px 4px;
+  padding: 3px 3px;
   border-bottom: 1px solid var(--surface2);
   vertical-align: middle;
 }
+.case-log-table .cl-del { color: var(--danger); cursor: pointer; font-size: 0.9rem; padding: 2px 4px; line-height: 1; }
 .case-log-table tr { cursor: pointer; transition: background 0.15s; }
 .case-log-table tbody tr:hover { background: rgba(59,130,246,0.08); }
 .case-log-table tbody tr:active { background: rgba(59,130,246,0.15); }
@@ -4169,7 +4169,7 @@ function renderCaseLogTable() {
     html += `<td>${c.startTime || '-'}</td>`;
     html += `<td>${c.endTime || '-'}</td>`;
     html += `<td><strong>${pts.toFixed(1)}</strong></td>`;
-    html += `<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteCase('${c.id}')" style="padding:2px 8px;font-size:0.7rem;">Del</button></td>`;
+    html += `<td><span class="cl-del" onclick="event.stopPropagation();deleteCase('${c.id}')">&times;</span></td>`;
     html += '</tr>';
   });
   html += '</tbody><tfoot><tr style="border-top:2px solid var(--accent);">';
