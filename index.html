@@ -577,10 +577,21 @@ input.mil-time.invalid {
 .settings-field label { font-size: 0.85rem; color: var(--text-dim); white-space: nowrap; min-width: 60px; }
 
 /* ===== DASHBOARD SUB-TABS ===== */
+.dash-sticky-header {
+  position: fixed;
+  top: var(--header-h);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--bg);
+  padding: 0 12px 4px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+#clStickyNav .case-log-search { margin-bottom: 4px; }
 .dash-tab-bar {
   display: flex;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 12px;
   overflow-x: auto;
   gap: 0;
 }
@@ -1323,8 +1334,14 @@ input.mil-time.invalid {
 
 <!-- TODAY PAGE -->
 <div class="page" id="page-today">
+  <div id="todayBackBar" class="hidden" style="display:none;align-items:center;gap:8px;margin-bottom:8px;">
+    <button class="btn btn-outline btn-sm" id="todayBackBtn" style="padding:4px 12px;font-size:0.8rem;">&larr; Daily</button>
+  </div>
   <div class="card">
-    <h2 id="todayTitle">Today's Summary</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 id="todayTitle" style="margin:0;">Today's Summary</h2>
+      <button class="btn btn-outline btn-sm hidden" id="todayEditShiftBtn" style="padding:4px 10px;font-size:0.72rem;">Edit Shift</button>
+    </div>
     <div class="summary-grid">
       <div class="summary-item">
         <div class="label">Availability (AR)</div>
@@ -1417,23 +1434,28 @@ input.mil-time.invalid {
 
 <!-- DASHBOARD PAGE -->
 <div class="page" id="page-dashboard">
-  <div class="dash-tab-bar">
-    <button class="dash-tab-btn active" data-dtab="caselogs">Case Logs</button>
-    <button class="dash-tab-btn" data-dtab="shiftlogs">Shift Logs</button>
-    <button class="dash-tab-btn" data-dtab="projections">Projections</button>
-    <button class="dash-tab-btn" data-dtab="time">Time</button>
-    <button class="dash-tab-btn" data-dtab="analytics">Analytics</button>
-    <button class="dash-tab-btn" data-dtab="daily">Daily</button>
+  <div class="dash-sticky-header" id="dashStickyHeader">
+    <div class="dash-tab-bar">
+      <button class="dash-tab-btn active" data-dtab="caselogs">Case Logs</button>
+      <button class="dash-tab-btn" data-dtab="shiftlogs">Shift Logs</button>
+      <button class="dash-tab-btn" data-dtab="projections">Projections</button>
+      <button class="dash-tab-btn" data-dtab="time">Time</button>
+      <button class="dash-tab-btn" data-dtab="analytics">Analytics</button>
+      <button class="dash-tab-btn" data-dtab="daily">Daily</button>
+    </div>
+    <div id="clStickyNav">
+      <div class="month-nav">
+        <button id="clPrevMonth">&larr;</button>
+        <span id="clMonthLabel">January 2026</span>
+        <button id="clNextMonth">&rarr;</button>
+      </div>
+      <input type="text" class="case-log-search" id="caseLogSearch" placeholder="Search cases...">
+    </div>
   </div>
+  <div id="dashStickyHeaderSpacer"></div>
 
   <!-- Case Logs Tab -->
   <div id="dtab-caselogs">
-    <div class="month-nav">
-      <button id="clPrevMonth">&larr;</button>
-      <span id="clMonthLabel">January 2026</span>
-      <button id="clNextMonth">&rarr;</button>
-    </div>
-    <input type="text" class="case-log-search" id="caseLogSearch" placeholder="Search cases...">
     <div class="case-log-wrap">
       <div id="caseLogTableContainer">
         <div class="empty-state"><p>No cases for this month.</p></div>
@@ -1808,16 +1830,16 @@ input.mil-time.invalid {
       <button id="ovNextMonth">&rarr;</button>
     </div>
     <div style="display:flex;gap:12px;margin-top:12px;">
-      <div class="settings-field" style="flex:1;">
-        <label>Total Time Points</label>
-        <input type="number" id="overrideTimePoints" min="0" step="0.01" placeholder="Calculated: —">
+      <div style="flex:1;">
+        <label style="display:block;font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Time Points</label>
+        <input type="number" id="overrideTimePoints" min="0" step="0.01" placeholder="Calculated: —" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
       </div>
-      <div class="settings-field" style="flex:1;">
-        <label>Total Production Points</label>
-        <input type="number" id="overrideProdPoints" min="0" step="0.01" placeholder="Calculated: —">
+      <div style="flex:1;">
+        <label style="display:block;font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Production Points</label>
+        <input type="number" id="overrideProdPoints" min="0" step="0.01" placeholder="Calculated: —" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
       </div>
     </div>
-    <div style="margin-top:8px;display:flex;gap:8px;">
+    <div style="margin-top:10px;display:flex;gap:8px;">
       <button class="btn btn-primary btn-sm" id="saveOverrideBtn">Save Override</button>
       <button class="btn btn-outline btn-sm" id="clearOverrideBtn">Clear</button>
     </div>
@@ -3004,8 +3026,8 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('page-' + btn.dataset.page).classList.add('active');
     if (btn.dataset.page === 'dataentry') loadDataEntryPage();
-    if (btn.dataset.page === 'today') renderToday();
-    if (btn.dataset.page === 'dashboard') switchDashboardTab(activeDashTab);
+    if (btn.dataset.page === 'today') { returnToDailyTab = false; renderToday(); }
+    if (btn.dataset.page === 'dashboard') { switchDashboardTab(activeDashTab); }
     if (btn.dataset.page === 'settings') { renderHistory(); loadOverrideUI(); loadStipendUI(); }
     if (btn.dataset.page === 'reconcile') renderReconTabs();
   });
@@ -3596,6 +3618,22 @@ function renderToday() {
   const shiftCases = data.cases.filter(c => c.shiftDate === date);
   document.getElementById('todayTitle').textContent = date === todayStr() ? "Today's Summary" : formatDate(date);
 
+  // Back bar and edit shift button
+  const backBar = document.getElementById('todayBackBar');
+  const editShiftBtn = document.getElementById('todayEditShiftBtn');
+  if (returnToDailyTab) {
+    backBar.style.display = 'flex';
+    backBar.classList.remove('hidden');
+  } else {
+    backBar.style.display = 'none';
+  }
+  if (shift) {
+    editShiftBtn.classList.remove('hidden');
+    editShiftBtn.onclick = () => openShiftEdit(date);
+  } else {
+    editShiftBtn.classList.add('hidden');
+  }
+
   if (!shift) {
     document.getElementById('todayAR').textContent = '0';
     document.getElementById('todayProd').textContent = '0';
@@ -3710,12 +3748,24 @@ function renderToday() {
         </div>
         <div class="actions">
           <span class="point-badge">${pts.toFixed(1)} pts</span>
+          <button class="btn btn-outline btn-sm" onclick="openCaseEdit('${c.id}')" style="padding:2px 8px;font-size:0.68rem;">Edit</button>
           <button class="btn btn-danger btn-sm" onclick="deleteCase('${c.id}')">Del</button>
         </div>
       </div>`;
   });
   document.getElementById('todayCaseList').innerHTML = listHtml;
 }
+
+// Back button: return to Dashboard Daily tab
+document.getElementById('todayBackBtn').addEventListener('click', () => {
+  returnToDailyTab = false;
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const dashBtn = document.querySelector('.bottom-nav button[data-page="dashboard"]');
+  if (dashBtn) dashBtn.classList.add('active');
+  document.getElementById('page-dashboard').classList.add('active');
+  switchDashboardTab('daily');
+});
 
 function escHtml(s) {
   const div = document.createElement('div');
@@ -3843,12 +3893,21 @@ function switchDashboardTab(tabName) {
   document.getElementById('dtab-time').classList.toggle('hidden', tabName !== 'time');
   document.getElementById('dtab-analytics').classList.toggle('hidden', tabName !== 'analytics');
   document.getElementById('dtab-daily').classList.toggle('hidden', tabName !== 'daily');
+  document.getElementById('clStickyNav').style.display = tabName === 'caselogs' ? 'block' : 'none';
+  updateDashStickyHeaderSpacer();
   if (tabName === 'caselogs') renderCaseLogTable();
   if (tabName === 'shiftlogs') renderShiftLogTable();
   if (tabName === 'projections') renderProjections();
   if (tabName === 'time') renderTimeTab();
   if (tabName === 'analytics') renderAnalyticsTab();
   if (tabName === 'daily') renderDailyTab();
+}
+
+function updateDashStickyHeaderSpacer() {
+  requestAnimationFrame(() => {
+    const h = document.getElementById('dashStickyHeader').offsetHeight;
+    document.getElementById('dashStickyHeaderSpacer').style.height = h + 'px';
+  });
 }
 
 // Generic collapsible toggle
@@ -4380,7 +4439,7 @@ document.getElementById('saveShiftEdit').addEventListener('click', () => {
   editingShiftDate = null;
   updateHeaderPoints();
   renderShiftLogTable();
-  renderDayDetailContent();
+  renderToday();
   renderDailyTab();
   showToast('Shift updated');
 });
@@ -4394,7 +4453,7 @@ document.getElementById('deleteShiftBtn').addEventListener('click', () => {
   editingShiftDate = null;
   updateHeaderPoints();
   renderShiftLogTable();
-  renderDayDetailContent();
+  renderToday();
   renderDailyTab();
   showToast('Shift deleted');
 });
@@ -4716,7 +4775,9 @@ function renderStabilization() {
   document.getElementById('stabWeighted').textContent = weighted.toFixed(1);
   const pv = settings.pointValue;
   if (pv && pv > 0) {
-    const paycheck = weighted * pv;
+    // Stipend from current month is attributed to next month's paycheck
+    const currentStipend = getMonthlyStipendTotal(mk(0));
+    const paycheck = weighted * pv + currentStipend;
     document.getElementById('stabPaycheck').textContent = '$' + paycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   } else {
     document.getElementById('stabPaycheck').innerHTML = '&mdash;';
@@ -4949,11 +5010,18 @@ function renderPipelineChart() {
     breakdowns.push(bd);
   }
 
+  // Add stipends: each target month's paycheck includes the previous month's stipend
+  const stipendValues = [];
+  for (let target = 0; target < 5; target++) {
+    const stipKey = mkKey(now.getFullYear(), now.getMonth() + target - 1);
+    stipendValues.push(getMonthlyStipendTotal(stipKey));
+  }
+
   const ctx = document.getElementById('pipelineChart').getContext('2d');
   if (pipelineChart) pipelineChart.destroy();
 
   const useDollars = pv > 0;
-  const realData = useDollars ? realValues.map(v => round2(v * pv)) : realValues;
+  const realData = useDollars ? realValues.map((v, i) => round2(v * pv + stipendValues[i])) : realValues;
   const projData = useDollars ? projectedValues.map(v => round2(v * pv)) : projectedValues;
   const hasAnyProjections = projectedValues.some(v => v > 0);
 
@@ -4987,15 +5055,19 @@ function renderPipelineChart() {
           callbacks: {
             title: ctx => ctx[0].label,
             afterBody: function(ctx) {
-              const bd = breakdowns[ctx[0].dataIndex];
+              const idx = ctx[0].dataIndex;
+              const bd = breakdowns[idx];
               const lines = bd.map(b => {
                 const pct = (b.weight * 100).toFixed(0);
                 const proj = b.isProjected ? ' (est)' : '';
                 return `  ${pct}% \u00d7 ${b.pts.toFixed(0)} pts${proj} (${b.label}) = ${b.contribution.toFixed(1)}`;
               });
-              const total = round2(realValues[ctx[0].dataIndex] + projectedValues[ctx[0].dataIndex]);
+              const total = round2(realValues[idx] + projectedValues[idx]);
+              const stip = stipendValues[idx];
               if (useDollars) {
-                lines.push(`  Total: ${total.toFixed(1)} pts \u2192 $${round2(total * pv).toLocaleString('en-US', {maximumFractionDigits:0})}`);
+                let line = `  Total: ${total.toFixed(1)} pts \u2192 $${round2(total * pv).toLocaleString('en-US', {maximumFractionDigits:0})}`;
+                if (stip > 0) line += ` + $${stip.toLocaleString('en-US', {maximumFractionDigits:0})} stipend`;
+                lines.push(line);
               }
               return lines;
             }
@@ -5379,15 +5451,23 @@ function renderDailyTab() {
 }
 
 // ================================================================
-// DAY DETAIL MODAL
+// DAY DETAIL — Navigate to Today page from Daily tab
 // ================================================================
 let dayDetailDate = '';
+let returnToDailyTab = false;
 
 function openDayDetail(dateStr) {
   dayDetailDate = dateStr;
-  document.getElementById('dayDetailTitle').textContent = formatDate(dateStr);
-  renderDayDetailContent();
-  document.getElementById('dayDetailModal').classList.remove('hidden');
+  returnToDailyTab = true;
+  // Set working date and navigate to Today page
+  setWorkingDate(dateStr);
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const todayBtn = document.querySelector('.bottom-nav button[data-page="today"]');
+  if (todayBtn) todayBtn.classList.add('active');
+  document.getElementById('page-today').classList.add('active');
+  renderToday();
+  window.scrollTo(0, 0);
 }
 
 function renderDayDetailContent() {
@@ -5712,7 +5792,7 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
   saveData(data);
   updateHeaderPoints();
   renderCaseLogTable();
-  renderDayDetailContent();
+  renderToday();
   renderDailyTab();
   renderDECaseList();
   updateDETally();
