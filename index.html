@@ -675,6 +675,8 @@ input.mil-time.invalid {
   gap: 8px;
 }
 .de-case-list-item:last-child { border-bottom: none; }
+.de-case-list-item:hover { background: rgba(59,130,246,0.06); }
+.de-case-list-item:active { background: rgba(59,130,246,0.12); }
 .de-case-list-item .de-info { flex: 1; min-width: 0; }
 .de-case-list-item .de-name { font-size: 0.82rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .de-case-list-item .de-detail { font-size: 0.72rem; color: var(--text-dim); }
@@ -3479,14 +3481,14 @@ function renderDECaseList() {
     const pts = shift ? calcCasePoints(c, shift) : 0;
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
     const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : '';
-    html += `<div class="de-case-list-item">
+    html += `<div class="de-case-list-item" onclick="openCaseEdit('${c.id}')" style="cursor:pointer;">
       <div class="de-info">
         <div class="de-name">${escHtml(name)}</div>
         ${timeStr ? `<div class="de-detail">${escHtml(timeStr)}</div>` : ''}
       </div>
       <div class="de-actions">
         <span class="de-pts">${pts.toFixed(1)}</span>
-        <button class="btn btn-danger btn-sm" onclick="deleteCaseDE('${c.id}')" style="padding:2px 8px;font-size:0.7rem;">Del</button>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteCaseDE('${c.id}')" style="padding:2px 8px;font-size:0.7rem;">Del</button>
       </div>
     </div>`;
   });
