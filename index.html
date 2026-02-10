@@ -4268,8 +4268,15 @@ function getShiftPayBreakdown(shift) {
 
   // Rate-change boundaries (minute of day)
   function getBoundaries() {
-    if (isWknd || isHol) return [420, 1020]; // 0700, 1700
-    return [420, 1020, 1380]; // 0700, 1700, 2300
+    const b = (isWknd || isHol) ? [420, 1020] : [420, 1020, 1380];
+    // Add supervision overlay boundaries so segments split at supervision start/end
+    if (shift.supervisionStart && shift.supervisionEnd && shift.assignmentType !== 'CRNA_supervision') {
+      const ss = timeToMinutes(shift.supervisionStart);
+      const se = timeToMinutes(shift.supervisionEnd);
+      if (ss > 0 && !b.includes(ss)) b.push(ss);
+      if (se > 0 && !b.includes(se)) b.push(se);
+    }
+    return b.sort((a, c) => a - c);
   }
   const bounds = getBoundaries();
 
@@ -4296,12 +4303,27 @@ function getShiftPayBreakdown(shift) {
         }
       }
       const payCode = getPayCodeName(normSeg, rateType, isWknd, isHol);
-      const payRate = getARRate(rateType, isHol, isWknd, normSeg);
+      let payRate = getARRate(rateType, isHol, isWknd, normSeg);
+
+      // CRNA supervision bonus: +7/hr
+      let supBonus = 0;
+      if (shift.assignmentType === 'CRNA_supervision') {
+        // Standalone CRNA supervision: +7 on all clocked time
+        supBonus = 7;
+      } else if (shift.supervisionStart && shift.supervisionEnd) {
+        // Overlay: +7 only during supervision period
+        let supStart = timeToMinutes(shift.supervisionStart);
+        let supEnd = timeToMinutes(shift.supervisionEnd);
+        if (supEnd <= supStart) supEnd += 1440;
+        if (segStart < supEnd && segEnd > supStart) supBonus = 7;
+      }
+      payRate += supBonus;
+
       const durMin = segEnd - segStart;
       rows.push({
         clockIn: segStart === cr.start ? cr.startStr : '',
         clockOut: segEnd === cr.end ? cr.endStr : '',
-        payCode,
+        payCode: supBonus > 0 ? payCode + ' + CRNA' : payCode,
         durationMin: durMin,
         payRate,
         amount: round2((durMin / 60) * payRate),
