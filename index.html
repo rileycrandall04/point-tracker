@@ -59,7 +59,9 @@ header > * { flex: 1; }
 header > .header-date-btn { flex: 0 0 auto; }
 
 header h1 { font-size: 1.1rem; font-weight: 700; color: var(--primary); min-width: 0; }
-.header-pts { font-size: 0.95rem; color: var(--accent); font-weight: 700; text-align: right; }
+.header-pts { text-align: right; line-height: 1.2; }
+.header-pts .daily { font-size: 0.95rem; color: var(--accent); font-weight: 700; }
+.header-pts .monthly { font-size: 0.7rem; color: var(--text-dim); font-weight: 500; }
 .header-date-btn {
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -525,6 +527,13 @@ textarea { resize: vertical; min-height: 60px; }
 .empty-state { text-align: center; padding: 40px 20px; color: var(--text-dim); }
 .empty-state p { margin-top: 8px; font-size: 0.85rem; }
 .divider { height: 1px; background: var(--border); margin: 16px 0; }
+.modifiers-section { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+.modifiers-section summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; color: var(--text-dim); list-style: none; display: flex; align-items: center; gap: 8px; }
+.modifiers-section summary::-webkit-details-marker { display: none; }
+.modifiers-section summary::before { content: '\25B6'; font-size: 0.65rem; transition: transform 0.2s; }
+.modifiers-section[open] summary::before { transform: rotate(90deg); }
+.modifier-tags { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.modifier-tags .mod-tag { background: var(--accent); color: #fff; font-size: 0.65rem; padding: 1px 6px; border-radius: 10px; font-weight: 500; }
 .hidden { display: none !important; }
 
 /* ===== END TIME WARNING ===== */
@@ -588,6 +597,18 @@ input.mil-time.invalid {
   text-align: center;
 }
 .dash-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* ===== DAILY CALENDAR ===== */
+.daily-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.daily-cal-header { font-size: 0.65rem; color: var(--text-dim); text-align: center; padding: 4px 0; font-weight: 600; }
+.daily-cal-cell { background: var(--surface); border-radius: 6px; padding: 6px 4px; text-align: center; min-height: 52px; position: relative; }
+.daily-cal-cell.empty { background: transparent; }
+.daily-cal-cell.today { border: 2px solid var(--primary); }
+.daily-cal-cell.vacation { background: rgba(139,92,246,0.15); }
+.daily-cal-day { font-size: 0.7rem; color: var(--text-dim); margin-bottom: 2px; }
+.daily-cal-pts { font-size: 0.85rem; font-weight: 700; color: var(--text); }
+.daily-cal-pts.zero { color: var(--text-dim); font-weight: 400; }
+.daily-cal-type { font-size: 0.55rem; color: var(--accent); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ===== CASE LOG TABLE ===== */
 .case-log-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -12px; padding: 0 12px; }
@@ -834,7 +855,7 @@ input.mil-time.invalid {
 <header>
   <h1>MWA Points</h1>
   <button class="header-date-btn" id="headerDateBtn"></button>
-  <span class="header-pts" id="headerPoints">0 pts</span>
+  <span class="header-pts" id="headerPoints"><span class="daily">0 pts</span><br><span class="monthly">0 mo</span></span>
 </header>
 
 <!-- ===== PAGES ===== -->
@@ -882,6 +903,13 @@ input.mil-time.invalid {
         <option value="CRNA_supervision">CRNA Supervision</option>
         <option value="vacation">Vacation / Off</option>
       </select>
+    </div>
+
+    <div id="vacationRangeSection" class="hidden">
+      <div class="form-group">
+        <label>Vacation End Date <span style="font-size:0.75rem;color:var(--text-dim);">(optional — leave blank for single day)</span></label>
+        <input type="date" id="vacationEndDate" class="settings-input">
+      </div>
     </div>
 
     <div class="form-group">
@@ -982,6 +1010,7 @@ input.mil-time.invalid {
       <select id="caseTypeSelect">
         <option value="standard" selected>Standard Case</option>
         <option value="labor_epidural">Labor Epidural</option>
+        <option value="acute_pain_procedure">Acute Pain Procedure</option>
         <option value="epidural_blood_patch">Epidural Blood Patch</option>
         <option value="emergency_intubation">Emergency Intubation</option>
         <option value="01996">Epidural Rounding (01996)</option>
@@ -1025,84 +1054,70 @@ input.mil-time.invalid {
         </div>
       </div>
 
-      <div class="checkbox-group">
-        <input type="checkbox" id="caseEmergency">
-        <label for="caseEmergency">Emergency Case (+1 pt)</label>
-      </div>
-
-      <div class="checkbox-group">
-        <input type="checkbox" id="caseMedicalProc">
-        <label for="caseMedicalProc">Medical Procedure (arterial/central line)</label>
-      </div>
-
-      <div class="form-group hidden" id="medicalUnitsRow">
-        <label>ASA Medical Procedure Units</label>
-        <input type="number" id="caseMedicalUnits" min="0" step="1" value="0">
-      </div>
-
-      <div class="checkbox-group">
-        <input type="checkbox" id="caseAcutePain">
-        <label for="caseAcutePain">Acute Pain Procedure</label>
-      </div>
-
-      <div class="form-group hidden" id="acutePainUnitsRow">
-        <label>MWA Acute Pain Unit Value</label>
-        <input type="number" id="caseAcutePainUnits" min="0" step="0.1" value="0">
-      </div>
-
-      <div class="checkbox-group">
-        <input type="checkbox" id="caseHighRiskPeds">
-        <label for="caseHighRiskPeds">High Risk Pediatrics (1.33x time)</label>
-      </div>
-
-      <div class="checkbox-group hidden" id="orCaseRow">
-        <input type="checkbox" id="caseORCase">
-        <label for="caseORCase">OR Case (use OR rates, no OB doubling)</label>
-      </div>
-
-      <div class="checkbox-group">
-        <input type="checkbox" id="caseShared">
-        <label for="caseShared">Shared/Split Case</label>
-      </div>
-      <div class="form-group hidden" id="sharedPctRow">
-        <label>Startup Points Credit %</label>
-        <input type="number" id="caseSharedPct" min="0" max="100" value="50" step="1">
-      </div>
-
-      <div class="divider"></div>
-      <h3>Add-Ons</h3>
-      <div class="form-group">
-        <label>Nerve Block</label>
-        <select id="caseNerveBlock">
-          <option value="none">None</option>
-          <option value="brachial_plexus">Brachial Plexus (3 pts)</option>
-          <option value="other">Other (2.6 pts)</option>
-        </select>
-      </div>
-      <div class="form-row">
-        <div class="checkbox-group">
-          <input type="checkbox" id="caseCentralLine">
-          <label for="caseCentralLine">Central Line (0.8 pts)</label>
+      <details class="modifiers-section" id="modifiersSection">
+        <summary>Modifiers <span class="modifier-tags" id="modifierTags"></span></summary>
+        <div style="padding:8px 0 4px;">
+          <div class="checkbox-group">
+            <input type="checkbox" id="caseEmergency">
+            <label for="caseEmergency">Emergency Case (+1 pt)</label>
+          </div>
+          <div class="checkbox-group">
+            <input type="checkbox" id="caseHighRiskPeds">
+            <label for="caseHighRiskPeds">High Risk Pediatrics (1.33x time)</label>
+          </div>
+          <div class="checkbox-group hidden" id="orCaseRow">
+            <input type="checkbox" id="caseORCase">
+            <label for="caseORCase">OR Case (use OR rates, no OB doubling)</label>
+          </div>
+          <div class="checkbox-group">
+            <input type="checkbox" id="caseShared">
+            <label for="caseShared">Shared/Split Case</label>
+          </div>
+          <div class="form-group hidden" id="sharedPctRow">
+            <label>Startup Points Credit %</label>
+            <input type="number" id="caseSharedPct" min="0" max="100" value="50" step="1">
+          </div>
         </div>
-        <div class="checkbox-group">
-          <input type="checkbox" id="caseArterialLine">
-          <label for="caseArterialLine">Arterial Line (0.6 pts)</label>
+      </details>
+
+      <details class="modifiers-section">
+        <summary>Supplemental Procedures</summary>
+        <div style="padding:8px 0 4px;">
+          <div class="form-group">
+            <label>Nerve Block</label>
+            <select id="caseNerveBlock">
+              <option value="none">None</option>
+              <option value="brachial_plexus">Brachial Plexus (3 pts)</option>
+              <option value="other">Other (2.6 pts)</option>
+              <option value="it_morphine">IT Morphine (3 pts)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="checkbox-group">
+              <input type="checkbox" id="caseCentralLine">
+              <label for="caseCentralLine">Central Line (0.8 pts)</label>
+            </div>
+            <div class="checkbox-group">
+              <input type="checkbox" id="caseArterialLine">
+              <label for="caseArterialLine">Arterial Line (0.6 pts)</label>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="checkbox-group">
+              <input type="checkbox" id="casePAC">
+              <label for="casePAC">PAC (2 pts)</label>
+            </div>
+            <div class="checkbox-group">
+              <input type="checkbox" id="caseTEEAddOn">
+              <label for="caseTEEAddOn">TEE (0.4 pts)</label>
+            </div>
+          </div>
+          <div class="checkbox-group">
+            <input type="checkbox" id="caseITMorphine">
+            <label for="caseITMorphine">IT Morphine (3 pts)</label>
+          </div>
         </div>
-      </div>
-      <div class="form-row">
-        <div class="checkbox-group">
-          <input type="checkbox" id="casePAC">
-          <label for="casePAC">PAC (2 pts)</label>
-        </div>
-        <div class="checkbox-group">
-          <input type="checkbox" id="caseTEEAddOn">
-          <label for="caseTEEAddOn">TEE (0.4 pts)</label>
-        </div>
-      </div>
-      <div class="checkbox-group">
-        <input type="checkbox" id="caseITMorphine">
-        <label for="caseITMorphine">IT Morphine (3 pts)</label>
-      </div>
+      </details>
     </div>
 
     <div id="laborEpiduralFields" class="hidden">
@@ -1255,6 +1270,7 @@ input.mil-time.invalid {
     <button class="dash-tab-btn" data-dtab="projections">Projections</button>
     <button class="dash-tab-btn" data-dtab="time">Time</button>
     <button class="dash-tab-btn" data-dtab="analytics">Analytics</button>
+    <button class="dash-tab-btn" data-dtab="daily">Daily</button>
   </div>
 
   <!-- Case Logs Tab -->
@@ -1576,6 +1592,17 @@ input.mil-time.invalid {
       </div>
     </div>
   </div>
+
+  <!-- Daily Totals Tab -->
+  <div id="dtab-daily" class="hidden">
+    <div class="month-nav">
+      <button id="dailyPrevMonth">&larr;</button>
+      <span id="dailyMonthLabel">January 2026</span>
+      <button id="dailyNextMonth">&rarr;</button>
+    </div>
+    <div id="dailyCalendarContainer" style="margin-top:12px;"></div>
+    <div id="dailyMonthSummary" style="margin-top:12px;font-size:0.85rem;color:var(--text-dim);text-align:center;"></div>
+  </div>
 </div>
 
 <!-- SETTINGS PAGE -->
@@ -1642,6 +1669,26 @@ input.mil-time.invalid {
       <button class="btn btn-outline btn-sm" id="clearOverrideBtn">Clear</button>
     </div>
     <div id="overrideStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
+  </div>
+
+  <!-- Monthly Stipends -->
+  <div class="card">
+    <h2>Monthly Stipends</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Add fixed dollar amounts per month (e.g., medical director stipend, teaching pay). These contribute to revenue totals but not point calculations.
+    </p>
+    <div class="month-nav">
+      <button id="stipPrevMonth">&larr;</button>
+      <span id="stipMonthLabel">January 2026</span>
+      <button id="stipNextMonth">&rarr;</button>
+    </div>
+    <div id="stipendEntries" style="margin-top:12px;"></div>
+    <button type="button" class="add-entry-btn" id="addStipendBtn">+ Add Stipend</button>
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <button class="btn btn-primary btn-sm" id="saveStipendBtn">Save Stipends</button>
+      <button class="btn btn-outline btn-sm" id="clearStipendBtn">Clear All</button>
+    </div>
+    <div id="stipendStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
   </div>
 
   <!-- Import Data -->
@@ -1744,6 +1791,7 @@ input.mil-time.invalid {
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" id="cancelDatePicker">Cancel</button>
+      <button class="btn btn-sm" id="todayDatePicker" style="width:auto;background:var(--accent2);color:#fff;">Today</button>
       <button class="btn btn-primary btn-sm" id="applyDatePicker" style="width:auto;">Apply</button>
     </div>
   </div>
@@ -1758,6 +1806,7 @@ input.mil-time.invalid {
       <select id="editCaseTypeSelect">
         <option value="standard" selected>Standard Case</option>
         <option value="labor_epidural">Labor Epidural</option>
+        <option value="acute_pain_procedure">Acute Pain Procedure</option>
         <option value="epidural_blood_patch">Epidural Blood Patch</option>
         <option value="emergency_intubation">Emergency Intubation</option>
         <option value="01996">Epidural Rounding (01996)</option>
@@ -1802,14 +1851,6 @@ input.mil-time.invalid {
         <label for="editCaseEmergency">Emergency Case (+1 pt)</label>
       </div>
       <div class="checkbox-group">
-        <input type="checkbox" id="editCaseMedicalProc">
-        <label for="editCaseMedicalProc">Medical Procedure</label>
-      </div>
-      <div class="form-group hidden" id="editMedicalUnitsRow">
-        <label>ASA Medical Procedure Units</label>
-        <input type="number" id="editCaseMedicalUnits" min="0" step="1" value="0">
-      </div>
-      <div class="checkbox-group">
         <input type="checkbox" id="editCaseAcutePain">
         <label for="editCaseAcutePain">Acute Pain Procedure</label>
       </div>
@@ -1836,7 +1877,7 @@ input.mil-time.invalid {
       </div>
 
       <div class="divider"></div>
-      <h3>Add-Ons</h3>
+      <h3>Supplemental Procedures</h3>
       <div class="form-group">
         <label>Nerve Block</label>
         <select id="editNerveBlock">
@@ -2008,10 +2049,11 @@ function loadData() {
     if (raw) {
       const d = JSON.parse(raw);
       if (!d.overrides) d.overrides = {};
+      if (!d.stipends) d.stipends = {};
       return d;
     }
   } catch(e) {}
-  return { shifts: {}, cases: [], overrides: {} };
+  return { shifts: {}, cases: [], overrides: {}, stipends: {} };
 }
 
 function saveData(d) {
@@ -2097,6 +2139,28 @@ function isUnrestrictedCallEligible(assignmentType, minuteOfDay, isWeekendOrHoli
       return !isWeekendOrHoliday && (minuteOfDay >= 1020); // weekday after 17:00 only
     default:
       return false; // OR, OB, Cardiac/Liver, NORA, ACS, CRNA Supervision
+  }
+}
+
+// Returns the pager pay eligible window {start, end} in minutes for a shift type.
+// end can be >1440 for cross-midnight windows. Returns null if not eligible.
+function getPagerPayWindow(assignmentType, isWkndOrHol) {
+  switch (assignmentType) {
+    case 'SF1': case 'SF2':
+    case '1st_call': case '2nd_call': case '3rd_call':
+      // Weekday: 17:00–07:00 next day; Weekend/Holiday: full 24h
+      return isWkndOrHol ? { start: 0, end: 1440 } : { start: 1020, end: 1860 };
+    case '4th_call':
+      // Weekend only
+      return isWkndOrHol ? { start: 0, end: 1440 } : null;
+    case 'mole':
+      // Weekday: 19:00–07:00 next day; Weekend/Holiday: full 24h
+      return isWkndOrHol ? { start: 0, end: 1440 } : { start: 1140, end: 1860 };
+    case 'endo':
+      // Weekday only: 17:00–midnight
+      return !isWkndOrHol ? { start: 1020, end: 1440 } : null;
+    default:
+      return null;
   }
 }
 
@@ -2232,9 +2296,22 @@ function createTimeEntryRow(start, end) {
     <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="${start || ''}">
     <span class="te-label">to</span>
     <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-end" value="${end || ''}">
+    <span class="te-next-day" style="display:none;color:var(--accent2);font-size:0.7rem;font-weight:600;">+1d</span>
     <button type="button" class="remove-entry-btn">&times;</button>
   `;
   row.querySelectorAll('input.mil-time').forEach(input => bindMilTimeInput(input));
+  // Show +1d indicator when end time < start time (cross-midnight)
+  const startInput = row.querySelector('.te-start');
+  const endInput = row.querySelector('.te-end');
+  const nextDayBadge = row.querySelector('.te-next-day');
+  function updateCrossMidnight() {
+    const s = timeToMinutes(startInput.value);
+    const e = timeToMinutes(endInput.value);
+    nextDayBadge.style.display = (!isNaN(s) && !isNaN(e) && e <= s && endInput.value) ? 'inline' : 'none';
+  }
+  startInput.addEventListener('input', updateCrossMidnight);
+  endInput.addEventListener('input', updateCrossMidnight);
+  updateCrossMidnight();
   row.querySelector('.remove-entry-btn').addEventListener('click', function() {
     row.remove();
     updateRemoveButtons();
@@ -2289,10 +2366,10 @@ function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
   const isDaytime = timeMinutes >= 420 && timeMinutes < 1020;
   let baseRate;
   if (assignmentType === 'SF1') {
-    // SF1: 13/hr during 0700-1700, General rate (20/hr) outside
-    baseRate = isDaytime ? 13 : 20;
+    // SF1: 13/hr during 0700-1700 on non-holiday weekdays only; General rate otherwise
+    baseRate = (!isHol && !isWknd && isDaytime) ? 13 : 20;
   } else {
-    const isOB = ['OB_restricted','SF2'].includes(assignmentType);
+    const isOB = assignmentType === 'OB_restricted';
     baseRate = isOB ? 13 : 20;
   }
   if (isHol || isWknd) {
@@ -2348,10 +2425,15 @@ function calcARPoints(shift) {
   const spanEnd = clockedRanges[clockedRanges.length - 1].end;
   if (spanEnd <= spanStart) return 0;
 
+  // Expand scan to cover full pager pay window (not just gaps between entries)
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+  const scanStart = pagerWindow ? Math.min(spanStart, pagerWindow.start) : spanStart;
+  const scanEnd = pagerWindow ? Math.max(spanEnd, pagerWindow.end) : spanEnd;
+
   let arPoints = 0;
   let callPoints = 0;
 
-  for (let m = spanStart; m < spanEnd; m++) {
+  for (let m = scanStart; m < scanEnd; m++) {
     const normalizedMin = m % 1440;
 
     // Is this minute within a clocked-in range?
@@ -2369,17 +2451,15 @@ function calcARPoints(shift) {
         }
       }
       arPoints += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
-    } else {
-      // Gap minute — check unrestricted call eligibility
-      if (isUnrestrictedCallEligible(shift.assignmentType, normalizedMin, isWkndOrHol)) {
-        callPoints += 3.5 / 60; // flat 3.5 pts/hr, no multipliers
-      }
+    } else if (pagerWindow && m >= pagerWindow.start && m < pagerWindow.end) {
+      // Pager pay for all non-clocked eligible minutes in the pager window
+      callPoints += 3.5 / 60;
     }
   }
 
   // Guaranteed minimums for clocked-in time (weekday, non-mole)
   if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
-    const isOBRate = ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
+    const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     arPoints = Math.max(arPoints, minPoints);
   }
@@ -2427,10 +2507,15 @@ function calcARBreakdown(shift) {
   const spanEnd = clockedRanges[clockedRanges.length - 1].end;
   if (spanEnd <= spanStart) return { ar: 0, call: 0 };
 
+  // Expand scan to cover full pager pay window
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+  const scanStart = pagerWindow ? Math.min(spanStart, pagerWindow.start) : spanStart;
+  const scanEnd = pagerWindow ? Math.max(spanEnd, pagerWindow.end) : spanEnd;
+
   let arPoints = 0;
   let callPoints = 0;
 
-  for (let m = spanStart; m < spanEnd; m++) {
+  for (let m = scanStart; m < scanEnd; m++) {
     const normalizedMin = m % 1440;
     let clockedIn = false;
     for (const r of clockedRanges) {
@@ -2444,15 +2529,13 @@ function calcARBreakdown(shift) {
         }
       }
       arPoints += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
-    } else {
-      if (isUnrestrictedCallEligible(shift.assignmentType, normalizedMin, isWkndOrHol)) {
-        callPoints += 3.5 / 60;
-      }
+    } else if (pagerWindow && m >= pagerWindow.start && m < pagerWindow.end) {
+      callPoints += 3.5 / 60;
     }
   }
 
   if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
-    const isOBRate = ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
+    const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     arPoints = Math.max(arPoints, minPoints);
   }
@@ -2479,6 +2562,7 @@ function calcAddOnPoints(caseData) {
   let pts = 0;
   if (caseData.nerveBlock === 'brachial_plexus') pts += 3;
   else if (caseData.nerveBlock === 'other') pts += 2.6;
+  else if (caseData.nerveBlock === 'it_morphine') pts += 3;
   if (caseData.hasCentralLine) pts += 0.8;
   if (caseData.hasArterialLine) pts += 0.6;
   if (caseData.hasPAC) pts += 2;
@@ -2494,6 +2578,10 @@ function calcCasePoints(caseData, shift) {
   if (ct === '01996') return 3;
   if (ct === '99231') return 2;
   if (ct === 'tee') return 22;
+
+  if (ct === 'acute_pain_procedure') {
+    return round2(calcAddOnPoints(caseData));
+  }
 
   if (ct === 'aps_rounding') {
     const epi = (parseInt(caseData.epiduralRounds) || 0) * 3;
@@ -2629,26 +2717,34 @@ function getCaseBreakdown(caseData, shift) {
 }
 
 function calcSupervisionPoints(shift) {
-  // Standalone CRNA_supervision type: sum clocked-in time from entries
+  const isHol = shift.isHoliday;
+  const isWknd = isWeekend(shift.date);
+  // Standalone CRNA_supervision type: AR rate + 7 per hour, minute-by-minute
   if (shift.assignmentType === 'CRNA_supervision') {
     const entries = shift.timeEntries || [];
-    let totalMinutes = 0;
+    let clockedRanges = [];
     entries.forEach(e => {
       if (!e.start || !e.end) return;
       let s = timeToMinutes(e.start);
       let en = timeToMinutes(e.end);
       if (en <= s) en += 1440;
-      totalMinutes += (en - s);
+      clockedRanges.push({ start: s, end: en });
     });
-    if (totalMinutes === 0 && shift.endTime) {
+    if (clockedRanges.length === 0 && shift.startTime && shift.endTime) {
       let startMin = timeToMinutes(shift.startTime);
       let endMin = timeToMinutes(shift.endTime);
       if (endMin <= startMin) endMin += 1440;
-      totalMinutes = endMin - startMin;
+      clockedRanges.push({ start: startMin, end: endMin });
     }
-    return round2(totalMinutes / 60 * 7);
+    let pts = 0;
+    clockedRanges.forEach(r => {
+      for (let m = r.start; m < r.end; m++) {
+        pts += (getARRate('OR', isHol, isWknd, m % 1440) + 7) / 60;
+      }
+    });
+    return round2(pts);
   }
-  // Overlay on OR/SF1/SF2
+  // Overlay on OR/SF1/SF2: +7/hr only (base AR already counted in calcARPoints)
   if (shift.supervisionStart && shift.supervisionEnd) {
     let startMin = timeToMinutes(shift.supervisionStart);
     let endMin = timeToMinutes(shift.supervisionEnd);
@@ -2676,9 +2772,7 @@ function calcShiftTotal(shift) {
   const arPts = breakdown.ar;
   const callPts = breakdown.call;
   let prodPts = 0;
-  if (shift.assignmentType !== 'CRNA_supervision') {
-    shiftCases.forEach(c => { prodPts += calcCasePoints(c, shift); });
-  }
+  shiftCases.forEach(c => { prodPts += calcCasePoints(c, shift); });
   const subspecPts = (shift.assignmentType === 'cardiac_liver') ? calcSubspecPoints(shift) : 0;
   const supervisionPts = calcSupervisionPoints(shift);
   return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, supervision: supervisionPts, total: round2(arPts + prodPts + callPts + subspecPts + supervisionPts) };
@@ -2687,6 +2781,7 @@ function calcShiftTotal(shift) {
 function getCaseTypeName(type) {
   const names = {
     standard: 'Standard Case', labor_epidural: 'Labor Epidural',
+    acute_pain_procedure: 'Acute Pain Procedure',
     aps_rounding: 'APS Rounding', epidural_blood_patch: 'Epidural Blood Patch',
     emergency_intubation: 'Emergency Intubation', '01996': 'Epidural Rounding (01996)',
     '99231': 'Pain Rounding (99231)', tee: 'TEE Exam'
@@ -2719,6 +2814,11 @@ document.getElementById('cancelDatePicker').addEventListener('click', () => {
   document.getElementById('datePickerModal').classList.add('hidden');
 });
 
+document.getElementById('todayDatePicker').addEventListener('click', () => {
+  setWorkingDate(todayStr());
+  document.getElementById('datePickerModal').classList.add('hidden');
+});
+
 document.getElementById('applyDatePicker').addEventListener('click', () => {
   const v = document.getElementById('globalDatePicker').value;
   if (v) setWorkingDate(v);
@@ -2742,7 +2842,7 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
     if (btn.dataset.page === 'today') renderToday();
     if (btn.dataset.page === 'cases') updateORCaseVisibility();
     if (btn.dataset.page === 'dashboard') switchDashboardTab(activeDashTab);
-    if (btn.dataset.page === 'settings') { renderHistory(); loadOverrideUI(); }
+    if (btn.dataset.page === 'settings') { renderHistory(); loadOverrideUI(); loadStipendUI(); }
     if (btn.dataset.page === 'reconcile') renderReconTabs();
   });
 });
@@ -2899,6 +2999,7 @@ function checkEndTimeNotification() {
 document.getElementById('shiftAssignmentType').addEventListener('change', function() {
   const type = this.value;
   document.getElementById('cardiacLiverOptions').classList.toggle('hidden', type !== 'cardiac_liver');
+  document.getElementById('vacationRangeSection').classList.toggle('hidden', type !== 'vacation');
   updateUnrestrictedCallVisibility();
   updateSupervisionOverlayVisibility();
   updateORCaseVisibility();
@@ -2930,6 +3031,8 @@ function loadShiftForDate() {
     document.getElementById('shiftHoliday').checked = shift.isHoliday || false;
     document.getElementById('shiftForcedOff').checked = shift.forcedOff || false;
     document.getElementById('cardiacLiverOptions').classList.toggle('hidden', shift.assignmentType !== 'cardiac_liver');
+    document.getElementById('vacationRangeSection').classList.toggle('hidden', shift.assignmentType !== 'vacation');
+    document.getElementById('vacationEndDate').value = '';
     document.getElementById('subspecCoverage').checked = shift.subspecCoverage || false;
     document.getElementById('teeCount').value = shift.teeCount || 0;
     if (shift.supervisionStart || shift.supervisionEnd) {
@@ -2950,6 +3053,8 @@ function loadShiftForDate() {
     document.getElementById('shiftHoliday').checked = false;
     document.getElementById('shiftForcedOff').checked = false;
     document.getElementById('cardiacLiverOptions').classList.add('hidden');
+    document.getElementById('vacationRangeSection').classList.add('hidden');
+    document.getElementById('vacationEndDate').value = '';
     document.getElementById('subspecCoverage').checked = false;
     document.getElementById('teeCount').value = 0;
     document.getElementById('supervisionOverlayCheck').checked = false;
@@ -2973,34 +3078,63 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     showToast('Please enter at least one start time');
     return;
   }
-  // Validate: entries should be in chronological order, no overlaps
+  // Validate: entries should be in chronological order, no overlaps (cross-midnight aware)
   if (!isVacation) {
     for (let i = 1; i < timeEntries.length; i++) {
       const prevEnd = timeToMinutes(timeEntries[i-1].end);
-      const currStart = timeToMinutes(timeEntries[i].start);
-      if (timeEntries[i-1].end && currStart <= prevEnd) {
+      let currStart = timeToMinutes(timeEntries[i].start);
+      // If current start is before previous end, assume cross-midnight
+      if (currStart < timeToMinutes(timeEntries[0].start)) currStart += 1440;
+      let adjPrevEnd = prevEnd;
+      if (adjPrevEnd < timeToMinutes(timeEntries[0].start)) adjPrevEnd += 1440;
+      if (timeEntries[i-1].end && currStart <= adjPrevEnd) {
         showToast('Time entries must be in chronological order with no overlaps');
         return;
       }
     }
   }
-  data.shifts[date] = {
-    date, assignmentType,
-    startTime: timeEntries[0].start || '',
-    endTime: timeEntries[timeEntries.length - 1].end || '',
-    timeEntries: timeEntries,
-    isHoliday: document.getElementById('shiftHoliday').checked,
-    forcedOff: document.getElementById('shiftForcedOff').checked,
-    subspecCoverage: document.getElementById('subspecCoverage').checked,
-    teeCount: parseInt(document.getElementById('teeCount').value) || 0,
-    supervisionStart: supervisionEnabled ? document.getElementById('supervisionStart').value : '',
-    supervisionEnd: supervisionEnabled ? document.getElementById('supervisionEnd').value : ''
-  };
+  // Build list of dates to save (range for vacation, single otherwise)
+  const datesToSave = [date];
+  if (isVacation) {
+    const vacEnd = document.getElementById('vacationEndDate').value;
+    if (vacEnd && vacEnd > date) {
+      const startD = new Date(date + 'T00:00:00');
+      const endD = new Date(vacEnd + 'T00:00:00');
+      datesToSave.length = 0;
+      for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
+        datesToSave.push(d.toISOString().split('T')[0]);
+      }
+    }
+  }
+  let skipped = 0;
+  datesToSave.forEach(dt => {
+    if (isVacation && datesToSave.length > 1 && data.shifts[dt] && data.shifts[dt].assignmentType !== 'vacation') {
+      skipped++;
+      return; // don't overwrite existing non-vacation shifts
+    }
+    data.shifts[dt] = {
+      date: dt, assignmentType,
+      startTime: timeEntries[0].start || '',
+      endTime: timeEntries[timeEntries.length - 1].end || '',
+      timeEntries: timeEntries,
+      isHoliday: document.getElementById('shiftHoliday').checked,
+      forcedOff: document.getElementById('shiftForcedOff').checked,
+      subspecCoverage: document.getElementById('subspecCoverage').checked,
+      teeCount: parseInt(document.getElementById('teeCount').value) || 0,
+      supervisionStart: supervisionEnabled ? document.getElementById('supervisionStart').value : '',
+      supervisionEnd: supervisionEnabled ? document.getElementById('supervisionEnd').value : ''
+    };
+  });
   saveData(data);
   updateHeaderPoints();
   updateEndTimeWarning();
   updateORCaseVisibility();
-  showToast('Shift saved!');
+  if (datesToSave.length > 1) {
+    const msg = `${datesToSave.length - skipped} vacation day${datesToSave.length - skipped !== 1 ? 's' : ''} saved!` + (skipped ? ` (${skipped} existing shift${skipped !== 1 ? 's' : ''} skipped)` : '');
+    showToast(msg);
+  } else {
+    showToast('Shift saved!');
+  }
 });
 
 // ================================================================
@@ -3013,20 +3147,11 @@ document.getElementById('caseTypeSelect').addEventListener('change', function() 
   const isStd = selectedCaseType === 'standard';
   const isLabor = selectedCaseType === 'labor_epidural';
   const isAPS = selectedCaseType === 'aps_rounding';
+  const isAcutePain = selectedCaseType === 'acute_pain_procedure';
   document.getElementById('standardFields').classList.toggle('hidden', !isStd);
   document.getElementById('laborEpiduralFields').classList.toggle('hidden', !isLabor);
   document.getElementById('apsRoundingFields').classList.toggle('hidden', !isAPS);
-  document.getElementById('simpleFields').classList.toggle('hidden', isStd || isLabor || isAPS);
-  updatePointPreview();
-});
-
-document.getElementById('caseMedicalProc').addEventListener('change', function() {
-  document.getElementById('medicalUnitsRow').classList.toggle('hidden', !this.checked);
-  updatePointPreview();
-});
-
-document.getElementById('caseAcutePain').addEventListener('change', function() {
-  document.getElementById('acutePainUnitsRow').classList.toggle('hidden', !this.checked);
+  document.getElementById('simpleFields').classList.toggle('hidden', isStd || isLabor || isAPS || isAcutePain);
   updatePointPreview();
 });
 
@@ -3035,17 +3160,43 @@ document.getElementById('caseShared').addEventListener('change', function() {
   updatePointPreview();
 });
 
-['caseBaseUnits','caseStart','caseEnd','casePhysicalStatus','caseMedicalUnits','caseAcutePainUnits','laborStart','laborEnd','caseNerveBlock','apsEpiduralCount','apsPainCount','caseSharedPct'].forEach(id => {
+['caseBaseUnits','caseStart','caseEnd','casePhysicalStatus','laborStart','laborEnd','caseNerveBlock','apsEpiduralCount','apsPainCount','caseSharedPct'].forEach(id => {
   const el = document.getElementById(id);
   if (el) { el.addEventListener('input', updatePointPreview); el.addEventListener('change', updatePointPreview); }
 });
 
-['caseEmergency','caseHighRiskPeds','caseMedicalProc','caseAcutePain','caseORCase','caseCentralLine','caseArterialLine','casePAC','caseTEEAddOn','caseITMorphine','caseShared'].forEach(id => {
+['caseEmergency','caseHighRiskPeds','caseORCase','caseCentralLine','caseArterialLine','casePAC','caseTEEAddOn','caseITMorphine','caseShared'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', updatePointPreview);
 });
 
+// Auto-check OR Case for SF1 during restricted window
+document.getElementById('caseStart').addEventListener('change', function() {
+  const shift = data.shifts[workingDate];
+  if (!shift || shift.assignmentType !== 'SF1') return;
+  const startMin = timeToMinutes(this.value);
+  if (isNaN(startMin)) return;
+  const isWknd = isWeekend(shift.date);
+  const isHol = shift.isHoliday;
+  const isDaytime = startMin >= 420 && startMin < 1020;
+  // Auto-check if case starts in restricted OB window (non-holiday weekday daytime)
+  if (!isHol && !isWknd && isDaytime) {
+    document.getElementById('caseORCase').checked = true;
+    updatePointPreview();
+  }
+});
+
+function updateModifierTags() {
+  const tags = [];
+  if (document.getElementById('caseEmergency').checked) tags.push('Emergency');
+  if (document.getElementById('caseHighRiskPeds').checked) tags.push('High Risk Peds');
+  if (document.getElementById('caseORCase').checked) tags.push('OR Case');
+  if (document.getElementById('caseShared').checked) tags.push('Shared');
+  document.getElementById('modifierTags').innerHTML = tags.map(t => `<span class="mod-tag">${t}</span>`).join('');
+}
+
 function updatePointPreview() {
+  updateModifierTags();
   const previewEl = document.getElementById('casePointPreview');
   const previewPts = document.getElementById('previewPoints');
   const tempCase = buildCaseFromForm();
@@ -3066,10 +3217,10 @@ function buildCaseFromForm() {
     startTime: isLabor ? (document.getElementById('laborStart')?.value || '') : (document.getElementById('caseStart')?.value || ''),
     endTime: isLabor ? (document.getElementById('laborEnd')?.value || '') : (document.getElementById('caseEnd')?.value || ''),
     isEmergency: document.getElementById('caseEmergency')?.checked || false,
-    isMedicalProc: document.getElementById('caseMedicalProc')?.checked || false,
-    medicalUnits: document.getElementById('caseMedicalUnits')?.value || 0,
-    isAcutePain: document.getElementById('caseAcutePain')?.checked || false,
-    acutePainUnits: document.getElementById('caseAcutePainUnits')?.value || 0,
+    isMedicalProc: false,
+    medicalUnits: 0,
+    isAcutePain: false,
+    acutePainUnits: 0,
     isHighRiskPeds: document.getElementById('caseHighRiskPeds')?.checked || false,
     isORCase: document.getElementById('caseORCase')?.checked || false,
     isSharedCase: document.getElementById('caseShared')?.checked || false,
@@ -3090,7 +3241,6 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   const date = workingDate;
   if (!date) { showToast('Set shift date first'); return; }
   if (!data.shifts[date]) { showToast('Please save a shift for this date first'); return; }
-  if (data.shifts[date].assignmentType === 'CRNA_supervision') { showToast('CRNA Supervision shifts do not have cases'); return; }
   if (data.shifts[date].assignmentType === 'vacation') { showToast('Vacation days do not have cases'); return; }
   const caseData = buildCaseFromForm();
   caseData.id = genId();
@@ -3118,9 +3268,6 @@ function resetCaseForm() {
   document.getElementById('caseStart').value = '';
   document.getElementById('caseEnd').value = '';
   document.getElementById('caseEmergency').checked = false;
-  document.getElementById('caseMedicalProc').checked = false;
-  document.getElementById('caseMedicalUnits').value = '0';
-  document.getElementById('medicalUnitsRow').classList.add('hidden');
   document.getElementById('caseAcutePain').checked = false;
   document.getElementById('caseAcutePainUnits').value = '0';
   document.getElementById('acutePainUnitsRow').classList.add('hidden');
@@ -3144,6 +3291,8 @@ function resetCaseForm() {
   document.getElementById('caseNotes').value = '';
   document.getElementById('simpleNotes').value = '';
   document.getElementById('casePointPreview').classList.add('hidden');
+  document.getElementById('modifiersSection').removeAttribute('open');
+  updateModifierTags();
 }
 
 // ================================================================
@@ -3175,22 +3324,61 @@ function renderToday() {
   let bdHtml = '<div class="point-breakdown">';
   // Show time entries
   const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
+  const isWkndOrHol = shift.isHoliday || isWeekend(shift.date);
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
   if (entries.length > 1) {
-    const isWkndOrHol = shift.isHoliday || isWeekend(shift.date);
     bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:4px;"><span>Time Entries (${entries.length})</span><span></span></div>`;
     for (let i = 0; i < entries.length; i++) {
+      // Show pager pay before first entry
+      if (i === 0 && pagerWindow && entries[i].start) {
+        const entryStart = timeToMinutes(entries[i].start);
+        if (pagerWindow.start < entryStart) {
+          bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${minutesToTimeStr(pagerWindow.start)} - ${entries[i].start}</span><span></span></div>`;
+        }
+      }
       bdHtml += `<div class="row" style="font-size:0.75rem;"><span>Clocked in: ${entries[i].start} - ${entries[i].end || '?'}</span><span></span></div>`;
       if (i < entries.length - 1 && entries[i].end && entries[i+1].start) {
-        const gapEligible = isUnrestrictedCallEligible(shift.assignmentType, timeToMinutes(entries[i].end), isWkndOrHol);
-        bdHtml += `<div class="row" style="font-size:0.75rem;color:${gapEligible ? 'var(--accent2)' : 'var(--text-dim)'}"><span>Gap: ${entries[i].end} - ${entries[i+1].start}${gapEligible ? ' (unrestricted)' : ''}</span><span></span></div>`;
+        if (pagerWindow) {
+          bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${entries[i].end} - ${entries[i+1].start}</span><span></span></div>`;
+        } else {
+          bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim)"><span>Gap: ${entries[i].end} - ${entries[i+1].start}</span><span></span></div>`;
+        }
+      }
+      // Show pager pay after last entry
+      if (i === entries.length - 1 && pagerWindow && entries[i].end) {
+        const entryEnd = timeToMinutes(entries[i].end);
+        const adjustedEnd = entryEnd <= timeToMinutes(entries[0].start) ? entryEnd + 1440 : entryEnd;
+        if (adjustedEnd < pagerWindow.end) {
+          bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${entries[i].end} - ${minutesToTimeStr(pagerWindow.end)}</span><span></span></div>`;
+        }
       }
     }
   } else if (entries.length === 1) {
-    bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim);"><span>${entries[0].start} - ${entries[0].end || '?'}</span><span></span></div>`;
+    if (pagerWindow && entries[0].start) {
+      const entryStart = timeToMinutes(entries[0].start);
+      if (pagerWindow.start < entryStart) {
+        bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${minutesToTimeStr(pagerWindow.start)} - ${entries[0].start}</span><span></span></div>`;
+      }
+    }
+    bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim);"><span>Clocked in: ${entries[0].start} - ${entries[0].end || '?'}</span><span></span></div>`;
+    if (pagerWindow && entries[0].end) {
+      const entryEnd = timeToMinutes(entries[0].end);
+      const entryStart = timeToMinutes(entries[0].start);
+      const adjustedEnd = entryEnd <= entryStart ? entryEnd + 1440 : entryEnd;
+      if (adjustedEnd < pagerWindow.end) {
+        bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${entries[0].end} - ${minutesToTimeStr(pagerWindow.end)}</span><span></span></div>`;
+      }
+    }
   }
   bdHtml += `<div class="row"><span>Availability Rate</span><span>${totals.ar.toFixed(2)}</span></div>`;
   bdHtml += `<div class="row"><span>Productivity (${shiftCases.length} cases)</span><span>${totals.prod.toFixed(2)}</span></div>`;
-  if (totals.call > 0) bdHtml += `<div class="row"><span>Unrestricted Call (auto)</span><span>${totals.call.toFixed(2)}</span></div>`;
+  // Show pager pay line item — always visible for eligible shift types
+  if (pagerWindow) {
+    const pagerHrs = round2(totals.call / 3.5);
+    bdHtml += `<div class="row"><span>Pager Pay (${pagerHrs.toFixed(1)} hrs × 3.5)</span><span>${totals.call.toFixed(2)}</span></div>`;
+  } else if (totals.call > 0) {
+    bdHtml += `<div class="row"><span>Pager Pay</span><span>${totals.call.toFixed(2)}</span></div>`;
+  }
   if (totals.subspec > 0) bdHtml += `<div class="row"><span>Subspecialty</span><span>${totals.subspec.toFixed(2)}</span></div>`;
   if (totals.supervision > 0) bdHtml += `<div class="row"><span>CRNA Supervision</span><span>${totals.supervision.toFixed(2)}</span></div>`;
   bdHtml += `<div class="row total"><span>Total</span><span>${totals.total.toFixed(2)} pts</span></div>`;
@@ -3360,11 +3548,13 @@ function switchDashboardTab(tabName) {
   document.getElementById('dtab-projections').classList.toggle('hidden', tabName !== 'projections');
   document.getElementById('dtab-time').classList.toggle('hidden', tabName !== 'time');
   document.getElementById('dtab-analytics').classList.toggle('hidden', tabName !== 'analytics');
+  document.getElementById('dtab-daily').classList.toggle('hidden', tabName !== 'daily');
   if (tabName === 'caselogs') renderCaseLogTable();
   if (tabName === 'shiftlogs') renderShiftLogTable();
   if (tabName === 'projections') renderProjections();
   if (tabName === 'time') renderTimeTab();
   if (tabName === 'analytics') renderAnalyticsTab();
+  if (tabName === 'daily') renderDailyTab();
 }
 
 // Generic collapsible toggle
@@ -3461,7 +3651,7 @@ function renderCaseLogTable() {
     return;
   }
   let html = '<table class="case-log-table" id="caseLogTable"><thead><tr>';
-  html += '<th>Date</th><th>Procedure</th><th>Type</th><th>Start</th><th>End</th><th>Units</th><th>PS</th><th>E</th><th>Add-ons</th><th>Pts</th>';
+  html += '<th>Date</th><th>Case</th><th>Start</th><th>Stop</th><th>Pts</th><th></th>';
   html += '</tr></thead><tbody>';
   let totalPts = 0;
   monthCases.forEach(c => {
@@ -3470,22 +3660,17 @@ function renderCaseLogTable() {
     totalPts += pts;
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
     const sharedMark = c.isSharedCase ? ' [S]' : '';
-    const addOns = getCaseAddOnSummary(c);
     html += `<tr data-caseid="${c.id}" onclick="openCaseEdit('${c.id}')">`;
     html += `<td>${formatDateShort(c.shiftDate)}</td>`;
     html += `<td>${escHtml(name)}${sharedMark}</td>`;
-    html += `<td>${c.caseType === 'standard' ? 'Std' : (c.caseType === 'labor_epidural' ? 'LE' : (c.caseType === 'aps_rounding' ? 'APS' : c.caseType))}</td>`;
     html += `<td>${c.startTime || '-'}</td>`;
     html += `<td>${c.endTime || '-'}</td>`;
-    html += `<td>${c.baseUnits || '-'}</td>`;
-    html += `<td>${c.physicalStatus || '-'}</td>`;
-    html += `<td>${c.isEmergency ? 'Y' : ''}</td>`;
-    html += `<td>${addOns || '-'}</td>`;
     html += `<td><strong>${pts.toFixed(1)}</strong></td>`;
+    html += `<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteCase('${c.id}')" style="padding:2px 8px;font-size:0.7rem;">Del</button></td>`;
     html += '</tr>';
   });
   html += '</tbody><tfoot><tr style="border-top:2px solid var(--accent);">';
-  html += `<td colspan="9" style="text-align:right;font-weight:600;">Monthly Total (${monthCases.length} cases)</td>`;
+  html += `<td colspan="5" style="text-align:right;font-weight:600;">Monthly Total (${monthCases.length} cases)</td>`;
   html += `<td><strong>${round2(totalPts).toFixed(1)}</strong></td>`;
   html += '</tr></tfoot></table>';
   container.innerHTML = html;
@@ -3525,8 +3710,10 @@ document.getElementById('slNextMonth').addEventListener('click', () => {
 document.getElementById('shiftLogSearch').addEventListener('input', () => filterShiftLog());
 
 function getPayCodeName(normalizedMin, assignmentType, isWknd, isHol) {
-  const isOB = ['OB_restricted','SF1','SF2'].includes(assignmentType);
   const isDaytime = normalizedMin >= 420 && normalizedMin < 1020;
+  // OB_restricted always uses restricted OB rate; SF1 only during non-holiday weekday daytime
+  const isOB = assignmentType === 'OB_restricted' ||
+    (assignmentType === 'SF1' && !isHol && !isWknd && isDaytime);
   const isEvening = normalizedMin >= 1020 && normalizedMin < 1380;
   if (isWknd || isHol) {
     if (isDaytime) return isOB ? 'Restricted OB Weekend Day' : 'Weekend Day';
@@ -3623,28 +3810,41 @@ function getShiftPayBreakdown(shift) {
     }
   });
 
-  // Compute gap-based pager pay
-  for (let g = 0; g < clockedRanges.length - 1; g++) {
-    const gapStart = clockedRanges[g].end;
-    const gapEnd = clockedRanges[g + 1].start;
-    let eligibleMin = 0;
-    for (let m = gapStart; m < gapEnd; m++) {
-      if (isUnrestrictedCallEligible(shift.assignmentType, m % 1440, isWkndOrHol)) {
-        eligibleMin++;
+  // Compute pager pay for full eligible window (not just gaps between entries)
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+  if (pagerWindow) {
+    // Build list of non-clocked segments within the pager window
+    const pwStart = pagerWindow.start;
+    const pwEnd = pagerWindow.end;
+    // Collect all pager segments: periods within pager window not covered by clocked ranges
+    const pagerSegments = [];
+    let cursor = pwStart;
+    // Sort clocked ranges by start (should already be sorted)
+    const sorted = [...clockedRanges].sort((a, b) => a.start - b.start);
+    for (const cr of sorted) {
+      if (cr.start > cursor && cursor < pwEnd) {
+        const segEnd = Math.min(cr.start, pwEnd);
+        if (segEnd > cursor) pagerSegments.push({ start: cursor, end: segEnd });
       }
+      cursor = Math.max(cursor, cr.end);
     }
-    if (eligibleMin > 0) {
-      rows.push({
-        clockIn: clockedRanges[g].endStr,
-        clockOut: clockedRanges[g + 1].startStr,
-        payCode: 'Pager Pay',
-        durationMin: eligibleMin,
-        payRate: 3.5,
-        amount: round2((eligibleMin / 60) * 3.5),
-        isPager: true,
-        isSubRow: false
-      });
-    }
+    if (cursor < pwEnd) pagerSegments.push({ start: cursor, end: pwEnd });
+
+    pagerSegments.forEach(seg => {
+      const durMin = seg.end - seg.start;
+      if (durMin > 0) {
+        rows.push({
+          clockIn: minutesToTimeStr(seg.start),
+          clockOut: minutesToTimeStr(seg.end),
+          payCode: 'Pager Pay',
+          durationMin: durMin,
+          payRate: 3.5,
+          amount: round2((durMin / 60) * 3.5),
+          isPager: true,
+          isSubRow: false
+        });
+      }
+    });
   }
 
   // Merge consecutive same-payCode segments within the same entry
@@ -3986,6 +4186,109 @@ document.getElementById('clearOverrideBtn').addEventListener('click', () => {
 });
 
 // ================================================================
+// MONTHLY STIPENDS
+// ================================================================
+let stipMonth = new Date().getMonth();
+let stipYear = new Date().getFullYear();
+
+function getStipKey() {
+  return stipYear + '-' + String(stipMonth + 1).padStart(2, '0');
+}
+
+function updateStipMonthLabel() {
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('stipMonthLabel').textContent = monthNames[stipMonth] + ' ' + stipYear;
+}
+
+function loadStipendUI() {
+  updateStipMonthLabel();
+  if (!data.stipends) data.stipends = {};
+  const mk = getStipKey();
+  const entries = data.stipends[mk] || [];
+  const container = document.getElementById('stipendEntries');
+  container.innerHTML = '';
+  if (entries.length === 0) {
+    addStipendRow(container, '', '');
+  } else {
+    entries.forEach(e => addStipendRow(container, e.label, e.amount));
+  }
+  updateStipendStatus();
+}
+
+function addStipendRow(container, label, amount) {
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center;';
+  row.innerHTML = `<input type="text" placeholder="Label (e.g., Med Director)" value="${label}" style="flex:2;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);" class="stip-label">
+    <input type="number" placeholder="$ Amount" value="${amount}" min="0" step="0.01" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);" class="stip-amount">
+    <button type="button" style="background:none;border:none;color:var(--danger);font-size:1.2rem;cursor:pointer;padding:4px 8px;" class="stip-remove">&times;</button>`;
+  row.querySelector('.stip-remove').addEventListener('click', () => {
+    row.remove();
+    if (container.children.length === 0) addStipendRow(container, '', '');
+  });
+  container.appendChild(row);
+}
+
+function updateStipendStatus() {
+  const mk = getStipKey();
+  const entries = (data.stipends || {})[mk] || [];
+  const total = entries.reduce((s, e) => s + (e.amount || 0), 0);
+  const status = document.getElementById('stipendStatus');
+  if (total > 0) {
+    status.innerHTML = `<span style="color:var(--accent2);font-weight:600;">$${total.toLocaleString('en-US', {minimumFractionDigits:2})} in stipends this month</span>`;
+  } else {
+    status.textContent = '';
+  }
+}
+
+function getMonthlyStipendTotal(monthKey) {
+  if (!data.stipends) return 0;
+  const entries = data.stipends[monthKey] || [];
+  return entries.reduce((s, e) => s + (e.amount || 0), 0);
+}
+
+document.getElementById('stipPrevMonth').addEventListener('click', () => {
+  stipMonth--; if (stipMonth < 0) { stipMonth = 11; stipYear--; }
+  loadStipendUI();
+});
+document.getElementById('stipNextMonth').addEventListener('click', () => {
+  stipMonth++; if (stipMonth > 11) { stipMonth = 0; stipYear++; }
+  loadStipendUI();
+});
+
+document.getElementById('addStipendBtn').addEventListener('click', () => {
+  addStipendRow(document.getElementById('stipendEntries'), '', '');
+});
+
+document.getElementById('saveStipendBtn').addEventListener('click', () => {
+  if (!data.stipends) data.stipends = {};
+  const mk = getStipKey();
+  const rows = document.getElementById('stipendEntries').children;
+  const entries = [];
+  for (const row of rows) {
+    const label = row.querySelector('.stip-label').value.trim();
+    const amount = parseFloat(row.querySelector('.stip-amount').value) || 0;
+    if (label || amount > 0) entries.push({ label, amount });
+  }
+  if (entries.length > 0) {
+    data.stipends[mk] = entries;
+  } else {
+    delete data.stipends[mk];
+  }
+  saveData(data);
+  updateStipendStatus();
+  showToast('Stipends saved');
+});
+
+document.getElementById('clearStipendBtn').addEventListener('click', () => {
+  if (!data.stipends) data.stipends = {};
+  const mk = getStipKey();
+  delete data.stipends[mk];
+  saveData(data);
+  loadStipendUI();
+  showToast('Stipends cleared');
+});
+
+// ================================================================
 // PROJECTIONS TAB
 // ================================================================
 function renderProjections() {
@@ -4133,23 +4436,38 @@ function renderProjectedAnnual() {
   document.getElementById('projRollingAvg').textContent = avg.toFixed(1);
   const pv = settings.pointValue;
 
-  // YTD points: sum all months in current year
+  // YTD points + stipends: sum all months in current year
   let ytdPts = 0;
   let ytdMonths = 0;
+  let ytdStipends = 0;
   for (let m = 0; m <= now.getMonth(); m++) {
     const key = thisYear + '-' + String(m + 1).padStart(2, '0');
     if (mt[key]) { ytdPts += mt[key]; ytdMonths++; }
+    ytdStipends += getMonthlyStipendTotal(key);
   }
   const remainingMonths = 12 - now.getMonth() - 1; // full months left after current
 
+  // Average monthly stipend for projection
+  const stipMonths = [];
+  for (let i = 0; i < 3; i++) {
+    const key = mk(i);
+    const s = getMonthlyStipendTotal(key);
+    if (s > 0) stipMonths.push(s);
+  }
+  const avgStipend = stipMonths.length > 0 ? stipMonths.reduce((a,b)=>a+b,0) / stipMonths.length : 0;
+
   if (pv && pv > 0 && avg > 0) {
-    const annual = avg * 12 * pv;
-    const ytdRevenue = ytdPts * pv;
-    const projRemaining = avg * remainingMonths * pv;
+    const annualPts = avg * 12 * pv;
+    const annualStipend = avgStipend * 12;
+    const annual = annualPts + annualStipend;
+    const ytdRevenue = ytdPts * pv + ytdStipends;
+    const projRemaining = avg * remainingMonths * pv + avgStipend * remainingMonths;
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projYTDRevenue').textContent = '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projRemaining').textContent = '$' + projRemaining.toLocaleString('en-US', { maximumFractionDigits: 0 });
-    document.getElementById('projYTDDetail').textContent = `${ytdPts.toFixed(0)} pts earned YTD across ${ytdMonths} month${ytdMonths !== 1 ? 's' : ''} \u2022 ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''} remaining`;
+    let detail = `${ytdPts.toFixed(0)} pts earned YTD across ${ytdMonths} month${ytdMonths !== 1 ? 's' : ''} \u2022 ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''} remaining`;
+    if (ytdStipends > 0) detail += ` \u2022 $${ytdStipends.toLocaleString('en-US', {maximumFractionDigits:0})} stipends YTD`;
+    document.getElementById('projYTDDetail').textContent = detail;
   } else {
     document.getElementById('projAnnualIncome').innerHTML = '&mdash;';
     document.getElementById('projYTDRevenue').innerHTML = '&mdash;';
@@ -4466,35 +4784,42 @@ function renderCaseTypeEfficiency() {
     const shift = data.shifts[c.shiftDate];
     if (!shift) return;
     const pts = calcCasePoints(c, shift);
-    // Group standard cases by procedure name, others by case type
+    // Calculate case duration in hours
+    let hrs = 0;
+    if (c.startTime && c.endTime) {
+      let s = timeToMinutes(c.startTime), e = timeToMinutes(c.endTime);
+      if (e <= s) e += 1440;
+      hrs = (e - s) / 60;
+    }
     const key = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
-    if (!groups[key]) groups[key] = { totalPts: 0, count: 0 };
+    if (!groups[key]) groups[key] = { totalPts: 0, totalHrs: 0, count: 0 };
     groups[key].totalPts += pts;
+    groups[key].totalHrs += hrs;
     groups[key].count++;
   });
 
   const ranked = Object.entries(groups)
-    .map(([name, g]) => ({ name, avgPts: round2(g.totalPts / g.count), totalPts: round2(g.totalPts), count: g.count }))
-    .filter(r => r.count >= 2)
-    .sort((a, b) => b.avgPts - a.avgPts);
+    .map(([name, g]) => ({ name, ptsPerHr: g.totalHrs > 0 ? round2(g.totalPts / g.totalHrs) : 0, totalPts: round2(g.totalPts), count: g.count, hasTime: g.totalHrs > 0 }))
+    .filter(r => r.count >= 2 && r.hasTime)
+    .sort((a, b) => b.ptsPerHr - a.ptsPerHr);
 
   let html = '';
   if (ranked.length > 0) {
     const top = ranked.slice(0, 8);
-    html += '<h4 style="font-size:0.82rem;color:var(--accent);margin-bottom:6px;">Highest Avg Points Per Case</h4>';
+    html += '<h4 style="font-size:0.82rem;color:var(--accent);margin-bottom:6px;">Highest pts/hr by Case Type</h4>';
     top.forEach(r => {
-      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count}x)</span></span><span class="eff-value good">${r.avgPts.toFixed(1)}</span></div>`;
+      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count}x)</span></span><span class="eff-value good">${r.ptsPerHr.toFixed(1)}</span></div>`;
     });
 
     const bottom = ranked.slice(-Math.min(5, Math.max(0, ranked.length - 8))).reverse();
     if (bottom.length > 0) {
-      html += '<h4 style="font-size:0.82rem;color:var(--danger);margin-top:12px;margin-bottom:6px;">Lowest Avg Points Per Case</h4>';
+      html += '<h4 style="font-size:0.82rem;color:var(--danger);margin-top:12px;margin-bottom:6px;">Lowest pts/hr by Case Type</h4>';
       bottom.forEach(r => {
-        html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count}x)</span></span><span class="eff-value bad">${r.avgPts.toFixed(1)}</span></div>`;
+        html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count}x)</span></span><span class="eff-value bad">${r.ptsPerHr.toFixed(1)}</span></div>`;
       });
     }
   }
-  if (!html) html = '<p style="font-size:0.85rem;color:var(--text-dim);">Not enough case data yet (need 2+ of a type).</p>';
+  if (!html) html = '<p style="font-size:0.85rem;color:var(--text-dim);">Not enough timed case data yet (need 2+ of a type).</p>';
   document.getElementById('caseEffContent').innerHTML = html;
 }
 
@@ -4670,6 +4995,89 @@ function renderNightCallFreq() {
 // ================================================================
 // ANALYTICS TAB
 // ================================================================
+// ================================================================
+// DAILY TAB
+// ================================================================
+let dailyMonth = new Date().getMonth();
+let dailyYear = new Date().getFullYear();
+
+function updateDailyMonthLabel() {
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('dailyMonthLabel').textContent = monthNames[dailyMonth] + ' ' + dailyYear;
+}
+
+document.getElementById('dailyPrevMonth').addEventListener('click', () => {
+  dailyMonth--; if (dailyMonth < 0) { dailyMonth = 11; dailyYear--; }
+  renderDailyTab();
+});
+document.getElementById('dailyNextMonth').addEventListener('click', () => {
+  dailyMonth++; if (dailyMonth > 11) { dailyMonth = 0; dailyYear++; }
+  renderDailyTab();
+});
+
+function renderDailyTab() {
+  updateDailyMonthLabel();
+  const prefix = dailyYear + '-' + String(dailyMonth + 1).padStart(2, '0');
+  const daysInMonth = new Date(dailyYear, dailyMonth + 1, 0).getDate();
+  const firstDow = new Date(dailyYear, dailyMonth, 1).getDay(); // 0=Sun
+  const today = new Date();
+  const todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+
+  // Compute daily totals
+  const dailyPts = {};
+  const dailyTypes = {};
+  Object.values(data.shifts).forEach(s => {
+    if (!s.date || !s.date.startsWith(prefix)) return;
+    const day = parseInt(s.date.split('-')[2]);
+    const t = calcShiftTotal(s);
+    dailyPts[day] = (dailyPts[day] || 0) + t.total;
+    dailyTypes[day] = s.assignmentType;
+  });
+
+  // Build calendar grid
+  let html = '<div class="daily-cal">';
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  dayNames.forEach(d => { html += `<div class="daily-cal-header">${d}</div>`; });
+
+  // Empty cells for days before month starts
+  for (let i = 0; i < firstDow; i++) {
+    html += '<div class="daily-cal-cell empty"></div>';
+  }
+
+  let monthTotal = 0;
+  let shiftCount = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = prefix + '-' + String(d).padStart(2, '0');
+    const pts = round2(dailyPts[d] || 0);
+    const shiftType = dailyTypes[d];
+    const isToday = dateStr === todayStr;
+    const isVac = shiftType === 'vacation';
+    monthTotal += pts;
+    if (shiftType) shiftCount++;
+
+    let classes = 'daily-cal-cell';
+    if (isToday) classes += ' today';
+    if (isVac) classes += ' vacation';
+
+    const typeName = shiftType ? getAssignmentTypeName(shiftType) : '';
+    const ptsClass = pts > 0 ? '' : ' zero';
+
+    html += `<div class="${classes}">`;
+    html += `<div class="daily-cal-day">${d}</div>`;
+    html += `<div class="daily-cal-pts${ptsClass}">${pts > 0 ? pts.toFixed(1) : (isVac ? 'VAC' : '—')}</div>`;
+    if (typeName) html += `<div class="daily-cal-type">${typeName}</div>`;
+    html += '</div>';
+  }
+  html += '</div>';
+
+  document.getElementById('dailyCalendarContainer').innerHTML = html;
+
+  // Summary
+  const avgPerShift = shiftCount > 0 ? (monthTotal / shiftCount).toFixed(1) : '—';
+  document.getElementById('dailyMonthSummary').innerHTML =
+    `<strong>${round2(monthTotal).toFixed(1)}</strong> total pts &bull; <strong>${shiftCount}</strong> shifts &bull; <strong>${avgPerShift}</strong> avg pts/shift`;
+}
+
 function renderAnalyticsTab() {
   renderCaseMix();
   renderAddOnUtil();
@@ -4788,10 +5196,6 @@ document.getElementById('editCaseTypeSelect').addEventListener('change', functio
   document.getElementById('editSimpleFields').classList.toggle('hidden', isStd || isLabor || isAPS);
 });
 
-document.getElementById('editCaseMedicalProc').addEventListener('change', function() {
-  document.getElementById('editMedicalUnitsRow').classList.toggle('hidden', !this.checked);
-});
-
 document.getElementById('editCaseAcutePain').addEventListener('change', function() {
   document.getElementById('editAcutePainUnitsRow').classList.toggle('hidden', !this.checked);
 });
@@ -4823,9 +5227,6 @@ function openCaseEdit(caseId) {
   document.getElementById('editCaseStart').value = c.startTime || '';
   document.getElementById('editCaseEnd').value = c.endTime || '';
   document.getElementById('editCaseEmergency').checked = c.isEmergency || false;
-  document.getElementById('editCaseMedicalProc').checked = c.isMedicalProc || false;
-  document.getElementById('editMedicalUnitsRow').classList.toggle('hidden', !c.isMedicalProc);
-  document.getElementById('editCaseMedicalUnits').value = c.medicalUnits || 0;
   document.getElementById('editCaseAcutePain').checked = c.isAcutePain || false;
   document.getElementById('editAcutePainUnitsRow').classList.toggle('hidden', !c.isAcutePain);
   document.getElementById('editCaseAcutePainUnits').value = c.acutePainUnits || 0;
@@ -4878,8 +5279,6 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
     c.startTime = document.getElementById('editCaseStart').value;
     c.endTime = document.getElementById('editCaseEnd').value;
     c.isEmergency = document.getElementById('editCaseEmergency').checked;
-    c.isMedicalProc = document.getElementById('editCaseMedicalProc').checked;
-    c.medicalUnits = document.getElementById('editCaseMedicalUnits').value;
     c.isAcutePain = document.getElementById('editCaseAcutePain').checked;
     c.acutePainUnits = document.getElementById('editCaseAcutePainUnits').value;
     c.isHighRiskPeds = document.getElementById('editCaseHighRiskPeds').checked;
@@ -5395,12 +5794,15 @@ document.getElementById('pipelineProjectToggle').addEventListener('change', () =
 function updateHeaderPoints() {
   const date = workingDate;
   const shift = data.shifts[date];
-  if (shift) {
-    const totals = calcShiftTotal(shift);
-    document.getElementById('headerPoints').textContent = totals.total.toFixed(1) + ' pts';
-  } else {
-    document.getElementById('headerPoints').textContent = '0 pts';
-  }
+  const dailyPts = shift ? calcShiftTotal(shift).total : 0;
+  // Monthly total
+  const prefix = date.substring(0, 7);
+  let monthPts = 0;
+  Object.values(data.shifts).forEach(s => {
+    if (s.date && s.date.startsWith(prefix)) monthPts += calcShiftTotal(s).total;
+  });
+  const el = document.getElementById('headerPoints');
+  el.innerHTML = `<span class="daily">${dailyPts.toFixed(1)} pts</span><br><span class="monthly">${monthPts.toFixed(0)} mo</span>`;
 }
 
 // ================================================================
