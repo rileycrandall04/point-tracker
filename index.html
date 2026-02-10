@@ -975,9 +975,105 @@ input.mil-time.invalid {
 }
 .add-entry-btn:hover { border-color: var(--primary); }
 
-/* ===== BOTTOM NAV — 4 items ===== */
-.bottom-nav button { font-size: 0.65rem; }
-.bottom-nav button .nav-icon { font-size: 1.25rem; }
+/* ===== SCAN PAGE ===== */
+.scan-capture-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.scan-capture-area:hover { border-color: var(--primary); }
+.scan-capture-area .scan-icon { font-size: 2.5rem; }
+.scan-capture-area p { margin: 0; font-size: 0.85rem; color: var(--text-dim); }
+.scan-preview-img {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: var(--radius);
+  margin-top: 8px;
+  object-fit: contain;
+}
+.scan-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  margin-top: 8px;
+}
+.scan-status.processing { background: rgba(59,130,246,0.12); color: var(--primary); }
+.scan-status.success { background: rgba(16,185,129,0.12); color: var(--accent); }
+.scan-status.error { background: rgba(239,68,68,0.12); color: var(--danger); }
+.scan-status .spinner {
+  width: 16px; height: 16px;
+  border: 2px solid transparent;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.scan-case-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.scan-case-card .scc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.scan-case-card .scc-header h4 { margin: 0; font-size: 0.9rem; }
+.scan-case-card .scc-remove {
+  background: none; border: none; color: var(--danger);
+  font-size: 1.1rem; cursor: pointer; padding: 4px;
+}
+.scan-case-card .scc-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.scan-case-card .scc-field { font-size: 0.8rem; }
+.scan-case-card .scc-field label { display: block; color: var(--text-dim); font-size: 0.72rem; margin-bottom: 2px; }
+.scan-case-card .scc-field input,
+.scan-case-card .scc-field select {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+.scan-case-card .scc-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.scan-case-card .scc-tag {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text-dim);
+}
+.scan-case-card .scc-tag.active { background: rgba(59,130,246,0.2); color: var(--primary); }
+.scan-case-card .scc-tag.emergency { background: rgba(239,68,68,0.2); color: var(--danger); }
+.scan-case-card .scc-tag.shared { background: rgba(139,92,246,0.2); color: var(--purple); }
+
+/* ===== BOTTOM NAV — 5 items ===== */
+.bottom-nav button { font-size: 0.6rem; }
+.bottom-nav button .nav-icon { font-size: 1.15rem; }
 
 @media (max-width: 480px) {
   .form-row { grid-template-columns: 1fr; }
@@ -1956,6 +2052,42 @@ input.mil-time.invalid {
   </div>
 </div>
 
+<!-- ==================== SCAN PAGE ==================== -->
+<div class="page" id="page-scan">
+  <div class="card">
+    <h2>Scan Billing Sheet</h2>
+    <div class="form-group">
+      <label style="font-size:0.8rem;color:var(--text-dim);">Sheet Date</label>
+      <input type="date" id="scanDate">
+    </div>
+    <div class="scan-capture-area" id="scanCaptureArea">
+      <span class="scan-icon">&#128247;</span>
+      <p>Tap to take a photo or select an image</p>
+      <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;">
+    </div>
+    <img id="scanPreviewImg" class="scan-preview-img hidden" alt="Preview">
+    <div id="scanStatus" class="hidden"></div>
+    <div style="margin-top:8px;display:flex;gap:8px;" id="scanActions" class="hidden">
+      <button class="btn btn-outline btn-sm" id="scanRetakeBtn" style="flex:1;">Retake</button>
+      <button class="btn btn-sm" id="scanProcessBtn" style="flex:1;background:var(--primary);color:#fff;">Process</button>
+    </div>
+  </div>
+
+  <div id="scanResultsArea" class="hidden">
+    <div class="card" style="background:var(--surface);border:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h3 style="margin:0;font-size:0.95rem;">Parsed Cases</h3>
+        <span id="scanCaseCount" style="font-size:0.8rem;color:var(--text-dim);"></span>
+      </div>
+      <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">Review and edit before importing. Remove any incorrect entries.</p>
+      <div id="scanCaseCards"></div>
+    </div>
+    <div style="padding:0 16px 16px;">
+      <button class="btn btn-sm" id="scanImportBtn" style="width:100%;background:var(--accent);color:#fff;font-size:0.95rem;padding:12px;">Import Cases</button>
+    </div>
+  </div>
+</div>
+
 <!-- Day detail modal -->
 <div class="modal-overlay hidden" id="dayModal">
   <div class="modal">
@@ -2213,6 +2345,10 @@ input.mil-time.invalid {
   <button data-page="dashboard">
     <span class="nav-icon">&#128202;</span>
     <span>Dashboard</span>
+  </button>
+  <button data-page="scan">
+    <span class="nav-icon">&#128247;</span>
+    <span>Scan</span>
   </button>
   <button data-page="settings">
     <span class="nav-icon">&#9881;</span>
@@ -3040,6 +3176,7 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
     if (btn.dataset.page === 'dashboard') { switchDashboardTab(activeDashTab); }
     if (btn.dataset.page === 'settings') { renderHistory(); loadOverrideUI(); loadStipendUI(); }
     if (btn.dataset.page === 'reconcile') renderReconTabs();
+    if (btn.dataset.page === 'scan') initScanPage();
   });
 });
 
@@ -8612,6 +8749,547 @@ function copyReconEmail() {
     showToast('Failed to copy — try selecting and copying manually');
   });
 }
+
+// ================================================================
+// BILLING SHEET SCAN — ASA CODE LOOKUP
+// ================================================================
+const ASA_BASE_UNITS = {
+  // Head
+  '00100': 5, '00102': 6, '00103': 5, '00104': 4, '00120': 5, '00124': 4,
+  '00126': 4, '00140': 5, '00142': 4, '00144': 6, '00145': 6, '00147': 4,
+  '00148': 4, '00160': 7, '00162': 7, '00164': 4, '00170': 5, '00172': 6,
+  '00174': 6, '00176': 7, '00190': 5, '00192': 7,
+  // Neck
+  '00210': 11, '00211': 11, '00212': 5, '00214': 4, '00215': 5, '00216': 7,
+  '00218': 10, '00220': 6, '00222': 6,
+  // Thorax
+  '00300': 5, '00320': 5, '00322': 6, '00326': 6, '00350': 5, '00352': 5,
+  '00400': 6, '00402': 6, '00404': 6, '00406': 8, '00410': 7, '00450': 5,
+  '00454': 4, '00470': 10, '00472': 10, '00474': 13,
+  // Spine & spinal cord
+  '00500': 10, '00520': 5, '00522': 4, '00524': 10, '00528': 6, '00530': 6,
+  '00532': 5, '00534': 13, '00537': 6, '00539': 10, '00540': 6, '00541': 6,
+  '00542': 6, '00546': 7, '00548': 10, '00550': 7,
+  // Upper abdomen
+  '00600': 4, '00604': 4, '00620': 7, '00625': 7, '00626': 7, '00630': 7,
+  '00632': 7, '00634': 7, '00635': 5, '00640': 7, '00670': 5, '00700': 4,
+  '00702': 4,
+  // Lower abdomen
+  '00730': 5, '00731': 5, '00732': 5, '00740': 6, '00750': 4, '00752': 6,
+  '00754': 7, '00756': 7, '00770': 7, '00790': 7, '00792': 7, '00794': 8,
+  '00796': 7, '00797': 9,
+  // Perineum
+  '00800': 3, '00802': 5, '00810': 4, '00812': 5, '00820': 3, '00830': 5,
+  '00832': 5, '00834': 4, '00836': 4, '00840': 6, '00842': 7, '00844': 7,
+  '00846': 7, '00848': 4, '00851': 7, '00860': 5, '00862': 7, '00864': 4,
+  '00865': 6, '00866': 6, '00868': 5, '00870': 5, '00872': 5, '00873': 7,
+  '00880': 5, '00882': 5, '00902': 7, '00904': 5, '00906': 3, '00908': 4,
+  '00910': 5, '00912': 5, '00914': 4, '00916': 5, '00918': 4, '00920': 3,
+  '00921': 4, '00922': 4, '00924': 4, '00926': 4, '00928': 3, '00930': 5,
+  '00932': 3, '00934': 5, '00936': 5, '00938': 3, '00940': 5, '00942': 5,
+  '00944': 4, '00948': 4, '00950': 5, '00952': 5,
+  // Upper leg
+  '01200': 4, '01202': 7, '01210': 3, '01212': 5, '01214': 4, '01215': 5,
+  '01220': 5, '01230': 3, '01232': 4, '01234': 4, '01250': 5, '01260': 7,
+  '01270': 4, '01272': 8,
+  // Knee & popliteal
+  '01320': 5, '01340': 3, '01360': 5, '01380': 3, '01382': 7, '01390': 4,
+  '01392': 4, '01400': 3, '01402': 6, '01404': 4, '01420': 5, '01430': 4,
+  '01432': 3, '01440': 4, '01442': 7, '01444': 6,
+  // Lower leg, ankle & foot
+  '01462': 3, '01464': 4, '01470': 3, '01472': 3, '01474': 5, '01480': 3,
+  '01482': 3, '01484': 3, '01486': 4, '01490': 3, '01500': 3, '01502': 3,
+  '01520': 5, '01522': 4,
+  // Shoulder & axilla
+  '01610': 3, '01620': 5, '01622': 4, '01630': 4, '01634': 4, '01636': 4,
+  '01638': 4, '01650': 4, '01652': 5, '01654': 5, '01656': 4, '01670': 4,
+  // Upper arm & elbow
+  '01710': 3, '01712': 5, '01714': 4, '01716': 4, '01730': 3, '01732': 5,
+  '01740': 4, '01742': 6, '01744': 5, '01756': 3, '01758': 3, '01760': 3,
+  '01770': 4, '01772': 4, '01780': 5, '01782': 7,
+  // Forearm, wrist & hand
+  '01810': 3, '01820': 3, '01829': 3, '01830': 3, '01832': 4, '01840': 3,
+  '01842': 4, '01844': 3, '01850': 3, '01852': 3, '01860': 3, '01916': 5,
+  '01920': 7, '01922': 7, '01924': 10, '01925': 7, '01926': 8, '01930': 5,
+  '01931': 5, '01932': 5, '01933': 7, '01935': 5, '01936': 5, '01951': 3,
+  '01952': 3, '01953': 5, '01958': 3, '01960': 3, '01961': 3, '01962': 5,
+  '01963': 8, '01965': 5, '01966': 3, '01967': 5, '01968': 5, '01969': 7,
+  '01990': 7, '01991': 7, '01992': 7, '01996': 3, '01999': 0,
+  // Burn excisions / debridement
+  '01951': 3, '01952': 3, '01953': 5,
+  // Radiological
+  '01916': 5, '01920': 7, '01922': 7, '01924': 10, '01925': 7, '01926': 8,
+  // Obstetric
+  '01958': 3, '01960': 3, '01961': 3, '01962': 5, '01963': 8, '01967': 5, '01968': 5, '01969': 7,
+  // Other
+  '01990': 7, '01991': 7, '01992': 7, '01999': 0,
+  // Invasive / cardiac
+  '00560': 15, '00561': 15, '00562': 15, '00563': 15, '00566': 25, '00567': 15,
+  '00580': 10
+};
+
+// ================================================================
+// BILLING SHEET SCAN — PARSER
+// ================================================================
+function parseBillingSheetText(text) {
+  const cases = [];
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const fullText = lines.join('\n');
+
+  // Strategy: Look for ASA codes (5-digit numbers starting with 0) and times
+  // The sheet has 4 case blocks; each block has a code, start/stop, and modifiers
+
+  // Find all 5-digit ASA codes (00xxx or 01xxx)
+  const asaPattern = /\b(0[01]\d{3})\b/g;
+  const asaMatches = [];
+  let m;
+  while ((m = asaPattern.exec(fullText)) !== null) {
+    asaMatches.push({ code: m[1], index: m.index });
+  }
+
+  if (asaMatches.length === 0) return cases;
+
+  // Find all military times (4-digit HHMM or HH:MM)
+  const timePattern = /\b(\d{2}):?(\d{2})\b/g;
+  const allTimes = [];
+  while ((m = timePattern.exec(fullText)) !== null) {
+    const h = parseInt(m[1]), min = parseInt(m[2]);
+    if (h >= 0 && h <= 23 && min >= 0 && min <= 59 && h + min > 0) {
+      allTimes.push({ time: String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0'), index: m.index });
+    }
+  }
+
+  // Segment text by ASA code positions — each code starts a new case block
+  for (let i = 0; i < asaMatches.length; i++) {
+    const blockStart = asaMatches[i].index;
+    const blockEnd = i + 1 < asaMatches.length ? asaMatches[i + 1].index : fullText.length;
+    const blockText = fullText.substring(blockStart, blockEnd);
+    const blockTextUpper = blockText.toUpperCase();
+
+    const asaCode = asaMatches[i].code;
+    const baseUnits = ASA_BASE_UNITS[asaCode] || 0;
+
+    // Find the first two valid times in this block for start/stop
+    const blockTimes = allTimes.filter(t => t.index > blockStart && t.index < blockEnd);
+    // Filter out the ASA code itself from times
+    const validTimes = blockTimes.filter(t => {
+      const timeDigits = t.time.replace(':', '');
+      return timeDigits !== asaCode;
+    });
+
+    let startTime = '', endTime = '';
+    // Look for Start: and Stop: labels
+    const startMatch = blockText.match(/start[:\s]*(\d{2}):?(\d{2})/i);
+    const stopMatch = blockText.match(/stop[:\s]*(\d{2}):?(\d{2})/i);
+    if (startMatch) {
+      startTime = String(parseInt(startMatch[1])).padStart(2, '0') + ':' + String(parseInt(startMatch[2])).padStart(2, '0');
+    }
+    if (stopMatch) {
+      endTime = String(parseInt(stopMatch[1])).padStart(2, '0') + ':' + String(parseInt(stopMatch[2])).padStart(2, '0');
+    }
+    // Fallback: use first two times if labels not found
+    if (!startTime && validTimes.length >= 1) startTime = validTimes[0].time;
+    if (!endTime && validTimes.length >= 2) endTime = validTimes[1].time;
+
+    // Check modifiers
+    const isEmergency = /emergency/i.test(blockText) && /[xX✓✗☒☑√✔]/.test(
+      blockText.substring(blockText.search(/emergency/i) - 5, blockText.search(/emergency/i) + 15)
+    ) || /[xX✓✗☒☑√✔]\s*emergency/i.test(blockText);
+    const isShared = /shared/i.test(blockText) && /[xX✓✗☒☑√✔]/.test(
+      blockText.substring(Math.max(0, blockText.search(/shared/i) - 5), blockText.search(/shared/i) + 12)
+    ) || /[xX✓✗☒☑√✔]\s*shared/i.test(blockText);
+
+    // Check nerve block types
+    let nerveBlock = 'none';
+    const nbChecks = [
+      { pattern: /brachial\s*pl[xks]/i, type: 'brachial_plexus' },
+      { pattern: /sciatic/i, type: 'other_nerve' },
+      { pattern: /femoral/i, type: 'other_nerve' },
+      { pattern: /abdominal\s*nb/i, type: 'other_nerve' },
+      { pattern: /chest\s*wall/i, type: 'other_nerve' },
+      { pattern: /paravertebral|esp/i, type: 'other_nerve' }
+    ];
+    for (const nb of nbChecks) {
+      if (nb.pattern.test(blockText)) {
+        // Check if there's a mark near it
+        const nbIdx = blockText.search(nb.pattern);
+        const nbRegion = blockText.substring(Math.max(0, nbIdx - 10), nbIdx + 20);
+        if (/[xX✓✗☒☑√✔]/.test(nbRegion)) {
+          nerveBlock = nb.type;
+          break;
+        }
+      }
+    }
+
+    // Lumbar INJ / Thoracic INJ — check for single vs continuous
+    let hasITMorphine = false;
+    if (/lumbar\s*inj|thoracic\s*inj/i.test(blockText)) {
+      const injIdx = blockText.search(/lumbar\s*inj|thoracic\s*inj/i);
+      const injRegion = blockText.substring(Math.max(0, injIdx - 10), injIdx + 20);
+      if (/[xX✓✗☒☑√✔]/.test(injRegion)) {
+        // Check if single is marked (IT morphine) vs continuous (epidural)
+        if (/single/i.test(blockTextUpper) && /[xX✓✗☒☑√✔]/.test(
+          blockText.substring(Math.max(0, blockText.search(/single/i) - 5), blockText.search(/single/i) + 12)
+        )) {
+          hasITMorphine = true;
+        }
+      }
+    }
+
+    // Other services
+    let hasCentralLine = false, hasArterialLine = false, hasTEE = false, hasBloodPatch = false, hasEmergIntub = false;
+    const svcChecks = [
+      { pattern: /\bCVC\b/i, set: () => hasCentralLine = true },
+      { pattern: /\bArt\b/i, set: () => hasArterialLine = true },
+      { pattern: /\bTEE\b/i, set: () => hasTEE = true },
+      { pattern: /blood\s*patch/i, set: () => hasBloodPatch = true },
+      { pattern: /emerg\w*\s*intub/i, set: () => hasEmergIntub = true }
+    ];
+    for (const svc of svcChecks) {
+      if (svc.pattern.test(blockText)) {
+        const sIdx = blockText.search(svc.pattern);
+        const sRegion = blockText.substring(Math.max(0, sIdx - 10), sIdx + 15);
+        if (/[xX✓✗☒☑√✔]/.test(sRegion)) svc.set();
+      }
+    }
+
+    // Extract notes
+    let notes = '';
+    const notesMatch = blockText.match(/notes[:\s]+(.*?)(?:\n|$)/i);
+    if (notesMatch && notesMatch[1].trim().length > 1) {
+      notes = notesMatch[1].trim();
+    }
+
+    // Determine case type
+    let caseType = 'standard';
+    if (hasBloodPatch) caseType = 'epidural_blood_patch';
+    else if (hasEmergIntub) caseType = 'emergency_intubation';
+
+    cases.push({
+      asaCode: asaCode,
+      baseUnits: baseUnits,
+      startTime: startTime,
+      endTime: endTime,
+      caseType: caseType,
+      isEmergency: isEmergency,
+      isShared: isShared,
+      nerveBlock: nerveBlock,
+      hasITMorphine: hasITMorphine,
+      hasCentralLine: hasCentralLine,
+      hasArterialLine: hasArterialLine,
+      hasTEE: hasTEE,
+      notes: notes
+    });
+  }
+
+  return cases;
+}
+
+// ================================================================
+// BILLING SHEET SCAN — PAGE LOGIC
+// ================================================================
+let scanParsedCases = [];
+
+function initScanPage() {
+  const dateInput = document.getElementById('scanDate');
+  if (!dateInput.value) dateInput.value = workingDate || todayStr();
+}
+
+document.getElementById('scanCaptureArea').addEventListener('click', () => {
+  document.getElementById('scanFileInput').click();
+});
+
+document.getElementById('scanFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const preview = document.getElementById('scanPreviewImg');
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    preview.src = ev.target.result;
+    preview.classList.remove('hidden');
+    document.getElementById('scanActions').classList.remove('hidden');
+    document.getElementById('scanResultsArea').classList.add('hidden');
+    setScanStatus('');
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('scanRetakeBtn').addEventListener('click', () => {
+  document.getElementById('scanFileInput').value = '';
+  document.getElementById('scanPreviewImg').classList.add('hidden');
+  document.getElementById('scanActions').classList.add('hidden');
+  document.getElementById('scanResultsArea').classList.add('hidden');
+  setScanStatus('');
+  scanParsedCases = [];
+});
+
+document.getElementById('scanProcessBtn').addEventListener('click', async () => {
+  const fileInput = document.getElementById('scanFileInput');
+  const file = fileInput.files[0];
+  if (!file) { showToast('No image selected'); return; }
+
+  setScanStatus('processing', 'Loading OCR engine...');
+  try {
+    await loadTesseract();
+    setScanStatus('processing', 'Recognizing text...');
+    const worker = await Tesseract.createWorker('eng');
+    const { data } = await worker.recognize(file);
+    await worker.terminate();
+
+    const ocrText = data.text;
+    if (!ocrText || ocrText.trim().length < 10) {
+      setScanStatus('error', 'Could not read text from image. Try a clearer photo.');
+      return;
+    }
+
+    setScanStatus('processing', 'Parsing billing sheet...');
+    scanParsedCases = parseBillingSheetText(ocrText);
+
+    if (scanParsedCases.length === 0) {
+      setScanStatus('error', 'No cases found. Make sure the ASA codes are clearly visible.');
+      // Show raw OCR text for debugging
+      console.log('OCR text:', ocrText);
+      return;
+    }
+
+    setScanStatus('success', `Found ${scanParsedCases.length} case${scanParsedCases.length > 1 ? 's' : ''}`);
+    renderScanCaseCards();
+  } catch (err) {
+    console.error('Scan error:', err);
+    setScanStatus('error', 'OCR failed: ' + err.message);
+  }
+});
+
+function setScanStatus(type, msg) {
+  const el = document.getElementById('scanStatus');
+  if (!type) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  el.classList.remove('hidden');
+  el.className = 'scan-status ' + type;
+  if (type === 'processing') {
+    el.innerHTML = '<div class="spinner"></div><span>' + msg + '</span>';
+  } else {
+    el.innerHTML = '<span>' + msg + '</span>';
+  }
+}
+
+function renderScanCaseCards() {
+  const area = document.getElementById('scanResultsArea');
+  const container = document.getElementById('scanCaseCards');
+  const countEl = document.getElementById('scanCaseCount');
+  area.classList.remove('hidden');
+  countEl.textContent = scanParsedCases.length + ' case' + (scanParsedCases.length !== 1 ? 's' : '');
+
+  container.innerHTML = '';
+  scanParsedCases.forEach((c, idx) => {
+    const unitLabel = ASA_BASE_UNITS[c.asaCode] ? c.asaCode : 'Unknown';
+    const tags = [];
+    if (c.isEmergency) tags.push('<span class="scc-tag emergency">Emergency</span>');
+    if (c.isShared) tags.push('<span class="scc-tag shared">Shared</span>');
+    if (c.nerveBlock !== 'none') tags.push('<span class="scc-tag active">' + (c.nerveBlock === 'brachial_plexus' ? 'Brachial Plexus' : 'Nerve Block') + '</span>');
+    if (c.hasITMorphine) tags.push('<span class="scc-tag active">IT Morphine</span>');
+    if (c.hasCentralLine) tags.push('<span class="scc-tag active">CVC</span>');
+    if (c.hasArterialLine) tags.push('<span class="scc-tag active">Art Line</span>');
+    if (c.hasTEE) tags.push('<span class="scc-tag active">TEE</span>');
+
+    const card = document.createElement('div');
+    card.className = 'scan-case-card';
+    card.innerHTML = `
+      <div class="scc-header">
+        <h4>Case ${idx + 1}</h4>
+        <button class="scc-remove" data-idx="${idx}" title="Remove">&times;</button>
+      </div>
+      <div class="scc-row">
+        <div class="scc-field">
+          <label>ASA Code</label>
+          <input type="text" value="${c.asaCode}" data-idx="${idx}" data-field="asaCode" maxlength="5">
+        </div>
+        <div class="scc-field">
+          <label>Base Units</label>
+          <input type="number" value="${c.baseUnits}" data-idx="${idx}" data-field="baseUnits" min="0" max="30">
+        </div>
+      </div>
+      <div class="scc-row">
+        <div class="scc-field">
+          <label>Start</label>
+          <input type="text" value="${c.startTime}" data-idx="${idx}" data-field="startTime" placeholder="HH:MM" maxlength="5">
+        </div>
+        <div class="scc-field">
+          <label>Stop</label>
+          <input type="text" value="${c.endTime}" data-idx="${idx}" data-field="endTime" placeholder="HH:MM" maxlength="5">
+        </div>
+      </div>
+      <div class="scc-row">
+        <div class="scc-field">
+          <label>Case Type</label>
+          <select data-idx="${idx}" data-field="caseType">
+            <option value="standard" ${c.caseType === 'standard' ? 'selected' : ''}>Standard</option>
+            <option value="epidural_blood_patch" ${c.caseType === 'epidural_blood_patch' ? 'selected' : ''}>Epidural Blood Patch</option>
+            <option value="emergency_intubation" ${c.caseType === 'emergency_intubation' ? 'selected' : ''}>Emergency Intubation</option>
+          </select>
+        </div>
+        <div class="scc-field">
+          <label>Notes</label>
+          <input type="text" value="${c.notes}" data-idx="${idx}" data-field="notes" placeholder="Surgeon, etc.">
+        </div>
+      </div>
+      <div class="scc-tags">${tags.join('')}</div>
+      <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">
+        <label style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" data-idx="${idx}" data-field="isEmergency" ${c.isEmergency ? 'checked' : ''}> Emergency
+        </label>
+        <label style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" data-idx="${idx}" data-field="isShared" ${c.isShared ? 'checked' : ''}> Shared
+        </label>
+        <label style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" data-idx="${idx}" data-field="hasITMorphine" ${c.hasITMorphine ? 'checked' : ''}> IT Morphine
+        </label>
+        <label style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" data-idx="${idx}" data-field="hasCentralLine" ${c.hasCentralLine ? 'checked' : ''}> CVC
+        </label>
+        <label style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" data-idx="${idx}" data-field="hasArterialLine" ${c.hasArterialLine ? 'checked' : ''}> Art Line
+        </label>
+        <label style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" data-idx="${idx}" data-field="hasTEE" ${c.hasTEE ? 'checked' : ''}> TEE
+        </label>
+      </div>
+      <div style="margin-top:6px;">
+        <label style="font-size:0.75rem;color:var(--text-dim);">Nerve Block</label>
+        <select data-idx="${idx}" data-field="nerveBlock" style="width:100%;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem;margin-top:2px;">
+          <option value="none" ${c.nerveBlock === 'none' ? 'selected' : ''}>None</option>
+          <option value="brachial_plexus" ${c.nerveBlock === 'brachial_plexus' ? 'selected' : ''}>Brachial Plexus</option>
+          <option value="other_nerve" ${c.nerveBlock === 'other_nerve' ? 'selected' : ''}>Other Nerve Block</option>
+        </select>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+
+  // Bind events
+  container.querySelectorAll('.scc-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      scanParsedCases.splice(idx, 1);
+      renderScanCaseCards();
+    });
+  });
+
+  container.querySelectorAll('input[data-field], select[data-field]').forEach(el => {
+    const handler = () => {
+      const idx = parseInt(el.dataset.idx);
+      const field = el.dataset.field;
+      if (!scanParsedCases[idx]) return;
+      if (el.type === 'checkbox') {
+        scanParsedCases[idx][field] = el.checked;
+      } else if (el.type === 'number') {
+        scanParsedCases[idx][field] = parseInt(el.value) || 0;
+      } else {
+        scanParsedCases[idx][field] = el.value;
+      }
+      // Auto-lookup base units when ASA code changes
+      if (field === 'asaCode' && el.value.length === 5) {
+        const units = ASA_BASE_UNITS[el.value];
+        if (units !== undefined) {
+          scanParsedCases[idx].baseUnits = units;
+          const unitsInput = container.querySelector(`input[data-idx="${idx}"][data-field="baseUnits"]`);
+          if (unitsInput) unitsInput.value = units;
+        }
+      }
+    };
+    el.addEventListener('change', handler);
+    if (el.type === 'text' || el.type === 'number') el.addEventListener('input', handler);
+  });
+
+  // Bind military time formatting on start/stop inputs
+  container.querySelectorAll('input[data-field="startTime"], input[data-field="endTime"]').forEach(inp => {
+    bindMilTimeInput(inp);
+  });
+}
+
+document.getElementById('scanImportBtn').addEventListener('click', () => {
+  if (scanParsedCases.length === 0) { showToast('No cases to import'); return; }
+
+  const scanDate = document.getElementById('scanDate').value;
+  if (!scanDate) { showToast('Please set the sheet date'); return; }
+
+  const newCases = [];
+  const existingKeys = new Set(data.cases.map(c => c.shiftDate + '|' + c.startTime));
+
+  for (const sc of scanParsedCases) {
+    if (!sc.startTime) continue; // skip cases with no start time
+    const key = scanDate + '|' + sc.startTime;
+    if (existingKeys.has(key)) continue; // skip duplicates
+
+    newCases.push({
+      id: genId(),
+      caseType: sc.caseType || 'standard',
+      procedure: sc.asaCode || '',
+      baseUnits: sc.baseUnits || 0,
+      physicalStatus: 'P2',
+      startTime: sc.startTime || '',
+      endTime: sc.endTime || '',
+      shiftDate: scanDate,
+      isEmergency: sc.isEmergency || false,
+      isMedicalProc: false,
+      medicalUnits: 0,
+      isAcutePain: false,
+      acutePainUnits: 0,
+      isHighRiskPeds: false,
+      isORCase: false,
+      isSharedCase: sc.isShared || false,
+      sharedStartupPct: 50,
+      nerveBlock: sc.nerveBlock || 'none',
+      hasCentralLine: sc.hasCentralLine || false,
+      hasArterialLine: sc.hasArterialLine || false,
+      hasPAC: false,
+      hasTEEAddOn: sc.hasTEE || false,
+      hasITMorphine: sc.hasITMorphine || false,
+      notes: sc.notes || '',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  if (newCases.length === 0) {
+    showToast('No new cases to import (all duplicates or missing start times)');
+    return;
+  }
+
+  // Create placeholder shift if none exists
+  if (!data.shifts[scanDate]) {
+    let earliest = '23:59', latest = '00:00';
+    newCases.forEach(c => {
+      if (c.startTime && c.startTime < earliest) earliest = c.startTime;
+      if (c.endTime && c.endTime > latest) latest = c.endTime;
+    });
+    const st = earliest || '07:00';
+    const en = latest || '17:00';
+    data.shifts[scanDate] = {
+      date: scanDate, assignmentType: 'OR',
+      startTime: st, endTime: en,
+      timeEntries: [{ start: st, end: en }],
+      isHoliday: false, forcedOff: false, subspecCoverage: false,
+      teeCount: 0, supervisionStart: '', supervisionEnd: ''
+    };
+    showToast(`Created placeholder OR shift for ${formatDateShort(scanDate)}`);
+  }
+
+  data.cases.push(...newCases);
+  saveData(data);
+  updateHeaderPoints();
+
+  const skipped = scanParsedCases.length - newCases.length;
+  let msg = `Imported ${newCases.length} case${newCases.length > 1 ? 's' : ''}`;
+  if (skipped > 0) msg += ` (${skipped} skipped)`;
+  showToast(msg);
+
+  // Reset scan page
+  scanParsedCases = [];
+  document.getElementById('scanResultsArea').classList.add('hidden');
+  document.getElementById('scanPreviewImg').classList.add('hidden');
+  document.getElementById('scanActions').classList.add('hidden');
+  document.getElementById('scanFileInput').value = '';
+  setScanStatus('success', msg);
+});
 
 // ================================================================
 // SERVICE WORKER REGISTRATION
