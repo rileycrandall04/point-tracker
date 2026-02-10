@@ -2225,14 +2225,14 @@ function getPagerPayWindow(assignmentType, isWkndOrHol) {
   switch (assignmentType) {
     case 'SF1': case 'SF2':
     case '1st_call': case '2nd_call': case '3rd_call':
-      // Weekday: 17:00–07:00 next day; Weekend/Holiday: full 24h
-      return isWkndOrHol ? { start: 0, end: 1440 } : { start: 1020, end: 1860 };
+      // Weekday: 17:00–07:00 next day; Weekend/Holiday: 07:00–07:00 next day
+      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
     case '4th_call':
-      // Weekend only
-      return isWkndOrHol ? { start: 0, end: 1440 } : null;
+      // Weekend/Holiday only: 07:00–07:00 next day
+      return isWkndOrHol ? { start: 420, end: 1860 } : null;
     case 'mole':
-      // Weekday: 19:00–07:00 next day; Weekend/Holiday: full 24h
-      return isWkndOrHol ? { start: 0, end: 1440 } : { start: 1140, end: 1860 };
+      // Weekday: 19:00–07:00 next day; Weekend/Holiday: 07:00–07:00 next day
+      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1140, end: 1860 };
     case 'endo':
       // Weekday only: 17:00–midnight
       return !isWkndOrHol ? { start: 1020, end: 1440 } : null;
