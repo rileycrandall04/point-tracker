@@ -10,6 +10,9 @@
 <link rel="manifest" href="manifest.json">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 <style>
 :root {
   --bg: #0f172a;
@@ -1074,6 +1077,77 @@ input.mil-time.invalid {
 .scan-case-card .scc-tag.emergency { background: rgba(239,68,68,0.2); color: var(--danger); }
 .scan-case-card .scc-tag.shared { background: rgba(139,92,246,0.2); color: var(--purple); }
 
+/* ===== AUTH OVERLAY ===== */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+.auth-overlay h1 { font-size: 1.6rem; margin-bottom: 8px; }
+.auth-overlay p { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 24px; max-width: 340px; }
+.auth-overlay .auth-disclaimer {
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  max-width: 340px;
+  font-size: 0.78rem;
+  color: var(--accent2);
+  text-align: left;
+}
+.google-sign-in-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  background: #fff;
+  color: #333;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+.google-sign-in-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+.google-sign-in-btn svg { width: 20px; height: 20px; }
+.auth-loading { color: var(--text-dim); font-size: 0.85rem; }
+.sync-indicator {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+}
+.sync-indicator.syncing { color: var(--primary); }
+.sync-indicator.synced { color: var(--accent); }
+.sync-indicator.error { color: var(--danger); }
+.account-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+.account-card img {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+}
+.account-card .ac-info { flex: 1; min-width: 0; }
+.account-card .ac-name { font-size: 0.85rem; font-weight: 600; }
+.account-card .ac-email { font-size: 0.72rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ===== BOTTOM NAV — 5 items ===== */
 .bottom-nav button { font-size: 0.6rem; }
 .bottom-nav button .nav-icon { font-size: 1.15rem; }
@@ -1086,6 +1160,21 @@ input.mil-time.invalid {
 </style>
 </head>
 <body>
+
+<!-- ===== AUTH OVERLAY ===== -->
+<div class="auth-overlay" id="authOverlay">
+  <h1>MWA Point Tracker</h1>
+  <p>Track anesthesia cases, shifts, and production points.</p>
+  <div class="auth-disclaimer">
+    <strong>Important:</strong> Do not store any patient-identifiable information (names, MRNs, account numbers, DOBs) in this app. Only record procedure types, times, and point data.
+  </div>
+  <button class="google-sign-in-btn" id="googleSignInBtn">
+    <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    Sign in with Google
+  </button>
+  <p id="authError" style="color:var(--danger);font-size:0.8rem;margin-top:12px;" class="hidden"></p>
+  <p class="auth-loading hidden" id="authLoading">Signing in...</p>
+</div>
 
 <!-- ===== HEADER ===== -->
 <header>
@@ -2037,6 +2126,20 @@ input.mil-time.invalid {
     <div id="csvImportResults"></div>
   </div>
 
+  <!-- Account -->
+  <div class="card" id="accountCard">
+    <h2>Account</h2>
+    <div class="account-card" id="accountInfo">
+      <img id="accountPhoto" src="" alt="">
+      <div class="ac-info">
+        <div class="ac-name" id="accountName"></div>
+        <div class="ac-email" id="accountEmail"></div>
+      </div>
+      <span class="sync-indicator synced" id="syncStatus">Synced</span>
+    </div>
+    <button class="btn btn-outline btn-sm" id="signOutBtn">Sign Out</button>
+  </div>
+
   <!-- Export / Import -->
   <div class="card">
     <h2>Data Management</h2>
@@ -2361,6 +2464,27 @@ input.mil-time.invalid {
 
 <script>
 // ================================================================
+// FIREBASE INIT
+// ================================================================
+firebase.initializeApp({
+  apiKey: "AIzaSyC_6NTHRa4lHUpbsms3RgN-REfr3tN4Uho",
+  authDomain: "mwa-point-tracker.firebaseapp.com",
+  projectId: "mwa-point-tracker",
+  storageBucket: "mwa-point-tracker.firebasestorage.app",
+  messagingSenderId: "523311146529",
+  appId: "1:523311146529:web:1b8a66fd270ab1b58ba560"
+});
+
+const auth = firebase.auth();
+const db = firebase.firestore();
+// Enable offline persistence so Firestore works offline
+db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+
+let currentUser = null;
+let firestoreSyncEnabled = false;
+let syncDebounceTimer = null;
+
+// ================================================================
 // DATA STORE
 // ================================================================
 const STORAGE_KEY = 'mwa_point_tracker';
@@ -2385,6 +2509,7 @@ function loadData() {
 
 function saveData(d) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+  syncToFirestore('data', d);
 }
 
 function loadSettings() {
@@ -2397,6 +2522,83 @@ function loadSettings() {
 
 function saveSettings(s) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  syncToFirestore('settings', s);
+}
+
+function syncToFirestore(docName, payload) {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  updateSyncStatus('syncing');
+  clearTimeout(syncDebounceTimer);
+  syncDebounceTimer = setTimeout(() => {
+    const docRef = db.collection('users').doc(currentUser.uid).collection('data').doc(docName);
+    docRef.set(JSON.parse(JSON.stringify(payload))).then(() => {
+      updateSyncStatus('synced');
+    }).catch(err => {
+      console.error('Firestore sync error:', err);
+      updateSyncStatus('error');
+    });
+  }, 500);
+}
+
+function updateSyncStatus(status) {
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  el.className = 'sync-indicator ' + status;
+  if (status === 'syncing') el.textContent = 'Syncing...';
+  else if (status === 'synced') el.textContent = 'Synced';
+  else if (status === 'error') el.textContent = 'Sync error';
+}
+
+async function loadFromFirestore(uid) {
+  try {
+    const dataDoc = await db.collection('users').doc(uid).collection('data').doc('data').get();
+    const settingsDoc = await db.collection('users').doc(uid).collection('data').doc('settings').get();
+
+    if (dataDoc.exists) {
+      const d = dataDoc.data();
+      if (!d.overrides) d.overrides = {};
+      if (!d.stipends) d.stipends = {};
+      // Ensure cases is an array
+      if (!Array.isArray(d.cases)) d.cases = [];
+      data = d;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      return 'loaded';
+    } else {
+      // No cloud data — check if there's local data to migrate
+      const localData = loadData();
+      const hasLocalData = localData.cases.length > 0 || Object.keys(localData.shifts).length > 0;
+      if (hasLocalData) {
+        // Upload local data to cloud
+        await db.collection('users').doc(uid).collection('data').doc('data').set(JSON.parse(JSON.stringify(localData)));
+        data = localData;
+        return 'migrated';
+      }
+      return 'empty';
+    }
+  } catch(err) {
+    console.error('Firestore load error:', err);
+    return 'error';
+  }
+}
+
+async function loadSettingsFromFirestore(uid) {
+  try {
+    const doc = await db.collection('users').doc(uid).collection('data').doc('settings').get();
+    if (doc.exists) {
+      const s = doc.data();
+      settings = s;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } else {
+      // Migrate local settings
+      const localSettings = loadSettings();
+      if (localSettings.name || localSettings.pointValue) {
+        await db.collection('users').doc(uid).collection('data').doc('settings').set(JSON.parse(JSON.stringify(localSettings)));
+      }
+      settings = localSettings;
+    }
+  } catch(err) {
+    console.error('Settings load error:', err);
+  }
 }
 
 let data = loadData();
@@ -9329,16 +9531,92 @@ if ('serviceWorker' in navigator) {
 }
 
 // ================================================================
+// AUTH — SIGN IN / SIGN OUT
+// ================================================================
+document.getElementById('googleSignInBtn').addEventListener('click', async () => {
+  const errEl = document.getElementById('authError');
+  const loadEl = document.getElementById('authLoading');
+  errEl.classList.add('hidden');
+  loadEl.classList.remove('hidden');
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await auth.signInWithPopup(provider);
+  } catch(err) {
+    console.error('Sign-in error:', err);
+    loadEl.classList.add('hidden');
+    errEl.textContent = err.message || 'Sign-in failed';
+    errEl.classList.remove('hidden');
+  }
+});
+
+document.getElementById('signOutBtn').addEventListener('click', async () => {
+  if (!confirm('Sign out? Your data is saved in the cloud.')) return;
+  firestoreSyncEnabled = false;
+  currentUser = null;
+  await auth.signOut();
+  document.getElementById('authOverlay').classList.remove('hidden');
+});
+
+function updateAccountUI(user) {
+  if (!user) return;
+  const photo = document.getElementById('accountPhoto');
+  const name = document.getElementById('accountName');
+  const email = document.getElementById('accountEmail');
+  photo.src = user.photoURL || '';
+  photo.style.display = user.photoURL ? '' : 'none';
+  name.textContent = user.displayName || 'User';
+  email.textContent = user.email || '';
+}
+
+// ================================================================
+// AUTH STATE LISTENER
+// ================================================================
+auth.onAuthStateChanged(async (user) => {
+  if (user) {
+    currentUser = user;
+    document.getElementById('authLoading').classList.add('hidden');
+
+    // Load data from Firestore
+    const result = await loadFromFirestore(user.uid);
+    await loadSettingsFromFirestore(user.uid);
+
+    firestoreSyncEnabled = true;
+    updateAccountUI(user);
+    document.getElementById('authOverlay').classList.add('hidden');
+
+    // Re-run migration & init with cloud data
+    migrateData(data);
+    initApp();
+
+    if (result === 'migrated') {
+      showToast('Local data synced to cloud');
+    } else if (result === 'loaded') {
+      showToast('Data loaded from cloud');
+    }
+  } else {
+    // Not signed in — show auth overlay
+    currentUser = null;
+    firestoreSyncEnabled = false;
+    document.getElementById('authOverlay').classList.remove('hidden');
+  }
+});
+
+// ================================================================
 // INIT
 // ================================================================
-initMilTimeInputs();
-setWorkingDate(todayStr());
-renderTemplates();
-updateHeaderPoints();
-updateReconMonthLabels();
-updateCLMonthLabel();
-updateSupervisionOverlayVisibility();
-checkEndTimeNotification();
+function initApp() {
+  initMilTimeInputs();
+  setWorkingDate(todayStr());
+  renderTemplates();
+  updateHeaderPoints();
+  updateReconMonthLabels();
+  updateCLMonthLabel();
+  updateSupervisionOverlayVisibility();
+  checkEndTimeNotification();
+}
+
+// Run init immediately with localStorage data (will re-run after auth)
+initApp();
 </script>
 
 </body>
