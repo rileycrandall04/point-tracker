@@ -62,6 +62,9 @@ header h1 { font-size: 1.1rem; font-weight: 700; color: var(--primary); min-widt
 .header-pts { text-align: right; line-height: 1.2; }
 .header-pts .daily { font-size: 0.95rem; color: var(--accent); font-weight: 700; }
 .header-pts .monthly { font-size: 0.7rem; color: var(--text-dim); font-weight: 500; }
+.header-pts .pace { font-size: 0.62rem; font-weight: 600; }
+.header-pts .pace.ahead { color: var(--accent); }
+.header-pts .pace.behind { color: var(--accent2); }
 .header-date-btn {
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -667,10 +670,64 @@ input.mil-time.invalid {
 .de-case-list-item .de-actions { display: flex; align-items: center; gap: 8px; }
 .de-case-list-item .de-pts { font-size: 0.82rem; color: var(--accent); font-weight: 700; white-space: nowrap; }
 
+/* ===== DAY DETAIL MODAL ===== */
+.dd-shift-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface2);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.dd-shift-bar .dd-badge {
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.dd-shift-bar .dd-badge.vacation { background: var(--purple); }
+.dd-shift-bar .dd-times { font-size: 0.82rem; color: var(--text-dim); flex: 1; }
+.dd-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.dd-summary-item {
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 8px 10px;
+  text-align: center;
+}
+.dd-summary-item .dd-label { font-size: 0.68rem; color: var(--text-dim); margin-bottom: 2px; }
+.dd-summary-item .dd-value { font-size: 1rem; font-weight: 700; }
+.dd-summary-item .dd-value.blue { color: var(--primary); }
+.dd-summary-item .dd-value.green { color: var(--accent); }
+.dd-summary-item .dd-value.yellow { color: var(--accent2); }
+.dd-case-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--surface2);
+  gap: 8px;
+}
+.dd-case-item:last-child { border-bottom: none; }
+.dd-case-item .dd-case-info { flex: 1; min-width: 0; }
+.dd-case-item .dd-case-name { font-size: 0.82rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd-case-item .dd-case-detail { font-size: 0.72rem; color: var(--text-dim); }
+.dd-case-item .dd-case-actions { display: flex; align-items: center; gap: 6px; }
+.dd-case-item .dd-case-pts { font-size: 0.82rem; color: var(--accent); font-weight: 700; white-space: nowrap; }
+
 /* ===== DAILY CALENDAR ===== */
 .daily-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .daily-cal-header { font-size: 0.65rem; color: var(--text-dim); text-align: center; padding: 4px 0; font-weight: 600; }
-.daily-cal-cell { background: var(--surface); border-radius: 6px; padding: 6px 4px; text-align: center; min-height: 52px; position: relative; }
+.daily-cal-cell { background: var(--surface); border-radius: 6px; padding: 6px 4px; text-align: center; min-height: 52px; position: relative; cursor: pointer; transition: background 0.15s; }
+.daily-cal-cell:active:not(.empty) { background: rgba(59,130,246,0.15); }
 .daily-cal-cell.empty { background: transparent; }
 .daily-cal-cell.today { border: 2px solid var(--primary); }
 .daily-cal-cell.vacation { background: rgba(139,92,246,0.15); }
@@ -2081,6 +2138,17 @@ input.mil-time.invalid {
       <button class="btn btn-danger btn-sm" id="deleteShiftBtn">Delete</button>
       <button class="btn btn-outline btn-sm" id="cancelShiftEdit">Cancel</button>
       <button class="btn btn-primary btn-sm" id="saveShiftEdit">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Day Detail Modal -->
+<div class="modal-overlay hidden" id="dayDetailModal">
+  <div class="modal" style="max-width:420px;">
+    <h2 id="dayDetailTitle">Day Summary</h2>
+    <div id="dayDetailBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" id="closeDayDetail">Close</button>
     </div>
   </div>
 </div>
@@ -4310,7 +4378,10 @@ document.getElementById('saveShiftEdit').addEventListener('click', () => {
   saveData(data);
   document.getElementById('shiftEditModal').classList.add('hidden');
   editingShiftDate = null;
+  updateHeaderPoints();
   renderShiftLogTable();
+  renderDayDetailContent();
+  renderDailyTab();
   showToast('Shift updated');
 });
 
@@ -4321,7 +4392,10 @@ document.getElementById('deleteShiftBtn').addEventListener('click', () => {
   saveData(data);
   document.getElementById('shiftEditModal').classList.add('hidden');
   editingShiftDate = null;
+  updateHeaderPoints();
   renderShiftLogTable();
+  renderDayDetailContent();
+  renderDailyTab();
   showToast('Shift deleted');
 });
 
@@ -5288,7 +5362,7 @@ function renderDailyTab() {
     const typeName = shiftType ? getAssignmentTypeName(shiftType) : '';
     const ptsClass = pts > 0 ? '' : ' zero';
 
-    html += `<div class="${classes}">`;
+    html += `<div class="${classes}" onclick="openDayDetail('${dateStr}')">`;
     html += `<div class="daily-cal-day">${d}</div>`;
     html += `<div class="daily-cal-pts${ptsClass}">${pts > 0 ? pts.toFixed(1) : (isVac ? 'VAC' : '—')}</div>`;
     if (typeName) html += `<div class="daily-cal-type">${typeName}</div>`;
@@ -5303,6 +5377,110 @@ function renderDailyTab() {
   document.getElementById('dailyMonthSummary').innerHTML =
     `<span style="font-size:1.3rem;font-weight:700;color:var(--accent);">${round2(monthTotal).toFixed(1)}</span> <span style="color:var(--text-dim);">total pts</span> &bull; <strong>${shiftCount}</strong> shifts &bull; <strong>${avgPerShift}</strong> avg pts/shift`;
 }
+
+// ================================================================
+// DAY DETAIL MODAL
+// ================================================================
+let dayDetailDate = '';
+
+function openDayDetail(dateStr) {
+  dayDetailDate = dateStr;
+  document.getElementById('dayDetailTitle').textContent = formatDate(dateStr);
+  renderDayDetailContent();
+  document.getElementById('dayDetailModal').classList.remove('hidden');
+}
+
+function renderDayDetailContent() {
+  const dateStr = dayDetailDate;
+  if (!dateStr) return;
+  const shift = data.shifts[dateStr];
+  const shiftCases = data.cases.filter(c => c.shiftDate === dateStr);
+  const body = document.getElementById('dayDetailBody');
+
+  if (!shift) {
+    body.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;margin:12px 0;">No shift saved for this date.</p>' +
+      (shiftCases.length > 0 ? renderDDCaseList(shiftCases, null) : '');
+    return;
+  }
+
+  const totals = calcShiftTotal(shift);
+  const isVacation = shift.assignmentType === 'vacation';
+  const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
+  let timesText = '';
+  if (isVacation) {
+    timesText = 'Vacation Day';
+  } else if (entries.length === 1) {
+    timesText = (entries[0].start || '?') + ' - ' + (entries[0].end || '?');
+  } else {
+    timesText = entries.length + ' time entries';
+  }
+
+  let html = '';
+  // Shift bar
+  html += `<div class="dd-shift-bar">
+    <span class="dd-badge${isVacation ? ' vacation' : ''}">${escHtml(getAssignmentTypeName(shift.assignmentType))}</span>
+    <span class="dd-times">${escHtml(timesText)}</span>
+    <button class="btn btn-outline btn-sm" onclick="openShiftEdit('${dateStr}')" style="padding:4px 10px;font-size:0.72rem;">Edit</button>
+  </div>`;
+
+  // Point summary
+  html += `<div class="dd-summary">
+    <div class="dd-summary-item"><div class="dd-label">Availability</div><div class="dd-value blue">${totals.ar.toFixed(1)}</div></div>
+    <div class="dd-summary-item"><div class="dd-label">Productivity</div><div class="dd-value green">${totals.prod.toFixed(1)}</div></div>
+    <div class="dd-summary-item"><div class="dd-label">Call / Other</div><div class="dd-value yellow">${(totals.call + totals.subspec + totals.supervision).toFixed(1)}</div></div>
+    <div class="dd-summary-item"><div class="dd-label">Total</div><div class="dd-value green">${totals.total.toFixed(1)}</div></div>
+  </div>`;
+
+  // Case list
+  if (!isVacation) {
+    html += `<h3 style="font-size:0.85rem;margin-bottom:6px;">Cases (${shiftCases.length})</h3>`;
+    html += renderDDCaseList(shiftCases, shift);
+  }
+
+  body.innerHTML = html;
+}
+
+function renderDDCaseList(cases, shift) {
+  if (cases.length === 0) return '<p style="color:var(--text-dim);font-size:0.8rem;">No cases logged.</p>';
+  let html = '';
+  cases.forEach(c => {
+    const pts = shift ? calcCasePoints(c, shift) : 0;
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
+    const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : (c.startTime ? c.startTime : '');
+    html += `<div class="dd-case-item">
+      <div class="dd-case-info">
+        <div class="dd-case-name">${escHtml(name)}</div>
+        ${timeStr ? `<div class="dd-case-detail">${escHtml(timeStr)}</div>` : ''}
+      </div>
+      <div class="dd-case-actions">
+        <span class="dd-case-pts">${pts.toFixed(1)}</span>
+        <button class="btn btn-outline btn-sm" onclick="openCaseEdit('${c.id}')" style="padding:2px 8px;font-size:0.68rem;">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCaseDayDetail('${c.id}')" style="padding:2px 8px;font-size:0.68rem;">Del</button>
+      </div>
+    </div>`;
+  });
+  return html;
+}
+
+function deleteCaseDayDetail(id) {
+  if (!confirm('Delete this case?')) return;
+  data.cases = data.cases.filter(c => c.id !== id);
+  saveData(data);
+  updateHeaderPoints();
+  renderDayDetailContent();
+  renderDailyTab();
+  renderDECaseList();
+  updateDETally();
+  showToast('Case deleted');
+}
+
+document.getElementById('closeDayDetail').addEventListener('click', () => {
+  document.getElementById('dayDetailModal').classList.add('hidden');
+});
+
+document.getElementById('dayDetailModal').addEventListener('click', (e) => {
+  if (e.target.id === 'dayDetailModal') document.getElementById('dayDetailModal').classList.add('hidden');
+});
 
 function renderAnalyticsTab() {
   renderCaseMix();
@@ -5534,6 +5712,10 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
   saveData(data);
   updateHeaderPoints();
   renderCaseLogTable();
+  renderDayDetailContent();
+  renderDailyTab();
+  renderDECaseList();
+  updateDETally();
   document.getElementById('caseEditModal').classList.add('hidden');
   showToast('Case updated');
 });
@@ -6026,11 +6208,61 @@ function updateHeaderPoints() {
   // Monthly total
   const prefix = date.substring(0, 7);
   let monthPts = 0;
+  const monthShifts = [];
   Object.values(data.shifts).forEach(s => {
-    if (s.date && s.date.startsWith(prefix)) monthPts += calcShiftTotal(s).total;
+    if (s.date && s.date.startsWith(prefix)) {
+      monthPts += calcShiftTotal(s).total;
+      monthShifts.push(s);
+    }
   });
+  monthPts = round2(monthPts);
+
+  // Pace calculation — how far ahead/behind prior month average
+  let paceHtml = '';
+  const now = new Date();
+  const thisPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  if (prefix === thisPrefix) {
+    const dayOfMonth = now.getDate();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const vacDays = monthShifts.filter(s => s.assignmentType === 'vacation');
+    const vacDaysPassed = vacDays.filter(s => parseInt(s.date.split('-')[2]) <= dayOfMonth).length;
+    const workingDaysInMonth = daysInMonth - vacDays.length;
+    const workingDaysElapsed = dayOfMonth - vacDaysPassed;
+    const vacRatio = workingDaysInMonth / daysInMonth;
+
+    const mt = getMonthlyTotals();
+    let sumAtDay = 0;
+    let curveCount = 0;
+    for (let offset = 1; offset <= 6; offset++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      if (!mt[key]) continue;
+      const mDays = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      const shifts = Object.values(data.shifts).filter(s => s.date.startsWith(key));
+      if (shifts.length === 0) continue;
+      const dailyP = new Array(mDays + 1).fill(0);
+      shifts.forEach(s => { dailyP[parseInt(s.date.split('-')[2])] += calcShiftTotal(s).total; });
+      const cum = new Array(mDays + 1).fill(0);
+      for (let i = 1; i <= mDays; i++) cum[i] = cum[i - 1] + dailyP[i];
+      const frac = workingDaysInMonth > 0 ? workingDaysElapsed / workingDaysInMonth : 0;
+      const mapped = frac * mDays;
+      const lo = Math.floor(mapped);
+      const hi = Math.min(Math.ceil(mapped), mDays);
+      const f = mapped - lo;
+      sumAtDay += lo >= 1 ? cum[lo] * (1 - f) + cum[hi] * f : cum[hi] * f;
+      curveCount++;
+    }
+    if (curveCount > 0) {
+      const expected = round2((sumAtDay / curveCount) * vacRatio);
+      const delta = round2(monthPts - expected);
+      const cls = delta >= 0 ? 'ahead' : 'behind';
+      const sign = delta >= 0 ? '+' : '';
+      paceHtml = `<span class="pace ${cls}">${sign}${delta.toFixed(0)} pace</span>`;
+    }
+  }
+
   const el = document.getElementById('headerPoints');
-  el.innerHTML = `<span class="daily">${dailyPts.toFixed(1)} pts</span><br><span class="monthly">${monthPts.toFixed(0)} mo</span>`;
+  el.innerHTML = `<span class="daily">${dailyPts.toFixed(1)} pts</span><br><span class="monthly">${monthPts.toFixed(0)} mo</span>` + (paceHtml ? `<br>${paceHtml}` : '');
 }
 
 // ================================================================
