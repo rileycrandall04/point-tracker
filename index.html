@@ -895,9 +895,11 @@ input.mil-time.invalid {
 }
 .add-entry-btn:hover { border-color: var(--primary); }
 
-/* ===== BOTTOM NAV — 5 items ===== */
-.bottom-nav button { font-size: 0.62rem; }
-.bottom-nav button .nav-icon { font-size: 1.2rem; }
+/* ===== BOTTOM NAV — 4 items ===== */
+.bottom-nav button { font-size: 0.65rem; }
+.bottom-nav button .nav-icon { font-size: 1.25rem; }
+.bottom-nav button.nav-center .nav-icon { font-size: 1.55rem; }
+.bottom-nav button.nav-center { font-weight: 700; }
 
 @media (max-width: 480px) {
   .form-row { grid-template-columns: 1fr; }
@@ -2089,21 +2091,17 @@ input.mil-time.invalid {
 
 <!-- BOTTOM NAV -->
 <div class="bottom-nav">
-  <button class="active" data-page="dataentry">
-    <span class="nav-icon">&#128221;</span>
-    <span>Data Entry</span>
-  </button>
   <button data-page="today">
     <span class="nav-icon">&#11088;</span>
     <span>Today</span>
   </button>
-  <button data-page="reconcile">
-    <span class="nav-icon">&#128260;</span>
-    <span>Reconcile</span>
-  </button>
   <button data-page="dashboard">
     <span class="nav-icon">&#128202;</span>
     <span>Dashboard</span>
+  </button>
+  <button class="active nav-center" data-page="dataentry">
+    <span class="nav-icon">&#128221;</span>
+    <span>Data Entry</span>
   </button>
   <button data-page="settings">
     <span class="nav-icon">&#9881;</span>
@@ -2687,10 +2685,12 @@ function calcCasePoints(caseData, shift) {
     basePoints *= (parseFloat(caseData.sharedStartupPct) || 50) / 100;
   }
   let caseStartMin = timeToMinutes(caseData.startTime);
-  let caseEndMin = timeToMinutes(caseData.endTime);
-  if (caseEndMin <= caseStartMin) caseEndMin += 1440;
-  const caseMinutes = caseEndMin - caseStartMin;
-  const caseHours = caseMinutes / 60;
+  let caseHours = 0;
+  if (caseData.endTime) {
+    let caseEndMin = timeToMinutes(caseData.endTime);
+    if (caseEndMin <= caseStartMin) caseEndMin += 1440;
+    caseHours = (caseEndMin - caseStartMin) / 60;
+  }
   const isHol = shift ? shift.isHoliday : false;
   const isWknd = shift ? isWeekend(shift.date) : false;
   const timeMultiplier = getTimeMultiplier(caseData.physicalStatus, isHol, isWknd, caseStartMin, caseData.isHighRiskPeds);
@@ -2758,10 +2758,12 @@ function getCaseBreakdown(caseData, shift) {
     bd.push({label: `Half Base Units (${baseUnits} x 0.5)`, pts: round2(halfBase)});
   }
   let caseStartMin = timeToMinutes(caseData.startTime);
-  let caseEndMin = timeToMinutes(caseData.endTime);
-  if (caseEndMin <= caseStartMin) caseEndMin += 1440;
-  const caseMinutes = caseEndMin - caseStartMin;
-  const caseHours = round2(caseMinutes / 60);
+  let caseHours = 0;
+  if (caseData.endTime) {
+    let caseEndMin = timeToMinutes(caseData.endTime);
+    if (caseEndMin <= caseStartMin) caseEndMin += 1440;
+    caseHours = round2((caseEndMin - caseStartMin) / 60);
+  }
   const isHol = shift ? shift.isHoliday : false;
   const isWknd = shift ? isWeekend(shift.date) : false;
   const tm = getTimeMultiplier(caseData.physicalStatus, isHol, isWknd, caseStartMin, caseData.isHighRiskPeds);
@@ -2770,7 +2772,7 @@ function getCaseBreakdown(caseData, shift) {
   let tl = `Time (${caseHours}h x 6 pts/hr`;
   if (tm > 1) tl += ` x ${tm}`;
   tl += ')';
-  bd.push({label: tl, pts: timePoints});
+  if (caseHours > 0) bd.push({label: tl, pts: timePoints});
   if (caseData.isMedicalProc) {
     const mu = parseFloat(caseData.medicalUnits) || 0;
     bd.push({label: `Medical Proc (20% x ${mu})`, pts: round2(0.20 * mu)});
@@ -3447,8 +3449,11 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   caseData.id = genId();
   caseData.shiftDate = date;
   caseData.timestamp = new Date().toISOString();
-  if (caseData.caseType === 'standard' || caseData.caseType === 'labor_epidural') {
+  if (caseData.caseType === 'labor_epidural') {
     if (!caseData.startTime || !caseData.endTime) { showToast('Please enter start and end times'); return; }
+  }
+  if (caseData.caseType === 'standard') {
+    if (!caseData.startTime) { showToast('Please enter a start time'); return; }
   }
   if (caseData.caseType === 'aps_rounding') {
     if (!(parseInt(caseData.epiduralRounds) > 0) && !(parseInt(caseData.painRounds) > 0)) { showToast('Enter at least one round count'); return; }
