@@ -600,13 +600,15 @@ input.mil-time.invalid {
 
 /* ===== DATA ENTRY PAGE ===== */
 .de-sticky-header {
-  position: sticky;
+  position: fixed;
   top: var(--header-h);
+  left: 0;
+  right: 0;
   z-index: 50;
   background: var(--bg);
-  padding-bottom: 4px;
-  margin: -12px -12px 8px;
-  padding: 12px 12px 4px;
+  padding: 8px 12px 4px;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .daily-tally {
@@ -943,6 +945,7 @@ input.mil-time.invalid {
       <span class="ssb-edit">Edit &#9998;</span>
     </div>
   </div>
+  <div id="deStickyHeaderSpacer"></div>
 
   <!-- Shift section (all existing shift HTML, IDs preserved) -->
   <div id="deShiftSection">
@@ -3167,6 +3170,13 @@ function loadShiftForDate() {
 // ================================================================
 // DATA ENTRY PAGE FUNCTIONS
 // ================================================================
+function updateDEStickyHeaderSpacer() {
+  requestAnimationFrame(() => {
+    const h = document.getElementById('deStickyHeader').offsetHeight;
+    document.getElementById('deStickyHeaderSpacer').style.height = h + 'px';
+  });
+}
+
 function loadDataEntryPage() {
   loadShiftForDate();
   updateORCaseVisibility();
@@ -3212,6 +3222,7 @@ function updateDataEntryState() {
     caseSection.classList.add('hidden');
     caseListCard.classList.toggle('hidden', !shift);
   }
+  updateDEStickyHeaderSpacer();
 }
 
 function renderDECaseList() {
