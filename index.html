@@ -598,6 +598,63 @@ input.mil-time.invalid {
 }
 .dash-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
 
+/* ===== DATA ENTRY PAGE ===== */
+.daily-tally {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  margin-bottom: 12px;
+}
+.daily-tally .tally-label { font-size: 0.85rem; color: var(--text-dim); font-weight: 500; }
+.daily-tally .tally-value { font-size: 1.1rem; color: var(--accent); font-weight: 700; }
+
+.shift-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.shift-summary-bar:hover { background: rgba(59,130,246,0.1); }
+.shift-summary-bar .ssb-info { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.shift-summary-bar .ssb-badge {
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.shift-summary-bar .ssb-badge.vacation { background: var(--purple); }
+.shift-summary-bar .ssb-times { font-size: 0.82rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shift-summary-bar .ssb-edit { color: var(--primary); font-size: 0.8rem; font-weight: 600; white-space: nowrap; margin-left: 8px; }
+
+.de-case-list { margin-top: 8px; }
+.de-case-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--surface2);
+  gap: 8px;
+}
+.de-case-list-item:last-child { border-bottom: none; }
+.de-case-list-item .de-info { flex: 1; min-width: 0; }
+.de-case-list-item .de-name { font-size: 0.82rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.de-case-list-item .de-detail { font-size: 0.72rem; color: var(--text-dim); }
+.de-case-list-item .de-actions { display: flex; align-items: center; gap: 8px; }
+.de-case-list-item .de-pts { font-size: 0.82rem; color: var(--accent); font-weight: 700; white-space: nowrap; }
+
 /* ===== DAILY CALENDAR ===== */
 .daily-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .daily-cal-header { font-size: 0.65rem; color: var(--text-dim); text-align: center; padding: 4px 0; font-weight: 600; }
@@ -838,9 +895,9 @@ input.mil-time.invalid {
 }
 .add-entry-btn:hover { border-color: var(--primary); }
 
-/* ===== BOTTOM NAV — 6 items ===== */
-.bottom-nav button { font-size: 0.58rem; }
-.bottom-nav button .nav-icon { font-size: 1.15rem; }
+/* ===== BOTTOM NAV — 5 items ===== */
+.bottom-nav button { font-size: 0.62rem; }
+.bottom-nav button .nav-icon { font-size: 1.2rem; }
 
 @media (max-width: 480px) {
   .form-row { grid-template-columns: 1fr; }
@@ -860,310 +917,336 @@ input.mil-time.invalid {
 
 <!-- ===== PAGES ===== -->
 
-<!-- SHIFT PAGE -->
-<div class="page active" id="page-shift">
-  <div class="hidden" id="editShiftBanner" style="background:rgba(59,130,246,0.15); border:1px solid var(--primary); border-radius:var(--radius); padding:10px 14px; margin-bottom:12px; font-size:0.82rem; color:var(--primary); font-weight:600;"></div>
-  <div class="end-time-warning hidden" id="endTimeWarning">
-    Shift end time is missing — AR points will be 0 until an end time is entered.
-  </div>
-  <div class="card">
-    <div class="card-collapse-header" id="templateCollapseHeader">
-      <h2>Quick Templates</h2>
-      <span class="arrow" id="templateArrow">&#9660;</span>
-    </div>
-    <div class="card-collapse-body" id="templateCollapseBody" style="max-height:0;">
-      <div class="template-grid" id="templateGrid" style="padding-top:12px;"></div>
-    </div>
+<!-- DATA ENTRY PAGE -->
+<div class="page active" id="page-dataentry">
+  <!-- Daily point tally -->
+  <div class="daily-tally" id="deTallyBar">
+    <span class="tally-label">Daily Points</span>
+    <span class="tally-value" id="deTallyValue">0</span>
   </div>
 
-  <div class="card">
-    <h2>Shift Setup</h2>
-
-    <div class="form-group">
-      <label>Date</label>
-      <input type="date" id="shiftDate">
+  <!-- Collapsed shift summary bar (shown after saving shift) -->
+  <div class="shift-summary-bar hidden" id="deShiftSummaryBar">
+    <div class="ssb-info">
+      <span class="ssb-badge" id="deSSBBadge">OR</span>
+      <span class="ssb-times" id="deSSBTimes">07:00 - 17:00</span>
     </div>
+    <span class="ssb-edit">Edit &#9998;</span>
+  </div>
 
-    <div class="form-group">
-      <label>Assignment Type</label>
-      <select id="shiftAssignmentType">
-        <option value="OR">OR / General</option>
-        <option value="OB_restricted">UVH OB</option>
-        <option value="cardiac_liver">Cardiac / Liver</option>
-        <option value="mole">Mole</option>
-        <option value="1st_call">1st Call</option>
-        <option value="2nd_call">2nd Call</option>
-        <option value="3rd_call">3rd Call</option>
-        <option value="4th_call">4th Call</option>
-        <option value="endo">Endo</option>
-        <option value="SF1">SF 1</option>
-        <option value="SF2">SF 2</option>
-        <option value="ACS">ACS</option>
-        <option value="NORA">NORA</option>
-        <option value="CRNA_supervision">CRNA Supervision</option>
-        <option value="vacation">Vacation / Off</option>
-      </select>
+  <!-- Shift section (all existing shift HTML, IDs preserved) -->
+  <div id="deShiftSection">
+    <div class="hidden" id="editShiftBanner" style="background:rgba(59,130,246,0.15); border:1px solid var(--primary); border-radius:var(--radius); padding:10px 14px; margin-bottom:12px; font-size:0.82rem; color:var(--primary); font-weight:600;"></div>
+    <div class="end-time-warning hidden" id="endTimeWarning">
+      Shift end time is missing — AR points will be 0 until an end time is entered.
     </div>
-
-    <div id="vacationRangeSection" class="hidden">
-      <div class="form-group">
-        <label>Vacation End Date <span style="font-size:0.75rem;color:var(--text-dim);">(optional — leave blank for single day)</span></label>
-        <input type="date" id="vacationEndDate" class="settings-input">
+    <div class="card">
+      <div class="card-collapse-header" id="templateCollapseHeader">
+        <h2>Quick Templates</h2>
+        <span class="arrow" id="templateArrow">&#9660;</span>
+      </div>
+      <div class="card-collapse-body" id="templateCollapseBody" style="max-height:0;">
+        <div class="template-grid" id="templateGrid" style="padding-top:12px;"></div>
       </div>
     </div>
 
-    <div class="form-group">
-      <label>Time Entries</label>
-      <div id="timeEntriesContainer">
-        <div class="time-entry-row">
-          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="07:00">
-          <span class="te-label">to</span>
-          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-end" value="17:00">
-          <button type="button" class="remove-entry-btn" disabled>&times;</button>
+    <div class="card">
+      <h2>Shift Setup</h2>
+
+      <div class="form-group" style="display:none;">
+        <label>Date</label>
+        <input type="date" id="shiftDate">
+      </div>
+
+      <div class="form-group">
+        <label>Assignment Type</label>
+        <select id="shiftAssignmentType">
+          <option value="OR">OR / General</option>
+          <option value="OB_restricted">UVH OB</option>
+          <option value="cardiac_liver">Cardiac / Liver</option>
+          <option value="mole">Mole</option>
+          <option value="1st_call">1st Call</option>
+          <option value="2nd_call">2nd Call</option>
+          <option value="3rd_call">3rd Call</option>
+          <option value="4th_call">4th Call</option>
+          <option value="endo">Endo</option>
+          <option value="SF1">SF 1</option>
+          <option value="SF2">SF 2</option>
+          <option value="ACS">ACS</option>
+          <option value="NORA">NORA</option>
+          <option value="CRNA_supervision">CRNA Supervision</option>
+          <option value="vacation">Vacation / Off</option>
+        </select>
+      </div>
+
+      <div id="vacationRangeSection" class="hidden">
+        <div class="form-group">
+          <label>Vacation End Date <span style="font-size:0.75rem;color:var(--text-dim);">(optional — leave blank for single day)</span></label>
+          <input type="date" id="vacationEndDate" class="settings-input">
         </div>
       </div>
-      <button type="button" class="add-entry-btn" id="addTimeEntryBtn">+ Add Time Entry</button>
-    </div>
 
-    <div class="checkbox-group">
-      <input type="checkbox" id="shiftHoliday">
-      <label for="shiftHoliday">Holiday</label>
-    </div>
+      <div class="form-group">
+        <label>Time Entries</label>
+        <div id="timeEntriesContainer">
+          <div class="time-entry-row">
+            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="07:00">
+            <span class="te-label">to</span>
+            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-end" value="17:00">
+            <button type="button" class="remove-entry-btn" disabled>&times;</button>
+          </div>
+        </div>
+        <button type="button" class="add-entry-btn" id="addTimeEntryBtn">+ Add Time Entry</button>
+      </div>
 
-    <div class="checkbox-group">
-      <input type="checkbox" id="shiftForcedOff">
-      <label for="shiftForcedOff">Forced Off (no cases)</label>
-    </div>
-
-    <div id="cardiacLiverOptions" class="hidden">
-      <div class="divider"></div>
-      <h3>Subspecialty Options</h3>
       <div class="checkbox-group">
-        <input type="checkbox" id="subspecCoverage">
-        <label for="subspecCoverage">Subspecialty coverage (45 pts/day)</label>
+        <input type="checkbox" id="shiftHoliday">
+        <label for="shiftHoliday">Holiday</label>
       </div>
-      <div class="form-group">
-        <label>TEE Exams Performed</label>
-        <input type="number" id="teeCount" value="0" min="0">
-      </div>
-    </div>
 
-    <div id="supervisionOverlaySection" class="hidden">
-      <div class="divider"></div>
-      <h3>CRNA Supervision</h3>
       <div class="checkbox-group">
-        <input type="checkbox" id="supervisionOverlayCheck">
-        <label for="supervisionOverlayCheck">Add CRNA supervision period (7 pts/hr)</label>
+        <input type="checkbox" id="shiftForcedOff">
+        <label for="shiftForcedOff">Forced Off (no cases)</label>
       </div>
-      <div class="form-row hidden" id="supervisionTimes">
-        <div class="form-group">
-          <label>Supervision Start</label>
-          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="supervisionStart">
+
+      <div id="cardiacLiverOptions" class="hidden">
+        <div class="divider"></div>
+        <h3>Subspecialty Options</h3>
+        <div class="checkbox-group">
+          <input type="checkbox" id="subspecCoverage">
+          <label for="subspecCoverage">Subspecialty coverage (45 pts/day)</label>
         </div>
         <div class="form-group">
-          <label>Supervision End</label>
-          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="supervisionEnd">
-        </div>
-      </div>
-    </div>
-
-    <div style="margin-top: 16px;">
-      <button class="btn btn-primary" id="saveShiftBtn">Save Shift</button>
-    </div>
-  </div>
-</div>
-
-<!-- CASES PAGE -->
-<div class="page" id="page-cases">
-  <div class="card">
-    <div class="card-collapse-header" id="quickProcCollapseHeader">
-      <h2>Quick Procedures</h2>
-      <span class="arrow" id="quickProcArrow">&#9660;</span>
-    </div>
-    <div class="card-collapse-body" id="quickProcCollapseBody" style="max-height:0;">
-      <div class="template-grid" style="padding-top:12px;">
-        <button class="template-btn" data-qproc="colonoscopy">
-          <span class="t-label">Colonoscopy</span>
-          <span class="t-time">4 base units</span>
-        </button>
-        <button class="template-btn" data-qproc="egd">
-          <span class="t-label">EGD</span>
-          <span class="t-time">5 base units</span>
-        </button>
-        <button class="template-btn" data-qproc="double">
-          <span class="t-label">Double / EGD+Colo</span>
-          <span class="t-time">5 base units</span>
-        </button>
-        <button class="template-btn" data-qproc="tonsils">
-          <span class="t-label">Tonsils</span>
-          <span class="t-time">5 base units</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Log a Case</h2>
-
-    <div class="form-group">
-      <label>Case Type</label>
-      <select id="caseTypeSelect">
-        <option value="standard" selected>Standard Case</option>
-        <option value="labor_epidural">Labor Epidural</option>
-        <option value="acute_pain_procedure">Acute Pain Procedure</option>
-        <option value="epidural_blood_patch">Epidural Blood Patch</option>
-        <option value="emergency_intubation">Emergency Intubation</option>
-        <option value="01996">Epidural Rounding (01996)</option>
-        <option value="99231">Pain Rounding (99231)</option>
-        <option value="tee">TEE Exam</option>
-        <option value="aps_rounding">APS Rounding</option>
-      </select>
-    </div>
-
-    <div id="standardFields">
-      <div class="form-group">
-        <label>Procedure Name</label>
-        <input type="text" id="caseProcedure" placeholder="e.g., Lap Chole, Total Knee">
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label>ASA Base Units</label>
-          <input type="number" id="caseBaseUnits" min="0" step="1" placeholder="Units">
-        </div>
-        <div class="form-group">
-          <label>Physical Status</label>
-          <select id="casePhysicalStatus">
-            <option value="P1">P1</option>
-            <option value="P2" selected>P2</option>
-            <option value="P3">P3</option>
-            <option value="P4">P4</option>
-            <option value="P5">P5</option>
-          </select>
+          <label>TEE Exams Performed</label>
+          <input type="number" id="teeCount" value="0" min="0">
         </div>
       </div>
 
-      <div class="form-row">
-        <div class="form-group">
-          <label>Anesthesia Start</label>
-          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="caseStart">
+      <div id="supervisionOverlaySection" class="hidden">
+        <div class="divider"></div>
+        <h3>CRNA Supervision</h3>
+        <div class="checkbox-group">
+          <input type="checkbox" id="supervisionOverlayCheck">
+          <label for="supervisionOverlayCheck">Add CRNA supervision period (7 pts/hr)</label>
         </div>
-        <div class="form-group">
-          <label>Anesthesia End</label>
-          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="caseEnd">
-        </div>
-      </div>
-
-      <details class="modifiers-section" id="modifiersSection">
-        <summary>Modifiers <span class="modifier-tags" id="modifierTags"></span></summary>
-        <div style="padding:8px 0 4px;">
-          <div class="checkbox-group">
-            <input type="checkbox" id="caseEmergency">
-            <label for="caseEmergency">Emergency Case (+1 pt)</label>
-          </div>
-          <div class="checkbox-group">
-            <input type="checkbox" id="caseHighRiskPeds">
-            <label for="caseHighRiskPeds">High Risk Pediatrics (1.33x time)</label>
-          </div>
-          <div class="checkbox-group hidden" id="orCaseRow">
-            <input type="checkbox" id="caseORCase">
-            <label for="caseORCase">OR Case (use OR rates, no OB doubling)</label>
-          </div>
-          <div class="checkbox-group">
-            <input type="checkbox" id="caseShared">
-            <label for="caseShared">Shared/Split Case</label>
-          </div>
-          <div class="form-group hidden" id="sharedPctRow">
-            <label>Startup Points Credit %</label>
-            <input type="number" id="caseSharedPct" min="0" max="100" value="50" step="1">
-          </div>
-        </div>
-      </details>
-
-      <details class="modifiers-section">
-        <summary>Supplemental Procedures</summary>
-        <div style="padding:8px 0 4px;">
+        <div class="form-row hidden" id="supervisionTimes">
           <div class="form-group">
-            <label>Nerve Block</label>
-            <select id="caseNerveBlock">
-              <option value="none">None</option>
-              <option value="brachial_plexus">Brachial Plexus (3 pts)</option>
-              <option value="other">Other (2.6 pts)</option>
-              <option value="it_morphine">IT Morphine (3 pts)</option>
+            <label>Supervision Start</label>
+            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="supervisionStart">
+          </div>
+          <div class="form-group">
+            <label>Supervision End</label>
+            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="supervisionEnd">
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 16px;">
+        <button class="btn btn-primary" id="saveShiftBtn">Save Shift</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Case section (hidden until shift is saved) -->
+  <div id="deCaseSection" class="hidden">
+    <div class="card">
+      <div class="card-collapse-header" id="quickProcCollapseHeader">
+        <h2>Quick Procedures</h2>
+        <span class="arrow" id="quickProcArrow">&#9660;</span>
+      </div>
+      <div class="card-collapse-body" id="quickProcCollapseBody" style="max-height:0;">
+        <div class="template-grid" style="padding-top:12px;">
+          <button class="template-btn" data-qproc="colonoscopy">
+            <span class="t-label">Colonoscopy</span>
+            <span class="t-time">4 base units</span>
+          </button>
+          <button class="template-btn" data-qproc="egd">
+            <span class="t-label">EGD</span>
+            <span class="t-time">5 base units</span>
+          </button>
+          <button class="template-btn" data-qproc="double">
+            <span class="t-label">Double / EGD+Colo</span>
+            <span class="t-time">5 base units</span>
+          </button>
+          <button class="template-btn" data-qproc="tonsils">
+            <span class="t-label">Tonsils</span>
+            <span class="t-time">5 base units</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Log a Case</h2>
+
+      <div class="form-group">
+        <label>Case Type</label>
+        <select id="caseTypeSelect">
+          <option value="standard" selected>Standard Case</option>
+          <option value="labor_epidural">Labor Epidural</option>
+          <option value="acute_pain_procedure">Acute Pain Procedure</option>
+          <option value="epidural_blood_patch">Epidural Blood Patch</option>
+          <option value="emergency_intubation">Emergency Intubation</option>
+          <option value="01996">Epidural Rounding (01996)</option>
+          <option value="99231">Pain Rounding (99231)</option>
+          <option value="tee">TEE Exam</option>
+          <option value="aps_rounding">APS Rounding</option>
+        </select>
+      </div>
+
+      <div id="standardFields">
+        <div class="form-group">
+          <label>Procedure Name</label>
+          <input type="text" id="caseProcedure" placeholder="e.g., Lap Chole, Total Knee">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>ASA Base Units</label>
+            <input type="number" id="caseBaseUnits" min="0" step="1" placeholder="Units">
+          </div>
+          <div class="form-group">
+            <label>Physical Status</label>
+            <select id="casePhysicalStatus">
+              <option value="P1">P1</option>
+              <option value="P2" selected>P2</option>
+              <option value="P3">P3</option>
+              <option value="P4">P4</option>
+              <option value="P5">P5</option>
             </select>
           </div>
-          <div class="form-row">
-            <div class="checkbox-group">
-              <input type="checkbox" id="caseCentralLine">
-              <label for="caseCentralLine">Central Line (0.8 pts)</label>
-            </div>
-            <div class="checkbox-group">
-              <input type="checkbox" id="caseArterialLine">
-              <label for="caseArterialLine">Arterial Line (0.6 pts)</label>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="checkbox-group">
-              <input type="checkbox" id="casePAC">
-              <label for="casePAC">PAC (2 pts)</label>
-            </div>
-            <div class="checkbox-group">
-              <input type="checkbox" id="caseTEEAddOn">
-              <label for="caseTEEAddOn">TEE (0.4 pts)</label>
-            </div>
-          </div>
-          <div class="checkbox-group">
-            <input type="checkbox" id="caseITMorphine">
-            <label for="caseITMorphine">IT Morphine (3 pts)</label>
-          </div>
         </div>
-      </details>
-    </div>
 
-    <div id="laborEpiduralFields" class="hidden">
-      <div class="form-row">
-        <div class="form-group">
-          <label>Epidural Start</label>
-          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="laborStart">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Anesthesia Start</label>
+            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="caseStart">
+          </div>
+          <div class="form-group">
+            <label>Anesthesia End</label>
+            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="caseEnd">
+          </div>
         </div>
-        <div class="form-group">
-          <label>Epidural End</label>
-          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="laborEnd">
+
+        <details class="modifiers-section" id="modifiersSection">
+          <summary>Modifiers <span class="modifier-tags" id="modifierTags"></span></summary>
+          <div style="padding:8px 0 4px;">
+            <div class="checkbox-group">
+              <input type="checkbox" id="caseEmergency">
+              <label for="caseEmergency">Emergency Case (+1 pt)</label>
+            </div>
+            <div class="checkbox-group">
+              <input type="checkbox" id="caseHighRiskPeds">
+              <label for="caseHighRiskPeds">High Risk Pediatrics (1.33x time)</label>
+            </div>
+            <div class="checkbox-group hidden" id="orCaseRow">
+              <input type="checkbox" id="caseORCase">
+              <label for="caseORCase">OR Case (use OR rates, no OB doubling)</label>
+            </div>
+            <div class="checkbox-group">
+              <input type="checkbox" id="caseShared">
+              <label for="caseShared">Shared/Split Case</label>
+            </div>
+            <div class="form-group hidden" id="sharedPctRow">
+              <label>Startup Points Credit %</label>
+              <input type="number" id="caseSharedPct" min="0" max="100" value="50" step="1">
+            </div>
+          </div>
+        </details>
+
+        <details class="modifiers-section">
+          <summary>Supplemental Procedures</summary>
+          <div style="padding:8px 0 4px;">
+            <div class="form-group">
+              <label>Nerve Block</label>
+              <select id="caseNerveBlock">
+                <option value="none">None</option>
+                <option value="brachial_plexus">Brachial Plexus (3 pts)</option>
+                <option value="other">Other (2.6 pts)</option>
+                <option value="it_morphine">IT Morphine (3 pts)</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <div class="checkbox-group">
+                <input type="checkbox" id="caseCentralLine">
+                <label for="caseCentralLine">Central Line (0.8 pts)</label>
+              </div>
+              <div class="checkbox-group">
+                <input type="checkbox" id="caseArterialLine">
+                <label for="caseArterialLine">Arterial Line (0.6 pts)</label>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="checkbox-group">
+                <input type="checkbox" id="casePAC">
+                <label for="casePAC">PAC (2 pts)</label>
+              </div>
+              <div class="checkbox-group">
+                <input type="checkbox" id="caseTEEAddOn">
+                <label for="caseTEEAddOn">TEE (0.4 pts)</label>
+              </div>
+            </div>
+            <div class="checkbox-group">
+              <input type="checkbox" id="caseITMorphine">
+              <label for="caseITMorphine">IT Morphine (3 pts)</label>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div id="laborEpiduralFields" class="hidden">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Epidural Start</label>
+            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="laborStart">
+          </div>
+          <div class="form-group">
+            <label>Epidural End</label>
+            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="laborEnd">
+          </div>
         </div>
       </div>
-    </div>
 
-    <div id="apsRoundingFields" class="hidden">
-      <div class="form-row">
-        <div class="form-group">
-          <label>Epidural Rounds (3 pts each)</label>
-          <input type="number" id="apsEpiduralCount" min="0" step="1" value="0">
-        </div>
-        <div class="form-group">
-          <label>Pain Rounds (2 pts each)</label>
-          <input type="number" id="apsPainCount" min="0" step="1" value="0">
+      <div id="apsRoundingFields" class="hidden">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Epidural Rounds (3 pts each)</label>
+            <input type="number" id="apsEpiduralCount" min="0" step="1" value="0">
+          </div>
+          <div class="form-group">
+            <label>Pain Rounds (2 pts each)</label>
+            <input type="number" id="apsPainCount" min="0" step="1" value="0">
+          </div>
         </div>
       </div>
-    </div>
 
-    <div id="simpleFields" class="hidden">
+      <div id="simpleFields" class="hidden">
+        <div class="form-group">
+          <label>Procedure Notes (optional)</label>
+          <input type="text" id="simpleNotes" placeholder="Optional notes">
+        </div>
+      </div>
+
       <div class="form-group">
-        <label>Procedure Notes (optional)</label>
-        <input type="text" id="simpleNotes" placeholder="Optional notes">
+        <label>Notes (optional)</label>
+        <textarea id="caseNotes" placeholder="Surgeon, location, or other notes"></textarea>
+      </div>
+
+      <div id="casePointPreview" class="point-breakdown hidden">
+        <div class="row"><span>Estimated Points</span><span id="previewPoints">--</span></div>
+      </div>
+
+      <div style="margin-top: 16px;">
+        <button class="btn btn-primary" id="saveCaseBtn">Save Case</button>
       </div>
     </div>
+  </div>
 
-    <div class="form-group">
-      <label>Notes (optional)</label>
-      <textarea id="caseNotes" placeholder="Surgeon, location, or other notes"></textarea>
-    </div>
-
-    <div id="casePointPreview" class="point-breakdown hidden">
-      <div class="row"><span>Estimated Points</span><span id="previewPoints">--</span></div>
-    </div>
-
-    <div style="margin-top: 16px;">
-      <button class="btn btn-primary" id="saveCaseBtn">Save Case</button>
+  <!-- Daily case list -->
+  <div class="card" id="deCaseListCard">
+    <h2>Cases Today <span id="deCaseCount" style="font-size:0.8rem;color:var(--text-dim);font-weight:400;"></span></h2>
+    <div class="de-case-list" id="deCaseList">
+      <p style="color:var(--text-dim);font-size:0.85rem;">No cases logged yet.</p>
     </div>
   </div>
 </div>
@@ -2006,13 +2089,9 @@ input.mil-time.invalid {
 
 <!-- BOTTOM NAV -->
 <div class="bottom-nav">
-  <button class="active" data-page="shift">
-    <span class="nav-icon">&#128197;</span>
-    <span>Shift</span>
-  </button>
-  <button data-page="cases">
-    <span class="nav-icon">&#128203;</span>
-    <span>Cases</span>
+  <button class="active" data-page="dataentry">
+    <span class="nav-icon">&#128221;</span>
+    <span>Data Entry</span>
   </button>
   <button data-page="today">
     <span class="nav-icon">&#11088;</span>
@@ -2793,6 +2872,7 @@ function getCaseTypeName(type) {
 // WORKING DATE
 // ================================================================
 let workingDate = todayStr();
+let deShiftEditing = false;
 
 function setWorkingDate(d) {
   workingDate = d;
@@ -2802,6 +2882,10 @@ function setWorkingDate(d) {
   updateHeaderPoints();
   updateEndTimeWarning();
   updateORCaseVisibility();
+  deShiftEditing = false;
+  updateDataEntryState();
+  renderDECaseList();
+  updateDETally();
 }
 
 // Header date picker
@@ -2838,9 +2922,8 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('page-' + btn.dataset.page).classList.add('active');
-    if (btn.dataset.page === 'shift') loadShiftForDate();
+    if (btn.dataset.page === 'dataentry') loadDataEntryPage();
     if (btn.dataset.page === 'today') renderToday();
-    if (btn.dataset.page === 'cases') updateORCaseVisibility();
     if (btn.dataset.page === 'dashboard') switchDashboardTab(activeDashTab);
     if (btn.dataset.page === 'settings') { renderHistory(); loadOverrideUI(); loadStipendUI(); }
     if (btn.dataset.page === 'reconcile') renderReconTabs();
@@ -3013,6 +3096,10 @@ shiftDateInput.addEventListener('change', function() {
   workingDate = this.value;
   document.getElementById('headerDateBtn').textContent = formatDateShort(workingDate);
   loadShiftForDate();
+  deShiftEditing = false;
+  updateDataEntryState();
+  renderDECaseList();
+  updateDETally();
 });
 
 function getSelectedAssignmentType() {
@@ -3066,6 +3153,116 @@ function loadShiftForDate() {
   updateSupervisionOverlayVisibility();
   updateEndTimeWarning();
 }
+
+// ================================================================
+// DATA ENTRY PAGE FUNCTIONS
+// ================================================================
+function loadDataEntryPage() {
+  loadShiftForDate();
+  updateORCaseVisibility();
+  updateDataEntryState();
+  renderDECaseList();
+  updateDETally();
+}
+
+function updateDataEntryState() {
+  const shift = data.shifts[workingDate];
+  const summaryBar = document.getElementById('deShiftSummaryBar');
+  const shiftSection = document.getElementById('deShiftSection');
+  const caseSection = document.getElementById('deCaseSection');
+  const caseListCard = document.getElementById('deCaseListCard');
+
+  if (shift && !deShiftEditing) {
+    // Shift exists and not editing — show summary bar, hide shift form, show case section
+    summaryBar.classList.remove('hidden');
+    shiftSection.style.display = 'none';
+    const isVacation = shift.assignmentType === 'vacation';
+    const badge = document.getElementById('deSSBBadge');
+    badge.textContent = getAssignmentTypeName(shift.assignmentType);
+    badge.classList.toggle('vacation', isVacation);
+    const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
+    if (isVacation) {
+      document.getElementById('deSSBTimes').textContent = 'Vacation Day';
+    } else if (entries.length === 1) {
+      document.getElementById('deSSBTimes').textContent = (entries[0].start || '?') + ' - ' + (entries[0].end || '?');
+    } else {
+      document.getElementById('deSSBTimes').textContent = entries.length + ' time entries';
+    }
+    // Show case section only if not vacation
+    if (isVacation) {
+      caseSection.classList.add('hidden');
+    } else {
+      caseSection.classList.remove('hidden');
+    }
+    caseListCard.classList.remove('hidden');
+  } else {
+    // No shift or editing — show shift form, hide summary bar and case section
+    summaryBar.classList.add('hidden');
+    shiftSection.style.display = '';
+    caseSection.classList.add('hidden');
+    caseListCard.classList.toggle('hidden', !shift);
+  }
+}
+
+function renderDECaseList() {
+  const listEl = document.getElementById('deCaseList');
+  const countEl = document.getElementById('deCaseCount');
+  const shift = data.shifts[workingDate];
+  const shiftCases = data.cases.filter(c => c.shiftDate === workingDate);
+  countEl.textContent = shiftCases.length > 0 ? `(${shiftCases.length})` : '';
+
+  if (shiftCases.length === 0) {
+    listEl.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No cases logged yet.</p>';
+    return;
+  }
+
+  let html = '';
+  shiftCases.forEach(c => {
+    const pts = shift ? calcCasePoints(c, shift) : 0;
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
+    const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : '';
+    html += `<div class="de-case-list-item">
+      <div class="de-info">
+        <div class="de-name">${escHtml(name)}</div>
+        ${timeStr ? `<div class="de-detail">${escHtml(timeStr)}</div>` : ''}
+      </div>
+      <div class="de-actions">
+        <span class="de-pts">${pts.toFixed(1)}</span>
+        <button class="btn btn-danger btn-sm" onclick="deleteCaseDE('${c.id}')" style="padding:2px 8px;font-size:0.7rem;">Del</button>
+      </div>
+    </div>`;
+  });
+  listEl.innerHTML = html;
+}
+
+function updateDETally() {
+  const shift = data.shifts[workingDate];
+  const tallyEl = document.getElementById('deTallyValue');
+  if (!shift) {
+    tallyEl.textContent = '0';
+    return;
+  }
+  const totals = calcShiftTotal(shift);
+  tallyEl.textContent = totals.total.toFixed(1);
+}
+
+function deleteCaseDE(id) {
+  if (!confirm('Delete this case?')) return;
+  data.cases = data.cases.filter(c => c.id !== id);
+  saveData(data);
+  updateHeaderPoints();
+  renderDECaseList();
+  updateDETally();
+  renderToday();
+  showToast('Case deleted');
+}
+
+// Summary bar click — re-expand shift form for editing
+document.getElementById('deShiftSummaryBar').addEventListener('click', () => {
+  deShiftEditing = true;
+  loadShiftForDate();
+  updateDataEntryState();
+});
 
 document.getElementById('saveShiftBtn').addEventListener('click', () => {
   const date = workingDate;
@@ -3135,6 +3332,10 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
   } else {
     showToast('Shift saved!');
   }
+  deShiftEditing = false;
+  updateDataEntryState();
+  renderDECaseList();
+  updateDETally();
 });
 
 // ================================================================
@@ -3257,6 +3458,8 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   updateHeaderPoints();
   showToast('Case saved! (' + calcCasePoints(caseData, data.shifts[date]).toFixed(2) + ' pts)');
   resetCaseForm();
+  renderDECaseList();
+  updateDETally();
 });
 
 function resetCaseForm() {
@@ -3437,6 +3640,8 @@ function deleteCase(id) {
   saveData(data);
   updateHeaderPoints();
   renderToday();
+  renderDECaseList();
+  updateDETally();
   showToast('Case deleted');
 }
 
@@ -5075,7 +5280,7 @@ function renderDailyTab() {
   // Summary
   const avgPerShift = shiftCount > 0 ? (monthTotal / shiftCount).toFixed(1) : '—';
   document.getElementById('dailyMonthSummary').innerHTML =
-    `<strong>${round2(monthTotal).toFixed(1)}</strong> total pts &bull; <strong>${shiftCount}</strong> shifts &bull; <strong>${avgPerShift}</strong> avg pts/shift`;
+    `<span style="font-size:1.3rem;font-weight:700;color:var(--accent);">${round2(monthTotal).toFixed(1)}</span> <span style="color:var(--text-dim);">total pts</span> &bull; <strong>${shiftCount}</strong> shifts &bull; <strong>${avgPerShift}</strong> avg pts/shift`;
 }
 
 function renderAnalyticsTab() {
@@ -5326,6 +5531,8 @@ function deleteCaseFromList(id) {
   saveData(data);
   updateHeaderPoints();
   renderCaseLogTable();
+  renderDECaseList();
+  updateDETally();
   showToast('Case deleted');
 }
 
