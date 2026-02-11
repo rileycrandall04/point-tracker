@@ -941,6 +941,27 @@ input.mil-time.invalid {
 .collapse-header .arrow.open { transform: rotate(180deg); }
 .collapse-body { overflow: hidden; transition: max-height 0.3s ease; max-height: 0; }
 
+/* ===== PROCEDURE AUTOCOMPLETE ===== */
+.proc-autocomplete { position: relative; }
+.proc-suggestions {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 100;
+  background: var(--card-bg); border: 1px solid var(--border); border-top: none;
+  border-radius: 0 0 8px 8px; max-height: 180px; overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.proc-suggestions .proc-item {
+  padding: 10px 12px; cursor: pointer; font-size: 0.85rem;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.proc-suggestions .proc-item:hover, .proc-suggestions .proc-item.active {
+  background: var(--primary); color: #fff;
+}
+.proc-suggestions .proc-item .proc-units {
+  font-size: 0.75rem; color: var(--text-dim); margin-left: 8px;
+}
+.proc-suggestions .proc-item:hover .proc-units,
+.proc-suggestions .proc-item.active .proc-units { color: rgba(255,255,255,0.7); }
+
 /* ===== TIME ENTRY ROWS ===== */
 .time-entry-row {
   display: flex;
@@ -1445,9 +1466,10 @@ input.mil-time.invalid {
       </div>
 
       <div id="standardFields">
-        <div class="form-group">
+        <div class="form-group proc-autocomplete">
           <label>Procedure Name</label>
-          <input type="text" id="caseProcedure" placeholder="e.g., Lap Chole, Total Knee">
+          <input type="text" id="caseProcedure" placeholder="e.g., Lap Chole, Total Knee" autocomplete="off">
+          <div class="proc-suggestions hidden" id="procSuggestions"></div>
         </div>
 
         <div class="form-row">
@@ -4473,6 +4495,88 @@ document.getElementById('caseShared').addEventListener('change', function() {
   document.getElementById('sharedPctRow').classList.toggle('hidden', !this.checked);
   updatePointPreview();
 });
+
+// Procedure autocomplete
+(function() {
+  const procInput = document.getElementById('caseProcedure');
+  const sugBox = document.getElementById('procSuggestions');
+  const baseUnitsInput = document.getElementById('caseBaseUnits');
+  let activeIdx = -1;
+  let baseUnitsAutoFilled = false;
+
+  function getProcHistory() {
+    const map = {};
+    data.cases.forEach(c => {
+      if (c.caseType !== 'standard' || !c.procedure) return;
+      const name = c.procedure.trim();
+      if (!name) return;
+      if (!map[name]) map[name] = { count: 0, lastUnits: '' };
+      map[name].count++;
+      if (c.baseUnits) map[name].lastUnits = c.baseUnits;
+    });
+    return map;
+  }
+
+  function showSuggestions() {
+    const query = procInput.value.trim().toLowerCase();
+    if (!query) { hideSuggestions(); return; }
+    const history = getProcHistory();
+    const matches = Object.entries(history)
+      .filter(([name]) => name.toLowerCase().includes(query))
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 8);
+    if (matches.length === 0) { hideSuggestions(); return; }
+    activeIdx = -1;
+    sugBox.innerHTML = matches.map(([name, d], i) =>
+      `<div class="proc-item" data-idx="${i}" data-name="${escHtml(name)}" data-units="${escHtml(d.lastUnits)}">${escHtml(name)}<span class="proc-units">${d.lastUnits ? d.lastUnits + 'u' : ''} (${d.count})</span></div>`
+    ).join('');
+    sugBox.classList.remove('hidden');
+  }
+
+  function hideSuggestions() { sugBox.classList.add('hidden'); sugBox.innerHTML = ''; activeIdx = -1; }
+
+  function selectItem(el) {
+    procInput.value = el.dataset.name;
+    const units = el.dataset.units;
+    if (units) { baseUnitsInput.value = units; baseUnitsAutoFilled = true; }
+    hideSuggestions();
+    updatePointPreview();
+  }
+
+  procInput.addEventListener('input', showSuggestions);
+  procInput.addEventListener('focus', () => { if (procInput.value.trim()) showSuggestions(); });
+
+  procInput.addEventListener('keydown', function(e) {
+    const items = sugBox.querySelectorAll('.proc-item');
+    if (items.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIdx = Math.min(activeIdx + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIdx = Math.max(activeIdx - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+    } else if (e.key === 'Enter' && activeIdx >= 0) {
+      e.preventDefault();
+      selectItem(items[activeIdx]);
+    } else if (e.key === 'Escape') {
+      hideSuggestions();
+    }
+  });
+
+  sugBox.addEventListener('click', function(e) {
+    const item = e.target.closest('.proc-item');
+    if (item) selectItem(item);
+  });
+
+  // Allow editing base units after auto-fill
+  baseUnitsInput.addEventListener('focus', function() { baseUnitsAutoFilled = false; });
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.proc-autocomplete')) hideSuggestions();
+  });
+})();
 
 ['caseBaseUnits','caseStart','caseEnd','casePhysicalStatus','laborStart','laborEnd','caseNerveBlock','apsEpiduralCount','apsPainCount','caseSharedPct'].forEach(id => {
   const el = document.getElementById(id);
