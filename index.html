@@ -7850,12 +7850,16 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
     const supEntries = entries.filter(e => e.clockInTime && (e.timeClockTask || '').toUpperCase() === 'CARE TEAM SUPERVISOR');
     const allClocked = [...entries].filter(e => e.clockInTime).sort((a, b) => a.clockInTime.localeCompare(b.clockInTime));
     const timeEntries = allClocked.map(e => ({ start: e.clockInTime, end: e.clockOutTime || '' }));
-    let earliest = '23:59', latest = '00:00', task = '';
+    let earliest = '23:59', latest = '00:00';
+    const allTasks = [];
     entries.forEach(e => {
       if (e.clockInTime && e.clockInTime < earliest) earliest = e.clockInTime;
       if (e.clockOutTime && e.clockOutTime > latest) latest = e.clockOutTime;
-      if (!task && e.task) task = e.task;
+      if (e.task) allTasks.push(e.task);
     });
+    // Prefer call/mole/endo task over daytime OR work (e.g. "UVH/SFH Work" + "Mole" → use "Mole")
+    const callTaskPatterns = /MOLE|ENDO|1ST|2ND|3RD|4TH|CALL|SFH\s/i;
+    const task = allTasks.find(t => callTaskPatterns.test(t)) || allTasks[0] || '';
     // Detect CRNA supervision period
     let supervisionStart = '', supervisionEnd = '';
     if (supEntries.length > 0) {
