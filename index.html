@@ -1258,7 +1258,7 @@ input.mil-time.invalid {
         </div>
       </div>
 
-      <div class="form-group">
+      <div class="form-group" id="timeEntriesGroup">
         <label id="timeEntriesLabel">Time Entries</label>
         <div id="timeEntriesContainer">
           <div class="time-entry-row">
@@ -3005,6 +3005,27 @@ function calcARPoints(shift) {
   const isWkndOrHol = isHol || isWknd;
   const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
 
+  // Temp coverage (covering): pager + AR scoped entirely to coverage interval
+  if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
+    const tc = shift.tempCoverage[0];
+    if (!tc.start || !tc.end) return 0;
+    let tcStart = timeToMinutes(tc.start);
+    let tcEnd = timeToMinutes(tc.end);
+    if (tcEnd <= tcStart) tcEnd += 1440;
+    const pagerPts = ((tcEnd - tcStart) / 60) * 3.5;
+    let arPts = 0;
+    (tc.timeEntries || []).forEach(e => {
+      if (!e.start || !e.end) return;
+      let es = timeToMinutes(e.start);
+      let ee = timeToMinutes(e.end);
+      if (ee <= es) ee += 1440;
+      for (let m = es; m < ee; m++) {
+        arPts += getARRate(shift.assignmentType, isHol, isWknd, m % 1440) / 60;
+      }
+    });
+    return round2(pagerPts + arPts);
+  }
+
   const entries = shift.timeEntries || [];
   const hasEntries = entries.length > 0 && (entries.length > 1 || entries[0].start);
   const lastEntry = hasEntries ? entries[entries.length - 1] : null;
@@ -3181,6 +3202,27 @@ function calcARBreakdown(shift) {
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
   const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+
+  // Temp coverage (covering): pager + AR scoped entirely to coverage interval
+  if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
+    const tc = shift.tempCoverage[0];
+    if (!tc.start || !tc.end) return { ar: 0, call: 0 };
+    let tcStart = timeToMinutes(tc.start);
+    let tcEnd = timeToMinutes(tc.end);
+    if (tcEnd <= tcStart) tcEnd += 1440;
+    const pagerPts = ((tcEnd - tcStart) / 60) * 3.5;
+    let arPts = 0;
+    (tc.timeEntries || []).forEach(e => {
+      if (!e.start || !e.end) return;
+      let es = timeToMinutes(e.start);
+      let ee = timeToMinutes(e.end);
+      if (ee <= es) ee += 1440;
+      for (let m = es; m < ee; m++) {
+        arPts += getARRate(shift.assignmentType, isHol, isWknd, m % 1440) / 60;
+      }
+    });
+    return { ar: round2(arPts), call: round2(pagerPts) };
+  }
 
   const entries = shift.timeEntries || [];
   const hasEntries = entries.length > 0 && (entries.length > 1 || entries[0].start);
@@ -3937,6 +3979,14 @@ document.getElementById('tempCoverageCheck').addEventListener('change', function
   if (!this.checked) {
     document.getElementById('tcTimeEntriesSection').classList.add('hidden');
     document.getElementById('tcTimeEntriesContainer').innerHTML = '';
+    // Restore regular time entries when coverage unchecked
+    document.getElementById('timeEntriesGroup').classList.remove('hidden');
+  } else {
+    // Check if covering is selected and hide time entries
+    const isCovering = document.querySelector('input[name="tcDirection"]:checked')?.value === 'covering';
+    if (isCovering) {
+      document.getElementById('timeEntriesGroup').classList.add('hidden');
+    }
   }
 });
 
@@ -3944,7 +3994,13 @@ document.querySelectorAll('input[name="tcDirection"]').forEach(r => {
   r.addEventListener('change', function() {
     const isCovering = this.value === 'covering';
     document.getElementById('tcTimeEntriesSection').classList.toggle('hidden', !isCovering);
-    if (!isCovering) document.getElementById('tcTimeEntriesContainer').innerHTML = '';
+    if (!isCovering) {
+      document.getElementById('tcTimeEntriesContainer').innerHTML = '';
+      document.getElementById('timeEntriesGroup').classList.remove('hidden');
+    } else {
+      // Hide regular time entries — coverage entries replace them
+      document.getElementById('timeEntriesGroup').classList.add('hidden');
+    }
   });
 });
 
@@ -4082,9 +4138,12 @@ function loadShiftForDate() {
       if (tc.type === 'covering') {
         document.getElementById('tcTimeEntriesSection').classList.remove('hidden');
         populateTCTimeEntries(tc.timeEntries || []);
+        // Hide regular time entries — coverage entries replace them
+        document.getElementById('timeEntriesGroup').classList.add('hidden');
       } else {
         document.getElementById('tcTimeEntriesSection').classList.add('hidden');
         document.getElementById('tcTimeEntriesContainer').innerHTML = '';
+        document.getElementById('timeEntriesGroup').classList.remove('hidden');
       }
     } else {
       document.getElementById('tempCoverageCheck').checked = false;
@@ -4093,6 +4152,7 @@ function loadShiftForDate() {
       document.getElementById('tcEnd').value = '';
       document.getElementById('tcTimeEntriesSection').classList.add('hidden');
       document.getElementById('tcTimeEntriesContainer').innerHTML = '';
+      document.getElementById('timeEntriesGroup').classList.remove('hidden');
     }
   } else {
     banner.classList.add('hidden');
@@ -4122,6 +4182,7 @@ function loadShiftForDate() {
     document.getElementById('tcEnd').value = '';
     document.getElementById('tcTimeEntriesSection').classList.add('hidden');
     document.getElementById('tcTimeEntriesContainer').innerHTML = '';
+    document.getElementById('timeEntriesGroup').classList.remove('hidden');
   }
   updateUnrestrictedCallVisibility();
   updateSupervisionOverlayVisibility();
@@ -4595,80 +4656,92 @@ function renderToday() {
   document.getElementById('todayTotal').textContent = totals.total.toFixed(1);
 
   let bdHtml = '<div class="point-breakdown">';
-  // Show time entries
-  const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
   const isWkndOrHol = shift.isHoliday || isWeekend(shift.date);
   const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
-  if (entries.length > 1) {
-    bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:4px;"><span>Time Entries (${entries.length})</span><span></span></div>`;
-    for (let i = 0; i < entries.length; i++) {
-      // Show pager pay before first entry
-      if (i === 0 && pagerWindow && entries[i].start) {
-        const entryStart = timeToMinutes(entries[i].start);
-        if (pagerWindow.start < entryStart) {
-          bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${minutesToTimeStr(pagerWindow.start)} - ${entries[i].start}</span><span></span></div>`;
-        }
-      }
-      bdHtml += `<div class="row" style="font-size:0.75rem;"><span>Clocked in: ${entries[i].start} - ${entries[i].end || '?'}</span><span></span></div>`;
-      if (i < entries.length - 1 && entries[i].end && entries[i+1].start) {
-        if (pagerWindow) {
-          bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${entries[i].end} - ${entries[i+1].start}</span><span></span></div>`;
-        } else {
-          bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim)"><span>Gap: ${entries[i].end} - ${entries[i+1].start}</span><span></span></div>`;
-        }
-      }
-      // Show pager pay after last entry
-      if (i === entries.length - 1 && pagerWindow && entries[i].end) {
-        const entryEnd = timeToMinutes(entries[i].end);
-        const adjustedEnd = entryEnd <= timeToMinutes(entries[0].start) ? entryEnd + 1440 : entryEnd;
-        if (adjustedEnd < pagerWindow.end) {
-          bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${entries[i].end} - ${minutesToTimeStr(pagerWindow.end)}</span><span></span></div>`;
-        }
-      }
-    }
-  } else if (entries.length === 1) {
-    if (pagerWindow && entries[0].start) {
-      const entryStart = timeToMinutes(entries[0].start);
-      if (pagerWindow.start < entryStart) {
-        bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${minutesToTimeStr(pagerWindow.start)} - ${entries[0].start}</span><span></span></div>`;
-      }
-    }
-    bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim);"><span>Clocked in: ${entries[0].start} - ${entries[0].end || '?'}</span><span></span></div>`;
-    if (pagerWindow && entries[0].end) {
-      const entryEnd = timeToMinutes(entries[0].end);
-      const entryStart = timeToMinutes(entries[0].start);
-      const adjustedEnd = entryEnd <= entryStart ? entryEnd + 1440 : entryEnd;
-      if (adjustedEnd < pagerWindow.end) {
-        bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${entries[0].end} - ${minutesToTimeStr(pagerWindow.end)}</span><span></span></div>`;
-      }
-    }
-  }
-  // Show AR breakdown: split for pre-call shifts
-  const arBreakdown = calcARBreakdown(shift);
-  if (arBreakdown.preCallAR !== undefined) {
-    const eveningName = getAssignmentTypeName(shift.assignmentType);
-    bdHtml += `<div class="row"><span>Pre-Call AR</span><span>${arBreakdown.preCallAR.toFixed(2)}</span></div>`;
-    bdHtml += `<div class="row"><span>${escHtml(eveningName)} AR</span><span>${arBreakdown.eveningAR.toFixed(2)}</span></div>`;
-  } else {
-    bdHtml += `<div class="row"><span>Availability Rate</span><span>${totals.ar.toFixed(2)}</span></div>`;
-  }
-  bdHtml += `<div class="row"><span>Productivity (${shiftCases.length} cases)</span><span>${totals.prod.toFixed(2)}</span></div>`;
-  // Show pager pay line item — always visible for eligible shift types
-  if (pagerWindow) {
+  const isCoveringShift = shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering';
+
+  if (isCoveringShift) {
+    // Covering shift: show coverage interval + time punches only
+    const tc = shift.tempCoverage[0];
+    bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Coverage Pager: ${tc.start} - ${tc.end}</span><span></span></div>`;
+    const tcEntries = tc.timeEntries || [];
+    tcEntries.forEach(e => {
+      if (e.start) bdHtml += `<div class="row" style="font-size:0.75rem;"><span>Clocked in: ${e.start} - ${e.end || '?'}</span><span></span></div>`;
+    });
+    bdHtml += `<div class="row"><span>Coverage AR</span><span>${totals.ar.toFixed(2)}</span></div>`;
+    bdHtml += `<div class="row"><span>Productivity (${shiftCases.length} cases)</span><span>${totals.prod.toFixed(2)}</span></div>`;
     const pagerHrs = round2(totals.call / 3.5);
-    bdHtml += `<div class="row"><span>Pager Pay (${pagerHrs.toFixed(1)} hrs × 3.5)</span><span>${totals.call.toFixed(2)}</span></div>`;
-  } else if (totals.call > 0) {
-    bdHtml += `<div class="row"><span>Pager Pay</span><span>${totals.call.toFixed(2)}</span></div>`;
-  }
-  // Temp coverage line item
-  if (shift.tempCoverage && shift.tempCoverage.length > 0) {
-    const tcPts = calcTempCoveragePoints(shift);
-    const tcTotal = round2(tcPts.pagerAdj + tcPts.ar);
-    if (tcTotal !== 0) {
-      const sign = tcTotal > 0 ? '+' : '';
-      const tc = shift.tempCoverage[0];
-      const label = tc.type === 'covered' ? 'Temp Coverage (Covered)' : 'Temp Coverage (Covering)';
-      bdHtml += `<div class="row"><span>${label} ${tc.start}-${tc.end}</span><span>${sign}${tcTotal.toFixed(2)}</span></div>`;
+    bdHtml += `<div class="row"><span>Coverage Pager Pay (${pagerHrs.toFixed(1)} hrs × 3.5)</span><span>${totals.call.toFixed(2)}</span></div>`;
+  } else {
+    // Regular shift: show time entries + standard breakdown
+    const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
+    if (entries.length > 1) {
+      bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:4px;"><span>Time Entries (${entries.length})</span><span></span></div>`;
+      for (let i = 0; i < entries.length; i++) {
+        if (i === 0 && pagerWindow && entries[i].start) {
+          const entryStart = timeToMinutes(entries[i].start);
+          if (pagerWindow.start < entryStart) {
+            bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${minutesToTimeStr(pagerWindow.start)} - ${entries[i].start}</span><span></span></div>`;
+          }
+        }
+        bdHtml += `<div class="row" style="font-size:0.75rem;"><span>Clocked in: ${entries[i].start} - ${entries[i].end || '?'}</span><span></span></div>`;
+        if (i < entries.length - 1 && entries[i].end && entries[i+1].start) {
+          if (pagerWindow) {
+            bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${entries[i].end} - ${entries[i+1].start}</span><span></span></div>`;
+          } else {
+            bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim)"><span>Gap: ${entries[i].end} - ${entries[i+1].start}</span><span></span></div>`;
+          }
+        }
+        if (i === entries.length - 1 && pagerWindow && entries[i].end) {
+          const entryEnd = timeToMinutes(entries[i].end);
+          const adjustedEnd = entryEnd <= timeToMinutes(entries[0].start) ? entryEnd + 1440 : entryEnd;
+          if (adjustedEnd < pagerWindow.end) {
+            bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${entries[i].end} - ${minutesToTimeStr(pagerWindow.end)}</span><span></span></div>`;
+          }
+        }
+      }
+    } else if (entries.length === 1) {
+      if (pagerWindow && entries[0].start) {
+        const entryStart = timeToMinutes(entries[0].start);
+        if (pagerWindow.start < entryStart) {
+          bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${minutesToTimeStr(pagerWindow.start)} - ${entries[0].start}</span><span></span></div>`;
+        }
+      }
+      bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim);"><span>Clocked in: ${entries[0].start} - ${entries[0].end || '?'}</span><span></span></div>`;
+      if (pagerWindow && entries[0].end) {
+        const entryEnd = timeToMinutes(entries[0].end);
+        const entryStart = timeToMinutes(entries[0].start);
+        const adjustedEnd = entryEnd <= entryStart ? entryEnd + 1440 : entryEnd;
+        if (adjustedEnd < pagerWindow.end) {
+          bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${entries[0].end} - ${minutesToTimeStr(pagerWindow.end)}</span><span></span></div>`;
+        }
+      }
+    }
+    // Show AR breakdown: split for pre-call shifts
+    const arBreakdown = calcARBreakdown(shift);
+    if (arBreakdown.preCallAR !== undefined) {
+      const eveningName = getAssignmentTypeName(shift.assignmentType);
+      bdHtml += `<div class="row"><span>Pre-Call AR</span><span>${arBreakdown.preCallAR.toFixed(2)}</span></div>`;
+      bdHtml += `<div class="row"><span>${escHtml(eveningName)} AR</span><span>${arBreakdown.eveningAR.toFixed(2)}</span></div>`;
+    } else {
+      bdHtml += `<div class="row"><span>Availability Rate</span><span>${totals.ar.toFixed(2)}</span></div>`;
+    }
+    bdHtml += `<div class="row"><span>Productivity (${shiftCases.length} cases)</span><span>${totals.prod.toFixed(2)}</span></div>`;
+    // Show pager pay line item
+    if (pagerWindow) {
+      const pagerHrs = round2(totals.call / 3.5);
+      bdHtml += `<div class="row"><span>Pager Pay (${pagerHrs.toFixed(1)} hrs × 3.5)</span><span>${totals.call.toFixed(2)}</span></div>`;
+    } else if (totals.call > 0) {
+      bdHtml += `<div class="row"><span>Pager Pay</span><span>${totals.call.toFixed(2)}</span></div>`;
+    }
+    // Temp coverage (covered) line item
+    if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covered') {
+      const tcPts = calcTempCoveragePoints(shift);
+      const tcTotal = round2(tcPts.pagerAdj);
+      if (tcTotal !== 0) {
+        const tc = shift.tempCoverage[0];
+        bdHtml += `<div class="row"><span>Temp Coverage (Covered) ${tc.start}-${tc.end}</span><span>${tcTotal.toFixed(2)}</span></div>`;
+      }
     }
   }
   if (totals.subspec > 0) bdHtml += `<div class="row"><span>Subspecialty</span><span>${totals.subspec.toFixed(2)}</span></div>`;
@@ -5046,6 +5119,41 @@ function getShiftPayBreakdown(shift) {
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
   const pagerWindowEarly = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+
+  // Temp coverage (covering): only coverage-scoped rows
+  if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
+    const tc = shift.tempCoverage[0];
+    if (!tc.start || !tc.end) return [];
+    let tcS = timeToMinutes(tc.start);
+    let tcE = timeToMinutes(tc.end);
+    if (tcE <= tcS) tcE += 1440;
+    const tcDurMin = tcE - tcS;
+    const coverageRows = [];
+    coverageRows.push({
+      clockIn: tc.start, clockOut: tc.end,
+      payCode: 'Temp Coverage Pager',
+      durationMin: tcDurMin, payRate: 3.5,
+      amount: round2((tcDurMin / 60) * 3.5),
+      isPager: true, isSubRow: false
+    });
+    (tc.timeEntries || []).forEach(e => {
+      if (!e.start || !e.end) return;
+      let es = timeToMinutes(e.start);
+      let ee = timeToMinutes(e.end);
+      if (ee <= es) ee += 1440;
+      const eDurMin = ee - es;
+      const normMin = es % 1440;
+      const rate = getARRate(shift.assignmentType, isHol, isWknd, normMin);
+      coverageRows.push({
+        clockIn: e.start, clockOut: e.end,
+        payCode: 'Temp Coverage AR',
+        durationMin: eDurMin, payRate: rate,
+        amount: round2((eDurMin / 60) * rate),
+        isSubRow: false
+      });
+    });
+    return coverageRows;
+  }
 
   const entries = shift.timeEntries || [];
   const hasEntries = entries.length > 0 && (entries.length > 1 || entries[0].start);
