@@ -2916,15 +2916,25 @@ function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
 function calcARPoints(shift) {
   if (shift.assignmentType === 'vacation') return 0;
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return 56;
-  const entries = shift.timeEntries || [];
-  if (entries.length === 0) return 0;
-  // Check if any entry has an end time
-  const lastEntry = entries[entries.length - 1];
-  if (!lastEntry.end && entries.length === 1) return 0;
-
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+
+  const entries = shift.timeEntries || [];
+  const hasEntries = entries.length > 0 && (entries.length > 1 || entries[0].start);
+  const lastEntry = hasEntries ? entries[entries.length - 1] : null;
+  const hasEnd = hasEntries && (entries.length > 1 || (lastEntry && lastEntry.end));
+
+  // No time entries: return pager pay only if eligible
+  if (!hasEntries || !hasEnd) {
+    if (pagerWindow) {
+      const pagerMinutes = pagerWindow.end - pagerWindow.start;
+      return round2((pagerMinutes / 60) * 3.5);
+    }
+    return 0;
+  }
+
   const isSF = ['SF1','SF2'].includes(shift.assignmentType);
 
   // Build OR-case time ranges for SF1/SF2
@@ -2949,17 +2959,24 @@ function calcARPoints(shift) {
     clockedRanges.push({ start: s, end: en });
   });
 
-  if (clockedRanges.length === 0) return 0;
+  if (clockedRanges.length === 0) {
+    if (pagerWindow) {
+      const pagerMinutes = pagerWindow.end - pagerWindow.start;
+      return round2((pagerMinutes / 60) * 3.5);
+    }
+    return 0;
+  }
 
   // Full span: first entry start → last entry end
   const spanStart = clockedRanges[0].start;
   const spanEnd = clockedRanges[clockedRanges.length - 1].end;
-  if (spanEnd <= spanStart) return 0;
-
-  // Expand scan to cover full pager pay window
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
-  const scanStart = pagerWindow ? Math.min(spanStart, pagerWindow.start) : spanStart;
-  const scanEnd = pagerWindow ? Math.max(spanEnd, pagerWindow.end) : spanEnd;
+  if (spanEnd <= spanStart) {
+    if (pagerWindow) {
+      const pagerMinutes = pagerWindow.end - pagerWindow.start;
+      return round2((pagerMinutes / 60) * 3.5);
+    }
+    return 0;
+  }
 
   let arPoints = 0;
 
@@ -3005,14 +3022,25 @@ function calcARPoints(shift) {
 function calcARBreakdown(shift) {
   if (shift.assignmentType === 'vacation') return { ar: 0, call: 0 };
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return { ar: 56, call: 0 };
-  const entries = shift.timeEntries || [];
-  if (entries.length === 0) return { ar: 0, call: 0 };
-  const lastEntry = entries[entries.length - 1];
-  if (!lastEntry.end && entries.length === 1) return { ar: 0, call: 0 };
-
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+
+  const entries = shift.timeEntries || [];
+  const hasEntries = entries.length > 0 && (entries.length > 1 || entries[0].start);
+  const lastEntry = hasEntries ? entries[entries.length - 1] : null;
+  const hasEnd = hasEntries && (entries.length > 1 || (lastEntry && lastEntry.end));
+
+  // No time entries: return pager pay only if eligible
+  if (!hasEntries || !hasEnd) {
+    if (pagerWindow) {
+      const pagerMinutes = pagerWindow.end - pagerWindow.start;
+      return { ar: 0, call: round2((pagerMinutes / 60) * 3.5) };
+    }
+    return { ar: 0, call: 0 };
+  }
+
   const isSF = ['SF1','SF2'].includes(shift.assignmentType);
 
   let orRanges = [];
@@ -3035,11 +3063,23 @@ function calcARBreakdown(shift) {
     clockedRanges.push({ start: s, end: en });
   });
 
-  if (clockedRanges.length === 0) return { ar: 0, call: 0 };
+  if (clockedRanges.length === 0) {
+    if (pagerWindow) {
+      const pagerMinutes = pagerWindow.end - pagerWindow.start;
+      return { ar: 0, call: round2((pagerMinutes / 60) * 3.5) };
+    }
+    return { ar: 0, call: 0 };
+  }
 
   const spanStart = clockedRanges[0].start;
   const spanEnd = clockedRanges[clockedRanges.length - 1].end;
-  if (spanEnd <= spanStart) return { ar: 0, call: 0 };
+  if (spanEnd <= spanStart) {
+    if (pagerWindow) {
+      const pagerMinutes = pagerWindow.end - pagerWindow.start;
+      return { ar: 0, call: round2((pagerMinutes / 60) * 3.5) };
+    }
+    return { ar: 0, call: 0 };
+  }
 
   // Compute AR for clocked-in time only
   let arPoints = 0;
@@ -3062,7 +3102,6 @@ function calcARBreakdown(shift) {
   }
 
   // Pager pay: guaranteed full window duration (does not stop when clocked in)
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
   let callPoints = 0;
   if (pagerWindow) {
     const pagerMinutes = pagerWindow.end - pagerWindow.start;
@@ -3751,7 +3790,8 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
   const isVacation = assignmentType === 'vacation';
   const isForcedOff = assignmentType === 'forced_off';
   const timeEntries = isVacation ? [{ start: '', end: '' }] : isForcedOff ? [{ start: '07:00', end: '20:00' }] : collectTimeEntries();
-  if (!isVacation && !isForcedOff && (timeEntries.length === 0 || !timeEntries[0].start)) {
+  const hasPagerWindow = getPagerPayWindow(assignmentType, isWeekend(date) || document.getElementById('holidayCheck')?.checked) !== null;
+  if (!isVacation && !isForcedOff && (timeEntries.length === 0 || !timeEntries[0].start) && !hasPagerWindow) {
     showToast('Please enter at least one start time');
     return;
   }
@@ -4453,14 +4493,24 @@ function getPayCodeName(normalizedMin, assignmentType, isWknd, isHol) {
 function getShiftPayBreakdown(shift) {
   if (shift.assignmentType === 'vacation') return [];
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return [{ clockIn: '', clockOut: '', payCode: 'Forced Off', durationMin: 0, payRate: 0, amount: 56 }];
-  const entries = shift.timeEntries || [];
-  if (entries.length === 0) return [];
-  const lastEntry = entries[entries.length - 1];
-  if (!lastEntry.end && entries.length === 1) return [];
-
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
+  const pagerWindowEarly = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+
+  const entries = shift.timeEntries || [];
+  const hasEntries = entries.length > 0 && (entries.length > 1 || entries[0].start);
+  const lastEntry = hasEntries ? entries[entries.length - 1] : null;
+  const hasEnd = hasEntries && (entries.length > 1 || (lastEntry && lastEntry.end));
+
+  // No time entries: return pager pay row only if eligible
+  if (!hasEntries || !hasEnd) {
+    if (pagerWindowEarly) {
+      const durMin = pagerWindowEarly.end - pagerWindowEarly.start;
+      return [{ clockIn: minutesToTimeStr(pagerWindowEarly.start), clockOut: minutesToTimeStr(pagerWindowEarly.end), payCode: 'Pager Pay', durationMin: durMin, payRate: 3.5, amount: round2((durMin / 60) * 3.5), isPager: true, isSubRow: false }];
+    }
+    return [];
+  }
   const isSF = ['SF1','SF2'].includes(shift.assignmentType);
 
   let orRanges = [];
@@ -4483,10 +4533,17 @@ function getShiftPayBreakdown(shift) {
     clockedRanges.push({ start: s, end: en, startStr: e.start, endStr: e.end || '' });
   });
 
-  if (clockedRanges.length === 0) return [];
+  function pagerOnlyRows() {
+    if (pagerWindowEarly) {
+      const durMin = pagerWindowEarly.end - pagerWindowEarly.start;
+      return [{ clockIn: minutesToTimeStr(pagerWindowEarly.start), clockOut: minutesToTimeStr(pagerWindowEarly.end), payCode: 'Pager Pay', durationMin: durMin, payRate: 3.5, amount: round2((durMin / 60) * 3.5), isPager: true, isSubRow: false }];
+    }
+    return [];
+  }
+  if (clockedRanges.length === 0) return pagerOnlyRows();
   const spanStart = clockedRanges[0].start;
   const spanEnd = clockedRanges[clockedRanges.length - 1].end;
-  if (spanEnd <= spanStart) return [];
+  if (spanEnd <= spanStart) return pagerOnlyRows();
 
   const rows = [];
 
@@ -7275,12 +7332,17 @@ function shiftReconAcceptQgenda(idx) {
       if (e.clockInTime && e.clockInTime < earliest) earliest = e.clockInTime;
       if (e.clockOutTime && e.clockOutTime > latest) latest = e.clockOutTime;
     });
+    const reconAssignType = d.qgendaAssignmentType || 'OR';
+    const reconHasPager = getPagerPayWindow(reconAssignType, isWeekend(d.date)) !== null;
+    const reconTimeEntries = timeEntries.length > 0
+      ? timeEntries
+      : reconHasPager ? [] : [{ start: earliest, end: latest }];
     data.shifts[d.date] = {
       date: d.date,
-      assignmentType: d.qgendaAssignmentType || 'OR',
-      startTime: earliest,
-      endTime: latest,
-      timeEntries: timeEntries.length > 0 ? timeEntries : [{ start: earliest, end: latest }],
+      assignmentType: reconAssignType,
+      startTime: timeEntries.length > 0 ? earliest : '',
+      endTime: timeEntries.length > 0 ? latest : '',
+      timeEntries: reconTimeEntries,
       isHoliday: false,
       forcedOff: false,
       subspecCoverage: false,
@@ -7805,10 +7867,16 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
     const assignmentType = workEntries.length === 0 && supEntries.length > 0
       ? 'CRNA_supervision'
       : mapTaskToAssignmentType(task, date);
+    // If no clock punches but shift type has pager pay, allow with empty time entries
+    const hasPager = getPagerPayWindow(assignmentType, isWeekend(date)) !== null;
+    const finalTimeEntries = timeEntries.length > 0
+      ? timeEntries
+      : hasPager ? [] : [{ start: earliest, end: latest }];
     shiftsToCreate.push({
       date, assignmentType,
-      startTime: earliest, endTime: latest,
-      timeEntries: timeEntries.length > 0 ? timeEntries : [{ start: earliest, end: latest }],
+      startTime: timeEntries.length > 0 ? earliest : '',
+      endTime: timeEntries.length > 0 ? latest : '',
+      timeEntries: finalTimeEntries,
       task, supervisionStart, supervisionEnd
     });
     toImport++;
@@ -7824,7 +7892,7 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
   body.innerHTML = `<p>Import <strong>${toImport}</strong> shift${toImport > 1 ? 's' : ''} from QGenda?</p>` +
     (toSkip > 0 ? `<p style="font-size:0.8rem;color:var(--text-dim);">${toSkip} date${toSkip > 1 ? 's' : ''} already have shifts and will be skipped.</p>` : '') +
     `<div style="max-height:200px;overflow-y:auto;margin-top:8px;font-size:0.8rem;">` +
-    shiftsToCreate.map(s => `<div style="padding:4px 0;border-bottom:1px solid var(--border);">${formatDateShort(s.date)} &mdash; ${getAssignmentTypeName(s.assignmentType)} (${s.startTime}-${s.endTime})</div>`).join('') +
+    shiftsToCreate.map(s => `<div style="padding:4px 0;border-bottom:1px solid var(--border);">${formatDateShort(s.date)} &mdash; ${getAssignmentTypeName(s.assignmentType)}${s.startTime ? ` (${s.startTime}-${s.endTime})` : ' (pager only)'}</div>`).join('') +
     `</div>`;
   document.getElementById('importConfirmTitle').textContent = 'Import Shifts';
 
