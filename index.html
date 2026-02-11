@@ -10587,13 +10587,20 @@ const ASA_BASE_UNITS = {
 // ================================================================
 function parseBillingSheetText(text) {
   const cases = [];
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  // Normalize common OCR misreads before parsing
+  let cleaned = text
+    .replace(/[OoQD](?=\d{4})/g, '0')    // O/o/Q/D before 4 digits → 0 (ASA codes start with 0)
+    .replace(/(?<=\d{3})[OoQD](?=\d)/g, '0') // O in middle of digit sequences → 0
+    .replace(/[Il|](?=\d{3,4})/g, '1')    // I/l/| before digits → 1
+    .replace(/[Ss](?=\d{4})/g, '5')       // S before 4 digits → 5
+    .replace(/[Bb](?=\d{3})/g, '8');       // B before 3 digits → 8
+  const lines = cleaned.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   const fullText = lines.join('\n');
 
   // Strategy: Look for ASA codes (5-digit numbers starting with 0) and times
   // The sheet has 4 case blocks; each block has a code, start/stop, and modifiers
 
-  // Find all 5-digit ASA codes (00xxx or 01xxx)
+  // Find all 5-digit ASA codes (00xxx or 01xxx) — also try common OCR variants
   const asaPattern = /\b(0[01]\d{3})\b/g;
   const asaMatches = [];
   let m;
@@ -10777,29 +10784,56 @@ document.getElementById('scanRetakeBtn').addEventListener('click', () => {
   scanParsedCases = [];
 });
 
-// Preprocess image: grayscale, contrast boost, sharpen for better OCR
+// Preprocess image: upscale 2x, grayscale, adaptive binarization for OCR
 function preprocessScanImage(file) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      // Draw original
-      ctx.drawImage(img, 0, 0);
-      // Convert to grayscale and boost contrast
+      // Upscale 2x — Tesseract needs ~300 DPI, phone photos are often low-res
+      const scale = Math.max(2, Math.min(3, 2400 / Math.max(img.width, img.height)));
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      // Pass 1: Convert to grayscale
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const d = imageData.data;
+      const grayArr = new Uint8Array(canvas.width * canvas.height);
       for (let i = 0; i < d.length; i += 4) {
-        // Grayscale using luminance weights
-        let gray = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
-        // Contrast stretch: push darks darker and lights lighter
-        gray = ((gray / 255 - 0.5) * 1.6 + 0.5) * 255;
-        // Threshold nudge: make near-white pixels fully white, darken text
-        gray = gray > 180 ? 255 : gray < 80 ? 0 : gray;
-        gray = Math.max(0, Math.min(255, gray));
-        d[i] = d[i+1] = d[i+2] = gray;
+        const gray = Math.round(0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]);
+        grayArr[i / 4] = gray;
+      }
+
+      // Pass 2: Adaptive threshold — compare each pixel to local average
+      // This handles uneven lighting and preserves handwritten strokes
+      const w = canvas.width, h = canvas.height;
+      const blockSize = Math.round(Math.max(w, h) / 30) | 1; // ensure odd
+      const half = Math.floor(blockSize / 2);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          // Compute local mean in a window around this pixel
+          let sum = 0, count = 0;
+          const y0 = Math.max(0, y - half), y1 = Math.min(h - 1, y + half);
+          const x0 = Math.max(0, x - half), x1 = Math.min(w - 1, x + half);
+          // Sample every other pixel for speed
+          for (let sy = y0; sy <= y1; sy += 2) {
+            for (let sx = x0; sx <= x1; sx += 2) {
+              sum += grayArr[sy * w + sx];
+              count++;
+            }
+          }
+          const localMean = sum / count;
+          const idx = y * w + x;
+          const pixel = grayArr[idx];
+          // Pixel is "ink" if it's significantly darker than local mean
+          const out = pixel < localMean - 15 ? 0 : 255;
+          const pi = idx * 4;
+          d[pi] = d[pi+1] = d[pi+2] = out;
+        }
       }
       ctx.putImageData(imageData, 0, 0);
       canvas.toBlob(blob => resolve(blob), 'image/png');
@@ -10820,6 +10854,10 @@ document.getElementById('scanProcessBtn').addEventListener('click', async () => 
     await loadTesseract();
     setScanStatus('processing', 'Recognizing text...');
     const worker = await Tesseract.createWorker('eng');
+    await worker.setParameters({
+      tessedit_pageseg_mode: '6',  // Assume single uniform block of text
+      preserve_interword_spaces: '1'
+    });
     const { data } = await worker.recognize(preprocessed);
     await worker.terminate();
 
