@@ -2129,6 +2129,18 @@ input.mil-time.invalid {
     </p>
   </div>
 
+  <!-- Scan Settings -->
+  <div class="card" style="margin-top:12px;">
+    <h2>Scan Settings</h2>
+    <div class="settings-field">
+      <label>Google Cloud Vision API Key</label>
+      <input type="password" id="settingsVisionKey" placeholder="Paste your API key">
+    </div>
+    <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
+      Required for billing sheet scanning. Free tier: 1,000 scans/month.
+    </p>
+  </div>
+
   <!-- History -->
   <div class="card">
     <h2>Monthly History</h2>
@@ -8102,6 +8114,15 @@ decAdvToggle.addEventListener('change', () => {
   renderPipelineChart();
 });
 
+// Vision API key
+const visionKeyInput = document.getElementById('settingsVisionKey');
+visionKeyInput.value = settings.visionApiKey || '';
+visionKeyInput.addEventListener('change', () => {
+  settings.visionApiKey = visionKeyInput.value.trim();
+  saveSettings(settings);
+  showToast('Vision API key saved');
+});
+
 document.getElementById('pipelineProjectToggle').addEventListener('change', () => {
   renderPipelineChart();
 });
@@ -10848,27 +10869,58 @@ document.getElementById('scanProcessBtn').addEventListener('click', async () => 
   const file = fileInput.files[0];
   if (!file) { showToast('No image selected'); return; }
 
+  const apiKey = settings.visionApiKey;
+  if (!apiKey) {
+    setScanStatus('error', 'No Vision API key set. Go to Settings to add your Google Cloud Vision API key.');
+    return;
+  }
+
   setScanStatus('processing', 'Preprocessing image...');
   try {
     const preprocessed = await preprocessScanImage(file);
-    await loadTesseract();
-    setScanStatus('processing', 'Recognizing text...');
-    const worker = await Tesseract.createWorker('eng');
-    await worker.setParameters({
-      tessedit_pageseg_mode: '6',  // Assume single uniform block of text
-      preserve_interword_spaces: '1'
-    });
-    const { data } = await worker.recognize(preprocessed);
-    await worker.terminate();
 
-    const ocrText = data.text;
-    const confidence = Math.round(data.confidence || 0);
-    console.log('OCR confidence:', confidence + '%');
-    console.log('OCR text:', ocrText);
+    // Convert blob to base64
+    setScanStatus('processing', 'Calling Vision API...');
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = () => reject(new Error('Failed to read image'));
+      reader.readAsDataURL(preprocessed);
+    });
+
+    const response = await fetch('https://vision.googleapis.com/v1/images:annotate?key=' + encodeURIComponent(apiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{
+          image: { content: base64 },
+          features: [{ type: 'DOCUMENT_TEXT_DETECTION' }]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}));
+      const errMsg = errBody.error?.message || response.statusText;
+      if (response.status === 403) throw new Error('API key invalid or Vision API not enabled. Check your Google Cloud console.');
+      if (response.status === 429) throw new Error('Vision API quota exceeded. Free tier allows 1,000 scans/month.');
+      throw new Error('Vision API error: ' + errMsg);
+    }
+
+    const result = await response.json();
+    const annotation = result.responses?.[0];
+    if (annotation?.error) {
+      throw new Error('Vision API: ' + annotation.error.message);
+    }
+
+    const ocrText = annotation?.fullTextAnnotation?.text || '';
+    const wordCount = ocrText.split(/\s+/).filter(w => w.length > 0).length;
+    console.log('Vision API words detected:', wordCount);
+    console.log('Vision API text:', ocrText);
 
     if (!ocrText || ocrText.trim().length < 10) {
       setScanStatus('error', 'Could not read text from image. Try a clearer photo.');
-      showScanOCRDebug(ocrText, confidence);
+      showScanOCRDebug(ocrText, wordCount);
       return;
     }
 
@@ -10877,16 +10929,16 @@ document.getElementById('scanProcessBtn').addEventListener('click', async () => 
 
     if (scanParsedCases.length === 0) {
       setScanStatus('error', 'No cases found. Make sure the ASA codes are clearly visible.');
-      showScanOCRDebug(ocrText, confidence);
+      showScanOCRDebug(ocrText, wordCount);
       return;
     }
 
-    setScanStatus('success', `Found ${scanParsedCases.length} case${scanParsedCases.length > 1 ? 's' : ''} (OCR ${confidence}% confidence)`);
-    showScanOCRDebug(ocrText, confidence);
+    setScanStatus('success', `Found ${scanParsedCases.length} case${scanParsedCases.length > 1 ? 's' : ''} (${wordCount} words detected)`);
+    showScanOCRDebug(ocrText, wordCount);
     renderScanCaseCards();
   } catch (err) {
     console.error('Scan error:', err);
-    setScanStatus('error', 'OCR failed: ' + err.message);
+    setScanStatus('error', err.message);
   }
 });
 
@@ -10902,7 +10954,7 @@ function setScanStatus(type, msg) {
   }
 }
 
-function showScanOCRDebug(ocrText, confidence) {
+function showScanOCRDebug(ocrText, wordCount) {
   const area = document.getElementById('scanResultsArea');
   area.classList.remove('hidden');
   let debugEl = document.getElementById('scanOCRDebug');
@@ -10912,7 +10964,7 @@ function showScanOCRDebug(ocrText, confidence) {
     debugEl.style.cssText = 'margin-top:12px;';
     area.prepend(debugEl);
   }
-  debugEl.innerHTML = `<summary style="cursor:pointer;font-size:0.8rem;color:var(--text-dim);">Raw OCR Text (${confidence}% confidence)</summary><pre style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:0.72rem;white-space:pre-wrap;max-height:200px;overflow-y:auto;margin-top:8px;color:var(--text-dim);">${escHtml(ocrText || '(empty)')}</pre>`;
+  debugEl.innerHTML = `<summary style="cursor:pointer;font-size:0.8rem;color:var(--text-dim);">Raw OCR Text (${wordCount} words detected)</summary><pre style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:0.72rem;white-space:pre-wrap;max-height:200px;overflow-y:auto;margin-top:8px;color:var(--text-dim);">${escHtml(ocrText || '(empty)')}</pre>`;
 }
 
 function renderScanCaseCards() {
