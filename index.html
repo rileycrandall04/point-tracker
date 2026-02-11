@@ -3703,6 +3703,10 @@ function setWorkingDate(d) {
   updateDataEntryState();
   renderDECaseList();
   updateDETally();
+  // Re-render Today page if it's currently visible
+  if (document.getElementById('page-today').classList.contains('active')) {
+    renderToday();
+  }
 }
 
 // Header date picker
