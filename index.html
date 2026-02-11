@@ -411,8 +411,8 @@ textarea { resize: vertical; min-height: 60px; }
 .email-preview { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-size: 0.8rem; white-space: pre-wrap; font-family: monospace; max-height: 300px; overflow-y: auto; margin: 12px 0; }
 
 /* Flag button */
-.flag-btn { background:none; border:none; cursor:pointer; font-size:1rem; padding:2px 4px; opacity:0.4; }
-.flag-btn.flagged { opacity:1; }
+.flag-btn { background:none; border:none; cursor:pointer; font-size:1rem; padding:2px 4px; color:transparent; -webkit-text-stroke:1.5px #fff; }
+.flag-btn.flagged { color:#e74c3c; -webkit-text-stroke:0; }
 .flagged-row { border-left: 3px solid #e74c3c !important; }
 
 /* ===== UPLOAD AREA ===== */
@@ -2063,7 +2063,7 @@ input.mil-time.invalid {
   </div>
 
   <!-- Daily Totals Tab -->
-  <div id="dtab-daily"
+  <div id="dtab-daily">
     <div class="month-nav">
       <button id="dailyPrevMonth">&larr;</button>
       <span id="dailyMonthLabel">January 2026</span>
@@ -3856,10 +3856,7 @@ document.querySelectorAll('[data-qproc]').forEach(btn => {
     if (!proc) return;
     selectedCaseType = 'standard';
     document.getElementById('caseTypeSelect').value = 'standard';
-    document.getElementById('standardFields').classList.remove('hidden');
-    document.getElementById('laborEpiduralFields').classList.add('hidden');
-    document.getElementById('apsRoundingFields').classList.add('hidden');
-    document.getElementById('simpleFields').classList.add('hidden');
+    applyCaseTypeVisibility('standard');
     document.getElementById('caseProcedure').value = proc.name;
     document.getElementById('caseBaseUnits').value = proc.units;
     updatePointPreview();
@@ -4513,16 +4510,20 @@ let selectedCaseType = 'standard';
 
 document.getElementById('caseTypeSelect').addEventListener('change', function() {
   selectedCaseType = this.value;
-  const isStd = selectedCaseType === 'standard';
-  const isLabor = selectedCaseType === 'labor_epidural';
-  const isAPS = selectedCaseType === 'aps_rounding';
-  const isAcutePain = selectedCaseType === 'acute_pain_procedure';
+  applyCaseTypeVisibility(selectedCaseType);
+  updatePointPreview();
+});
+
+function applyCaseTypeVisibility(ct) {
+  const isStd = ct === 'standard';
+  const isLabor = ct === 'labor_epidural';
+  const isAPS = ct === 'aps_rounding';
+  const isAcutePain = ct === 'acute_pain_procedure';
   document.getElementById('standardFields').classList.toggle('hidden', !isStd);
   document.getElementById('laborEpiduralFields').classList.toggle('hidden', !isLabor);
   document.getElementById('apsRoundingFields').classList.toggle('hidden', !isAPS);
   document.getElementById('simpleFields').classList.toggle('hidden', isStd || isLabor || isAPS || isAcutePain);
-  updatePointPreview();
-});
+}
 
 document.getElementById('caseShared').addEventListener('change', function() {
   document.getElementById('sharedPctRow').classList.toggle('hidden', !this.checked);
@@ -4712,6 +4713,7 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
 function resetCaseForm() {
   selectedCaseType = 'standard';
   document.getElementById('caseTypeSelect').value = 'standard';
+  applyCaseTypeVisibility('standard');
   document.getElementById('caseProcedure').value = '';
   document.getElementById('caseBaseUnits').value = '';
   document.getElementById('casePhysicalStatus').value = 'P2';
@@ -4731,10 +4733,8 @@ function resetCaseForm() {
   document.getElementById('caseITMorphine').checked = false;
   document.getElementById('laborStart').value = '';
   document.getElementById('laborEnd').value = '';
-  document.getElementById('laborEpiduralFields').classList.add('hidden');
   document.getElementById('apsEpiduralCount').value = '0';
   document.getElementById('apsPainCount').value = '0';
-  document.getElementById('apsRoundingFields').classList.add('hidden');
   document.getElementById('caseNotes').value = '';
   document.getElementById('simpleNotes').value = '';
   document.getElementById('casePointPreview').classList.add('hidden');
