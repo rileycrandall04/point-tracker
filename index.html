@@ -1505,7 +1505,7 @@ input.mil-time.invalid {
         </details>
 
         <details class="modifiers-section">
-          <summary>Supplemental Procedures</summary>
+          <summary>Additional Procedures</summary>
           <div style="padding:8px 0 4px;">
             <div class="form-group">
               <label>Nerve Block</label>
@@ -1991,7 +1991,7 @@ input.mil-time.invalid {
     <!-- Collapsible: Add-on Utilization -->
     <div class="card collapse-section">
       <div class="collapse-header" onclick="toggleCollapse('analAddOns')">
-        <h3>Add-On Utilization</h3>
+        <h3>Additional Procedure Utilization</h3>
         <span class="arrow" id="analAddOnsArrow">&#9660;</span>
       </div>
       <div class="collapse-body" id="analAddOnsBody">
@@ -2379,7 +2379,7 @@ input.mil-time.invalid {
       </div>
 
       <div class="divider"></div>
-      <h3>Supplemental Procedures</h3>
+      <h3>Additional Procedures</h3>
       <div class="form-group">
         <label>Nerve Block</label>
         <select id="editNerveBlock">
@@ -9514,10 +9514,10 @@ function renderAddOnTally(billingCases, trackerCases, prefix) {
     });
   });
 
-  let html = '<div class="card"><h2>Add-On Tally</h2>';
+  let html = '<div class="card"><h2>Additional Procedure Tally</h2>';
 
   // Monthly summary
-  html += '<table class="addon-tally-table"><thead><tr><th>Add-On Type</th><th>Billing</th><th>App</th><th>Diff</th></tr></thead><tbody>';
+  html += '<table class="addon-tally-table"><thead><tr><th>Procedure</th><th>Billing</th><th>App</th><th>Diff</th></tr></thead><tbody>';
   allTypes.forEach(type => {
     const b = monthBilling[type], a = monthApp[type];
     const diff = b - a;
@@ -9529,7 +9529,7 @@ function renderAddOnTally(billingCases, trackerCases, prefix) {
   // Per-day discrepancies
   if (rows.length > 0) {
     html += '<h3 style="margin-top:16px;font-size:0.85rem;">Daily Discrepancies</h3>';
-    html += '<table class="addon-tally-table"><thead><tr><th>Date</th><th>Add-On</th><th>Billing</th><th>App</th><th>Action</th></tr></thead><tbody>';
+    html += '<table class="addon-tally-table"><thead><tr><th>Date</th><th>Procedure</th><th>Billing</th><th>App</th><th>Action</th></tr></thead><tbody>';
     rows.forEach((r, idx) => {
       const diff = Math.abs(r.billing - r.app);
       const cls = diff === 1 ? 'addon-warn' : 'addon-miss';
@@ -9555,7 +9555,7 @@ function renderAddOnTally(billingCases, trackerCases, prefix) {
     });
     html += '</tbody></table>';
   } else {
-    html += '<p style="color:var(--accent);font-size:0.8rem;margin-top:8px;">All add-ons match!</p>';
+    html += '<p style="color:var(--accent);font-size:0.8rem;margin-top:8px;">All additional procedures match!</p>';
   }
 
   html += '</div>';
