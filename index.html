@@ -1245,6 +1245,7 @@ input.mil-time.invalid {
           <option value="ACS">ACS</option>
           <option value="NORA">NORA</option>
           <option value="CRNA_supervision">CRNA Supervision</option>
+          <option value="forced_off">Forced Off</option>
           <option value="vacation">Vacation / Off</option>
         </select>
       </div>
@@ -1274,7 +1275,7 @@ input.mil-time.invalid {
         <label for="shiftHoliday">Holiday</label>
       </div>
 
-      <div class="checkbox-group">
+      <div class="checkbox-group hidden" id="shiftForcedOffGroup">
         <input type="checkbox" id="shiftForcedOff">
         <label for="shiftForcedOff">Forced Off (no cases)</label>
       </div>
@@ -2397,6 +2398,7 @@ input.mil-time.invalid {
         <option value="ACS">ACS</option>
         <option value="NORA">NORA</option>
         <option value="CRNA_supervision">CRNA Supervision</option>
+        <option value="forced_off">Forced Off</option>
         <option value="vacation">Vacation / Off</option>
       </select>
     </div>
@@ -2698,6 +2700,7 @@ function getAssignmentTypeName(type) {
     mole: 'Mole', '1st_call': '1st Call', '2nd_call': '2nd Call', '3rd_call': '3rd Call', '4th_call': '4th Call',
     endo: 'Endo', SF1: 'SF 1', SF2: 'SF 2', ACS: 'ACS', NORA: 'NORA',
     CRNA_supervision: 'CRNA Supervision',
+    forced_off: 'Forced Off',
     vacation: 'Vacation / Off'
   };
   return names[type] || type;
@@ -2912,7 +2915,7 @@ function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
 
 function calcARPoints(shift) {
   if (shift.assignmentType === 'vacation') return 0;
-  if (shift.forcedOff) return 56;
+  if (shift.forcedOff || shift.assignmentType === 'forced_off') return 56;
   const entries = shift.timeEntries || [];
   if (entries.length === 0) return 0;
   // Check if any entry has an end time
@@ -3001,7 +3004,7 @@ function calcARPoints(shift) {
 // Separate getter for breakdown display purposes
 function calcARBreakdown(shift) {
   if (shift.assignmentType === 'vacation') return { ar: 0, call: 0 };
-  if (shift.forcedOff) return { ar: 56, call: 0 };
+  if (shift.forcedOff || shift.assignmentType === 'forced_off') return { ar: 56, call: 0 };
   const entries = shift.timeEntries || [];
   if (entries.length === 0) return { ar: 0, call: 0 };
   const lastEntry = entries[entries.length - 1];
@@ -3487,7 +3490,7 @@ function updateUnrestrictedCallVisibility() {
 function updateEndTimeWarning() {
   const shift = data.shifts[workingDate];
   const banner = document.getElementById('endTimeWarning');
-  const hasNoEnd = shift && !shift.forcedOff && shift.timeEntries &&
+  const hasNoEnd = shift && !shift.forcedOff && shift.assignmentType !== 'forced_off' && shift.timeEntries &&
     shift.timeEntries.length > 0 && !shift.timeEntries[shift.timeEntries.length - 1].end;
   if (hasNoEnd) {
     banner.classList.remove('hidden');
@@ -3518,7 +3521,7 @@ function checkEndTimeNotification() {
   if (now.getHours() < 7) return;
   const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
   const missing = Object.values(data.shifts).filter(s => {
-    if (s.forcedOff) return false;
+    if (s.forcedOff || s.assignmentType === 'forced_off') return false;
     // Check if last entry has an end time
     const entries = s.timeEntries || [];
     const lastEnd = entries.length > 0 ? entries[entries.length - 1].end : s.endTime;
@@ -3543,6 +3546,9 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
   const type = this.value;
   document.getElementById('cardiacLiverOptions').classList.toggle('hidden', type !== 'cardiac_liver');
   document.getElementById('vacationRangeSection').classList.toggle('hidden', type !== 'vacation');
+  if (type === 'forced_off') {
+    populateTimeEntries([{ start: '07:00', end: '20:00' }]);
+  }
   updateUnrestrictedCallVisibility();
   updateSupervisionOverlayVisibility();
   updateORCaseVisibility();
@@ -3573,10 +3579,11 @@ function loadShiftForDate() {
   if (shift) {
     banner.textContent = 'Editing shift for ' + formatDate(date);
     banner.classList.remove('hidden');
-    document.getElementById('shiftAssignmentType').value = shift.assignmentType;
+    // Backward compat: migrate old forcedOff flag to assignment type
+    const effectiveType = shift.forcedOff ? 'forced_off' : shift.assignmentType;
+    document.getElementById('shiftAssignmentType').value = effectiveType;
     populateTimeEntries(shift.timeEntries || [{ start: shift.startTime || '07:00', end: shift.endTime || '' }]);
     document.getElementById('shiftHoliday').checked = shift.isHoliday || false;
-    document.getElementById('shiftForcedOff').checked = shift.forcedOff || false;
     document.getElementById('cardiacLiverOptions').classList.toggle('hidden', shift.assignmentType !== 'cardiac_liver');
     document.getElementById('vacationRangeSection').classList.toggle('hidden', shift.assignmentType !== 'vacation');
     document.getElementById('vacationEndDate').value = '';
@@ -3598,7 +3605,6 @@ function loadShiftForDate() {
     document.getElementById('shiftAssignmentType').value = 'OR';
     populateTimeEntries([{ start: '07:00', end: '' }]);
     document.getElementById('shiftHoliday').checked = false;
-    document.getElementById('shiftForcedOff').checked = false;
     document.getElementById('cardiacLiverOptions').classList.add('hidden');
     document.getElementById('vacationRangeSection').classList.add('hidden');
     document.getElementById('vacationEndDate').value = '';
@@ -3646,19 +3652,22 @@ function updateDataEntryState() {
     summaryBar.classList.remove('hidden');
     shiftSection.style.display = 'none';
     const isVacation = shift.assignmentType === 'vacation';
+    const isForcedOff = shift.assignmentType === 'forced_off' || shift.forcedOff;
     const badge = document.getElementById('deSSBBadge');
-    badge.textContent = getAssignmentTypeName(shift.assignmentType);
+    badge.textContent = getAssignmentTypeName(isForcedOff ? 'forced_off' : shift.assignmentType);
     badge.classList.toggle('vacation', isVacation);
     const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
     if (isVacation) {
       document.getElementById('deSSBTimes').textContent = 'Vacation Day';
+    } else if (isForcedOff) {
+      document.getElementById('deSSBTimes').textContent = '56 pts — Forced Off';
     } else if (entries.length === 1) {
       document.getElementById('deSSBTimes').textContent = (entries[0].start || '?') + ' - ' + (entries[0].end || '?');
     } else {
       document.getElementById('deSSBTimes').textContent = entries.length + ' time entries';
     }
-    // Show case section only if not vacation
-    if (isVacation) {
+    // Show case section only if not vacation/forced off
+    if (isVacation || isForcedOff) {
       caseSection.classList.add('hidden');
     } else {
       caseSection.classList.remove('hidden');
@@ -3734,20 +3743,15 @@ document.getElementById('deShiftSummaryBar').addEventListener('click', () => {
   updateDataEntryState();
 });
 
-document.getElementById('shiftForcedOff').addEventListener('change', function() {
-  if (this.checked) {
-    populateTimeEntries([{ start: '07:00', end: '20:00' }]);
-  }
-});
-
 document.getElementById('saveShiftBtn').addEventListener('click', () => {
   const date = workingDate;
   if (!date) { showToast('Please select a date'); return; }
   const assignmentType = getSelectedAssignmentType();
   const supervisionEnabled = document.getElementById('supervisionOverlayCheck')?.checked || false;
   const isVacation = assignmentType === 'vacation';
-  const timeEntries = isVacation ? [{ start: '', end: '' }] : collectTimeEntries();
-  if (!isVacation && (timeEntries.length === 0 || !timeEntries[0].start)) {
+  const isForcedOff = assignmentType === 'forced_off';
+  const timeEntries = isVacation ? [{ start: '', end: '' }] : isForcedOff ? [{ start: '07:00', end: '20:00' }] : collectTimeEntries();
+  if (!isVacation && !isForcedOff && (timeEntries.length === 0 || !timeEntries[0].start)) {
     showToast('Please enter at least one start time');
     return;
   }
@@ -3791,7 +3795,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       endTime: timeEntries[timeEntries.length - 1].end || '',
       timeEntries: timeEntries,
       isHoliday: document.getElementById('shiftHoliday').checked,
-      forcedOff: document.getElementById('shiftForcedOff').checked,
+      forcedOff: false,
       subspecCoverage: document.getElementById('subspecCoverage').checked,
       teeCount: parseInt(document.getElementById('teeCount').value) || 0,
       supervisionStart: supervisionEnabled ? document.getElementById('supervisionStart').value : '',
@@ -4448,7 +4452,7 @@ function getPayCodeName(normalizedMin, assignmentType, isWknd, isHol) {
 
 function getShiftPayBreakdown(shift) {
   if (shift.assignmentType === 'vacation') return [];
-  if (shift.forcedOff) return [{ clockIn: '', clockOut: '', payCode: 'Forced Off', durationMin: 0, payRate: 0, amount: 56 }];
+  if (shift.forcedOff || shift.assignmentType === 'forced_off') return [{ clockIn: '', clockOut: '', payCode: 'Forced Off', durationMin: 0, payRate: 0, amount: 56 }];
   const entries = shift.timeEntries || [];
   if (entries.length === 0) return [];
   const lastEntry = entries[entries.length - 1];
@@ -4613,7 +4617,7 @@ function getShiftBadgeClass(type) {
   if (type.includes('call')) return 'sl-badge-call';
   if (type === 'endo') return 'sl-badge-endo';
   if (type === 'SF1' || type === 'SF2') return 'sl-badge-sf';
-  if (type === 'vacation') return 'sl-badge-vac';
+  if (type === 'vacation' || type === 'forced_off') return 'sl-badge-vac';
   return 'sl-badge-other';
 }
 
