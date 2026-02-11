@@ -591,7 +591,7 @@ input.mil-time.invalid {
   max-width: 600px;
   margin: 0 auto;
 }
-#clStickyNav .case-log-search { margin-bottom: 4px; }
+#dtab-caselogs .case-log-search { margin-bottom: 4px; }
 .dash-tab-bar {
   display: flex;
   border-bottom: 1px solid var(--border);
@@ -1712,19 +1712,17 @@ input.mil-time.invalid {
       <button class="dash-tab-btn" data-dtab="analytics">Analytics</button>
       <button class="dash-tab-btn" data-dtab="daily">Daily</button>
     </div>
-    <div id="clStickyNav">
-      <div class="month-nav">
-        <button id="clPrevMonth">&larr;</button>
-        <span id="clMonthLabel">January 2026</span>
-        <button id="clNextMonth">&rarr;</button>
-      </div>
-      <input type="text" class="case-log-search" id="caseLogSearch" placeholder="Search cases...">
-    </div>
   </div>
   <div id="dashStickyHeaderSpacer"></div>
 
   <!-- Case Logs Tab -->
   <div id="dtab-caselogs">
+    <div class="month-nav">
+      <button id="clPrevMonth">&larr;</button>
+      <span id="clMonthLabel">January 2026</span>
+      <button id="clNextMonth">&rarr;</button>
+    </div>
+    <input type="text" class="case-log-search" id="caseLogSearch" placeholder="Search cases...">
     <div class="case-log-wrap">
       <div id="caseLogTableContainer">
         <div class="empty-state"><p>No cases for this month.</p></div>
@@ -4928,7 +4926,6 @@ function switchDashboardTab(tabName) {
   document.getElementById('dtab-time').classList.toggle('hidden', tabName !== 'time');
   document.getElementById('dtab-analytics').classList.toggle('hidden', tabName !== 'analytics');
   document.getElementById('dtab-daily').classList.toggle('hidden', tabName !== 'daily');
-  document.getElementById('clStickyNav').style.display = tabName === 'caselogs' ? 'block' : 'none';
   updateDashStickyHeaderSpacer();
   if (tabName === 'caselogs') renderCaseLogTable();
   if (tabName === 'shiftlogs') renderShiftLogTable();
