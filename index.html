@@ -740,17 +740,17 @@ input.mil-time.invalid {
 .dd-case-item .dd-case-pts { font-size: 0.82rem; color: var(--accent); font-weight: 700; white-space: nowrap; }
 
 /* ===== DAILY CALENDAR ===== */
-.daily-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.daily-cal-header { font-size: 0.65rem; color: var(--text-dim); text-align: center; padding: 4px 0; font-weight: 600; }
-.daily-cal-cell { background: var(--surface); border-radius: 6px; padding: 6px 4px; text-align: center; min-height: 52px; position: relative; cursor: pointer; transition: background 0.15s; }
+.daily-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; width: 100%; box-sizing: border-box; }
+.daily-cal-header { font-size: 0.6rem; color: var(--text-dim); text-align: center; padding: 2px 0; font-weight: 600; }
+.daily-cal-cell { background: var(--surface); border-radius: 5px; padding: 4px 2px; text-align: center; min-height: 44px; position: relative; cursor: pointer; transition: background 0.15s; overflow: hidden; }
 .daily-cal-cell:active:not(.empty) { background: rgba(59,130,246,0.15); }
 .daily-cal-cell.empty { background: transparent; }
 .daily-cal-cell.today { border: 2px solid var(--primary); }
 .daily-cal-cell.vacation { background: rgba(139,92,246,0.15); }
-.daily-cal-day { font-size: 0.7rem; color: var(--text-dim); margin-bottom: 2px; }
-.daily-cal-pts { font-size: 0.85rem; font-weight: 700; color: var(--text); }
+.daily-cal-day { font-size: 0.6rem; color: var(--text-dim); margin-bottom: 1px; }
+.daily-cal-pts { font-size: 0.75rem; font-weight: 700; color: var(--text); }
 .daily-cal-pts.zero { color: var(--text-dim); font-weight: 400; }
-.daily-cal-type { font-size: 0.55rem; color: var(--accent); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.daily-cal-type { font-size: 0.5rem; color: var(--accent); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ===== CASE LOG TABLE ===== */
 .case-log-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -12px; padding: 0 12px; }
