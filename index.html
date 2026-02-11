@@ -4051,6 +4051,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
   updateHeaderPoints();
   updateEndTimeWarning();
   updateORCaseVisibility();
+  renderShiftLogTable();
   if (datesToSave.length > 1) {
     const msg = `${datesToSave.length - skipped} vacation day${datesToSave.length - skipped !== 1 ? 's' : ''} saved!` + (skipped ? ` (${skipped} existing shift${skipped !== 1 ? 's' : ''} skipped)` : '');
     showToast(msg);
