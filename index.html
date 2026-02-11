@@ -2351,7 +2351,7 @@ input.mil-time.invalid {
     <div class="scan-capture-area" id="scanCaptureArea">
       <span class="scan-icon">&#128247;</span>
       <p>Tap to take a photo or select an image</p>
-      <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;">
+      <input type="file" id="scanFileInput" accept="image/*" style="display:none;">
     </div>
     <img id="scanPreviewImg" class="scan-preview-img hidden" alt="Preview">
     <div id="scanStatus" class="hidden"></div>
@@ -10789,6 +10789,49 @@ function parseBillingSheetText(text) {
 // BILLING SHEET SCAN — PAGE LOGIC
 // ================================================================
 let scanParsedCases = [];
+let scanImageBlob = null;
+
+// IndexedDB helpers for persisting scan image across camera-induced page reloads
+function openScanDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('scanImageDB', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('images');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function saveScanImage(dataUrl) {
+  return openScanDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').put(dataUrl, 'pending');
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  }));
+}
+function loadScanImage() {
+  return openScanDB().then(db => new Promise(resolve => {
+    const tx = db.transaction('images', 'readonly');
+    const req = tx.objectStore('images').get('pending');
+    req.onsuccess = () => { db.close(); resolve(req.result || null); };
+    req.onerror = () => { db.close(); resolve(null); };
+  }));
+}
+function clearScanImage() {
+  return openScanDB().then(db => new Promise(resolve => {
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').delete('pending');
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); resolve(); };
+  })).catch(() => {});
+}
+function dataUrlToBlob(dataUrl) {
+  const [header, data] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)[1];
+  const binary = atob(data);
+  const arr = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
 
 function initScanPage() {
   const dateInput = document.getElementById('scanDate');
@@ -10802,19 +10845,41 @@ document.getElementById('scanCaptureArea').addEventListener('click', () => {
 document.getElementById('scanFileInput').addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
+  scanImageBlob = file;
   const preview = document.getElementById('scanPreviewImg');
   const reader = new FileReader();
   reader.onload = (ev) => {
-    preview.src = ev.target.result;
+    const dataUrl = ev.target.result;
+    preview.src = dataUrl;
     preview.classList.remove('hidden');
     document.getElementById('scanActions').classList.remove('hidden');
     document.getElementById('scanResultsArea').classList.add('hidden');
     setScanStatus('');
+    saveScanImage(dataUrl).catch(() => {});
   };
   reader.readAsDataURL(file);
 });
 
+// Restore scan image if page was reloaded by camera
+loadScanImage().then(dataUrl => {
+  if (!dataUrl) return;
+  scanImageBlob = dataUrlToBlob(dataUrl);
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const scanBtn = document.querySelector('.bottom-nav button[data-page="scan"]');
+  if (scanBtn) scanBtn.classList.add('active');
+  document.getElementById('page-scan').classList.add('active');
+  initScanPage();
+  const preview = document.getElementById('scanPreviewImg');
+  preview.src = dataUrl;
+  preview.classList.remove('hidden');
+  document.getElementById('scanActions').classList.remove('hidden');
+  showToast('Photo restored');
+}).catch(() => {});
+
 document.getElementById('scanRetakeBtn').addEventListener('click', () => {
+  scanImageBlob = null;
+  clearScanImage();
   document.getElementById('scanFileInput').value = '';
   document.getElementById('scanPreviewImg').classList.add('hidden');
   document.getElementById('scanActions').classList.add('hidden');
@@ -10883,9 +10948,7 @@ function preprocessScanImage(file) {
 }
 
 document.getElementById('scanProcessBtn').addEventListener('click', async () => {
-  const fileInput = document.getElementById('scanFileInput');
-  const file = fileInput.files[0];
-  if (!file) { showToast('No image selected'); return; }
+  if (!scanImageBlob) { showToast('No image selected'); return; }
 
   const apiKey = settings.visionApiKey;
   if (!apiKey) {
@@ -10895,7 +10958,7 @@ document.getElementById('scanProcessBtn').addEventListener('click', async () => 
 
   setScanStatus('processing', 'Preprocessing image...');
   try {
-    const preprocessed = await preprocessScanImage(file);
+    const preprocessed = await preprocessScanImage(scanImageBlob);
 
     // Convert blob to base64
     setScanStatus('processing', 'Calling Vision API...');
@@ -10954,6 +11017,7 @@ document.getElementById('scanProcessBtn').addEventListener('click', async () => 
     setScanStatus('success', `Found ${scanParsedCases.length} case${scanParsedCases.length > 1 ? 's' : ''} (${wordCount} words detected)`);
     showScanOCRDebug(ocrText, wordCount);
     renderScanCaseCards();
+    clearScanImage();
   } catch (err) {
     console.error('Scan error:', err);
     setScanStatus('error', err.message);
