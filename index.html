@@ -4808,21 +4808,25 @@ function getShiftPayBreakdown(shift) {
     }
   }
 
-  // Guaranteed minimum: weekday non-mole shifts get 4hr minimum
+  // Guaranteed minimum: weekday non-mole shifts get 4hr minimum — replace AR rows with single minimum row
   if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
     const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
-    const arTotal = consolidated.filter(r => !r.isPager).reduce((sum, r) => sum + r.amount, 0);
+    const arRows = consolidated.filter(r => !r.isPager);
+    const arTotal = arRows.reduce((sum, r) => sum + r.amount, 0);
     if (arTotal > 0 && arTotal < minPoints) {
-      const adj = round2(minPoints - arTotal);
+      // Replace all AR rows with a single 4-Hour Minimum row
+      const pagerRows = consolidated.filter(r => r.isPager);
+      consolidated.length = 0;
       consolidated.push({
-        clockIn: '', clockOut: '',
-        payCode: '4-Hour Minimum Adj',
-        durationMin: 0,
-        payRate: 0,
-        amount: adj,
+        clockIn: arRows[0]?.clockIn || '', clockOut: arRows[arRows.length - 1]?.clockOut || '',
+        payCode: '4-Hour Minimum',
+        durationMin: 240,
+        payRate: isOBRate ? 13 : 20,
+        amount: minPoints,
         isSubRow: false
       });
+      pagerRows.forEach(r => consolidated.push(r));
     }
   }
 
