@@ -2132,13 +2132,25 @@ input.mil-time.invalid {
   <!-- Scan Settings -->
   <div class="card" style="margin-top:12px;">
     <h2>Scan Settings</h2>
-    <div class="settings-field">
-      <label>Google Cloud Vision API Key</label>
-      <input type="password" id="settingsVisionKey" placeholder="Paste your API key">
+    <div style="margin-bottom:12px;">
+      <label for="settingsVisionKey" style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:6px;">Google Cloud Vision API Key</label>
+      <input type="password" id="settingsVisionKey" placeholder="Paste your API key" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
     </div>
-    <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
-      Required for billing sheet scanning. Free tier: 1,000 scans/month.
+    <p style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">
+      Required for billing sheet scanning. Free tier: 1,000 scans/month. Each user needs their own key.
     </p>
+    <details style="margin-top:4px;">
+      <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">How to get an API key</summary>
+      <ol style="font-size:0.75rem;color:var(--text-dim);margin:8px 0 0 0;padding-left:20px;line-height:1.6;">
+        <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noopener" style="color:var(--primary);">Google Cloud Console</a></li>
+        <li>Create a project (or select an existing one)</li>
+        <li>Go to <strong>APIs &amp; Services &rarr; Library</strong></li>
+        <li>Search for <strong>Cloud Vision API</strong> and click <strong>Enable</strong></li>
+        <li>Go to <strong>APIs &amp; Services &rarr; Credentials</strong></li>
+        <li>Click <strong>Create Credentials &rarr; API Key</strong></li>
+        <li>Copy the key and paste it above</li>
+      </ol>
+    </details>
   </div>
 
   <!-- History -->
