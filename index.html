@@ -4592,20 +4592,14 @@ document.getElementById('caseShared').addEventListener('change', function() {
   if (el) el.addEventListener('change', updatePointPreview);
 });
 
-// Auto-check OR Case for SF1 during restricted window
+// Auto-check OR Case for SF1 — all cases on SF1 default to OR rates
 document.getElementById('caseStart').addEventListener('change', function() {
   const shift = data.shifts[workingDate];
   if (!shift || shift.assignmentType !== 'SF1') return;
   const startMin = timeToMinutes(this.value);
   if (isNaN(startMin)) return;
-  const isWknd = isWeekend(shift.date);
-  const isHol = shift.isHoliday;
-  const isDaytime = startMin >= 420 && startMin < 1020;
-  // Auto-check if case starts in restricted OB window (non-holiday weekday daytime)
-  if (!isHol && !isWknd && isDaytime) {
-    document.getElementById('caseORCase').checked = true;
-    updatePointPreview();
-  }
+  document.getElementById('caseORCase').checked = true;
+  updatePointPreview();
 });
 
 function updateModifierTags() {
