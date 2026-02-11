@@ -1244,6 +1244,7 @@ input.mil-time.invalid {
           <option value="SF2">SF 2</option>
           <option value="ACS">ACS</option>
           <option value="NORA">NORA</option>
+          <option value="pre_call">Pre-Call</option>
           <option value="CRNA_supervision">CRNA Supervision</option>
           <option value="forced_off">Forced Off</option>
           <option value="vacation">Vacation / Off</option>
@@ -1308,6 +1309,25 @@ input.mil-time.invalid {
           <div class="form-group">
             <label>Supervision End</label>
             <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="supervisionEnd">
+          </div>
+        </div>
+      </div>
+
+      <div id="preCallOverlaySection" class="hidden">
+        <div class="divider"></div>
+        <h3>Pre-Call</h3>
+        <div class="checkbox-group">
+          <input type="checkbox" id="preCallOverlayCheck">
+          <label for="preCallOverlayCheck">Add pre-call OR period</label>
+        </div>
+        <div class="form-row hidden" id="preCallTimes">
+          <div class="form-group">
+            <label>Pre-Call Start</label>
+            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="preCallStartInput">
+          </div>
+          <div class="form-group">
+            <label>Pre-Call End</label>
+            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="preCallEndInput">
           </div>
         </div>
       </div>
@@ -2397,6 +2417,7 @@ input.mil-time.invalid {
         <option value="SF2">SF 2</option>
         <option value="ACS">ACS</option>
         <option value="NORA">NORA</option>
+        <option value="pre_call">Pre-Call</option>
         <option value="CRNA_supervision">CRNA Supervision</option>
         <option value="forced_off">Forced Off</option>
         <option value="vacation">Vacation / Off</option>
@@ -2627,6 +2648,8 @@ function migrateData(d) {
     // Ensure supervision overlay fields
     if (s.supervisionStart === undefined) { s.supervisionStart = ''; changed = true; }
     if (s.supervisionEnd === undefined) { s.supervisionEnd = ''; changed = true; }
+    if (s.preCallStart === undefined) { s.preCallStart = ''; changed = true; }
+    if (s.preCallEnd === undefined) { s.preCallEnd = ''; changed = true; }
   });
   // Ensure isORCase on all cases
   d.cases.forEach(c => {
@@ -2699,6 +2722,7 @@ function getAssignmentTypeName(type) {
     OR: 'OR / General', OB_restricted: 'UVH OB', cardiac_liver: 'Cardiac / Liver',
     mole: 'Mole', '1st_call': '1st Call', '2nd_call': '2nd Call', '3rd_call': '3rd Call', '4th_call': '4th Call',
     endo: 'Endo', SF1: 'SF 1', SF2: 'SF 2', ACS: 'ACS', NORA: 'NORA',
+    pre_call: 'Pre-Call',
     CRNA_supervision: 'CRNA Supervision',
     forced_off: 'Forced Off',
     vacation: 'Vacation / Off'
@@ -2978,6 +3002,15 @@ function calcARPoints(shift) {
     return 0;
   }
 
+  // Build pre-call range (OR rates during pre-call period)
+  let preCallRange = null;
+  if (shift.preCallStart && shift.preCallEnd) {
+    let pcs = timeToMinutes(shift.preCallStart);
+    let pce = timeToMinutes(shift.preCallEnd);
+    if (pce <= pcs) pce += 1440;
+    preCallRange = { start: pcs, end: pce };
+  }
+
   let arPoints = 0;
 
   for (let m = spanStart; m < spanEnd; m++) {
@@ -2990,9 +3023,11 @@ function calcARPoints(shift) {
     }
 
     if (clockedIn) {
-      // Normal AR rate
+      // Normal AR rate — override to OR during pre-call or SF OR-case windows
       let rateType = shift.assignmentType;
-      if (isSF) {
+      if (preCallRange && m >= preCallRange.start && m < preCallRange.end) {
+        rateType = 'OR';
+      } else if (isSF) {
         for (const r of orRanges) {
           if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
         }
@@ -3081,6 +3116,15 @@ function calcARBreakdown(shift) {
     return { ar: 0, call: 0 };
   }
 
+  // Build pre-call range (OR rates during pre-call period)
+  let preCallRange = null;
+  if (shift.preCallStart && shift.preCallEnd) {
+    let pcs = timeToMinutes(shift.preCallStart);
+    let pce = timeToMinutes(shift.preCallEnd);
+    if (pce <= pcs) pce += 1440;
+    preCallRange = { start: pcs, end: pce };
+  }
+
   // Compute AR for clocked-in time only
   let arPoints = 0;
 
@@ -3092,7 +3136,9 @@ function calcARBreakdown(shift) {
     }
     if (clockedIn) {
       let rateType = shift.assignmentType;
-      if (isSF) {
+      if (preCallRange && m >= preCallRange.start && m < preCallRange.end) {
+        rateType = 'OR';
+      } else if (isSF) {
         for (const r of orRanges) {
           if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
         }
@@ -3555,6 +3601,16 @@ function updateSupervisionOverlayVisibility() {
   }
 }
 
+function updatePreCallOverlayVisibility() {
+  const type = getSelectedAssignmentType();
+  const eligible = ['mole','OB_restricted'].includes(type);
+  document.getElementById('preCallOverlaySection').classList.toggle('hidden', !eligible);
+  if (!eligible) {
+    document.getElementById('preCallOverlayCheck').checked = false;
+    document.getElementById('preCallTimes').classList.add('hidden');
+  }
+}
+
 function checkEndTimeNotification() {
   const now = new Date();
   if (now.getHours() < 7) return;
@@ -3590,11 +3646,16 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
   }
   updateUnrestrictedCallVisibility();
   updateSupervisionOverlayVisibility();
+  updatePreCallOverlayVisibility();
   updateORCaseVisibility();
 });
 
 document.getElementById('supervisionOverlayCheck').addEventListener('change', function() {
   document.getElementById('supervisionTimes').classList.toggle('hidden', !this.checked);
+});
+
+document.getElementById('preCallOverlayCheck').addEventListener('change', function() {
+  document.getElementById('preCallTimes').classList.toggle('hidden', !this.checked);
 });
 
 shiftDateInput.addEventListener('change', function() {
@@ -3639,6 +3700,17 @@ function loadShiftForDate() {
       document.getElementById('supervisionEnd').value = '';
       document.getElementById('supervisionTimes').classList.add('hidden');
     }
+    if (shift.preCallStart || shift.preCallEnd) {
+      document.getElementById('preCallOverlayCheck').checked = true;
+      document.getElementById('preCallStartInput').value = shift.preCallStart || '';
+      document.getElementById('preCallEndInput').value = shift.preCallEnd || '';
+      document.getElementById('preCallTimes').classList.remove('hidden');
+    } else {
+      document.getElementById('preCallOverlayCheck').checked = false;
+      document.getElementById('preCallStartInput').value = '';
+      document.getElementById('preCallEndInput').value = '';
+      document.getElementById('preCallTimes').classList.add('hidden');
+    }
   } else {
     banner.classList.add('hidden');
     document.getElementById('shiftAssignmentType').value = 'OR';
@@ -3653,9 +3725,14 @@ function loadShiftForDate() {
     document.getElementById('supervisionStart').value = '';
     document.getElementById('supervisionEnd').value = '';
     document.getElementById('supervisionTimes').classList.add('hidden');
+    document.getElementById('preCallOverlayCheck').checked = false;
+    document.getElementById('preCallStartInput').value = '';
+    document.getElementById('preCallEndInput').value = '';
+    document.getElementById('preCallTimes').classList.add('hidden');
   }
   updateUnrestrictedCallVisibility();
   updateSupervisionOverlayVisibility();
+  updatePreCallOverlayVisibility();
   updateEndTimeWarning();
 }
 
@@ -3787,6 +3864,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
   if (!date) { showToast('Please select a date'); return; }
   const assignmentType = getSelectedAssignmentType();
   const supervisionEnabled = document.getElementById('supervisionOverlayCheck')?.checked || false;
+  const preCallEnabled = document.getElementById('preCallOverlayCheck')?.checked || false;
   const isVacation = assignmentType === 'vacation';
   const isForcedOff = assignmentType === 'forced_off';
   const timeEntries = isVacation ? [{ start: '', end: '' }] : isForcedOff ? [{ start: '07:00', end: '20:00' }] : collectTimeEntries();
@@ -3839,7 +3917,9 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       subspecCoverage: document.getElementById('subspecCoverage').checked,
       teeCount: parseInt(document.getElementById('teeCount').value) || 0,
       supervisionStart: supervisionEnabled ? document.getElementById('supervisionStart').value : '',
-      supervisionEnd: supervisionEnabled ? document.getElementById('supervisionEnd').value : ''
+      supervisionEnd: supervisionEnabled ? document.getElementById('supervisionEnd').value : '',
+      preCallStart: preCallEnabled ? document.getElementById('preCallStartInput').value : '',
+      preCallEnd: preCallEnabled ? document.getElementById('preCallEndInput').value : ''
     };
   });
   saveData(data);
@@ -4547,6 +4627,15 @@ function getShiftPayBreakdown(shift) {
 
   const rows = [];
 
+  // Build pre-call range (OR rates during pre-call period)
+  let preCallRange = null;
+  if (shift.preCallStart && shift.preCallEnd) {
+    let pcs = timeToMinutes(shift.preCallStart);
+    let pce = timeToMinutes(shift.preCallEnd);
+    if (pce <= pcs) pce += 1440;
+    preCallRange = { start: pcs, end: pce };
+  }
+
   // Rate-change boundaries (minute of day)
   function getBoundaries() {
     const b = (isWknd || isHol) ? [420, 1020] : [420, 1020, 1380];
@@ -4556,6 +4645,13 @@ function getShiftPayBreakdown(shift) {
       const se = timeToMinutes(shift.supervisionEnd);
       if (ss > 0 && !b.includes(ss)) b.push(ss);
       if (se > 0 && !b.includes(se)) b.push(se);
+    }
+    // Add pre-call boundaries so segments split at pre-call start/end
+    if (preCallRange) {
+      const pcStart = preCallRange.start % 1440;
+      const pcEnd = preCallRange.end % 1440;
+      if (!b.includes(pcStart)) b.push(pcStart);
+      if (pcEnd > 0 && !b.includes(pcEnd)) b.push(pcEnd);
     }
     return b.sort((a, c) => a - c);
   }
@@ -4578,12 +4674,16 @@ function getShiftPayBreakdown(shift) {
       const segEnd = Math.min(nextBound, cr.end);
       const normSeg = segStart % 1440;
       let rateType = shift.assignmentType;
-      if (isSF) {
+      let isPreCallSeg = false;
+      if (preCallRange && segStart >= preCallRange.start && segStart < preCallRange.end) {
+        rateType = 'OR';
+        isPreCallSeg = true;
+      } else if (isSF) {
         for (const r of orRanges) {
           if (segStart >= r.start && segStart < r.end) { rateType = 'OR'; break; }
         }
       }
-      const payCode = getPayCodeName(normSeg, rateType, isWknd, isHol);
+      const payCode = isPreCallSeg ? 'Pre-Call ' + getPayCodeName(normSeg, 'OR', isWknd, isHol) : getPayCodeName(normSeg, rateType, isWknd, isHol);
       let payRate = getARRate(rateType, isHol, isWknd, normSeg);
 
       // CRNA supervision bonus: +7/hr
@@ -4669,7 +4769,7 @@ function getShiftPayBreakdown(shift) {
 }
 
 function getShiftBadgeClass(type) {
-  if (type === 'OR' || type === 'cardiac_liver' || type === 'NORA' || type === 'ACS') return 'sl-badge-or';
+  if (type === 'OR' || type === 'cardiac_liver' || type === 'NORA' || type === 'ACS' || type === 'pre_call') return 'sl-badge-or';
   if (type === 'OB_restricted') return 'sl-badge-ob';
   if (type.includes('call')) return 'sl-badge-call';
   if (type === 'endo') return 'sl-badge-endo';
@@ -6577,7 +6677,9 @@ function generateTestData() {
           subspecCoverage: false,
           teeCount: 0,
           supervisionStart: '',
-          supervisionEnd: ''
+          supervisionEnd: '',
+          preCallStart: '',
+          preCallEnd: ''
         };
 
         // CRNA supervision: add supervision times
@@ -7348,8 +7450,18 @@ function shiftReconAcceptQgenda(idx) {
       subspecCoverage: false,
       teeCount: 0,
       supervisionStart: '',
-      supervisionEnd: ''
+      supervisionEnd: '',
+      preCallStart: '',
+      preCallEnd: ''
     };
+    // Detect pre-call entries in QGenda data
+    const pcPattern = /UVH\/SFH\s*WORK/i;
+    const pcEntries = entries.filter(e => e.clockInTime && pcPattern.test(e.task || ''));
+    if (pcEntries.length > 0 && ['mole','OB_restricted'].includes(reconAssignType)) {
+      const sortedPC = [...pcEntries].sort((a, b) => a.clockInTime.localeCompare(b.clockInTime));
+      data.shifts[d.date].preCallStart = sortedPC[0].clockInTime;
+      data.shifts[d.date].preCallEnd = sortedPC[sortedPC.length - 1].clockOutTime || '';
+    }
     showToast(`Created shift for ${formatDateShort(d.date)}`);
   } else if (d.type === 'hour_mismatch' || d.type === 'type_mismatch') {
     // Update existing shift to match QGenda
@@ -7691,8 +7803,8 @@ function parseQgendaScreenshot(text) {
 // ================================================================
 function mapTaskToAssignmentType(task, dateStr) {
   const t = (task || '').toUpperCase();
-  // "UVH/SFH Work" → general OR
-  if (/UVH\/SFH\s*WORK/.test(t)) return 'OR';
+  // "UVH/SFH Work" → pre-call (standalone; when paired with mole/OB, import handler uses overlay)
+  if (/UVH\/SFH\s*WORK/.test(t)) return 'pre_call';
   // "Post" anything → always general OR (Post 1-4, Post SF 1/2, etc.)
   if (/\bPOST\b/.test(t)) return 'OR';
   // SFH prefix → SF1 or SF2 (check before call keywords so "SFH 1st Call" → SF1)
@@ -7857,8 +7969,8 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
       if (e.clockOutTime && e.clockOutTime > latest) latest = e.clockOutTime;
       if (e.task) allTasks.push(e.task);
     });
-    // Prefer call/mole/endo task over daytime OR work (e.g. "UVH/SFH Work" + "Mole" → use "Mole")
-    const callTaskPatterns = /MOLE|ENDO|1ST|2ND|3RD|4TH|CALL|SFH\s/i;
+    // Prefer call/mole/endo task over pre-call OR work (e.g. "UVH/SFH Work" + "Mole" → use "Mole")
+    const callTaskPatterns = /MOLE|ENDO|1ST|2ND|3RD|4TH|CALL|SFH\s*\d/i;
     const task = allTasks.find(t => callTaskPatterns.test(t)) || allTasks[0] || '';
     // Detect CRNA supervision period
     let supervisionStart = '', supervisionEnd = '';
@@ -7871,6 +7983,17 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
     const assignmentType = workEntries.length === 0 && supEntries.length > 0
       ? 'CRNA_supervision'
       : mapTaskToAssignmentType(task, date);
+
+    // Detect pre-call: "UVH/SFH Work" entries paired with mole/OB
+    let preCallStart = '', preCallEnd = '';
+    const preCallPattern = /UVH\/SFH\s*WORK/i;
+    const preCallEntries = entries.filter(e => e.clockInTime && preCallPattern.test(e.task || ''));
+    if (preCallEntries.length > 0 && ['mole','OB_restricted'].includes(assignmentType)) {
+      const sortedPC = [...preCallEntries].sort((a, b) => a.clockInTime.localeCompare(b.clockInTime));
+      preCallStart = sortedPC[0].clockInTime;
+      preCallEnd = sortedPC[sortedPC.length - 1].clockOutTime || '';
+    }
+
     // If no clock punches but shift type has pager pay, allow with empty time entries
     const hasPager = getPagerPayWindow(assignmentType, isWeekend(date)) !== null;
     const finalTimeEntries = timeEntries.length > 0
@@ -7881,7 +8004,8 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
       startTime: timeEntries.length > 0 ? earliest : '',
       endTime: timeEntries.length > 0 ? latest : '',
       timeEntries: finalTimeEntries,
-      task, supervisionStart, supervisionEnd
+      task, supervisionStart, supervisionEnd,
+      preCallStart, preCallEnd
     });
     toImport++;
   });
@@ -7913,7 +8037,9 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
         subspecCoverage: false,
         teeCount: 0,
         supervisionStart: s.supervisionStart || '',
-        supervisionEnd: s.supervisionEnd || ''
+        supervisionEnd: s.supervisionEnd || '',
+        preCallStart: s.preCallStart || '',
+        preCallEnd: s.preCallEnd || ''
       };
     });
     saveData(data);
@@ -8227,7 +8353,7 @@ function showCSVImportConfirmation(result) {
           timeEntries: [{ start: st, end: en }],
           isHoliday: false,
           forcedOff: false, subspecCoverage: false,
-          teeCount: 0, supervisionStart: '', supervisionEnd: ''
+          teeCount: 0, supervisionStart: '', supervisionEnd: '', preCallStart: '', preCallEnd: ''
         };
         shiftsCreated++;
       }
@@ -9711,7 +9837,7 @@ document.getElementById('scanImportBtn').addEventListener('click', () => {
       startTime: st, endTime: en,
       timeEntries: [{ start: st, end: en }],
       isHoliday: false, forcedOff: false, subspecCoverage: false,
-      teeCount: 0, supervisionStart: '', supervisionEnd: ''
+      teeCount: 0, supervisionStart: '', supervisionEnd: '', preCallStart: '', preCallEnd: ''
     };
     showToast(`Created placeholder OR shift for ${formatDateShort(scanDate)}`);
   }
