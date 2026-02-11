@@ -3734,6 +3734,12 @@ document.getElementById('deShiftSummaryBar').addEventListener('click', () => {
   updateDataEntryState();
 });
 
+document.getElementById('shiftForcedOff').addEventListener('change', function() {
+  if (this.checked) {
+    populateTimeEntries([{ start: '07:00', end: '20:00' }]);
+  }
+});
+
 document.getElementById('saveShiftBtn').addEventListener('click', () => {
   const date = workingDate;
   if (!date) { showToast('Please select a date'); return; }
