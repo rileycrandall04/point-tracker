@@ -1999,10 +1999,10 @@ input.mil-time.invalid {
       </div>
     </div>
 
-    <!-- Collapsible: Top Procedures by Points -->
+    <!-- Collapsible: Top Procedures by Points/Hour -->
     <div class="card collapse-section">
       <div class="collapse-header" onclick="toggleCollapse('analTopProc')">
-        <h3>Top Procedures by Points</h3>
+        <h3>Top Procedures by Pts/Hr</h3>
         <span class="arrow" id="analTopProcArrow">&#9660;</span>
       </div>
       <div class="collapse-body" id="analTopProcBody">
@@ -7016,18 +7016,29 @@ function renderAddOnUtil() {
 }
 
 function renderTopProcedures() {
-  const ptsByProc = {};
+  const procData = {};
   data.cases.forEach(c => {
+    if (!c.startTime || !c.endTime) return;
+    let s = timeToMinutes(c.startTime);
+    let e = timeToMinutes(c.endTime);
+    if (e <= s) e += 1440;
+    const hrs = (e - s) / 60;
+    if (hrs <= 0) return;
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
     const shift = data.shifts[c.shiftDate];
     const pts = calcCasePoints(c, shift);
-    ptsByProc[name] = (ptsByProc[name] || 0) + pts;
+    if (!procData[name]) procData[name] = { totalPts: 0, totalHrs: 0, count: 0 };
+    procData[name].totalPts += pts;
+    procData[name].totalHrs += hrs;
+    procData[name].count++;
   });
-  const sorted = Object.entries(ptsByProc).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  if (sorted.length === 0) { document.getElementById('topProcContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No data.</p>'; return; }
+  const entries = Object.entries(procData).filter(([, d]) => d.count >= 2);
+  const sorted = entries.map(([name, d]) => ({ name, ptsPerHr: d.totalPts / d.totalHrs, count: d.count }))
+    .sort((a, b) => b.ptsPerHr - a.ptsPerHr).slice(0, 10);
+  if (sorted.length === 0) { document.getElementById('topProcContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No data (need 2+ timed cases per procedure).</p>'; return; }
   let html = '';
-  sorted.forEach(([name, pts], i) => {
-    html += `<div class="efficiency-item"><span class="eff-label">${i+1}. ${escHtml(name)}</span><span class="eff-value">${pts.toFixed(1)} pts</span></div>`;
+  sorted.forEach((p, i) => {
+    html += `<div class="efficiency-item"><span class="eff-label">${i+1}. ${escHtml(p.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${p.count})</span></span><span class="eff-value">${p.ptsPerHr.toFixed(1)} pts/hr</span></div>`;
   });
   document.getElementById('topProcContent').innerHTML = html;
 }
