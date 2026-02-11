@@ -3042,6 +3042,13 @@ function calcARPoints(shift) {
     if (en <= s && e.end) en += 1440;
     clockedRanges.push({ start: s, end: en });
   });
+  // Fix cross-midnight ordering: if an entry starts before the previous entry, it's the next day
+  for (let i = 1; i < clockedRanges.length; i++) {
+    if (clockedRanges[i].start < clockedRanges[i-1].start) {
+      clockedRanges[i].start += 1440;
+      clockedRanges[i].end += 1440;
+    }
+  }
 
   if (clockedRanges.length === 0) {
     if (pagerWindow) {
@@ -3210,6 +3217,13 @@ function calcARBreakdown(shift) {
     if (en <= s && e.end) en += 1440;
     clockedRanges.push({ start: s, end: en });
   });
+  // Fix cross-midnight ordering: if an entry starts before the previous entry, it's the next day
+  for (let i = 1; i < clockedRanges.length; i++) {
+    if (clockedRanges[i].start < clockedRanges[i-1].start) {
+      clockedRanges[i].start += 1440;
+      clockedRanges[i].end += 1440;
+    }
+  }
 
   if (clockedRanges.length === 0) {
     if (pagerWindow) {
@@ -5067,6 +5081,13 @@ function getShiftPayBreakdown(shift) {
     if (en <= s && e.end) en += 1440;
     clockedRanges.push({ start: s, end: en, startStr: e.start, endStr: e.end || '' });
   });
+  // Fix cross-midnight ordering: if an entry starts before the previous entry, it's the next day
+  for (let i = 1; i < clockedRanges.length; i++) {
+    if (clockedRanges[i].start < clockedRanges[i-1].start) {
+      clockedRanges[i].start += 1440;
+      clockedRanges[i].end += 1440;
+    }
+  }
 
   function pagerOnlyRows() {
     if (pagerWindowEarly) {
