@@ -1259,7 +1259,7 @@ input.mil-time.invalid {
       </div>
 
       <div class="form-group">
-        <label>Time Entries</label>
+        <label id="timeEntriesLabel">Time Entries</label>
         <div id="timeEntriesContainer">
           <div class="time-entry-row">
             <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="07:00">
@@ -1341,7 +1341,13 @@ input.mil-time.invalid {
             <option value="mole">Mole</option>
             <option value="OB_restricted">UVH OB</option>
           </select>
-          <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">Adds evening pager pay and rates for the call shift following pre-call.</p>
+        </div>
+        <div id="eveningTimeSection" class="hidden">
+          <div class="form-group">
+            <label>Evening Time Entries <span style="font-size:0.75rem;color:var(--text-dim);">(leave blank if no clock-in)</span></label>
+            <div id="eveningTimeEntriesContainer"></div>
+            <button type="button" class="add-entry-btn" id="addEveningTimeEntryBtn">+ Add Evening Entry</button>
+          </div>
         </div>
       </div>
 
@@ -3655,7 +3661,12 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
   document.getElementById('cardiacLiverOptions').classList.toggle('hidden', type !== 'cardiac_liver');
   document.getElementById('vacationRangeSection').classList.toggle('hidden', type !== 'vacation');
   document.getElementById('eveningAssignmentSection').classList.toggle('hidden', type !== 'pre_call');
-  if (type !== 'pre_call') document.getElementById('eveningAssignmentType').value = '';
+  document.getElementById('timeEntriesLabel').textContent = type === 'pre_call' ? 'Pre-Call Times' : 'Time Entries';
+  if (type !== 'pre_call') {
+    document.getElementById('eveningAssignmentType').value = '';
+    document.getElementById('eveningTimeSection').classList.add('hidden');
+    document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
+  }
   if (type === 'forced_off') {
     populateTimeEntries([{ start: '07:00', end: '20:00' }]);
   }
@@ -3672,6 +3683,50 @@ document.getElementById('supervisionOverlayCheck').addEventListener('change', fu
 document.getElementById('preCallOverlayCheck').addEventListener('change', function() {
   document.getElementById('preCallTimes').classList.toggle('hidden', !this.checked);
 });
+
+document.getElementById('eveningAssignmentType').addEventListener('change', function() {
+  const hasEvening = !!this.value;
+  document.getElementById('eveningTimeSection').classList.toggle('hidden', !hasEvening);
+  if (!hasEvening) {
+    document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
+  }
+});
+
+document.getElementById('addEveningTimeEntryBtn').addEventListener('click', () => {
+  addEveningTimeEntryRow('', '');
+});
+
+function addEveningTimeEntryRow(startVal, endVal) {
+  const container = document.getElementById('eveningTimeEntriesContainer');
+  const row = document.createElement('div');
+  row.className = 'time-entry-row';
+  row.innerHTML = `
+    <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time eve-start" value="${startVal}">
+    <span class="te-label">to</span>
+    <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time eve-end" value="${endVal}">
+    <button type="button" class="remove-entry-btn">&times;</button>
+  `;
+  row.querySelector('.remove-entry-btn').addEventListener('click', () => { row.remove(); });
+  row.querySelectorAll('input.mil-time').forEach(input => bindMilTimeInput(input));
+  container.appendChild(row);
+}
+
+function collectEveningTimeEntries() {
+  const rows = document.querySelectorAll('#eveningTimeEntriesContainer .time-entry-row');
+  const entries = [];
+  rows.forEach(row => {
+    const start = row.querySelector('.eve-start')?.value || '';
+    const end = row.querySelector('.eve-end')?.value || '';
+    if (start) entries.push({ start, end });
+  });
+  return entries;
+}
+
+function populateEveningTimeEntries(entries) {
+  const container = document.getElementById('eveningTimeEntriesContainer');
+  container.innerHTML = '';
+  entries.forEach(e => addEveningTimeEntryRow(e.start || '', e.end || ''));
+}
 
 shiftDateInput.addEventListener('change', function() {
   workingDate = this.value;
@@ -3700,14 +3755,35 @@ function loadShiftForDate() {
     const hasPreCallOverlay = (shift.preCallStart || shift.preCallEnd) && ['mole','OB_restricted'].includes(effectiveType);
     if (hasPreCallOverlay) {
       document.getElementById('shiftAssignmentType').value = 'pre_call';
+      document.getElementById('timeEntriesLabel').textContent = 'Pre-Call Times';
       document.getElementById('eveningAssignmentSection').classList.remove('hidden');
       document.getElementById('eveningAssignmentType').value = effectiveType;
+      document.getElementById('eveningTimeSection').classList.remove('hidden');
+      // Split time entries: pre-call entries vs evening entries
+      const pcEnd = timeToMinutes(shift.preCallEnd || '');
+      const allEntries = shift.timeEntries || [];
+      const preCallEntries = [];
+      const eveningEntries = [];
+      allEntries.forEach(e => {
+        if (!e.start) return;
+        const startMin = timeToMinutes(e.start);
+        if (pcEnd > 0 && startMin < pcEnd) {
+          preCallEntries.push(e);
+        } else {
+          eveningEntries.push(e);
+        }
+      });
+      populateTimeEntries(preCallEntries.length > 0 ? preCallEntries : [{ start: shift.preCallStart || '07:00', end: shift.preCallEnd || '' }]);
+      populateEveningTimeEntries(eveningEntries);
     } else {
       document.getElementById('shiftAssignmentType').value = effectiveType;
+      document.getElementById('timeEntriesLabel').textContent = 'Time Entries';
       document.getElementById('eveningAssignmentSection').classList.add('hidden');
       document.getElementById('eveningAssignmentType').value = '';
+      document.getElementById('eveningTimeSection').classList.add('hidden');
+      document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
+      populateTimeEntries(shift.timeEntries || [{ start: shift.startTime || '07:00', end: shift.endTime || '' }]);
     }
-    populateTimeEntries(shift.timeEntries || [{ start: shift.startTime || '07:00', end: shift.endTime || '' }]);
     document.getElementById('shiftHoliday').checked = shift.isHoliday || false;
     document.getElementById('cardiacLiverOptions').classList.toggle('hidden', shift.assignmentType !== 'cardiac_liver');
     document.getElementById('vacationRangeSection').classList.toggle('hidden', shift.assignmentType !== 'vacation');
@@ -3755,6 +3831,8 @@ function loadShiftForDate() {
     document.getElementById('preCallEndInput').value = '';
     document.getElementById('eveningAssignmentSection').classList.add('hidden');
     document.getElementById('eveningAssignmentType').value = '';
+    document.getElementById('eveningTimeSection').classList.add('hidden');
+    document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
     document.getElementById('preCallTimes').classList.add('hidden');
   }
   updateUnrestrictedCallVisibility();
@@ -3940,21 +4018,25 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       skipped++;
       return; // don't overwrite existing non-vacation shifts
     }
-    // When pre_call with evening assignment, save as evening type with pre-call overlay from time entries
+    // When pre_call with evening assignment, merge pre-call + evening time entries
     let savePreCallStart = preCallEnabled ? document.getElementById('preCallStartInput').value : '';
     let savePreCallEnd = preCallEnabled ? document.getElementById('preCallEndInput').value : '';
+    let allTimeEntries = timeEntries;
     if (eveningAssignment && assignmentType === 'pre_call') {
-      // Use the clocked time entries as the pre-call window
+      // Pre-call window from the main time entries
       const firstStart = timeEntries[0]?.start || '';
       const lastEnd = timeEntries[timeEntries.length - 1]?.end || '';
       savePreCallStart = firstStart;
       savePreCallEnd = lastEnd;
+      // Merge evening time entries
+      const eveningEntries = collectEveningTimeEntries();
+      allTimeEntries = [...timeEntries, ...eveningEntries];
     }
     data.shifts[dt] = {
       date: dt, assignmentType: effectiveType,
-      startTime: timeEntries[0].start || '',
-      endTime: timeEntries[timeEntries.length - 1].end || '',
-      timeEntries: timeEntries,
+      startTime: allTimeEntries[0]?.start || '',
+      endTime: allTimeEntries[allTimeEntries.length - 1]?.end || '',
+      timeEntries: allTimeEntries,
       isHoliday: document.getElementById('shiftHoliday').checked,
       forcedOff: false,
       subspecCoverage: document.getElementById('subspecCoverage').checked,
