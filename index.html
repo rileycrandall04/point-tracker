@@ -1332,6 +1332,19 @@ input.mil-time.invalid {
         </div>
       </div>
 
+      <div id="eveningAssignmentSection" class="hidden">
+        <div class="divider"></div>
+        <div class="form-group">
+          <label>Evening Assignment</label>
+          <select id="eveningAssignmentType">
+            <option value="">None</option>
+            <option value="mole">Mole</option>
+            <option value="OB_restricted">UVH OB</option>
+          </select>
+          <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">Adds evening pager pay and rates for the call shift following pre-call.</p>
+        </div>
+      </div>
+
       <div style="margin-top: 16px;">
         <button class="btn btn-primary" id="saveShiftBtn">Save Shift</button>
       </div>
@@ -3641,6 +3654,8 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
   const type = this.value;
   document.getElementById('cardiacLiverOptions').classList.toggle('hidden', type !== 'cardiac_liver');
   document.getElementById('vacationRangeSection').classList.toggle('hidden', type !== 'vacation');
+  document.getElementById('eveningAssignmentSection').classList.toggle('hidden', type !== 'pre_call');
+  if (type !== 'pre_call') document.getElementById('eveningAssignmentType').value = '';
   if (type === 'forced_off') {
     populateTimeEntries([{ start: '07:00', end: '20:00' }]);
   }
@@ -3681,7 +3696,17 @@ function loadShiftForDate() {
     banner.classList.remove('hidden');
     // Backward compat: migrate old forcedOff flag to assignment type
     const effectiveType = shift.forcedOff ? 'forced_off' : shift.assignmentType;
-    document.getElementById('shiftAssignmentType').value = effectiveType;
+    // If shift has pre-call overlay on mole/OB, show as pre_call with evening assignment
+    const hasPreCallOverlay = (shift.preCallStart || shift.preCallEnd) && ['mole','OB_restricted'].includes(effectiveType);
+    if (hasPreCallOverlay) {
+      document.getElementById('shiftAssignmentType').value = 'pre_call';
+      document.getElementById('eveningAssignmentSection').classList.remove('hidden');
+      document.getElementById('eveningAssignmentType').value = effectiveType;
+    } else {
+      document.getElementById('shiftAssignmentType').value = effectiveType;
+      document.getElementById('eveningAssignmentSection').classList.add('hidden');
+      document.getElementById('eveningAssignmentType').value = '';
+    }
     populateTimeEntries(shift.timeEntries || [{ start: shift.startTime || '07:00', end: shift.endTime || '' }]);
     document.getElementById('shiftHoliday').checked = shift.isHoliday || false;
     document.getElementById('cardiacLiverOptions').classList.toggle('hidden', shift.assignmentType !== 'cardiac_liver');
@@ -3728,6 +3753,8 @@ function loadShiftForDate() {
     document.getElementById('preCallOverlayCheck').checked = false;
     document.getElementById('preCallStartInput').value = '';
     document.getElementById('preCallEndInput').value = '';
+    document.getElementById('eveningAssignmentSection').classList.add('hidden');
+    document.getElementById('eveningAssignmentType').value = '';
     document.getElementById('preCallTimes').classList.add('hidden');
   }
   updateUnrestrictedCallVisibility();
@@ -3770,7 +3797,10 @@ function updateDataEntryState() {
     const isVacation = shift.assignmentType === 'vacation';
     const isForcedOff = shift.assignmentType === 'forced_off' || shift.forcedOff;
     const badge = document.getElementById('deSSBBadge');
-    badge.textContent = getAssignmentTypeName(isForcedOff ? 'forced_off' : shift.assignmentType);
+    const hasPreCallOverlay = (shift.preCallStart || shift.preCallEnd) && ['mole','OB_restricted'].includes(shift.assignmentType);
+    badge.textContent = hasPreCallOverlay
+      ? 'Pre-Call + ' + getAssignmentTypeName(shift.assignmentType)
+      : getAssignmentTypeName(isForcedOff ? 'forced_off' : shift.assignmentType);
     badge.classList.toggle('vacation', isVacation);
     const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
     if (isVacation) {
@@ -3862,13 +3892,16 @@ document.getElementById('deShiftSummaryBar').addEventListener('click', () => {
 document.getElementById('saveShiftBtn').addEventListener('click', () => {
   const date = workingDate;
   if (!date) { showToast('Please select a date'); return; }
-  const assignmentType = getSelectedAssignmentType();
+  let assignmentType = getSelectedAssignmentType();
   const supervisionEnabled = document.getElementById('supervisionOverlayCheck')?.checked || false;
   const preCallEnabled = document.getElementById('preCallOverlayCheck')?.checked || false;
+  // Pre-Call with evening assignment: save as evening type with pre-call overlay
+  const eveningAssignment = assignmentType === 'pre_call' ? (document.getElementById('eveningAssignmentType').value || '') : '';
   const isVacation = assignmentType === 'vacation';
   const isForcedOff = assignmentType === 'forced_off';
   const timeEntries = isVacation ? [{ start: '', end: '' }] : isForcedOff ? [{ start: '07:00', end: '20:00' }] : collectTimeEntries();
-  const hasPagerWindow = getPagerPayWindow(assignmentType, isWeekend(date) || document.getElementById('holidayCheck')?.checked) !== null;
+  const effectiveType = eveningAssignment || assignmentType;
+  const hasPagerWindow = getPagerPayWindow(effectiveType, isWeekend(date) || document.getElementById('holidayCheck')?.checked) !== null;
   if (!isVacation && !isForcedOff && (timeEntries.length === 0 || !timeEntries[0].start) && !hasPagerWindow) {
     showToast('Please enter at least one start time');
     return;
@@ -3907,8 +3940,18 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       skipped++;
       return; // don't overwrite existing non-vacation shifts
     }
+    // When pre_call with evening assignment, save as evening type with pre-call overlay from time entries
+    let savePreCallStart = preCallEnabled ? document.getElementById('preCallStartInput').value : '';
+    let savePreCallEnd = preCallEnabled ? document.getElementById('preCallEndInput').value : '';
+    if (eveningAssignment && assignmentType === 'pre_call') {
+      // Use the clocked time entries as the pre-call window
+      const firstStart = timeEntries[0]?.start || '';
+      const lastEnd = timeEntries[timeEntries.length - 1]?.end || '';
+      savePreCallStart = firstStart;
+      savePreCallEnd = lastEnd;
+    }
     data.shifts[dt] = {
-      date: dt, assignmentType,
+      date: dt, assignmentType: effectiveType,
       startTime: timeEntries[0].start || '',
       endTime: timeEntries[timeEntries.length - 1].end || '',
       timeEntries: timeEntries,
@@ -3918,8 +3961,8 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       teeCount: parseInt(document.getElementById('teeCount').value) || 0,
       supervisionStart: supervisionEnabled ? document.getElementById('supervisionStart').value : '',
       supervisionEnd: supervisionEnabled ? document.getElementById('supervisionEnd').value : '',
-      preCallStart: preCallEnabled ? document.getElementById('preCallStartInput').value : '',
-      preCallEnd: preCallEnabled ? document.getElementById('preCallEndInput').value : ''
+      preCallStart: savePreCallStart,
+      preCallEnd: savePreCallEnd
     };
   });
   saveData(data);
@@ -4762,6 +4805,24 @@ function getShiftPayBreakdown(shift) {
     } else {
       seen[key] = consolidated.length;
       consolidated.push({ ...r });
+    }
+  }
+
+  // Guaranteed minimum: weekday non-mole shifts get 4hr minimum
+  if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
+    const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
+    const minPoints = isOBRate ? 13 * 4 : 20 * 4;
+    const arTotal = consolidated.filter(r => !r.isPager).reduce((sum, r) => sum + r.amount, 0);
+    if (arTotal > 0 && arTotal < minPoints) {
+      const adj = round2(minPoints - arTotal);
+      consolidated.push({
+        clockIn: '', clockOut: '',
+        payCode: '4-Hour Minimum Adj',
+        durationMin: 0,
+        payRate: 0,
+        amount: adj,
+        isSubRow: false
+      });
     }
   }
 
