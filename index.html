@@ -410,6 +410,11 @@ textarea { resize: vertical; min-height: 60px; }
 /* Email preview */
 .email-preview { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-size: 0.8rem; white-space: pre-wrap; font-family: monospace; max-height: 300px; overflow-y: auto; margin: 12px 0; }
 
+/* Flag button */
+.flag-btn { background:none; border:none; cursor:pointer; font-size:1rem; padding:2px 4px; opacity:0.4; }
+.flag-btn.flagged { opacity:1; }
+.flagged-row { border-left: 3px solid #e74c3c !important; }
+
 /* ===== UPLOAD AREA ===== */
 .upload-area {
   border: 2px dashed var(--border);
@@ -2227,6 +2232,22 @@ input.mil-time.invalid {
     <div id="csvImportResults"></div>
   </div>
 
+  <!-- Flagged Items -->
+  <div class="card" id="flaggedItemsCard">
+    <details>
+      <summary style="cursor:pointer;font-weight:600;font-size:1.1rem;">
+        Flagged Items — Missing Time Punches
+        <span id="flaggedCount" style="font-size:0.8rem;color:var(--text-dim);margin-left:8px;">(0)</span>
+      </summary>
+      <div id="flaggedEmailPreview" style="margin-top:12px;"></div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn btn-primary btn-sm" id="copyFlaggedEmailBtn">Copy to Clipboard</button>
+        <button class="btn btn-outline btn-sm" id="clearAllFlagsBtn">Clear All Flags</button>
+      </div>
+      <div id="flaggedCopyStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
+    </details>
+  </div>
+
   <!-- Account -->
   <div class="card" id="accountCard">
     <h2>Account</h2>
@@ -2744,6 +2765,14 @@ function migrateData(d) {
       }
       changed = true;
     }
+  });
+  // Ensure flagged field on shifts
+  Object.values(d.shifts).forEach(s => {
+    if (s.flagged === undefined) { s.flagged = false; changed = true; }
+  });
+  // Ensure flagged field on cases
+  d.cases.forEach(c => {
+    if (c.flagged === undefined) { c.flagged = false; changed = true; }
   });
   // Ensure overrides object exists
   if (!d.overrides) { d.overrides = {}; changed = true; }
@@ -3747,7 +3776,7 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
     if (btn.dataset.page === 'dataentry') loadDataEntryPage();
     if (btn.dataset.page === 'today') { returnToDailyTab = false; renderToday(); }
     if (btn.dataset.page === 'dashboard') { switchDashboardTab(activeDashTab); }
-    if (btn.dataset.page === 'settings') { renderHistory(); loadOverrideUI(); loadStipendUI(); }
+    if (btn.dataset.page === 'settings') { renderHistory(); loadOverrideUI(); loadStipendUI(); renderFlaggedEmail(); }
     if (btn.dataset.page === 'reconcile') renderReconTabs();
     if (btn.dataset.page === 'scan') initScanPage();
   });
@@ -5138,7 +5167,7 @@ function renderCaseLogTable() {
     return;
   }
   let html = '<table class="case-log-table" id="caseLogTable"><thead><tr>';
-  html += '<th>Date</th><th>Case</th><th>Start</th><th>Stop</th><th>Pts</th><th></th>';
+  html += '<th>Date</th><th>Case</th><th>Start</th><th>Stop</th><th>Pts</th><th></th><th></th>';
   html += '</tr></thead><tbody>';
   let totalPts = 0;
   monthCases.forEach(c => {
@@ -5147,17 +5176,19 @@ function renderCaseLogTable() {
     totalPts += pts;
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
     const sharedMark = c.isSharedCase ? ' [S]' : '';
-    html += `<tr data-caseid="${c.id}" onclick="openCaseEdit('${c.id}')">`;
+    const flaggedClass = c.flagged ? ' flagged-row' : '';
+    html += `<tr class="${flaggedClass}" data-caseid="${c.id}" onclick="openCaseEdit('${c.id}')">`;
     html += `<td>${formatDateShort(c.shiftDate)}</td>`;
     html += `<td>${escHtml(name)}${sharedMark}</td>`;
     html += `<td>${c.startTime || '-'}</td>`;
     html += `<td>${c.endTime || '-'}</td>`;
     html += `<td><strong>${pts.toFixed(1)}</strong></td>`;
     html += `<td><span class="cl-del" onclick="event.stopPropagation();deleteCase('${c.id}')">&times;</span></td>`;
+    html += `<td><button class="flag-btn ${c.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleCaseFlag('${c.id}')">&#9873;</button></td>`;
     html += '</tr>';
   });
   html += '</tbody><tfoot><tr style="border-top:2px solid var(--accent);">';
-  html += `<td colspan="5" style="text-align:right;font-weight:600;">Monthly Total (${monthCases.length} cases)</td>`;
+  html += `<td colspan="6" style="text-align:right;font-weight:600;">Monthly Total (${monthCases.length} cases)</td>`;
   html += `<td><strong>${round2(totalPts).toFixed(1)}</strong></td>`;
   html += '</tr></tfoot></table>';
   container.innerHTML = html;
@@ -5621,7 +5652,7 @@ function renderShiftLogTable() {
   // Detail table
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   let html = '<table class="shift-log-table" id="shiftLogTable"><thead><tr>';
-  html += '<th>Date</th><th>Assignment</th><th>Time</th><th>Duration</th><th>Clock In</th><th>Clock Out</th><th>Pay Code</th><th>Hours</th><th>Pay Rate</th><th>Amount</th>';
+  html += '<th>Date</th><th>Assignment</th><th>Time</th><th>Duration</th><th>Clock In</th><th>Clock Out</th><th>Pay Code</th><th>Hours</th><th>Pay Rate</th><th>Amount</th><th></th>';
   html += '</tr></thead><tbody>';
 
   let grandTotal = 0;
@@ -5646,23 +5677,27 @@ function renderShiftLogTable() {
 
     if (shift.assignmentType === 'vacation') {
       const altClass = shiftIdx % 2 === 1 ? ' sl-alt' : '';
+      const fClass = shift.flagged ? ' flagged-row' : '';
       shiftIdx++;
-      html += `<tr class="${altClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      html += `<tr class="${altClass}${fClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       html += `<td>${dateLabel}</td>`;
       html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
       html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>Vacation</td><td>-</td><td>-</td><td>0.0</td>`;
+      html += `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>`;
       html += '</tr>';
       return;
     }
 
     if (rows.length === 0) {
       const altClass = shiftIdx % 2 === 1 ? ' sl-alt' : '';
+      const fClass = shift.flagged ? ' flagged-row' : '';
       shiftIdx++;
-      html += `<tr class="${altClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      html += `<tr class="${altClass}${fClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       html += `<td>${dateLabel}</td>`;
       html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
       html += `<td>${timeStr}</td><td>${totalHrs.toFixed(1)}h</td>`;
       html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
+      html += `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>`;
       html += '</tr>';
       return;
     }
@@ -5691,11 +5726,12 @@ function renderShiftLogTable() {
 
       // Pre-Call group
       const pcAlt = shiftIdx % 2 === 1 ? ' sl-alt' : '';
+      const pcFClass = shift.flagged ? ' flagged-row' : '';
       shiftIdx++;
       if (preCallRows.length > 0) {
         preCallRows.forEach((r, i) => {
           const rowClass = i > 0 ? `sl-sub-row${pcAlt}` : pcAlt.trim();
-          html += `<tr class="${rowClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+          html += `<tr class="${rowClass}${pcFClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
           if (i === 0) {
             html += `<td>${dateLabel}</td>`;
             html += `<td><span class="sl-badge sl-badge-or">Pre-Call</span></td>`;
@@ -5707,14 +5743,16 @@ function renderShiftLogTable() {
           html += `<td>${r.clockIn || ''}</td><td>${r.clockOut || ''}</td>`;
           html += `<td>${r.payCode}</td><td>${(r.durationMin / 60).toFixed(1)}</td>`;
           html += `<td>${r.payRate.toFixed(1)}/hr</td><td><strong>${r.amount.toFixed(1)}</strong></td>`;
+          html += i === 0 ? `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>` : '<td></td>';
           html += '</tr>';
         });
       } else {
-        html += `<tr class="${pcAlt}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+        html += `<tr class="${pcAlt}${pcFClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
         html += `<td>${dateLabel}</td>`;
         html += `<td><span class="sl-badge sl-badge-or">Pre-Call</span></td>`;
         html += `<td>${pcTimeStr}</td><td>${pcHrs.toFixed(1)}h</td>`;
         html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
+        html += `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>`;
         html += '</tr>';
       }
 
@@ -5724,7 +5762,7 @@ function renderShiftLogTable() {
       if (eveningRows.length > 0) {
         eveningRows.forEach((r, i) => {
           const rowClass = i > 0 ? `sl-sub-row${evAlt}` : evAlt.trim();
-          html += `<tr class="${rowClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+          html += `<tr class="${rowClass}${pcFClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
           if (i === 0) {
             html += `<td>${dateLabel}</td>`;
             html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
@@ -5736,14 +5774,16 @@ function renderShiftLogTable() {
           html += `<td>${r.clockIn || ''}</td><td>${r.clockOut || ''}</td>`;
           html += `<td>${r.payCode}</td><td>${(r.durationMin / 60).toFixed(1)}</td>`;
           html += `<td>${r.payRate.toFixed(1)}/hr</td><td><strong>${r.amount.toFixed(1)}</strong></td>`;
+          html += '<td></td>';
           html += '</tr>';
         });
       } else {
-        html += `<tr class="${evAlt}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+        html += `<tr class="${evAlt}${pcFClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
         html += `<td>${dateLabel}</td>`;
         html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
         html += `<td>${timeStr}</td><td>${eveningHrs.toFixed(1)}h</td>`;
         html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
+        html += '<td></td>';
         html += '</tr>';
       }
       return;
@@ -5751,10 +5791,11 @@ function renderShiftLogTable() {
 
     // Non-pre-call shifts: single group
     const altClass = shiftIdx % 2 === 1 ? ' sl-alt' : '';
+    const fClass = shift.flagged ? ' flagged-row' : '';
     shiftIdx++;
     rows.forEach((r, i) => {
       const rowClass = i > 0 ? `sl-sub-row${altClass}` : altClass.trim();
-      html += `<tr class="${rowClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      html += `<tr class="${rowClass}${fClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       if (i === 0) {
         html += `<td>${dateLabel}</td>`;
         html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
@@ -5769,11 +5810,12 @@ function renderShiftLogTable() {
       html += `<td>${(r.durationMin / 60).toFixed(1)}</td>`;
       html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
       html += `<td><strong>${r.amount.toFixed(1)}</strong></td>`;
+      html += i === 0 ? `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>` : '<td></td>';
       html += '</tr>';
     });
   });
 
-  html += `<tr style="border-top:2px solid var(--border);"><td colspan="9" style="text-align:right;font-weight:700;">Monthly Total</td><td><strong>${grandTotal.toFixed(1)}</strong></td></tr>`;
+  html += `<tr style="border-top:2px solid var(--border);"><td colspan="10" style="text-align:right;font-weight:700;">Monthly Total</td><td><strong>${grandTotal.toFixed(1)}</strong></td></tr>`;
   html += '</tbody></table>';
   container.innerHTML = html;
 }
@@ -5787,6 +5829,53 @@ function filterShiftLog() {
     const text = row.textContent.toLowerCase();
     row.style.display = text.includes(query) ? '' : 'none';
   });
+}
+
+function toggleCaseFlag(caseId) {
+  const c = data.cases.find(x => x.id === caseId);
+  if (c) { c.flagged = !c.flagged; saveData(); renderCaseLogTable(); }
+}
+function toggleShiftFlag(dateStr) {
+  const s = data.shifts[dateStr];
+  if (s) { s.flagged = !s.flagged; saveData(); renderShiftLogTable(); }
+}
+
+function renderFlaggedEmail() {
+  const flaggedShifts = Object.values(data.shifts).filter(s => s.flagged).sort((a,b) => a.date.localeCompare(b.date));
+  const flaggedCases = data.cases.filter(c => c.flagged).sort((a,b) => (a.shiftDate||'').localeCompare(b.shiftDate||''));
+  const total = flaggedShifts.length + flaggedCases.length;
+  document.getElementById('flaggedCount').textContent = `(${total})`;
+  const preview = document.getElementById('flaggedEmailPreview');
+  if (total === 0) {
+    preview.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No flagged items.</p>';
+    preview.dataset.emailText = '';
+    return;
+  }
+  const userName = data.settings?.name || 'Provider';
+  let emailText = `Subject: Missing Time Punches — ${userName}\n\nHi,\n\nThe following items are missing time punches on the compensation sheet:\n\n`;
+  let idx = 1;
+  flaggedShifts.forEach(s => {
+    const d = new Date(s.date + 'T12:00:00');
+    const dateStr = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+    const typeName = getAssignmentTypeName(s.assignmentType);
+    const entries = s.timeEntries || [];
+    const times = entries.length > 0 && entries[0].start
+      ? entries[0].start + (entries[entries.length-1].end ? ' \u2013 ' + entries[entries.length-1].end : '')
+      : 'no times recorded';
+    emailText += `${idx}. ${dateStr} \u2014 ${typeName} (${times})\n`;
+    idx++;
+  });
+  flaggedCases.forEach(c => {
+    const d = new Date(c.shiftDate + 'T12:00:00');
+    const dateStr = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
+    const times = (c.startTime || '?') + ' \u2013 ' + (c.endTime || '?');
+    emailText += `${idx}. ${dateStr} \u2014 Case: ${name} (${times})\n`;
+    idx++;
+  });
+  emailText += `\nPlease update accordingly.\n\nThanks,\n${userName}`;
+  preview.innerHTML = `<div class="email-preview">${escHtml(emailText)}</div>`;
+  preview.dataset.emailText = emailText;
 }
 
 // ================================================================
@@ -7395,6 +7484,22 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
       renderHistory();
     }
   }
+});
+
+document.getElementById('copyFlaggedEmailBtn').addEventListener('click', () => {
+  const text = document.getElementById('flaggedEmailPreview').dataset.emailText || '';
+  navigator.clipboard.writeText(text).then(() => {
+    document.getElementById('flaggedCopyStatus').textContent = 'Copied!';
+    setTimeout(() => document.getElementById('flaggedCopyStatus').textContent = '', 2000);
+  });
+});
+document.getElementById('clearAllFlagsBtn').addEventListener('click', () => {
+  Object.values(data.shifts).forEach(s => s.flagged = false);
+  data.cases.forEach(c => c.flagged = false);
+  saveData();
+  renderFlaggedEmail();
+  if (activeDashTab === 'caselogs') renderCaseLogTable();
+  if (activeDashTab === 'shiftlogs') renderShiftLogTable();
 });
 
 document.getElementById('loadTestDataBtn').addEventListener('click', () => {
