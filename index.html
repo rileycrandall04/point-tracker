@@ -1390,8 +1390,9 @@ input.mil-time.invalid {
         </div>
       </div>
 
-      <div style="margin-top: 16px;">
+      <div style="margin-top: 16px; display:flex; gap:10px; align-items:center;">
         <button class="btn btn-primary" id="saveShiftBtn">Save Shift</button>
+        <button class="btn btn-danger btn-sm hidden" id="deleteShiftDE" style="margin-left:auto;">Delete Shift</button>
       </div>
     </div>
   </div>
@@ -4082,6 +4083,8 @@ function updateDataEntryState() {
     caseSection.classList.add('hidden');
     caseListCard.classList.toggle('hidden', !shift);
   }
+  // Show delete button only when editing an existing shift
+  document.getElementById('deleteShiftDE').classList.toggle('hidden', !shift);
   updateDEStickyHeaderSpacer();
 }
 
@@ -4143,6 +4146,27 @@ document.getElementById('deShiftSummaryBar').addEventListener('click', () => {
   deShiftEditing = true;
   loadShiftForDate();
   updateDataEntryState();
+});
+
+document.getElementById('deleteShiftDE').addEventListener('click', () => {
+  const shift = data.shifts[workingDate];
+  if (!shift) return;
+  if (!confirm('Delete this shift? This cannot be undone.')) return;
+  delete data.shifts[workingDate];
+  saveData(data);
+  deShiftEditing = false;
+  updateHeaderPoints();
+  loadShiftForDate();
+  updateDataEntryState();
+  renderDECaseList();
+  updateDETally();
+  renderShiftLogTable();
+  renderToday();
+  if (returnToShiftLogs) {
+    navigateToShiftLogs();
+  } else {
+    showToast('Shift deleted');
+  }
 });
 
 document.getElementById('saveShiftBtn').addEventListener('click', () => {
