@@ -2678,12 +2678,15 @@ function getPagerPayWindow(assignmentType, isWkndOrHol) {
   switch (assignmentType) {
     case 'SF1': case 'SF2':
     case '1st_call': case '2nd_call': case '3rd_call':
-    case '4th_call': case 'mole':
-      // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: full 24 hrs (00:00–24:00)
-      return isWkndOrHol ? { start: 0, end: 1440 } : { start: 1020, end: 1860 };
+    case '4th_call':
+      // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: 07:00–07:00 next day (24 hrs)
+      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
+    case 'mole':
+      // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: 07:00–07:00 next day (24 hrs)
+      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
     case 'endo':
-      // Weekday only: 17:00–midnight
-      return !isWkndOrHol ? { start: 1020, end: 1440 } : null;
+      // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: same as mole (07:00–07:00)
+      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
     default:
       return null;
   }
@@ -2950,15 +2953,14 @@ function calcARPoints(shift) {
   const spanEnd = clockedRanges[clockedRanges.length - 1].end;
   if (spanEnd <= spanStart) return 0;
 
-  // Expand scan to cover full pager pay window (not just gaps between entries)
+  // Expand scan to cover full pager pay window
   const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
   const scanStart = pagerWindow ? Math.min(spanStart, pagerWindow.start) : spanStart;
   const scanEnd = pagerWindow ? Math.max(spanEnd, pagerWindow.end) : spanEnd;
 
   let arPoints = 0;
-  let callPoints = 0;
 
-  for (let m = scanStart; m < scanEnd; m++) {
+  for (let m = spanStart; m < spanEnd; m++) {
     const normalizedMin = m % 1440;
 
     // Is this minute within a clocked-in range?
@@ -2976,10 +2978,14 @@ function calcARPoints(shift) {
         }
       }
       arPoints += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
-    } else if (pagerWindow && m >= pagerWindow.start && m < pagerWindow.end) {
-      // Pager pay for all non-clocked eligible minutes in the pager window
-      callPoints += 3.5 / 60;
     }
+  }
+
+  // Pager pay: guaranteed full window duration (does not stop when clocked in)
+  let callPoints = 0;
+  if (pagerWindow) {
+    const pagerMinutes = pagerWindow.end - pagerWindow.start;
+    callPoints = (pagerMinutes / 60) * 3.5;
   }
 
   // Guaranteed minimums for clocked-in time (weekday, non-mole)
@@ -3032,15 +3038,10 @@ function calcARBreakdown(shift) {
   const spanEnd = clockedRanges[clockedRanges.length - 1].end;
   if (spanEnd <= spanStart) return { ar: 0, call: 0 };
 
-  // Expand scan to cover full pager pay window
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
-  const scanStart = pagerWindow ? Math.min(spanStart, pagerWindow.start) : spanStart;
-  const scanEnd = pagerWindow ? Math.max(spanEnd, pagerWindow.end) : spanEnd;
-
+  // Compute AR for clocked-in time only
   let arPoints = 0;
-  let callPoints = 0;
 
-  for (let m = scanStart; m < scanEnd; m++) {
+  for (let m = spanStart; m < spanEnd; m++) {
     const normalizedMin = m % 1440;
     let clockedIn = false;
     for (const r of clockedRanges) {
@@ -3054,9 +3055,15 @@ function calcARBreakdown(shift) {
         }
       }
       arPoints += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
-    } else if (pagerWindow && m >= pagerWindow.start && m < pagerWindow.end) {
-      callPoints += 3.5 / 60;
     }
+  }
+
+  // Pager pay: guaranteed full window duration (does not stop when clocked in)
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+  let callPoints = 0;
+  if (pagerWindow) {
+    const pagerMinutes = pagerWindow.end - pagerWindow.start;
+    callPoints = (pagerMinutes / 60) * 3.5;
   }
 
   if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
@@ -4541,41 +4548,22 @@ function getShiftPayBreakdown(shift) {
     }
   });
 
-  // Compute pager pay for full eligible window (not just gaps between entries)
+  // Pager pay: guaranteed full window duration (does not stop when clocked in)
   const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
   if (pagerWindow) {
-    // Build list of non-clocked segments within the pager window
-    const pwStart = pagerWindow.start;
-    const pwEnd = pagerWindow.end;
-    // Collect all pager segments: periods within pager window not covered by clocked ranges
-    const pagerSegments = [];
-    let cursor = pwStart;
-    // Sort clocked ranges by start (should already be sorted)
-    const sorted = [...clockedRanges].sort((a, b) => a.start - b.start);
-    for (const cr of sorted) {
-      if (cr.start > cursor && cursor < pwEnd) {
-        const segEnd = Math.min(cr.start, pwEnd);
-        if (segEnd > cursor) pagerSegments.push({ start: cursor, end: segEnd });
-      }
-      cursor = Math.max(cursor, cr.end);
+    const durMin = pagerWindow.end - pagerWindow.start;
+    if (durMin > 0) {
+      rows.push({
+        clockIn: minutesToTimeStr(pagerWindow.start),
+        clockOut: minutesToTimeStr(pagerWindow.end),
+        payCode: 'Pager Pay',
+        durationMin: durMin,
+        payRate: 3.5,
+        amount: round2((durMin / 60) * 3.5),
+        isPager: true,
+        isSubRow: false
+      });
     }
-    if (cursor < pwEnd) pagerSegments.push({ start: cursor, end: pwEnd });
-
-    pagerSegments.forEach(seg => {
-      const durMin = seg.end - seg.start;
-      if (durMin > 0) {
-        rows.push({
-          clockIn: minutesToTimeStr(seg.start),
-          clockOut: minutesToTimeStr(seg.end),
-          payCode: 'Pager Pay',
-          durationMin: durMin,
-          payRate: 3.5,
-          amount: round2((durMin / 60) * 3.5),
-          isPager: true,
-          isSubRow: false
-        });
-      }
-    });
   }
 
   // Merge consecutive same-payCode segments within the same entry
@@ -7650,7 +7638,7 @@ function mapTaskToAssignmentType(task, dateStr) {
   if (t.includes('NORA')) return 'NORA';
   if (t.includes('ACS') || t.includes('TOCR')) return 'ACS';
   if (t.includes('C/L') || t.includes('CARDIAC')) return 'cardiac_liver';
-  if (t.includes('MOLE')) return 'mole';
+  if (t.includes('MOLE')) return (dateStr && isWeekend(dateStr)) ? '4th_call' : 'mole';
   if (t.includes('CRNA')) return 'CRNA_supervision';
   if (t.includes('ENDO')) return 'endo';
   if (t.includes('SF1') || t.includes('SF 1')) return 'SF1';
