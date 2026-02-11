@@ -3071,6 +3071,56 @@ function calcARPoints(shift) {
     preCallRange = { start: pcs, end: pce };
   }
 
+  // Pre-call split: treat pre-call and evening as independent sub-shifts
+  if (preCallRange) {
+    // Split clocked ranges into pre-call and evening portions
+    let preCallAR = 0;
+    let eveningAR = 0;
+    for (let m = spanStart; m < spanEnd; m++) {
+      const normalizedMin = m % 1440;
+      let clockedIn = false;
+      for (const r of clockedRanges) {
+        if (m >= r.start && m < r.end) { clockedIn = true; break; }
+      }
+      if (clockedIn) {
+        if (m >= preCallRange.start && m < preCallRange.end) {
+          preCallAR += getARRate('OR', isHol, isWknd, normalizedMin) / 60;
+        } else {
+          let rateType = shift.assignmentType;
+          if (isSF) {
+            for (const r of orRanges) {
+              if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
+            }
+          }
+          eveningAR += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
+        }
+      }
+    }
+    // Pre-call minimum: weekday non-holiday → 4hr × OR rate (20) = 80 pts
+    if (!isHol && !isWknd) {
+      preCallAR = Math.max(preCallAR, 20 * 4);
+    }
+    // Evening minimum: based on evening assignment type (mole: no minimum)
+    if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
+      const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
+      const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
+      eveningAR = Math.max(eveningAR, eveningMin);
+    }
+    let arPoints = preCallAR + eveningAR;
+
+    // Pager pay: guaranteed full window duration
+    let callPoints = 0;
+    if (pagerWindow) {
+      const pagerMinutes = pagerWindow.end - pagerWindow.start;
+      callPoints = (pagerMinutes / 60) * 3.5;
+    }
+    const tcPts = calcTempCoveragePoints(shift);
+    callPoints += tcPts.pagerAdj;
+    arPoints += tcPts.ar;
+    return round2(arPoints + callPoints);
+  }
+
+  // Non-pre-call: single-shift logic
   let arPoints = 0;
 
   for (let m = spanStart; m < spanEnd; m++) {
@@ -3083,11 +3133,9 @@ function calcARPoints(shift) {
     }
 
     if (clockedIn) {
-      // Normal AR rate — override to OR during pre-call or SF OR-case windows
+      // Normal AR rate — override to OR during SF OR-case windows
       let rateType = shift.assignmentType;
-      if (preCallRange && m >= preCallRange.start && m < preCallRange.end) {
-        rateType = 'OR';
-      } else if (isSF) {
+      if (isSF) {
         for (const r of orRanges) {
           if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
         }
@@ -3190,7 +3238,54 @@ function calcARBreakdown(shift) {
     preCallRange = { start: pcs, end: pce };
   }
 
-  // Compute AR for clocked-in time only
+  // Pre-call split: treat pre-call and evening as independent sub-shifts
+  if (preCallRange) {
+    let preCallAR = 0;
+    let eveningAR = 0;
+    for (let m = spanStart; m < spanEnd; m++) {
+      const normalizedMin = m % 1440;
+      let clockedIn = false;
+      for (const r of clockedRanges) {
+        if (m >= r.start && m < r.end) { clockedIn = true; break; }
+      }
+      if (clockedIn) {
+        if (m >= preCallRange.start && m < preCallRange.end) {
+          preCallAR += getARRate('OR', isHol, isWknd, normalizedMin) / 60;
+        } else {
+          let rateType = shift.assignmentType;
+          if (isSF) {
+            for (const r of orRanges) {
+              if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
+            }
+          }
+          eveningAR += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
+        }
+      }
+    }
+    // Pre-call minimum: weekday non-holiday → 4hr × OR rate (20) = 80 pts
+    if (!isHol && !isWknd) {
+      preCallAR = Math.max(preCallAR, 20 * 4);
+    }
+    // Evening minimum: based on evening assignment type (mole: no minimum)
+    if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
+      const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
+      const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
+      eveningAR = Math.max(eveningAR, eveningMin);
+    }
+    let arPoints = preCallAR + eveningAR;
+
+    let callPoints = 0;
+    if (pagerWindow) {
+      const pagerMinutes = pagerWindow.end - pagerWindow.start;
+      callPoints = (pagerMinutes / 60) * 3.5;
+    }
+    const tcPtsBd = calcTempCoveragePoints(shift);
+    callPoints += tcPtsBd.pagerAdj;
+    arPoints += tcPtsBd.ar;
+    return { ar: round2(arPoints), call: round2(callPoints), preCallAR: round2(preCallAR), eveningAR: round2(eveningAR) };
+  }
+
+  // Non-pre-call: single-shift logic
   let arPoints = 0;
 
   for (let m = spanStart; m < spanEnd; m++) {
@@ -3201,9 +3296,7 @@ function calcARBreakdown(shift) {
     }
     if (clockedIn) {
       let rateType = shift.assignmentType;
-      if (preCallRange && m >= preCallRange.start && m < preCallRange.end) {
-        rateType = 'OR';
-      } else if (isSF) {
+      if (isSF) {
         for (const r of orRanges) {
           if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
         }
@@ -4536,7 +4629,15 @@ function renderToday() {
       }
     }
   }
-  bdHtml += `<div class="row"><span>Availability Rate</span><span>${totals.ar.toFixed(2)}</span></div>`;
+  // Show AR breakdown: split for pre-call shifts
+  const arBreakdown = calcARBreakdown(shift);
+  if (arBreakdown.preCallAR !== undefined) {
+    const eveningName = getAssignmentTypeName(shift.assignmentType);
+    bdHtml += `<div class="row"><span>Pre-Call AR</span><span>${arBreakdown.preCallAR.toFixed(2)}</span></div>`;
+    bdHtml += `<div class="row"><span>${escHtml(eveningName)} AR</span><span>${arBreakdown.eveningAR.toFixed(2)}</span></div>`;
+  } else {
+    bdHtml += `<div class="row"><span>Availability Rate</span><span>${totals.ar.toFixed(2)}</span></div>`;
+  }
   bdHtml += `<div class="row"><span>Productivity (${shiftCases.length} cases)</span><span>${totals.prod.toFixed(2)}</span></div>`;
   // Show pager pay line item — always visible for eligible shift types
   if (pagerWindow) {
@@ -5165,25 +5266,62 @@ function getShiftPayBreakdown(shift) {
     }
   }
 
-  // Guaranteed minimum: weekday non-mole shifts get 4hr minimum — replace AR rows with single minimum row
-  if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
-    const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
-    const minPoints = isOBRate ? 13 * 4 : 20 * 4;
-    const arRows = consolidated.filter(r => !r.isPager);
-    const arTotal = arRows.reduce((sum, r) => sum + r.amount, 0);
-    if (arTotal > 0 && arTotal < minPoints) {
-      // Replace all AR rows with a single 4-Hour Minimum row
+  // Guaranteed minimum logic
+  if (!isHol && !isWknd) {
+    if (preCallRange) {
+      // Pre-call split: apply separate minimums to pre-call and evening rows
+      const preCallRows = consolidated.filter(r => !r.isPager && r.payCode && r.payCode.startsWith('Pre-Call'));
+      const eveningRows = consolidated.filter(r => !r.isPager && r.payCode && !r.payCode.startsWith('Pre-Call'));
       const pagerRows = consolidated.filter(r => r.isPager);
+
+      const preCallTotal = preCallRows.reduce((sum, r) => sum + r.amount, 0);
+      const preCallMin = 20 * 4; // OR rate minimum = 80 pts
+      let preCallResult = preCallRows;
+      if (preCallTotal > 0 && preCallTotal < preCallMin) {
+        preCallResult = [{
+          clockIn: preCallRows[0]?.clockIn || '', clockOut: preCallRows[preCallRows.length - 1]?.clockOut || '',
+          payCode: 'Pre-Call 4-Hour Minimum',
+          durationMin: 240, payRate: 20, amount: preCallMin,
+          isSubRow: false, isPreCall: true
+        }];
+      }
+
+      let eveningResult = eveningRows;
+      if (shift.assignmentType !== 'mole') {
+        const eveningTotal = eveningRows.reduce((sum, r) => sum + r.amount, 0);
+        const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
+        const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
+        if (eveningTotal > 0 && eveningTotal < eveningMin) {
+          eveningResult = [{
+            clockIn: eveningRows[0]?.clockIn || '', clockOut: eveningRows[eveningRows.length - 1]?.clockOut || '',
+            payCode: getAssignmentTypeName(shift.assignmentType) + ' 4-Hour Minimum',
+            durationMin: 240, payRate: isOBRate ? 13 : 20, amount: eveningMin,
+            isSubRow: false
+          }];
+        }
+      }
+
       consolidated.length = 0;
-      consolidated.push({
-        clockIn: arRows[0]?.clockIn || '', clockOut: arRows[arRows.length - 1]?.clockOut || '',
-        payCode: '4-Hour Minimum',
-        durationMin: 240,
-        payRate: isOBRate ? 13 : 20,
-        amount: minPoints,
-        isSubRow: false
-      });
+      preCallResult.forEach(r => consolidated.push(r));
+      eveningResult.forEach(r => consolidated.push(r));
       pagerRows.forEach(r => consolidated.push(r));
+    } else if (shift.assignmentType !== 'mole') {
+      // Non-pre-call: single 4hr minimum
+      const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
+      const minPoints = isOBRate ? 13 * 4 : 20 * 4;
+      const arRows = consolidated.filter(r => !r.isPager);
+      const arTotal = arRows.reduce((sum, r) => sum + r.amount, 0);
+      if (arTotal > 0 && arTotal < minPoints) {
+        const pagerRows = consolidated.filter(r => r.isPager);
+        consolidated.length = 0;
+        consolidated.push({
+          clockIn: arRows[0]?.clockIn || '', clockOut: arRows[arRows.length - 1]?.clockOut || '',
+          payCode: '4-Hour Minimum',
+          durationMin: 240, payRate: isOBRate ? 13 : 20, amount: minPoints,
+          isSubRow: false
+        });
+        pagerRows.forEach(r => consolidated.push(r));
+      }
     }
   }
 
@@ -5271,6 +5409,7 @@ function renderShiftLogTable() {
     const dateLabel = `${dayName} ${month}/${day}`;
     const typeName = getAssignmentTypeName(shift.assignmentType);
     const badgeClass = getShiftBadgeClass(shift.assignmentType);
+    const hasPreCall = shift.preCallStart && shift.preCallEnd;
     const totalHrs = calcShiftHours(shift);
     const entries = shift.timeEntries || [];
     const timeStr = entries.length > 0 && entries[0].start
@@ -5279,10 +5418,18 @@ function renderShiftLogTable() {
     const shiftTotal = rows.reduce((s, r) => s + r.amount, 0);
     grandTotal += shiftTotal;
 
+    // Build assignment badge HTML — dual badges for pre-call shifts
+    let badgeHtml;
+    if (hasPreCall) {
+      badgeHtml = `<span class="sl-badge sl-badge-or" style="font-size:0.65rem;">Pre-Call</span><br><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span>`;
+    } else {
+      badgeHtml = `<span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span>`;
+    }
+
     if (shift.assignmentType === 'vacation') {
       html += `<tr class="${altClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       html += `<td>${dateLabel}</td>`;
-      html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
+      html += `<td>${badgeHtml}</td>`;
       html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>Vacation</td><td>-</td><td>-</td><td>0.0</td>`;
       html += '</tr>';
       return;
@@ -5291,7 +5438,7 @@ function renderShiftLogTable() {
     if (rows.length === 0) {
       html += `<tr class="${altClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       html += `<td>${dateLabel}</td>`;
-      html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
+      html += `<td>${badgeHtml}</td>`;
       html += `<td>${timeStr}</td><td>${totalHrs.toFixed(1)}h</td>`;
       html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
       html += '</tr>';
@@ -5303,7 +5450,7 @@ function renderShiftLogTable() {
       html += `<tr class="${rowClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       if (i === 0) {
         html += `<td>${dateLabel}</td>`;
-        html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
+        html += `<td>${badgeHtml}</td>`;
         html += `<td>${timeStr}</td>`;
         html += `<td>${totalHrs.toFixed(1)}h</td>`;
       } else {
