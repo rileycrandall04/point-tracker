@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mwa-tracker-v71';
+const CACHE_NAME = 'mwa-tracker-v72';
 const ASSETS = [
   './',
   './index.html',
@@ -24,16 +24,33 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(response => {
-        if (response && response.status === 200 && response.type === 'basic') {
+  const url = new URL(e.request.url);
+  const isAppPage = url.pathname.endsWith('/') || url.pathname.endsWith('.html');
+
+  if (isAppPage) {
+    // Network-first for HTML pages — always get latest code
+    e.respondWith(
+      fetch(e.request).then(response => {
+        if (response && response.status === 200) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
         }
         return response;
-      }).catch(() => cached);
-    })
-  );
+      }).catch(() => caches.match(e.request))
+    );
+  } else {
+    // Cache-first for static assets (CDN libs, manifest, etc.)
+    e.respondWith(
+      caches.match(e.request).then(cached => {
+        if (cached) return cached;
+        return fetch(e.request).then(response => {
+          if (response && response.status === 200 && response.type === 'basic') {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+          }
+          return response;
+        }).catch(() => cached);
+      })
+    );
+  }
 });
