@@ -3786,13 +3786,9 @@ function checkEndTimeNotification() {
 
 document.getElementById('shiftAssignmentType').addEventListener('change', function() {
   const type = this.value;
-  console.log('[DEBUG] Assignment type changed to:', type);
   document.getElementById('cardiacLiverOptions').classList.toggle('hidden', type !== 'cardiac_liver');
   document.getElementById('vacationRangeSection').classList.toggle('hidden', type !== 'vacation');
-  const evSection = document.getElementById('eveningAssignmentSection');
-  console.log('[DEBUG] Evening section before toggle:', evSection.classList.contains('hidden'), 'type===pre_call:', type === 'pre_call');
-  evSection.classList.toggle('hidden', type !== 'pre_call');
-  console.log('[DEBUG] Evening section after toggle:', evSection.classList.contains('hidden'));
+  document.getElementById('eveningAssignmentSection').classList.toggle('hidden', type !== 'pre_call');
   document.getElementById('timeEntriesLabel').textContent = type === 'pre_call' ? 'Pre-Call Times' : 'Time Entries';
   if (type !== 'pre_call') {
     document.getElementById('eveningAssignmentType').value = '';
@@ -3930,11 +3926,14 @@ function loadShiftForDate() {
       populateEveningTimeEntries(eveningEntries);
     } else {
       document.getElementById('shiftAssignmentType').value = effectiveType;
-      document.getElementById('timeEntriesLabel').textContent = 'Time Entries';
-      document.getElementById('eveningAssignmentSection').classList.add('hidden');
-      document.getElementById('eveningAssignmentType').value = '';
-      document.getElementById('eveningTimeSection').classList.add('hidden');
-      document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
+      const isPreCall = effectiveType === 'pre_call';
+      document.getElementById('timeEntriesLabel').textContent = isPreCall ? 'Pre-Call Times' : 'Time Entries';
+      document.getElementById('eveningAssignmentSection').classList.toggle('hidden', !isPreCall);
+      if (!isPreCall) {
+        document.getElementById('eveningAssignmentType').value = '';
+        document.getElementById('eveningTimeSection').classList.add('hidden');
+        document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
+      }
       populateTimeEntries(shift.timeEntries || [{ start: shift.startTime || '07:00', end: shift.endTime || '' }]);
     }
     document.getElementById('shiftHoliday').checked = shift.isHoliday || false;
