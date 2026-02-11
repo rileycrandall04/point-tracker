@@ -3786,9 +3786,13 @@ function checkEndTimeNotification() {
 
 document.getElementById('shiftAssignmentType').addEventListener('change', function() {
   const type = this.value;
+  console.log('[DEBUG] Assignment type changed to:', type);
   document.getElementById('cardiacLiverOptions').classList.toggle('hidden', type !== 'cardiac_liver');
   document.getElementById('vacationRangeSection').classList.toggle('hidden', type !== 'vacation');
-  document.getElementById('eveningAssignmentSection').classList.toggle('hidden', type !== 'pre_call');
+  const evSection = document.getElementById('eveningAssignmentSection');
+  console.log('[DEBUG] Evening section before toggle:', evSection.classList.contains('hidden'), 'type===pre_call:', type === 'pre_call');
+  evSection.classList.toggle('hidden', type !== 'pre_call');
+  console.log('[DEBUG] Evening section after toggle:', evSection.classList.contains('hidden'));
   document.getElementById('timeEntriesLabel').textContent = type === 'pre_call' ? 'Pre-Call Times' : 'Time Entries';
   if (type !== 'pre_call') {
     document.getElementById('eveningAssignmentType').value = '';
