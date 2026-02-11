@@ -1705,18 +1705,18 @@ input.mil-time.invalid {
 <div class="page" id="page-dashboard">
   <div class="dash-sticky-header" id="dashStickyHeader">
     <div class="dash-tab-bar">
-      <button class="dash-tab-btn active" data-dtab="caselogs">Case Logs</button>
+      <button class="dash-tab-btn active" data-dtab="daily">Daily</button>
+      <button class="dash-tab-btn" data-dtab="caselogs">Case Logs</button>
       <button class="dash-tab-btn" data-dtab="shiftlogs">Shift Logs</button>
       <button class="dash-tab-btn" data-dtab="projections">Projections</button>
       <button class="dash-tab-btn" data-dtab="time">Time</button>
       <button class="dash-tab-btn" data-dtab="analytics">Analytics</button>
-      <button class="dash-tab-btn" data-dtab="daily">Daily</button>
     </div>
   </div>
   <div id="dashStickyHeaderSpacer"></div>
 
   <!-- Case Logs Tab -->
-  <div id="dtab-caselogs">
+  <div id="dtab-caselogs" class="hidden">
     <div class="month-nav">
       <button id="clPrevMonth">&larr;</button>
       <span id="clMonthLabel">January 2026</span>
@@ -2036,7 +2036,7 @@ input.mil-time.invalid {
   </div>
 
   <!-- Daily Totals Tab -->
-  <div id="dtab-daily" class="hidden">
+  <div id="dtab-daily"
     <div class="month-nav">
       <button id="dailyPrevMonth">&larr;</button>
       <span id="dailyMonthLabel">January 2026</span>
@@ -4910,7 +4910,7 @@ let breakdownChart = null;
 let pipelineChart = null;
 let productionTrendChart = null;
 let shiftDistChart = null;
-let activeDashTab = 'caselogs';
+let activeDashTab = 'daily';
 
 // Dashboard sub-tab switching
 document.querySelectorAll('.dash-tab-btn').forEach(btn => {
