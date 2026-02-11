@@ -6955,7 +6955,7 @@ function parseExcelDate(val) {
   // Excel serial number
   if (typeof val === 'number') {
     const d = new Date((val - 25569) * 86400 * 1000);
-    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    return d.getUTCFullYear() + '-' + String(d.getUTCMonth()+1).padStart(2,'0') + '-' + String(d.getUTCDate()).padStart(2,'0');
   }
   // String like "1/2/2026" or "2026-01-02"
   const s = String(val).trim();
@@ -6971,10 +6971,11 @@ function parseExcelDate(val) {
 
 function parseExcelTime(val) {
   if (!val && val !== 0) return '';
-  // Excel fractional day (0.0 to 1.0)
-  if (typeof val === 'number' && val < 1) {
-    const totalMin = Math.round(val * 1440);
-    const h = Math.floor(totalMin / 60);
+  // Excel fractional day (0.0 to ~1.0) or full serial date-time (extract fractional part)
+  if (typeof val === 'number') {
+    const frac = val >= 1 ? val - Math.floor(val) : val;
+    const totalMin = Math.round(frac * 1440);
+    const h = Math.floor(totalMin / 60) % 24;
     const m = totalMin % 60;
     return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
   }
@@ -7695,6 +7696,7 @@ document.getElementById('importTimeFile').addEventListener('change', async (e) =
           clockOutDate: parseExcelDate(r['Effective Clock Out Date']),
           clockOutTime: parseExcelTime(r['Effective Clock Out Time']),
           duration: parseFloat(r['Duration']) || 0,
+          timeClockTask: String(r['Time Clock Task'] || ''),
           task: String(r['Scheduled Task Abbreviation'] || ''),
           location: String(r['Location Name'] || ''),
           notes: String(r['Notes'] || '')
@@ -7715,6 +7717,7 @@ document.getElementById('importTimeFile').addEventListener('change', async (e) =
           clockOutDate: parseExcelDate(r['Effective Clock Out Date']),
           clockOutTime: parseExcelTime(r['Effective Clock Out Time']),
           duration: parseFloat(r['Duration']) || 0,
+          timeClockTask: String(r['Time Clock Task'] || ''),
           task: String(r['Scheduled Task Abbreviation'] || ''),
           location: String(r['Location Name'] || ''),
           notes: String(r['Notes'] || '')
@@ -7748,20 +7751,33 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
   Object.keys(byDate).sort().forEach(date => {
     if (data.shifts[date]) { toSkip++; return; }
     const entries = byDate[date];
-    // Build time entries from QGenda punches, sorted by clock-in time
-    const sortedEntries = [...entries].filter(e => e.clockInTime).sort((a, b) => a.clockInTime.localeCompare(b.clockInTime));
-    const timeEntries = sortedEntries.map(e => ({ start: e.clockInTime, end: e.clockOutTime || '' }));
+    // Separate work hours from supervision entries
+    const workEntries = entries.filter(e => e.clockInTime && (e.timeClockTask || '').toUpperCase() !== 'CARE TEAM SUPERVISOR');
+    const supEntries = entries.filter(e => e.clockInTime && (e.timeClockTask || '').toUpperCase() === 'CARE TEAM SUPERVISOR');
+    const allClocked = [...entries].filter(e => e.clockInTime).sort((a, b) => a.clockInTime.localeCompare(b.clockInTime));
+    const timeEntries = allClocked.map(e => ({ start: e.clockInTime, end: e.clockOutTime || '' }));
     let earliest = '23:59', latest = '00:00', task = '';
     entries.forEach(e => {
       if (e.clockInTime && e.clockInTime < earliest) earliest = e.clockInTime;
       if (e.clockOutTime && e.clockOutTime > latest) latest = e.clockOutTime;
       if (!task && e.task) task = e.task;
     });
+    // Detect CRNA supervision period
+    let supervisionStart = '', supervisionEnd = '';
+    if (supEntries.length > 0) {
+      const sorted = [...supEntries].sort((a, b) => a.clockInTime.localeCompare(b.clockInTime));
+      supervisionStart = sorted[0].clockInTime;
+      supervisionEnd = sorted[sorted.length - 1].clockOutTime || '';
+    }
+    // If ALL entries are supervision (standalone CRNA shift), use CRNA_supervision type
+    const assignmentType = workEntries.length === 0 && supEntries.length > 0
+      ? 'CRNA_supervision'
+      : mapTaskToAssignmentType(task, date);
     shiftsToCreate.push({
-      date, assignmentType: mapTaskToAssignmentType(task, date),
+      date, assignmentType,
       startTime: earliest, endTime: latest,
       timeEntries: timeEntries.length > 0 ? timeEntries : [{ start: earliest, end: latest }],
-      task
+      task, supervisionStart, supervisionEnd
     });
     toImport++;
   });
@@ -7792,8 +7808,8 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
         forcedOff: false,
         subspecCoverage: false,
         teeCount: 0,
-        supervisionStart: '',
-        supervisionEnd: ''
+        supervisionStart: s.supervisionStart || '',
+        supervisionEnd: s.supervisionEnd || ''
       };
     });
     saveData(data);
@@ -7886,52 +7902,147 @@ function buildCaseMonthSummary(cases) {
   return Object.values(buckets).sort((a, b) => (a.year - b.year) || (a.month - b.month));
 }
 
-function parseGoogleSheetCSV(text) {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-  const cases = [];
+function parseDateField(raw) {
+  if (!raw) return '';
+  const s = raw.trim();
   const now = new Date();
   const curYear = now.getFullYear();
   const curMonth = now.getMonth() + 1;
 
-  for (const line of lines) {
-    const cols = line.split(',').map(c => c.trim());
-    if (cols.length < 5) continue;
-
-    const dateMatch = cols[0].match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
-    if (!dateMatch) continue;
-
-    let [, month, day, year] = dateMatch;
+  // M/D/YYYY or M/D/YY or M/D
+  const slashMatch = s.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  if (slashMatch) {
+    let [, month, day, year] = slashMatch;
     month = parseInt(month); day = parseInt(day);
+    if (year) { year = parseInt(year); if (year < 100) year += 2000; }
+    else { year = month > curMonth + 3 ? curYear - 1 : curYear; }
+    return year + '-' + String(month).padStart(2,'0') + '-' + String(day).padStart(2,'0');
+  }
 
-    if (year) {
-      year = parseInt(year);
-      if (year < 100) year += 2000;
-    } else {
-      // Infer year based on current date: if month is far ahead of current, likely previous year
-      if (month > curMonth + 3) year = curYear - 1;
-      else year = curYear;
+  // D-Mon or D-Mon-YY (e.g., "1-Nov", "15-Jan", "3-Dec-25")
+  const monNames = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+  const monMatch = s.match(/^(\d{1,2})-([A-Za-z]{3})(?:-(\d{2,4}))?$/);
+  if (monMatch) {
+    const day = parseInt(monMatch[1]);
+    const mon = monNames[monMatch[2].toLowerCase()];
+    if (!mon) return '';
+    let year = monMatch[3] ? parseInt(monMatch[3]) : null;
+    if (year !== null && year < 100) year += 2000;
+    if (year === null) {
+      // Infer year: if month is far ahead of current, likely previous year
+      year = mon > curMonth + 3 ? curYear - 1 : curYear;
+    }
+    return year + '-' + String(mon).padStart(2,'0') + '-' + String(day).padStart(2,'0');
+  }
+
+  return '';
+}
+
+function parseGoogleSheetCSV(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  const cases = [];
+
+  for (const line of lines) {
+    // Handle quoted CSV fields properly
+    const cols = [];
+    let inQuote = false, field = '';
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQuote = !inQuote; continue; }
+      if (ch === ',' && !inQuote) { cols.push(field.trim()); field = ''; continue; }
+      field += ch;
+    }
+    cols.push(field.trim());
+
+    if (cols.length < 3) continue;
+
+    const dateStr = parseDateField(cols[0]);
+    if (!dateStr) continue;
+
+    const surgeon = (cols[1] || '').trim();
+    const baseUnits = parseFloat(cols[2]) || 0;
+    const startTime = convertAMPMToMilitary(cols[3] || '');
+    const endTime = convertAMPMToMilitary(cols[4] || '');
+    const modifiers = cols.length > 5 ? (cols[5] || '') : '';
+    const blockVal = cols.length > 6 ? (parseFloat(cols[6]) || 0) : 0;
+    const shared = cols.length > 7 ? (cols[7] || '').trim() : '';
+
+    // Detect special case types from surgeon column
+    const surgeonUpper = surgeon.toUpperCase().trim();
+
+    // Skip CRNA supervision entries (these are shift-level, not case-level)
+    if (surgeonUpper.startsWith('SUPERVISING') || surgeonUpper === 'CRNA' || surgeonUpper === 'CRNAS') continue;
+
+    // APS Rounding
+    if (surgeonUpper === 'APS') {
+      cases.push({
+        id: genId(),
+        caseType: 'aps_rounding',
+        procedure: 'APS Rounding',
+        baseUnits: 0,
+        physicalStatus: 'P2',
+        startTime: '', endTime: '',
+        shiftDate: dateStr,
+        isEmergency: false,
+        isMedicalProc: false, medicalUnits: 0,
+        isAcutePain: false, acutePainUnits: 0,
+        isHighRiskPeds: false, isORCase: false,
+        isSharedCase: false, sharedStartupPct: 100,
+        nerveBlock: 'none',
+        hasCentralLine: false, hasArterialLine: false,
+        hasPAC: false, hasTEEAddOn: false, hasITMorphine: false,
+        epiduralRounds: baseUnits === 3 ? 1 : 0,
+        painRounds: baseUnits === 2 ? 1 : 0,
+        notes: '', timestamp: new Date().toISOString()
+      });
+      continue;
     }
 
-    const dateStr = year + '-' + String(month).padStart(2,'0') + '-' + String(day).padStart(2,'0');
+    // Labor epidural
+    if (surgeonUpper === 'EPIDURAL' || surgeonUpper === 'LABOR EPIDURAL') {
+      cases.push({
+        id: genId(),
+        caseType: 'labor_epidural',
+        procedure: 'Labor Epidural',
+        baseUnits: 0,
+        physicalStatus: 'P2',
+        startTime: startTime, endTime: endTime,
+        shiftDate: dateStr,
+        isEmergency: false,
+        isMedicalProc: false, medicalUnits: 0,
+        isAcutePain: false, acutePainUnits: 0,
+        isHighRiskPeds: false, isORCase: false,
+        isSharedCase: false, sharedStartupPct: 100,
+        nerveBlock: 'none',
+        hasCentralLine: false, hasArterialLine: false,
+        hasPAC: false, hasTEEAddOn: false, hasITMorphine: false,
+        notes: '', timestamp: new Date().toISOString()
+      });
+      continue;
+    }
 
-    const surgeon = cols[1] || '';
-    const baseUnits = parseFloat(cols[2]) || 0;
-    const startTime = convertAMPMToMilitary(cols[3]);
-    const endTime = convertAMPMToMilitary(cols[4]);
-    const modifiers = cols[6] || '';
-    const blockVal = parseFloat(cols[7]) || 0;
-    const shared = (cols[8] || '').trim();
-
-    // Modifiers: text like "E" / "ASA 4", or numeric modifier point value (nonzero = emergency)
-    const isEmergency = /\bE\b/i.test(modifiers) || (parseFloat(modifiers) > 0);
+    // Modifiers: text "E" for emergency, "4"/"5" for physical status
+    const isEmergency = /\bE\b/.test(modifiers);
     let physicalStatus = 'P2';
-    const psMatch = modifiers.match(/\b([45])\b/);
+    const psMatch = modifiers.match(/\bASA\s*([45])\b/i) || modifiers.match(/^([45])$/);
     if (psMatch) physicalStatus = 'P' + psMatch[1];
 
-    // Nerve block: detect from block point value
+    // If modifier column has a numeric value and block column is empty, it may be misplaced
+    const modNum = parseFloat(modifiers) || 0;
+    const effectiveBlock = blockVal > 0 ? blockVal : modNum;
+
+    // Nerve block: detect from block point value (3=brachial plexus, 2.6=other)
     let nerveBlock = 'none';
-    if (blockVal >= 3) nerveBlock = 'brachial_plexus';
-    else if (blockVal > 0) nerveBlock = 'other_nerve';
+    if (effectiveBlock >= 3) nerveBlock = 'brachial_plexus';
+    else if (effectiveBlock >= 2.5) nerveBlock = 'other_nerve';
+
+    // Arterial line: 0.6 in block or modifier column
+    const hasArterialLine = Math.abs(effectiveBlock - 0.6) < 0.01;
+    if (hasArterialLine) nerveBlock = 'none';
+
+    // Central line: 0.8
+    const hasCentralLine = Math.abs(effectiveBlock - 0.8) < 0.01;
+    if (hasCentralLine) nerveBlock = 'none';
 
     // Shared case
     const isShared = shared.toUpperCase() === 'Y';
@@ -7948,19 +8059,15 @@ function parseGoogleSheetCSV(text) {
       endTime: endTime,
       shiftDate: dateStr,
       isEmergency: isEmergency,
-      isMedicalProcedure: false,
-      medicalProcedureUnits: 0,
-      isAcutePain: false,
-      acutePainUnits: 0,
-      isHighRiskPeds: false,
-      isORCase: false,
-      nerveBlock: nerveBlock,
-      centralLine: false,
-      arterialLine: false,
-      pac: false,
-      teeAddOn: false,
+      isMedicalProc: false, medicalUnits: 0,
+      isAcutePain: false, acutePainUnits: 0,
+      isHighRiskPeds: false, isORCase: false,
       isSharedCase: isShared,
       sharedStartupPct: isShared ? 50 : 100,
+      nerveBlock: nerveBlock,
+      hasCentralLine: hasCentralLine,
+      hasArterialLine: hasArterialLine,
+      hasPAC: false, hasTEEAddOn: false, hasITMorphine: false,
       notes: surgeon,
       timestamp: new Date().toISOString()
     });
