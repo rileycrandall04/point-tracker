@@ -1332,6 +1332,45 @@ input.mil-time.invalid {
         </div>
       </div>
 
+      <div id="tempCoverageSection" class="hidden">
+        <div class="divider"></div>
+        <h3>Temporary Coverage</h3>
+        <div class="checkbox-group">
+          <input type="checkbox" id="tempCoverageCheck">
+          <label for="tempCoverageCheck">Add temporary coverage period</label>
+        </div>
+        <div class="hidden" id="tempCoverageForm">
+          <div class="form-group" style="margin-top:8px;">
+            <label>Direction</label>
+            <div style="display:flex;gap:16px;">
+              <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer;">
+                <input type="radio" name="tcDirection" value="covered" checked> Someone covering for me
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer;">
+                <input type="radio" name="tcDirection" value="covering"> I'm covering for someone
+              </label>
+            </div>
+          </div>
+          <div class="form-row" style="margin-top:8px;">
+            <div class="form-group">
+              <label>Coverage Start</label>
+              <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="tcStart">
+            </div>
+            <div class="form-group">
+              <label>Coverage End</label>
+              <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="tcEnd">
+            </div>
+          </div>
+          <div id="tcTimeEntriesSection" class="hidden">
+            <div class="form-group" style="margin-top:8px;">
+              <label>Work Time Entries <span style="font-size:0.75rem;color:var(--text-dim);">(clock-in during coverage)</span></label>
+              <div id="tcTimeEntriesContainer"></div>
+              <button type="button" class="add-entry-btn" id="addTCTimeEntryBtn">+ Add Coverage Entry</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="eveningAssignmentSection" class="hidden">
         <div class="divider"></div>
         <div class="form-group">
@@ -2669,6 +2708,7 @@ function migrateData(d) {
     if (s.supervisionEnd === undefined) { s.supervisionEnd = ''; changed = true; }
     if (s.preCallStart === undefined) { s.preCallStart = ''; changed = true; }
     if (s.preCallEnd === undefined) { s.preCallEnd = ''; changed = true; }
+    if (s.tempCoverage === undefined) { s.tempCoverage = []; changed = true; }
   });
   // Ensure isORCase on all cases
   d.cases.forEach(c => {
@@ -3062,6 +3102,11 @@ function calcARPoints(shift) {
     callPoints = (pagerMinutes / 60) * 3.5;
   }
 
+  // Temp coverage adjustment
+  const tcPts = calcTempCoveragePoints(shift);
+  callPoints += tcPts.pagerAdj;
+  arPoints += tcPts.ar;
+
   // Guaranteed minimums for clocked-in time (weekday, non-mole)
   if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
     const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
@@ -3172,6 +3217,11 @@ function calcARBreakdown(shift) {
     const pagerMinutes = pagerWindow.end - pagerWindow.start;
     callPoints = (pagerMinutes / 60) * 3.5;
   }
+
+  // Temp coverage adjustment
+  const tcPtsBd = calcTempCoveragePoints(shift);
+  callPoints += tcPtsBd.pagerAdj;
+  arPoints += tcPtsBd.ar;
 
   if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
     const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
@@ -3409,6 +3459,38 @@ function calcSubspecPoints(shift) {
   return pts;
 }
 
+function calcTempCoveragePoints(shift) {
+  if (!shift.tempCoverage || shift.tempCoverage.length === 0) return { pagerAdj: 0, ar: 0 };
+  const isHol = shift.isHoliday;
+  const isWknd = isWeekend(shift.date);
+  let pagerAdj = 0;
+  let ar = 0;
+  shift.tempCoverage.forEach(tc => {
+    if (!tc.start || !tc.end) return;
+    let tcStart = timeToMinutes(tc.start);
+    let tcEnd = timeToMinutes(tc.end);
+    if (tcEnd <= tcStart) tcEnd += 1440;
+    const tcMinutes = tcEnd - tcStart;
+    if (tc.type === 'covered') {
+      pagerAdj -= (tcMinutes / 60) * 3.5;
+    } else if (tc.type === 'covering') {
+      pagerAdj += (tcMinutes / 60) * 3.5;
+      // AR for work time entries during coverage
+      const tcEntries = tc.timeEntries || [];
+      tcEntries.forEach(e => {
+        if (!e.start || !e.end) return;
+        let es = timeToMinutes(e.start);
+        let ee = timeToMinutes(e.end);
+        if (ee <= es) ee += 1440;
+        for (let m = es; m < ee; m++) {
+          ar += getARRate(shift.assignmentType, isHol, isWknd, m % 1440) / 60;
+        }
+      });
+    }
+  });
+  return { pagerAdj: round2(pagerAdj), ar: round2(ar) };
+}
+
 function calcShiftTotal(shift) {
   const shiftCases = data.cases.filter(c => c.shiftDate === shift.date);
   const breakdown = calcARBreakdown(shift);
@@ -3630,6 +3712,51 @@ function updatePreCallOverlayVisibility() {
   }
 }
 
+function updateTempCoverageVisibility() {
+  const type = getSelectedAssignmentType();
+  const isWkndOrHol = document.getElementById('shiftHoliday').checked || isWeekend(workingDate);
+  const eligible = getPagerPayWindow(type, isWkndOrHol) !== null;
+  document.getElementById('tempCoverageSection').classList.toggle('hidden', !eligible);
+  if (!eligible) {
+    document.getElementById('tempCoverageCheck').checked = false;
+    document.getElementById('tempCoverageForm').classList.add('hidden');
+    document.getElementById('tcTimeEntriesSection').classList.add('hidden');
+    document.getElementById('tcTimeEntriesContainer').innerHTML = '';
+  }
+}
+
+function addTCTimeEntryRow(startVal, endVal) {
+  const container = document.getElementById('tcTimeEntriesContainer');
+  const row = document.createElement('div');
+  row.className = 'time-entry-row';
+  row.innerHTML = `
+    <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time tc-start" value="${startVal}">
+    <span class="te-label">to</span>
+    <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time tc-end" value="${endVal}">
+    <button type="button" class="remove-entry-btn">&times;</button>
+  `;
+  row.querySelector('.remove-entry-btn').addEventListener('click', () => { row.remove(); });
+  row.querySelectorAll('input.mil-time').forEach(input => bindMilTimeInput(input));
+  container.appendChild(row);
+}
+
+function collectTCTimeEntries() {
+  const rows = document.querySelectorAll('#tcTimeEntriesContainer .time-entry-row');
+  const entries = [];
+  rows.forEach(row => {
+    const start = row.querySelector('.tc-start')?.value || '';
+    const end = row.querySelector('.tc-end')?.value || '';
+    if (start) entries.push({ start, end });
+  });
+  return entries;
+}
+
+function populateTCTimeEntries(entries) {
+  const container = document.getElementById('tcTimeEntriesContainer');
+  container.innerHTML = '';
+  entries.forEach(e => addTCTimeEntryRow(e.start || '', e.end || ''));
+}
+
 function checkEndTimeNotification() {
   const now = new Date();
   if (now.getHours() < 7) return;
@@ -3673,6 +3800,7 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
   updateUnrestrictedCallVisibility();
   updateSupervisionOverlayVisibility();
   updatePreCallOverlayVisibility();
+  updateTempCoverageVisibility();
   updateORCaseVisibility();
 });
 
@@ -3694,6 +3822,26 @@ document.getElementById('eveningAssignmentType').addEventListener('change', func
 
 document.getElementById('addEveningTimeEntryBtn').addEventListener('click', () => {
   addEveningTimeEntryRow('', '');
+});
+
+document.getElementById('tempCoverageCheck').addEventListener('change', function() {
+  document.getElementById('tempCoverageForm').classList.toggle('hidden', !this.checked);
+  if (!this.checked) {
+    document.getElementById('tcTimeEntriesSection').classList.add('hidden');
+    document.getElementById('tcTimeEntriesContainer').innerHTML = '';
+  }
+});
+
+document.querySelectorAll('input[name="tcDirection"]').forEach(r => {
+  r.addEventListener('change', function() {
+    const isCovering = this.value === 'covering';
+    document.getElementById('tcTimeEntriesSection').classList.toggle('hidden', !isCovering);
+    if (!isCovering) document.getElementById('tcTimeEntriesContainer').innerHTML = '';
+  });
+});
+
+document.getElementById('addTCTimeEntryBtn').addEventListener('click', () => {
+  addTCTimeEntryRow('', '');
 });
 
 function addEveningTimeEntryRow(startVal, endVal) {
@@ -3812,6 +3960,29 @@ function loadShiftForDate() {
       document.getElementById('preCallEndInput').value = '';
       document.getElementById('preCallTimes').classList.add('hidden');
     }
+    // Temp coverage
+    if (shift.tempCoverage && shift.tempCoverage.length > 0) {
+      const tc = shift.tempCoverage[0];
+      document.getElementById('tempCoverageCheck').checked = true;
+      document.getElementById('tempCoverageForm').classList.remove('hidden');
+      document.querySelector(`input[name="tcDirection"][value="${tc.type}"]`).checked = true;
+      document.getElementById('tcStart').value = tc.start || '';
+      document.getElementById('tcEnd').value = tc.end || '';
+      if (tc.type === 'covering') {
+        document.getElementById('tcTimeEntriesSection').classList.remove('hidden');
+        populateTCTimeEntries(tc.timeEntries || []);
+      } else {
+        document.getElementById('tcTimeEntriesSection').classList.add('hidden');
+        document.getElementById('tcTimeEntriesContainer').innerHTML = '';
+      }
+    } else {
+      document.getElementById('tempCoverageCheck').checked = false;
+      document.getElementById('tempCoverageForm').classList.add('hidden');
+      document.getElementById('tcStart').value = '';
+      document.getElementById('tcEnd').value = '';
+      document.getElementById('tcTimeEntriesSection').classList.add('hidden');
+      document.getElementById('tcTimeEntriesContainer').innerHTML = '';
+    }
   } else {
     banner.classList.add('hidden');
     document.getElementById('shiftAssignmentType').value = 'OR';
@@ -3834,10 +4005,17 @@ function loadShiftForDate() {
     document.getElementById('eveningTimeSection').classList.add('hidden');
     document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
     document.getElementById('preCallTimes').classList.add('hidden');
+    document.getElementById('tempCoverageCheck').checked = false;
+    document.getElementById('tempCoverageForm').classList.add('hidden');
+    document.getElementById('tcStart').value = '';
+    document.getElementById('tcEnd').value = '';
+    document.getElementById('tcTimeEntriesSection').classList.add('hidden');
+    document.getElementById('tcTimeEntriesContainer').innerHTML = '';
   }
   updateUnrestrictedCallVisibility();
   updateSupervisionOverlayVisibility();
   updatePreCallOverlayVisibility();
+  updateTempCoverageVisibility();
   updateEndTimeWarning();
 }
 
@@ -4044,7 +4222,19 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       supervisionStart: supervisionEnabled ? document.getElementById('supervisionStart').value : '',
       supervisionEnd: supervisionEnabled ? document.getElementById('supervisionEnd').value : '',
       preCallStart: savePreCallStart,
-      preCallEnd: savePreCallEnd
+      preCallEnd: savePreCallEnd,
+      tempCoverage: (() => {
+        const tcCheck = document.getElementById('tempCoverageCheck');
+        if (!tcCheck || !tcCheck.checked) return [];
+        const dir = document.querySelector('input[name="tcDirection"]:checked')?.value || 'covered';
+        const tcStartVal = document.getElementById('tcStart').value;
+        const tcEndVal = document.getElementById('tcEnd').value;
+        if (!tcStartVal || !tcEndVal) return [];
+        const entry = { type: dir, start: tcStartVal, end: tcEndVal };
+        if (dir === 'covering') entry.timeEntries = collectTCTimeEntries();
+        else entry.timeEntries = [];
+        return [entry];
+      })()
     };
   });
   saveData(data);
@@ -4327,6 +4517,17 @@ function renderToday() {
     bdHtml += `<div class="row"><span>Pager Pay (${pagerHrs.toFixed(1)} hrs × 3.5)</span><span>${totals.call.toFixed(2)}</span></div>`;
   } else if (totals.call > 0) {
     bdHtml += `<div class="row"><span>Pager Pay</span><span>${totals.call.toFixed(2)}</span></div>`;
+  }
+  // Temp coverage line item
+  if (shift.tempCoverage && shift.tempCoverage.length > 0) {
+    const tcPts = calcTempCoveragePoints(shift);
+    const tcTotal = round2(tcPts.pagerAdj + tcPts.ar);
+    if (tcTotal !== 0) {
+      const sign = tcTotal > 0 ? '+' : '';
+      const tc = shift.tempCoverage[0];
+      const label = tc.type === 'covered' ? 'Temp Coverage (Covered)' : 'Temp Coverage (Covering)';
+      bdHtml += `<div class="row"><span>${label} ${tc.start}-${tc.end}</span><span>${sign}${tcTotal.toFixed(2)}</span></div>`;
+    }
   }
   if (totals.subspec > 0) bdHtml += `<div class="row"><span>Subspecialty</span><span>${totals.subspec.toFixed(2)}</span></div>`;
   if (totals.supervision > 0) bdHtml += `<div class="row"><span>CRNA Supervision</span><span>${totals.supervision.toFixed(2)}</span></div>`;
@@ -4857,6 +5058,52 @@ function getShiftPayBreakdown(shift) {
         isSubRow: false
       });
     }
+  }
+
+  // Temp coverage rows
+  if (shift.tempCoverage && shift.tempCoverage.length > 0) {
+    shift.tempCoverage.forEach(tc => {
+      if (!tc.start || !tc.end) return;
+      let tcS = timeToMinutes(tc.start);
+      let tcE = timeToMinutes(tc.end);
+      if (tcE <= tcS) tcE += 1440;
+      const tcDurMin = tcE - tcS;
+      if (tc.type === 'covered') {
+        rows.push({
+          clockIn: tc.start, clockOut: tc.end,
+          payCode: 'Temp Coverage (Covered)',
+          durationMin: tcDurMin, payRate: -3.5,
+          amount: round2((tcDurMin / 60) * -3.5),
+          isPager: true, isSubRow: false
+        });
+      } else if (tc.type === 'covering') {
+        rows.push({
+          clockIn: tc.start, clockOut: tc.end,
+          payCode: 'Temp Coverage Pager',
+          durationMin: tcDurMin, payRate: 3.5,
+          amount: round2((tcDurMin / 60) * 3.5),
+          isPager: true, isSubRow: false
+        });
+        // AR rows for coverage work time entries
+        const tcEntries = tc.timeEntries || [];
+        tcEntries.forEach(e => {
+          if (!e.start || !e.end) return;
+          let es = timeToMinutes(e.start);
+          let ee = timeToMinutes(e.end);
+          if (ee <= es) ee += 1440;
+          const eDurMin = ee - es;
+          const normMin = es % 1440;
+          const rate = getARRate(shift.assignmentType, isHol, isWknd, normMin);
+          rows.push({
+            clockIn: e.start, clockOut: e.end,
+            payCode: 'Temp Coverage AR',
+            durationMin: eDurMin, payRate: rate,
+            amount: round2((eDurMin / 60) * rate),
+            isSubRow: false
+          });
+        });
+      }
+    });
   }
 
   // Merge consecutive same-payCode segments within the same entry
@@ -6827,7 +7074,8 @@ function generateTestData() {
           supervisionStart: '',
           supervisionEnd: '',
           preCallStart: '',
-          preCallEnd: ''
+          preCallEnd: '',
+          tempCoverage: []
         };
 
         // CRNA supervision: add supervision times
@@ -6840,6 +7088,18 @@ function generateTestData() {
         if (['OR','SF1','SF2'].includes(aType) && Math.random() < 0.1) {
           shift.supervisionStart = timeEntries[0].start;
           shift.supervisionEnd = fmtTime(rand(10,12), 0);
+        }
+
+        // Random temp coverage on pager-eligible shifts (~8%)
+        if (getPagerPayWindow(aType, isWeekend) !== null && Math.random() < 0.08) {
+          const tcType = Math.random() < 0.5 ? 'covered' : 'covering';
+          const tcStartHr = rand(17, 20);
+          const tcEndHr = Math.min(tcStartHr + rand(1, 3), 23);
+          const tcEntry = { type: tcType, start: fmtTime(tcStartHr, 0), end: fmtTime(tcEndHr, 0), timeEntries: [] };
+          if (tcType === 'covering') {
+            tcEntry.timeEntries = [{ start: fmtTime(tcStartHr, 15), end: fmtTime(tcEndHr - 1 < tcStartHr ? tcStartHr + 1 : tcEndHr, 45) }];
+          }
+          shift.tempCoverage = [tcEntry];
         }
 
         data.shifts[dateStr] = shift;
@@ -7600,7 +7860,8 @@ function shiftReconAcceptQgenda(idx) {
       supervisionStart: '',
       supervisionEnd: '',
       preCallStart: '',
-      preCallEnd: ''
+      preCallEnd: '',
+      tempCoverage: []
     };
     // Detect pre-call entries in QGenda data
     const pcPattern = /UVH\/SFH\s*WORK/i;
@@ -8501,7 +8762,7 @@ function showCSVImportConfirmation(result) {
           timeEntries: [{ start: st, end: en }],
           isHoliday: false,
           forcedOff: false, subspecCoverage: false,
-          teeCount: 0, supervisionStart: '', supervisionEnd: '', preCallStart: '', preCallEnd: ''
+          teeCount: 0, supervisionStart: '', supervisionEnd: '', preCallStart: '', preCallEnd: '', tempCoverage: []
         };
         shiftsCreated++;
       }
@@ -9985,7 +10246,7 @@ document.getElementById('scanImportBtn').addEventListener('click', () => {
       startTime: st, endTime: en,
       timeEntries: [{ start: st, end: en }],
       isHoliday: false, forcedOff: false, subspecCoverage: false,
-      teeCount: 0, supervisionStart: '', supervisionEnd: '', preCallStart: '', preCallEnd: ''
+      teeCount: 0, supervisionStart: '', supervisionEnd: '', preCallStart: '', preCallEnd: '', tempCoverage: []
     };
     showToast(`Created placeholder OR shift for ${formatDateShort(scanDate)}`);
   }
