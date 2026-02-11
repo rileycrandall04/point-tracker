@@ -6298,6 +6298,7 @@ document.getElementById('importFile').addEventListener('change', (e) => {
         if (confirm('This will replace all existing data. Continue?')) {
           data = imported;
           migrateData(data); // handles timeEntries migration for old format
+          saveData(data);
           updateHeaderPoints();
           showToast('Data imported!');
           renderHistory();
