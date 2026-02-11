@@ -7638,9 +7638,9 @@ function mapTaskToAssignmentType(task, dateStr) {
   if (t.includes('NORA')) return 'NORA';
   if (t.includes('ACS') || t.includes('TOCR')) return 'ACS';
   if (t.includes('C/L') || t.includes('CARDIAC')) return 'cardiac_liver';
-  if (t.includes('MOLE')) return (dateStr && isWeekend(dateStr)) ? '4th_call' : 'mole';
+  if (t.includes('MOLE')) return 'mole';
   if (t.includes('CRNA')) return 'CRNA_supervision';
-  if (t.includes('ENDO')) return 'endo';
+  if (t.includes('ENDO')) return (dateStr && isWeekend(dateStr)) ? 'mole' : 'endo';
   if (t.includes('SF1') || t.includes('SF 1')) return 'SF1';
   if (t.includes('SF2') || t.includes('SF 2')) return 'SF2';
   if (t.includes('OB') || t.includes('UVOC')) return 'OB_restricted';
