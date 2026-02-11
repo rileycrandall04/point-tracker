@@ -785,6 +785,20 @@ input.mil-time.invalid {
 .case-log-table tr { cursor: pointer; transition: background 0.15s; }
 .case-log-table tbody tr:hover { background: rgba(59,130,246,0.08); }
 .case-log-table tbody tr:active { background: rgba(59,130,246,0.15); }
+.case-log-table .cl-cb { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; margin: 0; }
+.case-log-table th:first-child, .case-log-table td:first-child { width: 28px; text-align: center; }
+#clDeleteSelectedBtn {
+  background: var(--danger);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+#clDeleteSelectedBtn:hover { opacity: 0.9; }
 
 .case-log-search {
   width: 100%;
@@ -830,6 +844,15 @@ input.mil-time.invalid {
 .shift-log-table tbody tr:active { background: rgba(59,130,246,0.15); }
 .sl-sub-row td { border-top: none; }
 .sl-sub-row td:empty, .sl-sub-row td[data-blank] { color: transparent; }
+.shift-log-table .sl-check { width: 28px; text-align: center; }
+.shift-log-table .sl-check input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary); }
+.shift-log-table .sl-del-cell { width: 28px; text-align: center; }
+.shift-log-table .sl-del-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 1rem; padding: 2px 4px; line-height: 1; opacity: 0.7; transition: opacity 0.15s; }
+.shift-log-table .sl-del-btn:hover { opacity: 1; }
+.sl-delete-bar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin-bottom: 8px; background: rgba(239,68,68,0.08); border: 1px solid var(--danger); border-radius: 8px; }
+.sl-delete-bar .sl-del-count { font-size: 0.82rem; color: var(--text); font-weight: 600; }
+.sl-delete-bar .sl-del-action { background: var(--danger); color: white; border: none; border-radius: 6px; padding: 6px 14px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+.sl-delete-bar .sl-del-action:hover { opacity: 0.9; }
 .sl-badge {
   display: inline-block;
   padding: 2px 6px;
@@ -950,7 +973,7 @@ input.mil-time.invalid {
 .proc-autocomplete { position: relative; }
 .proc-suggestions {
   position: absolute; top: 100%; left: 0; right: 0; z-index: 100;
-  background: var(--card-bg); border: 1px solid var(--border); border-top: none;
+  background: var(--surface); border: 1px solid var(--border); border-top: none;
   border-radius: 0 0 8px 8px; max-height: 180px; overflow-y: auto;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
@@ -1418,6 +1441,7 @@ input.mil-time.invalid {
 
       <div style="margin-top: 16px; display:flex; gap:10px; align-items:center;">
         <button class="btn btn-primary" id="saveShiftBtn">Save Shift</button>
+        <button class="btn btn-outline btn-sm hidden" id="switchToCaseEntryBtn" style="font-size:0.8rem;">Add Cases &rarr;</button>
         <button class="btn btn-danger btn-sm hidden" id="deleteShiftDE" style="margin-left:auto;">Delete Shift</button>
       </div>
     </div>
@@ -1425,6 +1449,7 @@ input.mil-time.invalid {
 
   <!-- Case section (hidden until shift is saved) -->
   <div id="deCaseSection" class="hidden">
+    <button class="btn btn-outline btn-sm" id="switchToShiftEntryBtn" style="margin-bottom:10px;font-size:0.8rem;">&larr; Edit Shift</button>
     <div class="card">
       <div class="card-collapse-header" id="quickProcCollapseHeader">
         <h2>Quick Procedures</h2>
@@ -1750,6 +1775,7 @@ input.mil-time.invalid {
       <button id="clNextMonth">&rarr;</button>
     </div>
     <input type="text" class="case-log-search" id="caseLogSearch" placeholder="Search cases...">
+    <button id="clDeleteSelectedBtn" class="hidden">Delete Selected (<span id="clDeleteSelectedCount">0</span>)</button>
     <div class="case-log-wrap">
       <div id="caseLogTableContainer">
         <div class="empty-state"><p>No cases for this month.</p></div>
@@ -1766,6 +1792,10 @@ input.mil-time.invalid {
     </div>
     <div class="card" id="shiftLogSummary"></div>
     <input type="text" class="case-log-search" id="shiftLogSearch" placeholder="Search shifts...">
+    <div id="slDeleteBar" class="sl-delete-bar hidden">
+      <span class="sl-del-count" id="slDeleteCount">0 selected</span>
+      <button class="sl-del-action" onclick="deleteSelectedShifts()">Delete Selected</button>
+    </div>
     <div class="case-log-wrap">
       <div id="shiftLogTableContainer">
         <div class="empty-state"><p>No shifts for this month.</p></div>
@@ -2490,9 +2520,12 @@ input.mil-time.invalid {
       <label>Notes (optional)</label>
       <textarea id="editCaseNotes" placeholder="Notes"></textarea>
     </div>
-    <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" id="cancelCaseEdit">Cancel</button>
-      <button class="btn btn-primary btn-sm" id="saveCaseEdit" style="width:auto;">Save</button>
+    <div class="modal-actions" style="justify-content:space-between;">
+      <button class="btn btn-danger btn-sm" id="deleteCaseEdit">Delete</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline btn-sm" id="cancelCaseEdit">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="saveCaseEdit" style="width:auto;">Save</button>
+      </div>
     </div>
   </div>
 </div>
@@ -4304,6 +4337,10 @@ function updateDataEntryState() {
     caseSection.classList.add('hidden');
     caseListCard.classList.toggle('hidden', !shift);
   }
+  // Show "Add Cases" button only when editing an existing shift (so user can switch back to case view)
+  const switchToCaseBtn = document.getElementById('switchToCaseEntryBtn');
+  const isVacOrForcedForBtn = shift && (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off' || shift.forcedOff);
+  switchToCaseBtn.classList.toggle('hidden', !(shift && deShiftEditing && !isVacOrForcedForBtn));
   // Show delete button only when editing an existing shift
   document.getElementById('deleteShiftDE').classList.toggle('hidden', !shift);
   updateDEStickyHeaderSpacer();
@@ -4366,6 +4403,19 @@ function deleteCaseDE(id) {
 document.getElementById('deShiftSummaryBar').addEventListener('click', () => {
   deShiftEditing = true;
   loadShiftForDate();
+  updateDataEntryState();
+});
+
+// "Edit Shift" button in case section — switch to shift entry view
+document.getElementById('switchToShiftEntryBtn').addEventListener('click', () => {
+  deShiftEditing = true;
+  loadShiftForDate();
+  updateDataEntryState();
+});
+
+// "Add Cases" button in shift section — switch back to case entry view (without saving)
+document.getElementById('switchToCaseEntryBtn').addEventListener('click', () => {
+  deShiftEditing = false;
   updateDataEntryState();
 });
 
@@ -4943,6 +4993,7 @@ function deleteCase(id) {
   saveData(data);
   updateHeaderPoints();
   renderToday();
+  renderCaseLogTable();
   renderDECaseList();
   updateDETally();
   showToast('Case deleted');
@@ -5162,11 +5213,14 @@ function renderCaseLogTable() {
   const monthCases = data.cases.filter(c => c.shiftDate && c.shiftDate.startsWith(prefix))
     .sort((a, b) => (b.shiftDate + (b.startTime || '')).localeCompare(a.shiftDate + (a.startTime || '')));
   const container = document.getElementById('caseLogTableContainer');
+  // Hide delete-selected button on re-render
+  document.getElementById('clDeleteSelectedBtn').classList.add('hidden');
   if (monthCases.length === 0) {
     container.innerHTML = '<div class="empty-state"><p>No cases for this month.</p></div>';
     return;
   }
   let html = '<table class="case-log-table" id="caseLogTable"><thead><tr>';
+  html += '<th><input type="checkbox" class="cl-cb" id="clSelectAll" onclick="clToggleSelectAll(this)"></th>';
   html += '<th>Date</th><th>Case</th><th>Start</th><th>Stop</th><th>Pts</th><th></th><th></th>';
   html += '</tr></thead><tbody>';
   let totalPts = 0;
@@ -5178,6 +5232,7 @@ function renderCaseLogTable() {
     const sharedMark = c.isSharedCase ? ' [S]' : '';
     const flaggedClass = c.flagged ? ' flagged-row' : '';
     html += `<tr class="${flaggedClass}" data-caseid="${c.id}" onclick="openCaseEdit('${c.id}')">`;
+    html += `<td><input type="checkbox" class="cl-cb cl-row-cb" data-caseid="${c.id}" onclick="event.stopPropagation();clUpdateDeleteBtn()"></td>`;
     html += `<td>${formatDateShort(c.shiftDate)}</td>`;
     html += `<td>${escHtml(name)}${sharedMark}</td>`;
     html += `<td>${c.startTime || '-'}</td>`;
@@ -5188,11 +5243,48 @@ function renderCaseLogTable() {
     html += '</tr>';
   });
   html += '</tbody><tfoot><tr style="border-top:2px solid var(--accent);">';
-  html += `<td colspan="6" style="text-align:right;font-weight:600;">Monthly Total (${monthCases.length} cases)</td>`;
+  html += `<td colspan="7" style="text-align:right;font-weight:600;">Monthly Total (${monthCases.length} cases)</td>`;
   html += `<td><strong>${round2(totalPts).toFixed(1)}</strong></td>`;
   html += '</tr></tfoot></table>';
   container.innerHTML = html;
 }
+
+function clToggleSelectAll(masterCb) {
+  const cbs = document.querySelectorAll('#caseLogTable .cl-row-cb');
+  cbs.forEach(cb => { cb.checked = masterCb.checked; });
+  clUpdateDeleteBtn();
+}
+
+function clUpdateDeleteBtn() {
+  const cbs = document.querySelectorAll('#caseLogTable .cl-row-cb:checked');
+  const btn = document.getElementById('clDeleteSelectedBtn');
+  const count = cbs.length;
+  document.getElementById('clDeleteSelectedCount').textContent = count;
+  btn.classList.toggle('hidden', count === 0);
+  // Update select-all checkbox state
+  const allCbs = document.querySelectorAll('#caseLogTable .cl-row-cb');
+  const selectAll = document.getElementById('clSelectAll');
+  if (selectAll) {
+    selectAll.checked = allCbs.length > 0 && count === allCbs.length;
+    selectAll.indeterminate = count > 0 && count < allCbs.length;
+  }
+}
+
+document.getElementById('clDeleteSelectedBtn').addEventListener('click', () => {
+  const cbs = document.querySelectorAll('#caseLogTable .cl-row-cb:checked');
+  const ids = Array.from(cbs).map(cb => cb.getAttribute('data-caseid'));
+  if (ids.length === 0) return;
+  if (!confirm(`Delete ${ids.length} selected case${ids.length > 1 ? 's' : ''}?`)) return;
+  const idSet = new Set(ids);
+  data.cases = data.cases.filter(c => !idSet.has(c.id));
+  saveData(data);
+  updateHeaderPoints();
+  renderCaseLogTable();
+  renderToday();
+  renderDECaseList();
+  updateDETally();
+  showToast(`${ids.length} case${ids.length > 1 ? 's' : ''} deleted`);
+});
 
 function filterCaseLog() {
   const query = (document.getElementById('caseLogSearch').value || '').toLowerCase();
@@ -5611,6 +5703,7 @@ function renderShiftLogTable() {
 
   const container = document.getElementById('shiftLogTableContainer');
   const summaryEl = document.getElementById('shiftLogSummary');
+  document.getElementById('slDeleteBar').classList.add('hidden');
 
   if (monthShifts.length === 0) {
     container.innerHTML = '<div class="empty-state"><p>No shifts for this month.</p></div>';
@@ -5652,7 +5745,8 @@ function renderShiftLogTable() {
   // Detail table
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   let html = '<table class="shift-log-table" id="shiftLogTable"><thead><tr>';
-  html += '<th>Date</th><th>Assignment</th><th>Time</th><th>Duration</th><th>Clock In</th><th>Clock Out</th><th>Pay Code</th><th>Hours</th><th>Pay Rate</th><th>Amount</th><th></th>';
+  html += '<th class="sl-check"><input type="checkbox" id="slSelectAll" onclick="slToggleAll(this)"></th>';
+  html += '<th>Date</th><th>Assignment</th><th>Time</th><th>Duration</th><th>Clock In</th><th>Clock Out</th><th>Pay Code</th><th>Hours</th><th>Pay Rate</th><th>Amount</th><th></th><th class="sl-del-cell"></th>';
   html += '</tr></thead><tbody>';
 
   let grandTotal = 0;
@@ -5674,16 +5768,20 @@ function renderShiftLogTable() {
       : '-';
     const shiftTotal = rows.reduce((s, r) => s + r.amount, 0);
     grandTotal += shiftTotal;
+    const checkboxCell = `<td class="sl-check"><input type="checkbox" class="sl-shift-cb" data-date="${shift.date}" onclick="event.stopPropagation();slUpdateDeleteBar()"></td>`;
+    const deleteCell = `<td class="sl-del-cell"><button class="sl-del-btn" title="Delete shift" onclick="event.stopPropagation();deleteShiftFromLog('${shift.date}')">&times;</button></td>`;
 
     if (shift.assignmentType === 'vacation') {
       const altClass = shiftIdx % 2 === 1 ? ' sl-alt' : '';
       const fClass = shift.flagged ? ' flagged-row' : '';
       shiftIdx++;
       html += `<tr class="${altClass}${fClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      html += checkboxCell;
       html += `<td>${dateLabel}</td>`;
       html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
       html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>Vacation</td><td>-</td><td>-</td><td>0.0</td>`;
       html += `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>`;
+      html += deleteCell;
       html += '</tr>';
       return;
     }
@@ -5693,11 +5791,13 @@ function renderShiftLogTable() {
       const fClass = shift.flagged ? ' flagged-row' : '';
       shiftIdx++;
       html += `<tr class="${altClass}${fClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      html += checkboxCell;
       html += `<td>${dateLabel}</td>`;
       html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
       html += `<td>${timeStr}</td><td>${totalHrs.toFixed(1)}h</td>`;
       html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
       html += `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>`;
+      html += deleteCell;
       html += '</tr>';
       return;
     }
@@ -5733,26 +5833,30 @@ function renderShiftLogTable() {
           const rowClass = i > 0 ? `sl-sub-row${pcAlt}` : pcAlt.trim();
           html += `<tr class="${rowClass}${pcFClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
           if (i === 0) {
+            html += checkboxCell;
             html += `<td>${dateLabel}</td>`;
             html += `<td><span class="sl-badge sl-badge-or">Pre-Call</span></td>`;
             html += `<td>${pcTimeStr}</td>`;
             html += `<td>${pcHrs.toFixed(1)}h</td>`;
           } else {
-            html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>';
+            html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>';
           }
           html += `<td>${r.clockIn || ''}</td><td>${r.clockOut || ''}</td>`;
           html += `<td>${r.payCode}</td><td>${(r.durationMin / 60).toFixed(1)}</td>`;
           html += `<td>${r.payRate.toFixed(1)}/hr</td><td><strong>${r.amount.toFixed(1)}</strong></td>`;
           html += i === 0 ? `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>` : '<td></td>';
+          html += i === 0 ? deleteCell : '<td></td>';
           html += '</tr>';
         });
       } else {
         html += `<tr class="${pcAlt}${pcFClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+        html += checkboxCell;
         html += `<td>${dateLabel}</td>`;
         html += `<td><span class="sl-badge sl-badge-or">Pre-Call</span></td>`;
         html += `<td>${pcTimeStr}</td><td>${pcHrs.toFixed(1)}h</td>`;
         html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
         html += `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>`;
+        html += deleteCell;
         html += '</tr>';
       }
 
@@ -5764,25 +5868,29 @@ function renderShiftLogTable() {
           const rowClass = i > 0 ? `sl-sub-row${evAlt}` : evAlt.trim();
           html += `<tr class="${rowClass}${pcFClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
           if (i === 0) {
+            html += '<td data-blank></td>';
             html += `<td>${dateLabel}</td>`;
             html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
             html += `<td>${timeStr}</td>`;
             html += `<td>${eveningHrs.toFixed(1)}h</td>`;
           } else {
-            html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>';
+            html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>';
           }
           html += `<td>${r.clockIn || ''}</td><td>${r.clockOut || ''}</td>`;
           html += `<td>${r.payCode}</td><td>${(r.durationMin / 60).toFixed(1)}</td>`;
           html += `<td>${r.payRate.toFixed(1)}/hr</td><td><strong>${r.amount.toFixed(1)}</strong></td>`;
           html += '<td></td>';
+          html += '<td></td>';
           html += '</tr>';
         });
       } else {
         html += `<tr class="${evAlt}${pcFClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+        html += '<td data-blank></td>';
         html += `<td>${dateLabel}</td>`;
         html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
         html += `<td>${timeStr}</td><td>${eveningHrs.toFixed(1)}h</td>`;
         html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
+        html += '<td></td>';
         html += '<td></td>';
         html += '</tr>';
       }
@@ -5797,12 +5905,13 @@ function renderShiftLogTable() {
       const rowClass = i > 0 ? `sl-sub-row${altClass}` : altClass.trim();
       html += `<tr class="${rowClass}${fClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       if (i === 0) {
+        html += checkboxCell;
         html += `<td>${dateLabel}</td>`;
         html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
         html += `<td>${timeStr}</td>`;
         html += `<td>${totalHrs.toFixed(1)}h</td>`;
       } else {
-        html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>';
+        html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>';
       }
       html += `<td>${r.clockIn || ''}</td>`;
       html += `<td>${r.clockOut || ''}</td>`;
@@ -5811,13 +5920,68 @@ function renderShiftLogTable() {
       html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
       html += `<td><strong>${r.amount.toFixed(1)}</strong></td>`;
       html += i === 0 ? `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>` : '<td></td>';
+      html += i === 0 ? deleteCell : '<td></td>';
       html += '</tr>';
     });
   });
 
-  html += `<tr style="border-top:2px solid var(--border);"><td colspan="10" style="text-align:right;font-weight:700;">Monthly Total</td><td><strong>${grandTotal.toFixed(1)}</strong></td></tr>`;
+  html += `<tr style="border-top:2px solid var(--border);"><td colspan="12" style="text-align:right;font-weight:700;">Monthly Total</td><td><strong>${grandTotal.toFixed(1)}</strong></td></tr>`;
   html += '</tbody></table>';
   container.innerHTML = html;
+}
+
+function slToggleAll(masterCb) {
+  const cbs = document.querySelectorAll('.sl-shift-cb');
+  cbs.forEach(cb => { cb.checked = masterCb.checked; });
+  slUpdateDeleteBar();
+}
+
+function slUpdateDeleteBar() {
+  const cbs = document.querySelectorAll('.sl-shift-cb:checked');
+  const bar = document.getElementById('slDeleteBar');
+  const countEl = document.getElementById('slDeleteCount');
+  if (cbs.length > 0) {
+    bar.classList.remove('hidden');
+    countEl.textContent = cbs.length + ' selected';
+  } else {
+    bar.classList.add('hidden');
+  }
+  // Sync select-all checkbox
+  const allCbs = document.querySelectorAll('.sl-shift-cb');
+  const selectAll = document.getElementById('slSelectAll');
+  if (selectAll) {
+    selectAll.checked = allCbs.length > 0 && cbs.length === allCbs.length;
+  }
+}
+
+function deleteShiftFromLog(dateStr) {
+  if (!confirm('Delete this shift and its associated cases? This cannot be undone.')) return;
+  delete data.shifts[dateStr];
+  data.cases = data.cases.filter(c => c.shiftDate !== dateStr);
+  saveData(data);
+  updateHeaderPoints();
+  renderShiftLogTable();
+  renderToday();
+  renderDailyTab();
+  showToast('Shift deleted');
+}
+
+function deleteSelectedShifts() {
+  const cbs = document.querySelectorAll('.sl-shift-cb:checked');
+  if (cbs.length === 0) return;
+  const dates = Array.from(cbs).map(cb => cb.dataset.date);
+  const unique = [...new Set(dates)];
+  if (!confirm(`Delete ${unique.length} shift${unique.length > 1 ? 's' : ''} and their associated cases? This cannot be undone.`)) return;
+  unique.forEach(dateStr => {
+    delete data.shifts[dateStr];
+    data.cases = data.cases.filter(c => c.shiftDate !== dateStr);
+  });
+  saveData(data);
+  updateHeaderPoints();
+  renderShiftLogTable();
+  renderToday();
+  renderDailyTab();
+  showToast(`${unique.length} shift${unique.length > 1 ? 's' : ''} deleted`);
 }
 
 function filterShiftLog() {
@@ -7413,6 +7577,21 @@ document.getElementById('cancelCaseEdit').addEventListener('click', () => {
 
 document.getElementById('caseEditModal').addEventListener('click', (e) => {
   if (e.target.id === 'caseEditModal') document.getElementById('caseEditModal').classList.add('hidden');
+});
+
+document.getElementById('deleteCaseEdit').addEventListener('click', () => {
+  if (!editingCaseId) return;
+  if (!confirm('Delete this case?')) return;
+  data.cases = data.cases.filter(c => c.id !== editingCaseId);
+  saveData(data);
+  updateHeaderPoints();
+  renderCaseLogTable();
+  renderToday();
+  renderDailyTab();
+  renderDECaseList();
+  updateDETally();
+  document.getElementById('caseEditModal').classList.add('hidden');
+  showToast('Case deleted');
 });
 
 function deleteCaseFromList(id) {
@@ -10425,11 +10604,17 @@ function parseBillingSheetText(text) {
   if (asaMatches.length === 0) return cases;
 
   // Find all military times (4-digit HHMM or HH:MM)
+  // Build set of ASA codes found to filter them out of time matches
+  const asaCodeSet = new Set(asaMatches.map(a => a.code));
   const timePattern = /\b(\d{2}):?(\d{2})\b/g;
   const allTimes = [];
   while ((m = timePattern.exec(fullText)) !== null) {
     const h = parseInt(m[1]), min = parseInt(m[2]);
     if (h >= 0 && h <= 23 && min >= 0 && min <= 59 && h + min > 0) {
+      const digits = m[1] + m[2];
+      // Skip if it matches an ASA code or looks like a year (19xx, 20xx)
+      if (asaCodeSet.has(digits)) continue;
+      if (digits.startsWith('19') || digits.startsWith('20')) continue;
       allTimes.push({ time: String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0'), index: m.index });
     }
   }
@@ -10444,13 +10629,8 @@ function parseBillingSheetText(text) {
     const asaCode = asaMatches[i].code;
     const baseUnits = ASA_BASE_UNITS[asaCode] || 0;
 
-    // Find the first two valid times in this block for start/stop
-    const blockTimes = allTimes.filter(t => t.index > blockStart && t.index < blockEnd);
-    // Filter out the ASA code itself from times
-    const validTimes = blockTimes.filter(t => {
-      const timeDigits = t.time.replace(':', '');
-      return timeDigits !== asaCode;
-    });
+    // Find valid times in this block (ASA codes and years already filtered above)
+    const validTimes = allTimes.filter(t => t.index > blockStart && t.index < blockEnd);
 
     let startTime = '', endTime = '';
     // Look for Start: and Stop: labels
@@ -10466,30 +10646,30 @@ function parseBillingSheetText(text) {
     if (!startTime && validTimes.length >= 1) startTime = validTimes[0].time;
     if (!endTime && validTimes.length >= 2) endTime = validTimes[1].time;
 
-    // Check modifiers
-    const isEmergency = /emergency/i.test(blockText) && /[xX✓✗☒☑√✔]/.test(
-      blockText.substring(blockText.search(/emergency/i) - 5, blockText.search(/emergency/i) + 15)
-    ) || /[xX✓✗☒☑√✔]\s*emergency/i.test(blockText);
-    const isShared = /shared/i.test(blockText) && /[xX✓✗☒☑√✔]/.test(
-      blockText.substring(Math.max(0, blockText.search(/shared/i) - 5), blockText.search(/shared/i) + 12)
-    ) || /[xX✓✗☒☑√✔]\s*shared/i.test(blockText);
+    // Check modifiers — broadened checkbox symbols for OCR variance
+    const checkMark = /[xXvV✓✗☒☑√✔✘\|\/\\+><\]\)}/;
+    const isEmergency = /emergency/i.test(blockText) && checkMark.test(
+      blockText.substring(blockText.search(/emergency/i) - 8, blockText.search(/emergency/i) + 15)
+    ) || /[xXvV✓✗☒☑√✔✘]\s*emergency/i.test(blockText);
+    const isShared = /shared/i.test(blockText) && checkMark.test(
+      blockText.substring(Math.max(0, blockText.search(/shared/i) - 8), blockText.search(/shared/i) + 12)
+    ) || /[xXvV✓✗☒☑√✔✘]\s*shared/i.test(blockText);
 
-    // Check nerve block types
+    // Check nerve block types — "PLXS" matches the actual form label "Brachial PLXS"
     let nerveBlock = 'none';
     const nbChecks = [
-      { pattern: /brachial\s*pl[xks]/i, type: 'brachial_plexus' },
-      { pattern: /sciatic/i, type: 'other_nerve' },
-      { pattern: /femoral/i, type: 'other_nerve' },
-      { pattern: /abdominal\s*nb/i, type: 'other_nerve' },
-      { pattern: /chest\s*wall/i, type: 'other_nerve' },
-      { pattern: /paravertebral|esp/i, type: 'other_nerve' }
+      { pattern: /brachial\s*pl[xks]+/i, type: 'brachial_plexus' },
+      { pattern: /sciatic/i, type: 'other' },
+      { pattern: /femoral/i, type: 'other' },
+      { pattern: /abdominal\s*n?b?/i, type: 'other' },
+      { pattern: /chest\s*wall/i, type: 'other' },
+      { pattern: /paravertebral|esp/i, type: 'other' }
     ];
     for (const nb of nbChecks) {
       if (nb.pattern.test(blockText)) {
-        // Check if there's a mark near it
         const nbIdx = blockText.search(nb.pattern);
-        const nbRegion = blockText.substring(Math.max(0, nbIdx - 10), nbIdx + 20);
-        if (/[xX✓✗☒☑√✔]/.test(nbRegion)) {
+        const nbRegion = blockText.substring(Math.max(0, nbIdx - 12), nbIdx + 25);
+        if (checkMark.test(nbRegion)) {
           nerveBlock = nb.type;
           break;
         }
@@ -10500,22 +10680,21 @@ function parseBillingSheetText(text) {
     let hasITMorphine = false;
     if (/lumbar\s*inj|thoracic\s*inj/i.test(blockText)) {
       const injIdx = blockText.search(/lumbar\s*inj|thoracic\s*inj/i);
-      const injRegion = blockText.substring(Math.max(0, injIdx - 10), injIdx + 20);
-      if (/[xX✓✗☒☑√✔]/.test(injRegion)) {
-        // Check if single is marked (IT morphine) vs continuous (epidural)
-        if (/single/i.test(blockTextUpper) && /[xX✓✗☒☑√✔]/.test(
-          blockText.substring(Math.max(0, blockText.search(/single/i) - 5), blockText.search(/single/i) + 12)
+      const injRegion = blockText.substring(Math.max(0, injIdx - 12), injIdx + 25);
+      if (checkMark.test(injRegion)) {
+        if (/single/i.test(blockTextUpper) && checkMark.test(
+          blockText.substring(Math.max(0, blockText.search(/single/i) - 8), blockText.search(/single/i) + 15)
         )) {
           hasITMorphine = true;
         }
       }
     }
 
-    // Other services
+    // Other services — "Art" pattern requires nearby context to avoid false positives
     let hasCentralLine = false, hasArterialLine = false, hasTEE = false, hasBloodPatch = false, hasEmergIntub = false;
     const svcChecks = [
       { pattern: /\bCVC\b/i, set: () => hasCentralLine = true },
-      { pattern: /\bArt\b/i, set: () => hasArterialLine = true },
+      { pattern: /\bArt(?:erial)?\b(?!\w)/i, set: () => hasArterialLine = true },
       { pattern: /\bTEE\b/i, set: () => hasTEE = true },
       { pattern: /blood\s*patch/i, set: () => hasBloodPatch = true },
       { pattern: /emerg\w*\s*intub/i, set: () => hasEmergIntub = true }
@@ -10523,8 +10702,8 @@ function parseBillingSheetText(text) {
     for (const svc of svcChecks) {
       if (svc.pattern.test(blockText)) {
         const sIdx = blockText.search(svc.pattern);
-        const sRegion = blockText.substring(Math.max(0, sIdx - 10), sIdx + 15);
-        if (/[xX✓✗☒☑√✔]/.test(sRegion)) svc.set();
+        const sRegion = blockText.substring(Math.max(0, sIdx - 12), sIdx + 20);
+        if (checkMark.test(sRegion)) svc.set();
       }
     }
 
@@ -10598,22 +10777,60 @@ document.getElementById('scanRetakeBtn').addEventListener('click', () => {
   scanParsedCases = [];
 });
 
+// Preprocess image: grayscale, contrast boost, sharpen for better OCR
+function preprocessScanImage(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      // Draw original
+      ctx.drawImage(img, 0, 0);
+      // Convert to grayscale and boost contrast
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = imageData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        // Grayscale using luminance weights
+        let gray = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+        // Contrast stretch: push darks darker and lights lighter
+        gray = ((gray / 255 - 0.5) * 1.6 + 0.5) * 255;
+        // Threshold nudge: make near-white pixels fully white, darken text
+        gray = gray > 180 ? 255 : gray < 80 ? 0 : gray;
+        gray = Math.max(0, Math.min(255, gray));
+        d[i] = d[i+1] = d[i+2] = gray;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      canvas.toBlob(blob => resolve(blob), 'image/png');
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 document.getElementById('scanProcessBtn').addEventListener('click', async () => {
   const fileInput = document.getElementById('scanFileInput');
   const file = fileInput.files[0];
   if (!file) { showToast('No image selected'); return; }
 
-  setScanStatus('processing', 'Loading OCR engine...');
+  setScanStatus('processing', 'Preprocessing image...');
   try {
+    const preprocessed = await preprocessScanImage(file);
     await loadTesseract();
     setScanStatus('processing', 'Recognizing text...');
     const worker = await Tesseract.createWorker('eng');
-    const { data } = await worker.recognize(file);
+    const { data } = await worker.recognize(preprocessed);
     await worker.terminate();
 
     const ocrText = data.text;
+    const confidence = Math.round(data.confidence || 0);
+    console.log('OCR confidence:', confidence + '%');
+    console.log('OCR text:', ocrText);
+
     if (!ocrText || ocrText.trim().length < 10) {
       setScanStatus('error', 'Could not read text from image. Try a clearer photo.');
+      showScanOCRDebug(ocrText, confidence);
       return;
     }
 
@@ -10622,12 +10839,12 @@ document.getElementById('scanProcessBtn').addEventListener('click', async () => 
 
     if (scanParsedCases.length === 0) {
       setScanStatus('error', 'No cases found. Make sure the ASA codes are clearly visible.');
-      // Show raw OCR text for debugging
-      console.log('OCR text:', ocrText);
+      showScanOCRDebug(ocrText, confidence);
       return;
     }
 
-    setScanStatus('success', `Found ${scanParsedCases.length} case${scanParsedCases.length > 1 ? 's' : ''}`);
+    setScanStatus('success', `Found ${scanParsedCases.length} case${scanParsedCases.length > 1 ? 's' : ''} (OCR ${confidence}% confidence)`);
+    showScanOCRDebug(ocrText, confidence);
     renderScanCaseCards();
   } catch (err) {
     console.error('Scan error:', err);
@@ -10645,6 +10862,19 @@ function setScanStatus(type, msg) {
   } else {
     el.innerHTML = '<span>' + msg + '</span>';
   }
+}
+
+function showScanOCRDebug(ocrText, confidence) {
+  const area = document.getElementById('scanResultsArea');
+  area.classList.remove('hidden');
+  let debugEl = document.getElementById('scanOCRDebug');
+  if (!debugEl) {
+    debugEl = document.createElement('details');
+    debugEl.id = 'scanOCRDebug';
+    debugEl.style.cssText = 'margin-top:12px;';
+    area.prepend(debugEl);
+  }
+  debugEl.innerHTML = `<summary style="cursor:pointer;font-size:0.8rem;color:var(--text-dim);">Raw OCR Text (${confidence}% confidence)</summary><pre style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:0.72rem;white-space:pre-wrap;max-height:200px;overflow-y:auto;margin-top:8px;color:var(--text-dim);">${escHtml(ocrText || '(empty)')}</pre>`;
 }
 
 function renderScanCaseCards() {
