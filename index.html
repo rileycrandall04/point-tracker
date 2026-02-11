@@ -5400,8 +5400,6 @@ function renderShiftLogTable() {
   let shiftIdx = 0;
 
   allBreakdowns.forEach(({ shift, rows }) => {
-    const altClass = shiftIdx % 2 === 1 ? ' sl-alt' : '';
-    shiftIdx++;
     const d = new Date(shift.date + 'T12:00:00');
     const dayName = dayNames[d.getDay()];
     const month = d.getMonth() + 1;
@@ -5418,39 +5416,120 @@ function renderShiftLogTable() {
     const shiftTotal = rows.reduce((s, r) => s + r.amount, 0);
     grandTotal += shiftTotal;
 
-    // Build assignment badge HTML — dual badges for pre-call shifts
-    let badgeHtml;
-    if (hasPreCall) {
-      badgeHtml = `<span class="sl-badge sl-badge-or" style="font-size:0.65rem;">Pre-Call</span><br><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span>`;
-    } else {
-      badgeHtml = `<span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span>`;
-    }
-
     if (shift.assignmentType === 'vacation') {
+      const altClass = shiftIdx % 2 === 1 ? ' sl-alt' : '';
+      shiftIdx++;
       html += `<tr class="${altClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       html += `<td>${dateLabel}</td>`;
-      html += `<td>${badgeHtml}</td>`;
+      html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
       html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>Vacation</td><td>-</td><td>-</td><td>0.0</td>`;
       html += '</tr>';
       return;
     }
 
     if (rows.length === 0) {
+      const altClass = shiftIdx % 2 === 1 ? ' sl-alt' : '';
+      shiftIdx++;
       html += `<tr class="${altClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       html += `<td>${dateLabel}</td>`;
-      html += `<td>${badgeHtml}</td>`;
+      html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
       html += `<td>${timeStr}</td><td>${totalHrs.toFixed(1)}h</td>`;
       html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
       html += '</tr>';
       return;
     }
 
+    // Pre-call shifts: render as two separate visual groups
+    if (hasPreCall) {
+      const preCallRows = rows.filter(r => r.payCode && r.payCode.startsWith('Pre-Call'));
+      const eveningRows = rows.filter(r => !r.payCode || !r.payCode.startsWith('Pre-Call'));
+      const pcTimeStr = shift.preCallStart + ' - ' + shift.preCallEnd;
+      // Compute pre-call clocked hours
+      let pcMinutes = 0;
+      const pcEnd = (() => { let e = timeToMinutes(shift.preCallEnd); const s = timeToMinutes(shift.preCallStart); if (e <= s) e += 1440; return e; })();
+      const pcStart = timeToMinutes(shift.preCallStart);
+      entries.forEach(e => {
+        if (!e.start || !e.end) return;
+        let s = timeToMinutes(e.start);
+        let en = timeToMinutes(e.end);
+        if (en <= s) en += 1440;
+        // Overlap with pre-call window
+        const overlapStart = Math.max(s, pcStart);
+        const overlapEnd = Math.min(en, pcEnd);
+        if (overlapEnd > overlapStart) pcMinutes += (overlapEnd - overlapStart);
+      });
+      const pcHrs = pcMinutes / 60;
+      const eveningHrs = totalHrs - pcHrs;
+
+      // Pre-Call group
+      const pcAlt = shiftIdx % 2 === 1 ? ' sl-alt' : '';
+      shiftIdx++;
+      if (preCallRows.length > 0) {
+        preCallRows.forEach((r, i) => {
+          const rowClass = i > 0 ? `sl-sub-row${pcAlt}` : pcAlt.trim();
+          html += `<tr class="${rowClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+          if (i === 0) {
+            html += `<td>${dateLabel}</td>`;
+            html += `<td><span class="sl-badge sl-badge-or">Pre-Call</span></td>`;
+            html += `<td>${pcTimeStr}</td>`;
+            html += `<td>${pcHrs.toFixed(1)}h</td>`;
+          } else {
+            html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>';
+          }
+          html += `<td>${r.clockIn || ''}</td><td>${r.clockOut || ''}</td>`;
+          html += `<td>${r.payCode}</td><td>${(r.durationMin / 60).toFixed(1)}</td>`;
+          html += `<td>${r.payRate.toFixed(1)}/hr</td><td><strong>${r.amount.toFixed(1)}</strong></td>`;
+          html += '</tr>';
+        });
+      } else {
+        html += `<tr class="${pcAlt}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+        html += `<td>${dateLabel}</td>`;
+        html += `<td><span class="sl-badge sl-badge-or">Pre-Call</span></td>`;
+        html += `<td>${pcTimeStr}</td><td>${pcHrs.toFixed(1)}h</td>`;
+        html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
+        html += '</tr>';
+      }
+
+      // Evening group
+      const evAlt = shiftIdx % 2 === 1 ? ' sl-alt' : '';
+      shiftIdx++;
+      if (eveningRows.length > 0) {
+        eveningRows.forEach((r, i) => {
+          const rowClass = i > 0 ? `sl-sub-row${evAlt}` : evAlt.trim();
+          html += `<tr class="${rowClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+          if (i === 0) {
+            html += `<td>${dateLabel}</td>`;
+            html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
+            html += `<td>${timeStr}</td>`;
+            html += `<td>${eveningHrs.toFixed(1)}h</td>`;
+          } else {
+            html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>';
+          }
+          html += `<td>${r.clockIn || ''}</td><td>${r.clockOut || ''}</td>`;
+          html += `<td>${r.payCode}</td><td>${(r.durationMin / 60).toFixed(1)}</td>`;
+          html += `<td>${r.payRate.toFixed(1)}/hr</td><td><strong>${r.amount.toFixed(1)}</strong></td>`;
+          html += '</tr>';
+        });
+      } else {
+        html += `<tr class="${evAlt}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+        html += `<td>${dateLabel}</td>`;
+        html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
+        html += `<td>${timeStr}</td><td>${eveningHrs.toFixed(1)}h</td>`;
+        html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
+        html += '</tr>';
+      }
+      return;
+    }
+
+    // Non-pre-call shifts: single group
+    const altClass = shiftIdx % 2 === 1 ? ' sl-alt' : '';
+    shiftIdx++;
     rows.forEach((r, i) => {
       const rowClass = i > 0 ? `sl-sub-row${altClass}` : altClass.trim();
       html += `<tr class="${rowClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       if (i === 0) {
         html += `<td>${dateLabel}</td>`;
-        html += `<td>${badgeHtml}</td>`;
+        html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
         html += `<td>${timeStr}</td>`;
         html += `<td>${totalHrs.toFixed(1)}h</td>`;
       } else {
