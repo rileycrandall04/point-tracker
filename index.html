@@ -10668,7 +10668,7 @@ function parseBillingSheetText(text) {
     if (!endTime && validTimes.length >= 2) endTime = validTimes[1].time;
 
     // Check modifiers — broadened checkbox symbols for OCR variance
-    const checkMark = /[xXvV✓✗☒☑√✔✘\|\/\\+><\]\)}/;
+    const checkMark = /[xXvV✓✗☒☑√✔✘|/\\+><\])]/;
     const isEmergency = /emergency/i.test(blockText) && checkMark.test(
       blockText.substring(blockText.search(/emergency/i) - 8, blockText.search(/emergency/i) + 15)
     ) || /[xXvV✓✗☒☑√✔✘]\s*emergency/i.test(blockText);
