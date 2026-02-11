@@ -11,9 +11,23 @@
 <script>
 window.onerror = function(msg, src, line) {
   var d = document.getElementById('_dbg');
-  if (!d) { d = document.createElement('div'); d.id = '_dbg'; d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:red;color:white;padding:8px;font-size:12px;max-height:40vh;overflow:auto;'; document.body.appendChild(d); }
-  d.innerHTML += '<div>' + msg + ' (line ' + line + ')</div>';
+  if (!d) { d = document.createElement('div'); d.id = '_dbg'; d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:red;color:white;padding:8px;font-size:12px;max-height:40vh;overflow:auto;font-family:monospace;'; document.body.appendChild(d); }
+  d.innerHTML += '<div>ERR: ' + msg + ' (line ' + line + ')</div>';
 };
+window.onunhandledrejection = function(e) {
+  var d = document.getElementById('_dbg');
+  if (!d) { d = document.createElement('div'); d.id = '_dbg'; d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:red;color:white;padding:8px;font-size:12px;max-height:40vh;overflow:auto;font-family:monospace;'; document.body.appendChild(d); }
+  d.innerHTML += '<div>PROMISE: ' + (e.reason ? e.reason.message || e.reason : 'unknown') + '</div>';
+};
+document.addEventListener('DOMContentLoaded', function() {
+  var b = document.getElementById('googleSignInBtn');
+  if (b) {
+    document.title = 'DEBUG: btn found';
+    b.setAttribute('onclick', "document.title='CLICKED at '+new Date().toLocaleTimeString()");
+  } else {
+    document.title = 'DEBUG: btn NOT found';
+  }
+});
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
