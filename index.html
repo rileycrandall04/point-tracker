@@ -1874,9 +1874,9 @@ input.mil-time.invalid {
       </div>
     </div>
 
-    <!-- Production Trend -->
+    <!-- Hours Trend -->
     <div class="card">
-      <h2>Monthly Production Trend</h2>
+      <h2>Monthly Hours Trend</h2>
       <div class="chart-container">
         <canvas id="productionTrendChart"></canvas>
       </div>
@@ -1948,17 +1948,6 @@ input.mil-time.invalid {
       </div>
     </div>
 
-    <!-- Collapsible: Add-on Utilization -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('analAddOns')">
-        <h3>Additional Procedure Utilization</h3>
-        <span class="arrow" id="analAddOnsArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="analAddOnsBody">
-        <div id="addOnContent" style="padding-top:12px;"></div>
-      </div>
-    </div>
-
     <!-- Collapsible: Top Procedures by Points/Hour -->
     <div class="card collapse-section">
       <div class="collapse-header" onclick="toggleCollapse('analTopProc')">
@@ -1970,40 +1959,14 @@ input.mil-time.invalid {
       </div>
     </div>
 
-    <!-- Top Surgeons by Points/Hour -->
+    <!-- Surgeon Efficiency -->
     <div class="card collapse-section">
       <div class="collapse-header" onclick="toggleCollapse('analTopSurgeons')">
-        <h3>Top Surgeons (pts/hr)</h3>
+        <h3>Surgeon Efficiency (pts/hr)</h3>
         <span class="arrow" id="analTopSurgeonsArrow">&#9660;</span>
       </div>
       <div class="collapse-body" id="analTopSurgeonsBody">
-        <div class="chart-container" style="margin-top:12px;">
-          <canvas id="topSurgeonsChart"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Surgeons with Room to Grow -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('analSlowSurgeons')">
-        <h3>Surgeons — Room to Grow (pts/hr)</h3>
-        <span class="arrow" id="analSlowSurgeonsArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="analSlowSurgeonsBody">
-        <div class="chart-container" style="margin-top:12px;">
-          <canvas id="slowSurgeonsChart"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Collapsible: Case Type Efficiency -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('projCaseEff')">
-        <h3>Most Efficient Case Types</h3>
-        <span class="arrow" id="projCaseEffArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="projCaseEffBody">
-        <div id="caseEffContent" style="padding-top:12px;"></div>
+        <div id="surgeonEffContent" style="padding-top:12px;"></div>
       </div>
     </div>
   </div>
@@ -2757,7 +2720,7 @@ input.mil-time.invalid {
 <!-- BOTTOM NAV -->
 <div class="bottom-nav">
   <button data-page="dataentry">
-    <span class="nav-icon">&#128137;&#128339;</span>
+    <span class="nav-icon">&#128137;</span>
     <span>Work</span>
   </button>
   <button class="active" data-page="today">
@@ -2769,7 +2732,7 @@ input.mil-time.invalid {
     <span>Dashboard</span>
   </button>
   <button data-page="compensation">
-    <span class="nav-icon">&#36;</span>
+    <span class="nav-icon">&#129689;</span>
     <span>Comp</span>
   </button>
   <button id="moreNavBtn">
@@ -5340,8 +5303,6 @@ let monthlyChart = null;
 let breakdownChart = null;
 let pipelineChart = null;
 let productionTrendChart = null;
-let topSurgeonsChart = null;
-let slowSurgeonsChart = null;
 let activeDashTab = 'daily';
 
 // Dashboard sub-tab switching
@@ -5379,19 +5340,19 @@ function updateDashStickyHeaderSpacer() {
 function toggleCollapse(sectionId) {
   const bodyMap = {
     deScan: 'deScanBody',
-    projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projCaseEff: 'projCaseEffBody', projMoM: 'projMoMBody', projPtsPerType: 'projPtsPerTypeBody',
+    projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projMoM: 'projMoMBody', projPtsPerType: 'projPtsPerTypeBody',
     timeDOW: 'timeDOWBody', timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
-    analAddOns: 'analAddOnsBody', analTopProc: 'analTopProcBody',
-    analTopSurgeons: 'analTopSurgeonsBody', analSlowSurgeons: 'analSlowSurgeonsBody',
+    analTopProc: 'analTopProcBody',
+    analTopSurgeons: 'analTopSurgeonsBody',
     histOverride: 'histOverrideBody', compStipends: 'compStipendsBody',
     pvHistory: 'pvHistoryBody', importScan: 'importScanBody'
   };
   const arrowMap = {
     deScan: 'deScanArrow',
-    projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projCaseEff: 'projCaseEffArrow', projMoM: 'projMoMArrow', projPtsPerType: 'projPtsPerTypeArrow',
+    projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projMoM: 'projMoMArrow', projPtsPerType: 'projPtsPerTypeArrow',
     timeDOW: 'timeDOWArrow', timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
-    analAddOns: 'analAddOnsArrow', analTopProc: 'analTopProcArrow',
-    analTopSurgeons: 'analTopSurgeonsArrow', analSlowSurgeons: 'analSlowSurgeonsArrow',
+    analTopProc: 'analTopProcArrow',
+    analTopSurgeons: 'analTopSurgeonsArrow',
     histOverride: 'histOverrideArrow', compStipends: 'compStipendsArrow',
     pvHistory: 'pvHistoryArrow', importScan: 'importScanArrow'
   };
@@ -7285,51 +7246,6 @@ function renderShiftEfficiency() {
   document.getElementById('efficiencyContent').innerHTML = html;
 }
 
-function renderCaseTypeEfficiency() {
-  const groups = {};
-  data.cases.forEach(c => {
-    const shift = data.shifts[c.shiftDate];
-    if (!shift) return;
-    const pts = calcCasePoints(c, shift);
-    // Calculate case duration in hours
-    let hrs = 0;
-    if (c.startTime && c.endTime) {
-      let s = timeToMinutes(c.startTime), e = timeToMinutes(c.endTime);
-      if (e <= s) e += 1440;
-      hrs = (e - s) / 60;
-    }
-    const key = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
-    if (!groups[key]) groups[key] = { totalPts: 0, totalHrs: 0, count: 0 };
-    groups[key].totalPts += pts;
-    groups[key].totalHrs += hrs;
-    groups[key].count++;
-  });
-
-  const ranked = Object.entries(groups)
-    .map(([name, g]) => ({ name, ptsPerHr: g.totalHrs > 0 ? round2(g.totalPts / g.totalHrs) : 0, totalPts: round2(g.totalPts), count: g.count, hasTime: g.totalHrs > 0 }))
-    .filter(r => r.count >= 2 && r.hasTime)
-    .sort((a, b) => b.ptsPerHr - a.ptsPerHr);
-
-  let html = '';
-  if (ranked.length > 0) {
-    const top = ranked.slice(0, 8);
-    html += '<h4 style="font-size:0.82rem;color:var(--accent);margin-bottom:6px;">Highest pts/hr by Case Type</h4>';
-    top.forEach(r => {
-      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count}x)</span></span><span class="eff-value good">${r.ptsPerHr.toFixed(1)}</span></div>`;
-    });
-
-    const bottom = ranked.slice(-Math.min(5, Math.max(0, ranked.length - 8))).reverse();
-    if (bottom.length > 0) {
-      html += '<h4 style="font-size:0.82rem;color:var(--danger);margin-top:12px;margin-bottom:6px;">Lowest pts/hr by Case Type</h4>';
-      bottom.forEach(r => {
-        html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count}x)</span></span><span class="eff-value bad">${r.ptsPerHr.toFixed(1)}</span></div>`;
-      });
-    }
-  }
-  if (!html) html = '<p style="font-size:0.85rem;color:var(--text-dim);">Not enough timed case data yet (need 2+ of a type).</p>';
-  document.getElementById('caseEffContent').innerHTML = html;
-}
-
 function renderMoMChange() {
   const mt = getMonthlyTotals();
   const now = new Date();
@@ -7411,18 +7327,41 @@ function renderTimeSummary() {
 }
 
 function renderProductionTrend() {
-  const mt = getMonthlyTotals();
-  const sortedKeys = Object.keys(mt).sort();
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const labels = sortedKeys.map(k => { const [y,m] = k.split('-'); return monthNames[parseInt(m)-1] + ' ' + y; });
-  const values = sortedKeys.map(k => round2(mt[k]));
+  // Build last 13 month keys (current month + 12 prior)
+  const now = new Date();
+  const monthKeys = [];
+  for (let i = 12; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    monthKeys.push(y + '-' + m);
+  }
+  // Group shifts by month and compute average daily hours
+  const hoursByMonth = {};
+  const countByMonth = {};
+  monthKeys.forEach(k => { hoursByMonth[k] = 0; countByMonth[k] = 0; });
+  const shifts = data.shifts || {};
+  Object.keys(shifts).forEach(dateKey => {
+    const mk = dateKey.substring(0, 7);
+    if (hoursByMonth.hasOwnProperty(mk)) {
+      const shift = shifts[dateKey];
+      if (shift && shift.assignmentType !== 'vacation') {
+        const hrs = calcShiftHours(shift);
+        hoursByMonth[mk] += hrs;
+        countByMonth[mk] += 1;
+      }
+    }
+  });
+  const labels = monthKeys.map(k => { const [y, m] = k.split('-'); return monthNames[parseInt(m) - 1] + ' ' + y; });
+  const values = monthKeys.map(k => countByMonth[k] > 0 ? round2(hoursByMonth[k] / countByMonth[k]) : 0);
   const ctx = document.getElementById('productionTrendChart').getContext('2d');
   if (productionTrendChart) productionTrendChart.destroy();
   productionTrendChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels,
-      datasets: [{ label: 'Monthly Points', data: values, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.15)', fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#3b82f6' }]
+      datasets: [{ label: 'Avg Daily Hours', data: values, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.15)', fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#3b82f6' }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -7712,11 +7651,8 @@ document.getElementById('dayDetailModal').addEventListener('click', (e) => {
 
 function renderAnalyticsTab() {
   renderCaseMix();
-  renderAddOnUtil();
   renderTopProcedures();
-  renderTopSurgeonsChart();
-  renderSlowSurgeonsChart();
-  renderCaseTypeEfficiency();
+  renderSurgeonEfficiency();
 }
 
 function renderCaseMix() {
@@ -7735,26 +7671,6 @@ function renderCaseMix() {
     html += `<div class="efficiency-item"><span class="eff-label">${escHtml(item.procedure)}</span><span class="eff-value"><span class="point-badge">${item.pts.toFixed(1)}</span><span style="font-size:0.7rem;color:var(--text-dim);margin-left:6px;">${escHtml(item.date)}</span></span></div>`;
   });
   document.getElementById('caseMixContent').innerHTML = html;
-}
-
-function renderAddOnUtil() {
-  const stdCases = data.cases.filter(c => c.caseType === 'standard');
-  const total = stdCases.length;
-  if (total === 0) { document.getElementById('addOnContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No standard cases.</p>'; return; }
-  const counts = { 'Nerve Block': 0, 'Central Line': 0, 'Arterial Line': 0, 'PAC': 0, 'TEE': 0 };
-  stdCases.forEach(c => {
-    if (c.nerveBlock && c.nerveBlock !== 'none') counts['Nerve Block']++;
-    if (c.hasCentralLine) counts['Central Line']++;
-    if (c.hasArterialLine) counts['Arterial Line']++;
-    if (c.hasPAC) counts['PAC']++;
-    if (c.hasTEEAddOn) counts['TEE']++;
-  });
-  let html = '';
-  Object.entries(counts).forEach(([name, count]) => {
-    const pct = round2(count / total * 100);
-    html += `<div class="efficiency-item"><span class="eff-label">${name}</span><span class="eff-value">${count} (${pct.toFixed(0)}%)</span></div>`;
-  });
-  document.getElementById('addOnContent').innerHTML = html;
 }
 
 function renderTopProcedures() {
@@ -7778,74 +7694,103 @@ function renderTopProcedures() {
   const sorted = entries.map(([name, d]) => ({ name, ptsPerHr: d.totalPts / d.totalHrs, count: d.count }))
     .sort((a, b) => b.ptsPerHr - a.ptsPerHr).slice(0, 10);
   if (sorted.length === 0) { document.getElementById('topProcContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No data (need 2+ timed cases per procedure).</p>'; return; }
-  let html = '';
-  sorted.forEach((p, i) => {
-    html += `<div class="efficiency-item"><span class="eff-label">${i+1}. ${escHtml(p.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${p.count})</span></span><span class="eff-value">${p.ptsPerHr.toFixed(1)} pts/hr</span></div>`;
+  let topHtml = '';
+  sorted.slice(0, 5).forEach((p, i) => {
+    topHtml += `<div class="efficiency-item"><span class="eff-label">${i+1}. ${escHtml(p.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${p.count})</span></span><span class="eff-value">${p.ptsPerHr.toFixed(1)} pts/hr</span></div>`;
   });
+  let extraHtml = '';
+  if (sorted.length > 5) {
+    sorted.slice(5).forEach((p, i) => {
+      extraHtml += `<div class="efficiency-item"><span class="eff-label">${i+6}. ${escHtml(p.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${p.count})</span></span><span class="eff-value">${p.ptsPerHr.toFixed(1)} pts/hr</span></div>`;
+    });
+  }
+  let html = topHtml;
+  if (extraHtml) {
+    html += `<div id="topProcExtra" style="display:none;">${extraHtml}</div>`;
+    html += `<a href="javascript:void(0)" id="topProcToggle" style="display:inline-block;margin-top:8px;font-size:0.82rem;color:var(--primary);" onclick="var ex=document.getElementById('topProcExtra');var tg=document.getElementById('topProcToggle');if(ex.style.display==='none'){ex.style.display='block';tg.textContent='Show less';}else{ex.style.display='none';tg.textContent='Show all '+${sorted.length};}">Show all ${sorted.length}</a>`;
+  }
   document.getElementById('topProcContent').innerHTML = html;
 }
 
-function getSurgeonPPH() {
-  const surgeonStats = {};
+function renderSurgeonEfficiency() {
+  const surgeonData = {};
   data.cases.forEach(c => {
     const surgeon = (c.notes || '').trim();
-    if (!surgeon) return;
+    if (!surgeon || !c.startTime || !c.endTime) return;
     const shift = data.shifts[c.shiftDate];
     const pts = calcCasePoints(c, shift || {});
-    let caseHrs = 0;
-    if (c.startTime && c.endTime) {
-      let cs = timeToMinutes(c.startTime);
-      let ce = timeToMinutes(c.endTime);
-      if (ce <= cs) ce += 1440;
-      caseHrs = (ce - cs) / 60;
-    }
-    if (caseHrs <= 0) return;
-    if (!surgeonStats[surgeon]) surgeonStats[surgeon] = { pts: 0, hrs: 0, cases: 0 };
-    surgeonStats[surgeon].pts += pts;
-    surgeonStats[surgeon].hrs += caseHrs;
-    surgeonStats[surgeon].cases++;
+    const dateKey = c.shiftDate || 'unknown';
+    if (!surgeonData[surgeon]) surgeonData[surgeon] = { totalPts: 0, dates: {}, caseCount: 0 };
+    surgeonData[surgeon].totalPts += pts;
+    surgeonData[surgeon].caseCount++;
+    if (!surgeonData[surgeon].dates[dateKey]) surgeonData[surgeon].dates[dateKey] = { earliest: null, latest: null };
+    const startMin = timeToMinutes(c.startTime);
+    let endMin = timeToMinutes(c.endTime);
+    if (endMin <= startMin) endMin += 1440;
+    const dateEntry = surgeonData[surgeon].dates[dateKey];
+    if (dateEntry.earliest === null || startMin < dateEntry.earliest) dateEntry.earliest = startMin;
+    if (dateEntry.latest === null || endMin > dateEntry.latest) dateEntry.latest = endMin;
   });
-  return Object.entries(surgeonStats)
-    .filter(([, s]) => s.hrs > 0 && s.cases >= 2)
-    .map(([name, s]) => ({ name, pph: round2(s.pts / s.hrs), cases: s.cases }));
-}
-
-function renderSurgeonBarChart(entries, canvasId, chartRef, color) {
-  if (entries.length === 0) return null;
-  const ctx = document.getElementById(canvasId).getContext('2d');
-  if (chartRef) chartRef.destroy();
-  return new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: entries.map(e => e.name),
-      datasets: [{ label: 'pts/hr', data: entries.map(e => e.pph), backgroundColor: color, borderRadius: 4 }]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { afterLabel: (tip) => `${entries[tip.dataIndex].cases} cases` } }
-      },
-      scales: {
-        x: { grid: { color: 'rgba(148,163,184,0.1)' }, ticks: { color: '#94a3b8' } },
-        y: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11 } } }
-      }
-    }
+  const ranked = Object.entries(surgeonData)
+    .filter(([, d]) => d.caseCount >= 2)
+    .map(([name, d]) => {
+      let totalHrs = 0;
+      Object.values(d.dates).forEach(dt => {
+        totalHrs += (dt.latest - dt.earliest) / 60;
+      });
+      return { name, pph: totalHrs > 0 ? round2(d.totalPts / totalHrs) : 0, cases: d.caseCount, totalHrs };
+    })
+    .filter(r => r.totalHrs > 0)
+    .sort((a, b) => b.pph - a.pph);
+  if (ranked.length === 0) {
+    document.getElementById('surgeonEffContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No data (need 2+ timed cases per surgeon).</p>';
+    return;
+  }
+  const top5 = ranked.slice(0, 5);
+  const topRest = ranked.slice(5);
+  const bottom5 = ranked.slice(-Math.min(5, ranked.length)).reverse();
+  const bottomRest = ranked.slice(0, -Math.min(5, ranked.length)).reverse();
+  let html = '';
+  // Top Surgeons section
+  html += '<h4 style="font-size:0.82rem;color:#22c55e;margin-bottom:6px;">Top Surgeons</h4>';
+  top5.forEach((s, i) => {
+    html += `<div class="efficiency-item"><span class="eff-label">${i+1}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span><span class="eff-value">${s.pph.toFixed(1)} pts/hr</span></div>`;
   });
-}
-
-function renderTopSurgeonsChart() {
-  const all = getSurgeonPPH();
-  const top = all.sort((a, b) => b.pph - a.pph).slice(0, 15);
-  topSurgeonsChart = renderSurgeonBarChart(top, 'topSurgeonsChart', topSurgeonsChart, '#3b82f6');
-}
-
-function renderSlowSurgeonsChart() {
-  const all = getSurgeonPPH();
-  const bottom = all.sort((a, b) => a.pph - b.pph).slice(0, 15);
-  slowSurgeonsChart = renderSurgeonBarChart(bottom, 'slowSurgeonsChart', slowSurgeonsChart, '#f59e0b');
+  if (topRest.length > 0) {
+    let topExtraHtml = '';
+    topRest.forEach((s, i) => {
+      topExtraHtml += `<div class="efficiency-item"><span class="eff-label">${i+6}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span><span class="eff-value">${s.pph.toFixed(1)} pts/hr</span></div>`;
+    });
+    html += `<div id="surgTopExtra" style="display:none;">${topExtraHtml}</div>`;
+    html += `<a href="javascript:void(0)" id="surgTopToggle" style="display:inline-block;margin-top:4px;font-size:0.82rem;color:var(--primary);" onclick="var ex=document.getElementById('surgTopExtra');var tg=document.getElementById('surgTopToggle');if(ex.style.display==='none'){ex.style.display='block';tg.textContent='Show less';}else{ex.style.display='none';tg.textContent='Show all';}">Show all</a>`;
+  }
+  // Room to Grow section
+  if (ranked.length > 5) {
+    html += '<h4 style="font-size:0.82rem;color:#f59e0b;margin-top:16px;margin-bottom:6px;">Room to Grow</h4>';
+    bottom5.forEach((s, i) => {
+      const rank = ranked.length - bottom5.length + i + 1;
+      html += `<div class="efficiency-item"><span class="eff-label">${rank}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span><span class="eff-value">${s.pph.toFixed(1)} pts/hr</span></div>`;
+    });
+    if (bottomRest.length > 0) {
+      let bottomExtraHtml = '';
+      bottomRest.forEach((s) => {
+        const rank = ranked.indexOf(s) + 1;
+        bottomExtraHtml += `<div class="efficiency-item"><span class="eff-label">${rank}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span><span class="eff-value">${s.pph.toFixed(1)} pts/hr</span></div>`;
+      });
+      html += `<div id="surgBottomExtra" style="display:none;">${bottomExtraHtml}</div>`;
+      html += `<a href="javascript:void(0)" id="surgBottomToggle" style="display:inline-block;margin-top:4px;font-size:0.82rem;color:var(--primary);" onclick="var ex=document.getElementById('surgBottomExtra');var tg=document.getElementById('surgBottomToggle');if(ex.style.display==='none'){ex.style.display='block';tg.textContent='Show less';}else{ex.style.display='none';tg.textContent='Show all';}">Show all</a>`;
+    }
+  }
+  // View all surgeons link
+  if (ranked.length > 10) {
+    let allHtml = '';
+    ranked.forEach((s, i) => {
+      allHtml += `<div class="efficiency-item"><span class="eff-label">${i+1}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span><span class="eff-value">${s.pph.toFixed(1)} pts/hr</span></div>`;
+    });
+    html += `<div id="surgAllList" style="display:none;margin-top:16px;"><h4 style="font-size:0.82rem;color:var(--text-dim);margin-bottom:6px;">All Surgeons (ranked)</h4>${allHtml}</div>`;
+    html += `<a href="javascript:void(0)" id="surgAllToggle" style="display:inline-block;margin-top:12px;font-size:0.82rem;color:var(--primary);" onclick="var ex=document.getElementById('surgAllList');var tg=document.getElementById('surgAllToggle');if(ex.style.display==='none'){ex.style.display='block';tg.textContent='Hide full list';}else{ex.style.display='none';tg.textContent='View all surgeons';}">View all surgeons</a>`;
+  }
+  document.getElementById('surgeonEffContent').innerHTML = html;
 }
 
 let editingCaseId = null;
