@@ -8531,7 +8531,7 @@ function renderQgendaRecon() {
     const forcedOffEntry = qDay.find(e => /FORCED?\s*OFF/i.test(e.task || ''));
     const qTask = forcedOffEntry ? forcedOffEntry.task : (qDay.length > 0 ? qDay[0].task : '');
     const qAssignType = qTask ? mapTaskToAssignmentType(qTask, date) : '';
-    const tAssignType = tShift ? tShift.assignmentType : '';
+    const tAssignType = tShift ? (tShift.forcedOff ? 'forced_off' : tShift.assignmentType) : '';
 
     const sortedQ = [...qDay].filter(e => e.clockInTime).sort((a, b) => a.clockInTime.localeCompare(b.clockInTime));
     const qTimeEntries = sortedQ.map(e => ({ start: e.clockInTime, end: e.clockOutTime || '' }));
