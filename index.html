@@ -8539,7 +8539,10 @@ function renderQgendaRecon() {
     let dayStatus = 'match', diffType = '';
     if (qDay.length > 0 && tShift) {
       const hourDiff = Math.abs(qHours - tHours);
+      const tHasNoTimes = !tShift.timeEntries || tShift.timeEntries.every(e => !e.start || !e.end);
       if (qAssignType === 'forced_off' && tAssignType === 'forced_off') {
+        matchCount++;
+      } else if (qAssignType === tAssignType && (tHasNoTimes || qHours === 0)) {
         matchCount++;
       } else if (hourDiff <= 0.25 && qAssignType === tAssignType) {
         matchCount++;
