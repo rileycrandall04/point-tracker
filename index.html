@@ -147,16 +147,16 @@ header h1 { font-size: 1.1rem; font-weight: 700; color: var(--primary); min-widt
 }
 .drawer-backdrop.visible { opacity: 1; pointer-events: auto; }
 .drawer-panel {
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 201;
-  background: var(--surface); border-radius: 16px 16px 0 0;
-  max-width: 600px; margin: 0 auto;
-  transform: translateY(100%); transition: transform 0.3s ease;
-  padding: 8px 0 calc(var(--bottom-nav) + 16px);
+  position: fixed; bottom: var(--bottom-nav); right: 8px; z-index: 201;
+  background: var(--surface); border-radius: 12px;
+  width: 200px; border: 1px solid var(--border);
+  transform: translateY(10px); opacity: 0; transition: transform 0.2s ease, opacity 0.2s ease;
+  padding: 8px 0; pointer-events: none;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
 }
-.drawer-panel.open { transform: translateY(0); }
+.drawer-panel.open { transform: translateY(0); opacity: 1; pointer-events: auto; }
 .drawer-handle {
-  width: 36px; height: 4px; border-radius: 2px;
-  background: var(--border); margin: 0 auto 8px;
+  display: none;
 }
 .drawer-item {
   display: flex; align-items: center; gap: 12px;
@@ -1877,6 +1877,7 @@ input.mil-time.invalid {
     <!-- Hours Trend -->
     <div class="card">
       <h2>Monthly Hours Trend</h2>
+      <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">Average workday length per month (clock-in to clock-out)</p>
       <div class="chart-container">
         <canvas id="productionTrendChart"></canvas>
       </div>
@@ -1929,7 +1930,7 @@ input.mil-time.invalid {
     <!-- Collapsible: Shift Efficiency -->
     <div class="card collapse-section">
       <div class="collapse-header" onclick="toggleCollapse('projEfficiency')">
-        <h3>Most / Least Efficient Shifts</h3>
+        <h3>Most / Least Efficient Assignments</h3>
         <span class="arrow" id="projEfficiencyArrow">&#9660;</span>
       </div>
       <div class="collapse-body" id="projEfficiencyBody">
@@ -2724,6 +2725,10 @@ input.mil-time.invalid {
     <span class="nav-icon">&#128137;</span>
     <span>Work</span>
   </button>
+  <button data-page="compensation">
+    <span class="nav-icon">&#129689;</span>
+    <span>Comp</span>
+  </button>
   <button class="active" data-page="today">
     <span class="nav-icon">&#11088;</span>
     <span>Today</span>
@@ -2731,10 +2736,6 @@ input.mil-time.invalid {
   <button data-page="dashboard">
     <span class="nav-icon">&#128202;</span>
     <span>Dashboard</span>
-  </button>
-  <button data-page="compensation">
-    <span class="nav-icon">&#129689;</span>
-    <span>Comp</span>
   </button>
   <button id="moreNavBtn">
     <span class="nav-icon">&middot;&middot;&middot;</span>
@@ -7249,29 +7250,35 @@ function renderPtsPerShiftType() {
 }
 
 function renderShiftEfficiency() {
-  const allShifts = Object.values(data.shifts);
-  const efficiencies = [];
-  allShifts.forEach(shift => {
+  const groups = {};
+  Object.values(data.shifts).forEach(shift => {
     const hrs = calcShiftHours(shift);
     if (hrs <= 0) return;
     const total = calcShiftTotal(shift).total;
-    efficiencies.push({ date: shift.date, type: shift.assignmentType, ptsPerHr: round2(total / hrs), total, hrs });
+    const type = shift.assignmentType;
+    if (!groups[type]) groups[type] = { totalPts: 0, totalHrs: 0, count: 0 };
+    groups[type].totalPts += total;
+    groups[type].totalHrs += hrs;
+    groups[type].count++;
   });
-  efficiencies.sort((a, b) => b.ptsPerHr - a.ptsPerHr);
-  const best5 = efficiencies.slice(0, 5);
-  const worst5 = efficiencies.length > 5 ? efficiencies.slice(-5).reverse() : [];
+  const ranked = Object.entries(groups)
+    .filter(([, g]) => g.count >= 1)
+    .map(([type, g]) => ({ type, name: getAssignmentTypeName(type), ptsPerHr: round2(g.totalPts / g.totalHrs), count: g.count }))
+    .sort((a, b) => b.ptsPerHr - a.ptsPerHr);
   let html = '';
-  if (best5.length > 0) {
-    html += '<h4 style="font-size:0.82rem;color:var(--accent);margin-bottom:6px;">Top 5 (pts/hr)</h4>';
-    best5.forEach(e => {
-      html += `<div class="efficiency-item"><span class="eff-label">${formatDateShort(e.date)} — ${getAssignmentTypeName(e.type)}</span><span class="eff-value good">${e.ptsPerHr.toFixed(1)}</span></div>`;
+  if (ranked.length > 0) {
+    const top = ranked.slice(0, 5);
+    html += '<h4 style="font-size:0.82rem;color:var(--accent);margin-bottom:6px;">Most Efficient (pts/hr)</h4>';
+    top.forEach(r => {
+      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count} shift${r.count !== 1 ? 's' : ''})</span></span><span class="eff-value good">${r.ptsPerHr.toFixed(1)}</span></div>`;
     });
-  }
-  if (worst5.length > 0) {
-    html += '<h4 style="font-size:0.82rem;color:var(--danger);margin-top:12px;margin-bottom:6px;">Bottom 5 (pts/hr)</h4>';
-    worst5.forEach(e => {
-      html += `<div class="efficiency-item"><span class="eff-label">${formatDateShort(e.date)} — ${getAssignmentTypeName(e.type)}</span><span class="eff-value bad">${e.ptsPerHr.toFixed(1)}</span></div>`;
-    });
+    if (ranked.length > 5) {
+      const bottom = ranked.slice(-Math.min(5, ranked.length - 5)).reverse();
+      html += '<h4 style="font-size:0.82rem;color:var(--danger);margin-top:12px;margin-bottom:6px;">Least Efficient (pts/hr)</h4>';
+      bottom.forEach(r => {
+        html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count} shift${r.count !== 1 ? 's' : ''})</span></span><span class="eff-value bad">${r.ptsPerHr.toFixed(1)}</span></div>`;
+      });
+    }
   }
   if (!html) html = '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet.</p>';
   document.getElementById('efficiencyContent').innerHTML = html;
