@@ -2351,7 +2351,7 @@ input.mil-time.invalid {
     <div class="scan-capture-area" id="scanCaptureArea">
       <span class="scan-icon">&#128247;</span>
       <p>Tap to take a photo or select an image</p>
-      <input type="file" id="scanFileInput" accept="image/*" style="display:none;">
+      <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;">
     </div>
     <img id="scanPreviewImg" class="scan-preview-img hidden" alt="Preview">
     <div id="scanStatus" class="hidden"></div>
@@ -10956,17 +10956,14 @@ document.getElementById('scanProcessBtn').addEventListener('click', async () => 
     return;
   }
 
-  setScanStatus('processing', 'Preprocessing image...');
+  setScanStatus('processing', 'Calling Vision API...');
   try {
-    const preprocessed = await preprocessScanImage(scanImageBlob);
-
-    // Convert blob to base64
-    setScanStatus('processing', 'Calling Vision API...');
+    // Convert image to base64 (Vision API handles raw photos natively — no preprocessing needed)
     const base64 = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result.split(',')[1]);
       reader.onerror = () => reject(new Error('Failed to read image'));
-      reader.readAsDataURL(preprocessed);
+      reader.readAsDataURL(scanImageBlob);
     });
 
     const response = await fetch('https://vision.googleapis.com/v1/images:annotate?key=' + encodeURIComponent(apiKey), {
