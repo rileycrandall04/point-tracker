@@ -1925,13 +1925,24 @@ input.mil-time.invalid {
         <div id="ptsPerTypeContent" style="padding-top:12px;"></div>
       </div>
     </div>
+
+    <!-- Collapsible: Shift Efficiency -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('projEfficiency')">
+        <h3>Most / Least Efficient Shifts</h3>
+        <span class="arrow" id="projEfficiencyArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="projEfficiencyBody">
+        <div id="efficiencyContent" style="padding-top:12px;"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Analytics Tab -->
   <div id="dtab-analytics" class="hidden">
-    <!-- Case Mix -->
+    <!-- Top Producing Cases -->
     <div class="card">
-      <h2>Case Mix</h2>
+      <h2>Top Producing Cases</h2>
       <div id="caseMixContent">
         <div class="empty-state"><p>No case data.</p></div>
       </div>
@@ -1969,6 +1980,30 @@ input.mil-time.invalid {
         <div class="chart-container" style="margin-top:12px;">
           <canvas id="topSurgeonsChart"></canvas>
         </div>
+      </div>
+    </div>
+
+    <!-- Surgeons with Room to Grow -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('analSlowSurgeons')">
+        <h3>Surgeons — Room to Grow (pts/hr)</h3>
+        <span class="arrow" id="analSlowSurgeonsArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="analSlowSurgeonsBody">
+        <div class="chart-container" style="margin-top:12px;">
+          <canvas id="slowSurgeonsChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collapsible: Case Type Efficiency -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('projCaseEff')">
+        <h3>Most Efficient Case Types</h3>
+        <span class="arrow" id="projCaseEffArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="projCaseEffBody">
+        <div id="caseEffContent" style="padding-top:12px;"></div>
       </div>
     </div>
   </div>
@@ -2156,28 +2191,6 @@ input.mil-time.invalid {
       <div class="chart-container" style="margin-top:12px;">
         <canvas id="breakdownChart"></canvas>
       </div>
-    </div>
-  </div>
-
-  <!-- Collapsible: Shift Efficiency -->
-  <div class="card collapse-section">
-    <div class="collapse-header" onclick="toggleCollapse('projEfficiency')">
-      <h3>Most / Least Efficient Shifts</h3>
-      <span class="arrow" id="projEfficiencyArrow">&#9660;</span>
-    </div>
-    <div class="collapse-body" id="projEfficiencyBody">
-      <div id="efficiencyContent" style="padding-top:12px;"></div>
-    </div>
-  </div>
-
-  <!-- Collapsible: Case Type Efficiency -->
-  <div class="card collapse-section">
-    <div class="collapse-header" onclick="toggleCollapse('projCaseEff')">
-      <h3>Most Efficient Case Types</h3>
-      <span class="arrow" id="projCaseEffArrow">&#9660;</span>
-    </div>
-    <div class="collapse-body" id="projCaseEffBody">
-      <div id="caseEffContent" style="padding-top:12px;"></div>
     </div>
   </div>
 
@@ -5237,6 +5250,7 @@ let breakdownChart = null;
 let pipelineChart = null;
 let productionTrendChart = null;
 let topSurgeonsChart = null;
+let slowSurgeonsChart = null;
 let activeDashTab = 'daily';
 
 // Dashboard sub-tab switching
@@ -5277,14 +5291,14 @@ function toggleCollapse(sectionId) {
     projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projCaseEff: 'projCaseEffBody', projMoM: 'projMoMBody', projPtsPerType: 'projPtsPerTypeBody',
     timeDOW: 'timeDOWBody', timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
     analAddOns: 'analAddOnsBody', analTopProc: 'analTopProcBody',
-    analTopSurgeons: 'analTopSurgeonsBody'
+    analTopSurgeons: 'analTopSurgeonsBody', analSlowSurgeons: 'analSlowSurgeonsBody'
   };
   const arrowMap = {
     deScan: 'deScanArrow',
     projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projCaseEff: 'projCaseEffArrow', projMoM: 'projMoMArrow', projPtsPerType: 'projPtsPerTypeArrow',
     timeDOW: 'timeDOWArrow', timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
     analAddOns: 'analAddOnsArrow', analTopProc: 'analTopProcArrow',
-    analTopSurgeons: 'analTopSurgeonsArrow'
+    analTopSurgeons: 'analTopSurgeonsArrow', analSlowSurgeons: 'analSlowSurgeonsArrow'
   };
   const body = document.getElementById(bodyMap[sectionId]);
   const arrow = document.getElementById(arrowMap[sectionId]);
@@ -6501,8 +6515,6 @@ function renderProjections() {
   renderProjectedAnnual();
   renderMonthlyPace();
   renderPipelineChart();
-  renderShiftEfficiency();
-  renderCaseTypeEfficiency();
   renderMoMChange();
 }
 
@@ -7139,6 +7151,7 @@ function renderTimeTab() {
   renderWeekendVsWeekday();
   renderNightCallFreq();
   renderPtsPerShiftType();
+  renderShiftEfficiency();
 }
 
 function getRecentShifts(months) {
@@ -7486,24 +7499,24 @@ function renderAnalyticsTab() {
   renderAddOnUtil();
   renderTopProcedures();
   renderTopSurgeonsChart();
+  renderSlowSurgeonsChart();
+  renderCaseTypeEfficiency();
 }
 
 function renderCaseMix() {
-  const freq = {};
-  data.cases.forEach(c => {
-    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
-    freq[name] = (freq[name] || 0) + 1;
-  });
-  const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
-  const maxCount = sorted.length > 0 ? sorted[0][1] : 1;
-  if (sorted.length === 0) {
-    document.getElementById('caseMixContent').innerHTML = '<div class="empty-state"><p>No case data.</p></div>';
+  if (data.cases.length === 0) {
+    document.getElementById('caseMixContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No cases logged yet.</p>';
     return;
   }
+  const ranked = data.cases.map(c => {
+    const shift = data.shifts[c.shiftDate] || {};
+    const pts = calcCasePoints(c, shift);
+    const procedure = c.procedure || c.notes || c.caseType;
+    return { procedure, pts, date: c.shiftDate || '' };
+  }).sort((a, b) => b.pts - a.pts).slice(0, 8);
   let html = '';
-  sorted.slice(0, 20).forEach(([name, count]) => {
-    const pct = (count / maxCount * 100);
-    html += `<div class="case-mix-item"><span class="cm-label" title="${escHtml(name)}">${escHtml(name)}</span><div class="case-mix-bar-wrap"><div class="case-mix-bar" style="width:${pct}%"></div></div><span class="cm-count">${count}</span></div>`;
+  ranked.forEach(item => {
+    html += `<div class="efficiency-item"><span class="eff-label">${escHtml(item.procedure)}</span><span class="eff-value"><span class="point-badge">${item.pts.toFixed(1)}</span><span style="font-size:0.7rem;color:var(--text-dim);margin-left:6px;">${escHtml(item.date)}</span></span></div>`;
   });
   document.getElementById('caseMixContent').innerHTML = html;
 }
@@ -7556,7 +7569,7 @@ function renderTopProcedures() {
   document.getElementById('topProcContent').innerHTML = html;
 }
 
-function renderTopSurgeonsChart() {
+function getSurgeonPPH() {
   const surgeonStats = {};
   data.cases.forEach(c => {
     const surgeon = (c.notes || '').trim();
@@ -7576,19 +7589,20 @@ function renderTopSurgeonsChart() {
     surgeonStats[surgeon].hrs += caseHrs;
     surgeonStats[surgeon].cases++;
   });
-  const entries = Object.entries(surgeonStats)
+  return Object.entries(surgeonStats)
     .filter(([, s]) => s.hrs > 0 && s.cases >= 2)
-    .map(([name, s]) => ({ name, pph: round2(s.pts / s.hrs), cases: s.cases }))
-    .sort((a, b) => b.pph - a.pph)
-    .slice(0, 15);
-  if (entries.length === 0) return;
-  const ctx = document.getElementById('topSurgeonsChart').getContext('2d');
-  if (topSurgeonsChart) topSurgeonsChart.destroy();
-  topSurgeonsChart = new Chart(ctx, {
+    .map(([name, s]) => ({ name, pph: round2(s.pts / s.hrs), cases: s.cases }));
+}
+
+function renderSurgeonBarChart(entries, canvasId, chartRef, color) {
+  if (entries.length === 0) return null;
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  if (chartRef) chartRef.destroy();
+  return new Chart(ctx, {
     type: 'bar',
     data: {
       labels: entries.map(e => e.name),
-      datasets: [{ label: 'pts/hr', data: entries.map(e => e.pph), backgroundColor: '#3b82f6', borderRadius: 4 }]
+      datasets: [{ label: 'pts/hr', data: entries.map(e => e.pph), backgroundColor: color, borderRadius: 4 }]
     },
     options: {
       indexAxis: 'y',
@@ -7596,7 +7610,7 @@ function renderTopSurgeonsChart() {
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { afterLabel: (ctx) => `${entries[ctx.dataIndex].cases} cases` } }
+        tooltip: { callbacks: { afterLabel: (tip) => `${entries[tip.dataIndex].cases} cases` } }
       },
       scales: {
         x: { grid: { color: 'rgba(148,163,184,0.1)' }, ticks: { color: '#94a3b8' } },
@@ -7604,6 +7618,18 @@ function renderTopSurgeonsChart() {
       }
     }
   });
+}
+
+function renderTopSurgeonsChart() {
+  const all = getSurgeonPPH();
+  const top = all.sort((a, b) => b.pph - a.pph).slice(0, 15);
+  topSurgeonsChart = renderSurgeonBarChart(top, 'topSurgeonsChart', topSurgeonsChart, '#3b82f6');
+}
+
+function renderSlowSurgeonsChart() {
+  const all = getSurgeonPPH();
+  const bottom = all.sort((a, b) => a.pph - b.pph).slice(0, 15);
+  slowSurgeonsChart = renderSurgeonBarChart(bottom, 'slowSurgeonsChart', slowSurgeonsChart, '#f59e0b');
 }
 
 let editingCaseId = null;
