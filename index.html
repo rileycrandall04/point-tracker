@@ -1914,6 +1914,17 @@ input.mil-time.invalid {
         <div id="nightContent" style="padding-top:12px;"></div>
       </div>
     </div>
+
+    <!-- Points Per Shift Type -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('projPtsPerType')">
+        <h3>Avg Points by Shift Type</h3>
+        <span class="arrow" id="projPtsPerTypeArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="projPtsPerTypeBody">
+        <div id="ptsPerTypeContent" style="padding-top:12px;"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Analytics Tab -->
@@ -2133,17 +2144,6 @@ input.mil-time.invalid {
       <canvas id="pipelineChart"></canvas>
     </div>
     <div id="pipelineSummary" style="margin-top:8px; font-size:0.78rem; color:var(--text-dim); text-align:center;"></div>
-  </div>
-
-  <!-- Points Per Shift Type -->
-  <div class="card collapse-section">
-    <div class="collapse-header" onclick="toggleCollapse('projPtsPerType')">
-      <h3>Avg Points by Shift Type</h3>
-      <span class="arrow" id="projPtsPerTypeArrow">&#9660;</span>
-    </div>
-    <div class="collapse-body" id="projPtsPerTypeBody">
-      <div id="ptsPerTypeContent" style="padding-top:12px;"></div>
-    </div>
   </div>
 
   <!-- Collapsible: Breakdown Chart -->
@@ -6501,7 +6501,6 @@ function renderProjections() {
   renderProjectedAnnual();
   renderMonthlyPace();
   renderPipelineChart();
-  renderPtsPerShiftType();
   renderShiftEfficiency();
   renderCaseTypeEfficiency();
   renderMoMChange();
@@ -7139,6 +7138,7 @@ function renderTimeTab() {
   renderDayOfWeekHeatmap();
   renderWeekendVsWeekday();
   renderNightCallFreq();
+  renderPtsPerShiftType();
 }
 
 function getRecentShifts(months) {
