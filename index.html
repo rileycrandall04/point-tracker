@@ -129,9 +129,43 @@ header h1 { font-size: 1.1rem; font-weight: 700; color: var(--primary); min-widt
   transition: color 0.2s;
 }
 
-.bottom-nav button .nav-icon { font-size: 1.3rem; line-height: 1; }
+.bottom-nav button .nav-icon {
+  font-size: 1.3rem; line-height: 1;
+  width: 36px; height: 28px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s;
+}
 .bottom-nav button.active { color: var(--primary); }
+.bottom-nav button.active .nav-icon { background: rgba(59,130,246,0.15); }
 .bottom-nav button:active { color: var(--primary); }
+
+/* ===== DRAWER ===== */
+.drawer-backdrop {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.5); opacity: 0;
+  transition: opacity 0.3s; display: none;
+}
+.drawer-backdrop.visible { opacity: 1; pointer-events: auto; }
+.drawer-panel {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 201;
+  background: var(--surface); border-radius: 16px 16px 0 0;
+  max-width: 600px; margin: 0 auto;
+  transform: translateY(100%); transition: transform 0.3s ease;
+  padding: 8px 0 calc(var(--bottom-nav) + 16px);
+}
+.drawer-panel.open { transform: translateY(0); }
+.drawer-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: var(--border); margin: 0 auto 8px;
+}
+.drawer-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px; min-height: 48px;
+  cursor: pointer; transition: background 0.15s;
+  color: var(--text); font-size: 0.95rem;
+}
+.drawer-item:hover { background: var(--surface2); }
+.drawer-item .drawer-icon { font-size: 1.2rem; width: 28px; text-align: center; }
 
 /* ===== PAGES ===== */
 .page {
@@ -1698,6 +1732,47 @@ input.mil-time.invalid {
       <p style="color:var(--text-dim);font-size:0.85rem;">No cases logged yet.</p>
     </div>
   </div>
+
+  <!-- Scan Billing Sheet (collapsible) -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('deScan')">
+      <h3>&#128247; Scan Billing Sheet</h3>
+      <span class="arrow" id="deScanArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="deScanBody">
+      <div style="padding-top:12px;">
+        <div class="form-group">
+          <label style="font-size:0.8rem;color:var(--text-dim);">Sheet Date</label>
+          <input type="date" id="scanDate">
+        </div>
+        <label class="scan-capture-area" id="scanCaptureArea">
+          <span class="scan-icon">&#128247;</span>
+          <p>Tap to take a photo</p>
+          <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;">
+        </label>
+        <img id="scanPreviewImg" class="scan-preview-img hidden" alt="Preview">
+        <div id="scanStatus" class="hidden"></div>
+        <div style="margin-top:8px;display:flex;gap:8px;" id="scanActions" class="hidden">
+          <button class="btn btn-outline btn-sm" id="scanRetakeBtn" style="flex:1;">Retake</button>
+          <button class="btn btn-sm" id="scanProcessBtn" style="flex:1;background:var(--primary);color:#fff;">Process</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="scanResultsArea" class="hidden">
+    <div class="card" style="background:var(--surface);border:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h3 style="margin:0;font-size:0.95rem;">Parsed Cases</h3>
+        <span id="scanCaseCount" style="font-size:0.8rem;color:var(--text-dim);"></span>
+      </div>
+      <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">Review and edit before importing. Remove any incorrect entries.</p>
+      <div id="scanCaseCards"></div>
+    </div>
+    <div style="padding:0 16px 16px;">
+      <button class="btn btn-sm" id="scanImportBtn" style="width:100%;background:var(--accent);color:#fff;font-size:0.95rem;padding:12px;">Import Cases</button>
+    </div>
+  </div>
 </div>
 
 <!-- TODAY PAGE -->
@@ -1724,61 +1799,6 @@ input.mil-time.invalid {
   </div>
 </div>
 
-<!-- RECONCILE PAGE -->
-<div class="page" id="page-reconcile">
-  <div class="tab-bar">
-    <button class="tab-btn active" data-rtab="qgenda">QGenda Time</button>
-    <button class="tab-btn" data-rtab="production">Production</button>
-  </div>
-
-  <!-- QGenda Tab -->
-  <div id="rtab-qgenda">
-    <div class="card">
-      <h2>QGenda Time Reconciliation</h2>
-      <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-        Upload your QGenda time punch export (.xlsx or .csv) or screenshot to compare against your tracked shifts.
-      </p>
-      <div class="upload-area" id="qgendaUploadArea">
-        <div style="font-size:2rem;">&#128196;</div>
-        <p>Tap to upload QGenda .xlsx, .csv, or screenshot</p>
-        <input type="file" id="qgendaFile" accept=".xlsx,.xls,.csv,.png,.jpg,.jpeg">
-      </div>
-    </div>
-
-    <div class="month-nav" style="margin-top:12px;">
-      <button id="qPrevMonth">&larr;</button>
-      <span id="qMonthLabel">January 2026</span>
-      <button id="qNextMonth">&rarr;</button>
-    </div>
-
-    <div id="qgendaResults"></div>
-  </div>
-
-  <!-- Production Tab -->
-  <div id="rtab-production" class="hidden">
-    <div class="card">
-      <h2>Production Reconciliation</h2>
-      <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-        Upload your Charge Detail PDF or screenshot to compare billing production against your tracked cases.
-      </p>
-      <div class="upload-area" id="prodUploadArea">
-        <div style="font-size:2rem;">&#128196;</div>
-        <p>Tap to upload Charge Detail PDF or screenshot</p>
-        <input type="file" id="prodFile" accept=".pdf,.png,.jpg,.jpeg">
-      </div>
-    </div>
-
-    <div class="month-nav" style="margin-top:12px;">
-      <button id="pPrevMonth">&larr;</button>
-      <span id="pMonthLabel">January 2026</span>
-      <button id="pNextMonth">&rarr;</button>
-    </div>
-
-    <div id="prodResults"></div>
-  </div>
-
-</div>
-
 <!-- DASHBOARD PAGE -->
 <div class="page" id="page-dashboard">
   <div class="dash-sticky-header" id="dashStickyHeader">
@@ -1786,9 +1806,9 @@ input.mil-time.invalid {
       <button class="dash-tab-btn active" data-dtab="daily">Daily</button>
       <button class="dash-tab-btn" data-dtab="caselogs">Case Logs</button>
       <button class="dash-tab-btn" data-dtab="shiftlogs">Shift Logs</button>
-      <button class="dash-tab-btn" data-dtab="projections">Projections</button>
       <button class="dash-tab-btn" data-dtab="time">Time</button>
       <button class="dash-tab-btn" data-dtab="analytics">Analytics</button>
+      <button class="dash-tab-btn" data-dtab="reconcile">Reconcile</button>
     </div>
   </div>
   <div id="dashStickyHeaderSpacer"></div>
@@ -1825,171 +1845,6 @@ input.mil-time.invalid {
     <div class="case-log-wrap">
       <div id="shiftLogTableContainer">
         <div class="empty-state"><p>No shifts for this month.</p></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Projections Tab -->
-  <div id="dtab-projections" class="hidden">
-    <!-- Point Value Input -->
-    <div class="card" style="display:flex; align-items:center; gap:12px; padding:12px 16px;">
-      <label style="font-size:0.85rem; font-weight:600; white-space:nowrap;">$/point</label>
-      <input type="number" id="dashPointValue" min="0" step="0.01" placeholder="e.g. 55.00" style="max-width:120px;">
-    </div>
-
-    <!-- Stabilization Card -->
-    <div class="card">
-      <h2>Stabilization-Weighted Points</h2>
-      <p style="font-size:0.8rem; color:var(--text-dim); margin-bottom:12px;">
-        Weighted: 10% current + 40% prior + 25% 2-mo + 15% 3-mo + 10% 4-mo
-      </p>
-      <div class="summary-grid">
-        <div class="summary-item">
-          <div class="label">Raw This Month</div>
-          <div class="value blue" id="stabRaw">0</div>
-        </div>
-        <div class="summary-item">
-          <div class="label">Stabilized</div>
-          <div class="value green" id="stabWeighted">0</div>
-        </div>
-      </div>
-      <div id="stabPaycheckRow" style="margin-top:12px; text-align:center;">
-        <div style="font-size:1.3rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
-        <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px;" id="stabPaycheckLabel">Projected next month's paycheck</div>
-      </div>
-    </div>
-
-    <!-- Monthly Trend Chart -->
-    <div class="card">
-      <h2>Monthly Trend</h2>
-      <div class="chart-container">
-        <canvas id="monthlyChart"></canvas>
-      </div>
-      <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
-    </div>
-
-    <!-- Projected Annual Income -->
-    <div class="card">
-      <h2>Projected Annual Income</h2>
-      <div class="summary-grid">
-        <div class="summary-item">
-          <div class="label">3-Month Rolling Avg</div>
-          <div class="value blue" id="projRollingAvg">0</div>
-        </div>
-        <div class="summary-item">
-          <div class="label">Annual Projection</div>
-          <div class="value green" id="projAnnualIncome">&mdash;</div>
-        </div>
-      </div>
-      <div class="summary-grid" style="margin-top:8px;">
-        <div class="summary-item">
-          <div class="label">YTD Revenue</div>
-          <div class="value yellow" id="projYTDRevenue">&mdash;</div>
-        </div>
-        <div class="summary-item">
-          <div class="label">Projected Remaining</div>
-          <div class="value purple" id="projRemaining">&mdash;</div>
-        </div>
-      </div>
-      <div id="projYTDDetail" style="margin-top:8px; font-size:0.78rem; color:var(--text-dim); text-align:center;"></div>
-    </div>
-
-    <!-- Pace Tracker -->
-    <div class="card">
-      <h2>Monthly Pace</h2>
-      <div class="summary-grid">
-        <div class="summary-item">
-          <div class="label">This Month So Far</div>
-          <div class="value blue" id="paceCurrentPts">0</div>
-        </div>
-        <div class="summary-item">
-          <div class="label">Projected End-of-Month</div>
-          <div class="value green" id="paceProjected">0</div>
-        </div>
-      </div>
-      <div style="margin-top:8px;">
-        <div style="background:var(--surface2); border-radius:6px; height:10px; overflow:hidden;">
-          <div id="paceBar" style="height:100%; background:var(--primary); border-radius:6px; transition:width 0.3s; width:0%;"></div>
-        </div>
-        <div id="paceLabel" style="font-size:0.75rem; color:var(--text-dim); margin-top:4px; text-align:center;"></div>
-      </div>
-    </div>
-
-    <!-- Stabilization Pipeline -->
-    <div class="card">
-      <h2>Income Pipeline</h2>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <p style="font-size:0.78rem; color:var(--text-dim); margin:0;">
-          Estimated paychecks from recorded data
-        </p>
-        <label class="toggle-row">
-          <span>Include projections</span>
-          <span class="toggle-switch">
-            <input type="checkbox" id="pipelineProjectToggle">
-            <span class="slider"></span>
-          </span>
-        </label>
-      </div>
-      <div class="chart-container">
-        <canvas id="pipelineChart"></canvas>
-      </div>
-      <div id="pipelineSummary" style="margin-top:8px; font-size:0.78rem; color:var(--text-dim); text-align:center;"></div>
-    </div>
-
-    <!-- Points Per Shift Type -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('projPtsPerType')">
-        <h3>Avg Points by Shift Type</h3>
-        <span class="arrow" id="projPtsPerTypeArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="projPtsPerTypeBody">
-        <div id="ptsPerTypeContent" style="padding-top:12px;"></div>
-      </div>
-    </div>
-
-    <!-- Collapsible: Breakdown Chart -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('projBreakdown')">
-        <h3>Points Breakdown (This Month)</h3>
-        <span class="arrow" id="projBreakdownArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="projBreakdownBody">
-        <div class="chart-container" style="margin-top:12px;">
-          <canvas id="breakdownChart"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Collapsible: Shift Efficiency -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('projEfficiency')">
-        <h3>Most / Least Efficient Shifts</h3>
-        <span class="arrow" id="projEfficiencyArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="projEfficiencyBody">
-        <div id="efficiencyContent" style="padding-top:12px;"></div>
-      </div>
-    </div>
-
-    <!-- Collapsible: Case Type Efficiency -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('projCaseEff')">
-        <h3>Most Efficient Case Types</h3>
-        <span class="arrow" id="projCaseEffArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="projCaseEffBody">
-        <div id="caseEffContent" style="padding-top:12px;"></div>
-      </div>
-    </div>
-
-    <!-- Collapsible: Month-over-Month -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('projMoM')">
-        <h3>Month-over-Month Change</h3>
-        <span class="arrow" id="projMoMArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="projMoMBody">
-        <div id="momContent" style="padding-top:12px;"></div>
       </div>
     </div>
   </div>
@@ -2127,6 +1982,225 @@ input.mil-time.invalid {
     </div>
     <div id="dailyCalendarContainer" style="margin-top:12px;"></div>
     <div id="dailyMonthSummary" style="margin-top:12px;font-size:0.85rem;color:var(--text-dim);text-align:center;"></div>
+  </div>
+
+  <!-- Reconcile Tab -->
+  <div id="dtab-reconcile" class="hidden">
+    <div class="tab-bar">
+      <button class="tab-btn active" data-rtab="qgenda">QGenda Time</button>
+      <button class="tab-btn" data-rtab="production">Production</button>
+    </div>
+
+    <!-- QGenda Tab -->
+    <div id="rtab-qgenda">
+      <div class="card">
+        <h2>QGenda Time Reconciliation</h2>
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+          Upload your QGenda time punch export (.xlsx or .csv) or screenshot to compare against your tracked shifts.
+        </p>
+        <div class="upload-area" id="qgendaUploadArea">
+          <div style="font-size:2rem;">&#128196;</div>
+          <p>Tap to upload QGenda .xlsx, .csv, or screenshot</p>
+          <input type="file" id="qgendaFile" accept=".xlsx,.xls,.csv,.png,.jpg,.jpeg">
+        </div>
+      </div>
+
+      <div class="month-nav" style="margin-top:12px;">
+        <button id="qPrevMonth">&larr;</button>
+        <span id="qMonthLabel">January 2026</span>
+        <button id="qNextMonth">&rarr;</button>
+      </div>
+
+      <div id="qgendaResults"></div>
+    </div>
+
+    <!-- Production Tab -->
+    <div id="rtab-production" class="hidden">
+      <div class="card">
+        <h2>Production Reconciliation</h2>
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+          Upload your Charge Detail PDF or screenshot to compare billing production against your tracked cases.
+        </p>
+        <div class="upload-area" id="prodUploadArea">
+          <div style="font-size:2rem;">&#128196;</div>
+          <p>Tap to upload Charge Detail PDF or screenshot</p>
+          <input type="file" id="prodFile" accept=".pdf,.png,.jpg,.jpeg">
+        </div>
+      </div>
+
+      <div class="month-nav" style="margin-top:12px;">
+        <button id="pPrevMonth">&larr;</button>
+        <span id="pMonthLabel">January 2026</span>
+        <button id="pNextMonth">&rarr;</button>
+      </div>
+
+      <div id="prodResults"></div>
+    </div>
+  </div>
+</div>
+
+<!-- COMPENSATION PAGE -->
+<div class="page" id="page-compensation">
+  <!-- Point Value Input -->
+  <div class="card" style="display:flex; align-items:center; gap:12px; padding:12px 16px;">
+    <label style="font-size:0.85rem; font-weight:600; white-space:nowrap;">$/point</label>
+    <input type="number" id="dashPointValue" min="0" step="0.01" placeholder="e.g. 55.00" style="max-width:120px;">
+  </div>
+
+  <!-- Stabilization Card -->
+  <div class="card">
+    <h2>Stabilization-Weighted Points</h2>
+    <p style="font-size:0.8rem; color:var(--text-dim); margin-bottom:12px;">
+      Weighted: 10% current + 40% prior + 25% 2-mo + 15% 3-mo + 10% 4-mo
+    </p>
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="label">Raw This Month</div>
+        <div class="value blue" id="stabRaw">0</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Stabilized</div>
+        <div class="value green" id="stabWeighted">0</div>
+      </div>
+    </div>
+    <div id="stabPaycheckRow" style="margin-top:12px; text-align:center;">
+      <div style="font-size:1.3rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
+      <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px;" id="stabPaycheckLabel">Projected next month's paycheck</div>
+    </div>
+  </div>
+
+  <!-- Monthly Trend Chart -->
+  <div class="card">
+    <h2>Monthly Trend</h2>
+    <div class="chart-container">
+      <canvas id="monthlyChart"></canvas>
+    </div>
+    <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
+  </div>
+
+  <!-- Projected Annual Income -->
+  <div class="card">
+    <h2>Projected Annual Income</h2>
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="label">3-Month Rolling Avg</div>
+        <div class="value blue" id="projRollingAvg">0</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Annual Projection</div>
+        <div class="value green" id="projAnnualIncome">&mdash;</div>
+      </div>
+    </div>
+    <div class="summary-grid" style="margin-top:8px;">
+      <div class="summary-item">
+        <div class="label">YTD Revenue</div>
+        <div class="value yellow" id="projYTDRevenue">&mdash;</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Projected Remaining</div>
+        <div class="value purple" id="projRemaining">&mdash;</div>
+      </div>
+    </div>
+    <div id="projYTDDetail" style="margin-top:8px; font-size:0.78rem; color:var(--text-dim); text-align:center;"></div>
+  </div>
+
+  <!-- Pace Tracker -->
+  <div class="card">
+    <h2>Monthly Pace</h2>
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="label">This Month So Far</div>
+        <div class="value blue" id="paceCurrentPts">0</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Projected End-of-Month</div>
+        <div class="value green" id="paceProjected">0</div>
+      </div>
+    </div>
+    <div style="margin-top:8px;">
+      <div style="background:var(--surface2); border-radius:6px; height:10px; overflow:hidden;">
+        <div id="paceBar" style="height:100%; background:var(--primary); border-radius:6px; transition:width 0.3s; width:0%;"></div>
+      </div>
+      <div id="paceLabel" style="font-size:0.75rem; color:var(--text-dim); margin-top:4px; text-align:center;"></div>
+    </div>
+  </div>
+
+  <!-- Stabilization Pipeline -->
+  <div class="card">
+    <h2>Income Pipeline</h2>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <p style="font-size:0.78rem; color:var(--text-dim); margin:0;">
+        Estimated paychecks from recorded data
+      </p>
+      <label class="toggle-row">
+        <span>Include projections</span>
+        <span class="toggle-switch">
+          <input type="checkbox" id="pipelineProjectToggle">
+          <span class="slider"></span>
+        </span>
+      </label>
+    </div>
+    <div class="chart-container">
+      <canvas id="pipelineChart"></canvas>
+    </div>
+    <div id="pipelineSummary" style="margin-top:8px; font-size:0.78rem; color:var(--text-dim); text-align:center;"></div>
+  </div>
+
+  <!-- Points Per Shift Type -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('projPtsPerType')">
+      <h3>Avg Points by Shift Type</h3>
+      <span class="arrow" id="projPtsPerTypeArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="projPtsPerTypeBody">
+      <div id="ptsPerTypeContent" style="padding-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- Collapsible: Breakdown Chart -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('projBreakdown')">
+      <h3>Points Breakdown (This Month)</h3>
+      <span class="arrow" id="projBreakdownArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="projBreakdownBody">
+      <div class="chart-container" style="margin-top:12px;">
+        <canvas id="breakdownChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Collapsible: Shift Efficiency -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('projEfficiency')">
+      <h3>Most / Least Efficient Shifts</h3>
+      <span class="arrow" id="projEfficiencyArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="projEfficiencyBody">
+      <div id="efficiencyContent" style="padding-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- Collapsible: Case Type Efficiency -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('projCaseEff')">
+      <h3>Most Efficient Case Types</h3>
+      <span class="arrow" id="projCaseEffArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="projCaseEffBody">
+      <div id="caseEffContent" style="padding-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- Collapsible: Month-over-Month -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('projMoM')">
+      <h3>Month-over-Month Change</h3>
+      <span class="arrow" id="projMoMArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="projMoMBody">
+      <div id="momContent" style="padding-top:12px;"></div>
+    </div>
   </div>
 </div>
 
@@ -2362,42 +2436,6 @@ input.mil-time.invalid {
     </div>
     <div style="margin-top:12px;">
       <button class="btn btn-outline btn-sm" id="loadTestDataBtn" style="border-color:var(--accent2);color:var(--accent2);">Load Test Data (3 months)</button>
-    </div>
-  </div>
-</div>
-
-<!-- ==================== SCAN PAGE ==================== -->
-<div class="page" id="page-scan">
-  <div class="card">
-    <h2>Scan Billing Sheet</h2>
-    <div class="form-group">
-      <label style="font-size:0.8rem;color:var(--text-dim);">Sheet Date</label>
-      <input type="date" id="scanDate">
-    </div>
-    <label class="scan-capture-area" id="scanCaptureArea">
-      <span class="scan-icon">&#128247;</span>
-      <p>Tap to take a photo</p>
-      <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;">
-    </label>
-    <img id="scanPreviewImg" class="scan-preview-img hidden" alt="Preview">
-    <div id="scanStatus" class="hidden"></div>
-    <div style="margin-top:8px;display:flex;gap:8px;" id="scanActions" class="hidden">
-      <button class="btn btn-outline btn-sm" id="scanRetakeBtn" style="flex:1;">Retake</button>
-      <button class="btn btn-sm" id="scanProcessBtn" style="flex:1;background:var(--primary);color:#fff;">Process</button>
-    </div>
-  </div>
-
-  <div id="scanResultsArea" class="hidden">
-    <div class="card" style="background:var(--surface);border:1px solid var(--border);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <h3 style="margin:0;font-size:0.95rem;">Parsed Cases</h3>
-        <span id="scanCaseCount" style="font-size:0.8rem;color:var(--text-dim);"></span>
-      </div>
-      <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">Review and edit before importing. Remove any incorrect entries.</p>
-      <div id="scanCaseCards"></div>
-    </div>
-    <div style="padding:0 16px 16px;">
-      <button class="btn btn-sm" id="scanImportBtn" style="width:100%;background:var(--accent);color:#fff;font-size:0.95rem;padding:12px;">Import Cases</button>
     </div>
   </div>
 </div>
@@ -2665,18 +2703,24 @@ input.mil-time.invalid {
     <span class="nav-icon">&#128202;</span>
     <span>Dashboard</span>
   </button>
-  <button data-page="scan">
-    <span class="nav-icon">&#128247;</span>
-    <span>Scan</span>
+  <button data-page="compensation">
+    <span class="nav-icon">&#36;</span>
+    <span>Comp</span>
   </button>
-  <button data-page="reconcile">
-    <span class="nav-icon">&#9878;</span>
-    <span>Reconcile</span>
+  <button id="moreNavBtn">
+    <span class="nav-icon">&middot;&middot;&middot;</span>
+    <span>More</span>
   </button>
-  <button data-page="settings">
-    <span class="nav-icon">&#9881;</span>
+</div>
+
+<!-- MORE DRAWER -->
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+<div class="drawer-panel" id="drawerPanel">
+  <div class="drawer-handle"></div>
+  <div class="drawer-item" data-page="settings">
+    <span class="drawer-icon">&#9881;</span>
     <span>Settings</span>
-  </button>
+  </div>
 </div>
 
 <script>
@@ -3872,9 +3916,10 @@ document.getElementById('datePickerModal').addEventListener('click', (e) => {
 // ================================================================
 // NAVIGATION (bottom nav)
 // ================================================================
-document.querySelectorAll('.bottom-nav button').forEach(btn => {
+document.querySelectorAll('.bottom-nav button[data-page]').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+    closeDrawer();
+    document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('page-' + btn.dataset.page).classList.add('active');
@@ -3882,9 +3927,49 @@ document.querySelectorAll('.bottom-nav button').forEach(btn => {
     if (btn.dataset.page === 'dataentry') loadDataEntryPage();
     if (btn.dataset.page === 'today') { returnToDailyTab = false; renderToday(); }
     if (btn.dataset.page === 'dashboard') { switchDashboardTab(activeDashTab); }
-    if (btn.dataset.page === 'settings') { renderHistory(); loadOverrideUI(); loadStipendUI(); renderFlaggedEmail(); }
-    if (btn.dataset.page === 'reconcile') renderReconTabs();
-    if (btn.dataset.page === 'scan') initScanPage();
+    if (btn.dataset.page === 'compensation') renderProjections();
+  });
+});
+
+// ================================================================
+// MORE DRAWER
+// ================================================================
+function openDrawer() {
+  const backdrop = document.getElementById('drawerBackdrop');
+  const panel = document.getElementById('drawerPanel');
+  backdrop.style.display = 'block';
+  requestAnimationFrame(() => {
+    backdrop.classList.add('visible');
+    panel.classList.add('open');
+  });
+}
+
+function closeDrawer() {
+  const backdrop = document.getElementById('drawerBackdrop');
+  const panel = document.getElementById('drawerPanel');
+  backdrop.classList.remove('visible');
+  panel.classList.remove('open');
+  setTimeout(() => { backdrop.style.display = 'none'; }, 300);
+}
+
+function toggleDrawer() {
+  const panel = document.getElementById('drawerPanel');
+  if (panel.classList.contains('open')) closeDrawer();
+  else openDrawer();
+}
+
+document.getElementById('moreNavBtn').addEventListener('click', toggleDrawer);
+document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer);
+
+document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
+  item.addEventListener('click', () => {
+    const page = item.dataset.page;
+    closeDrawer();
+    document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    returnToShiftLogs = false;
+    if (page === 'settings') { renderHistory(); loadOverrideUI(); loadStipendUI(); renderFlaggedEmail(); }
   });
 });
 
@@ -4363,6 +4448,7 @@ function loadDataEntryPage() {
   updateDataEntryState();
   renderDECaseList();
   updateDETally();
+  initScanPage();
   // Show/hide back button based on whether we came from Shift Logs
   document.getElementById('backToShiftLogsBtn').classList.toggle('hidden', !returnToShiftLogs);
 }
@@ -5170,21 +5256,22 @@ document.querySelectorAll('.dash-tab-btn').forEach(btn => {
 });
 
 function switchDashboardTab(tabName) {
+  if (tabName === 'projections') tabName = 'daily';
   activeDashTab = tabName;
   document.querySelectorAll('.dash-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.dtab === tabName));
   document.getElementById('dtab-caselogs').classList.toggle('hidden', tabName !== 'caselogs');
   document.getElementById('dtab-shiftlogs').classList.toggle('hidden', tabName !== 'shiftlogs');
-  document.getElementById('dtab-projections').classList.toggle('hidden', tabName !== 'projections');
   document.getElementById('dtab-time').classList.toggle('hidden', tabName !== 'time');
   document.getElementById('dtab-analytics').classList.toggle('hidden', tabName !== 'analytics');
   document.getElementById('dtab-daily').classList.toggle('hidden', tabName !== 'daily');
+  document.getElementById('dtab-reconcile').classList.toggle('hidden', tabName !== 'reconcile');
   updateDashStickyHeaderSpacer();
   if (tabName === 'caselogs') renderCaseLogTable();
   if (tabName === 'shiftlogs') renderShiftLogTable();
-  if (tabName === 'projections') renderProjections();
   if (tabName === 'time') renderTimeTab();
   if (tabName === 'analytics') renderAnalyticsTab();
   if (tabName === 'daily') renderDailyTab();
+  if (tabName === 'reconcile') renderReconTabs();
 }
 
 function updateDashStickyHeaderSpacer() {
@@ -5197,12 +5284,14 @@ function updateDashStickyHeaderSpacer() {
 // Generic collapsible toggle
 function toggleCollapse(sectionId) {
   const bodyMap = {
+    deScan: 'deScanBody',
     projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projCaseEff: 'projCaseEffBody', projMoM: 'projMoMBody', projPtsPerType: 'projPtsPerTypeBody',
     timeDOW: 'timeDOWBody', timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
     analAddOns: 'analAddOnsBody', analTopProc: 'analTopProcBody', analAvgUnits: 'analAvgUnitsBody',
     analShiftDist: 'analShiftDistBody'
   };
   const arrowMap = {
+    deScan: 'deScanArrow',
     projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projCaseEff: 'projCaseEffArrow', projMoM: 'projMoMArrow', projPtsPerType: 'projPtsPerTypeArrow',
     timeDOW: 'timeDOWArrow', timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
     analAddOns: 'analAddOnsArrow', analTopProc: 'analTopProcArrow', analAvgUnits: 'analAvgUnitsArrow',
@@ -8256,9 +8345,9 @@ function updateHeaderPoints() {
 // RECONCILE PAGE — Tab switching
 // ================================================================
 // Main reconcile tabs
-document.querySelectorAll('#page-reconcile > .tab-bar > .tab-btn').forEach(btn => {
+document.querySelectorAll('#dtab-reconcile > .tab-bar > .tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('#page-reconcile > .tab-bar > .tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#dtab-reconcile > .tab-bar > .tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('rtab-qgenda').classList.toggle('hidden', btn.dataset.rtab !== 'qgenda');
     document.getElementById('rtab-production').classList.toggle('hidden', btn.dataset.rtab !== 'production');
