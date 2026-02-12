@@ -1885,7 +1885,7 @@ input.mil-time.invalid {
     <!-- Collapsible: Day-of-Week Breakdown -->
     <div class="card collapse-section">
       <div class="collapse-header" onclick="toggleCollapse('timeDOW')">
-        <h3>Day-of-Week Breakdown</h3>
+        <h3>Points by Day of Week (3 mo)</h3>
         <span class="arrow" id="timeDOWArrow">&#9660;</span>
       </div>
       <div class="collapse-body" id="timeDOWBody">
@@ -1907,7 +1907,7 @@ input.mil-time.invalid {
     <!-- Collapsible: Night & Call Frequency -->
     <div class="card collapse-section">
       <div class="collapse-header" onclick="toggleCollapse('timeNight')">
-        <h3>Night &amp; Call Shift Frequency</h3>
+        <h3>Call Shift Tally (3 mo)</h3>
         <span class="arrow" id="timeNightArrow">&#9660;</span>
       </div>
       <div class="collapse-body" id="timeNightBody">
@@ -7219,29 +7219,32 @@ function renderProductionTrend() {
 
 function renderDayOfWeekHeatmap() {
   const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const hoursByDay = [0,0,0,0,0,0,0];
   const ptsByDay = [0,0,0,0,0,0,0];
   const countByDay = [0,0,0,0,0,0,0];
-  Object.values(data.shifts).forEach(s => {
+  const recent = getRecentShifts(3);
+  recent.forEach(s => {
     const d = new Date(s.date + 'T12:00:00');
     const dow = d.getDay();
-    const hrs = calcShiftHours(s);
-    hoursByDay[dow] += hrs;
     ptsByDay[dow] += calcShiftTotal(s).total;
     countByDay[dow]++;
   });
-  const maxHrs = Math.max(...hoursByDay, 1);
+  const maxPts = Math.max(...ptsByDay, 1);
   let html = '';
   for (let i = 1; i <= 7; i++) {
-    const idx = i % 7; // Mon first, Sun last
-    const pct = maxHrs > 0 ? (hoursByDay[idx] / maxHrs * 100) : 0;
+    const idx = i % 7;
+    const pct = maxPts > 0 ? (ptsByDay[idx] / maxPts * 100) : 0;
+    const avg = countByDay[idx] > 0 ? (ptsByDay[idx] / countByDay[idx]).toFixed(1) : '0';
+    // Heat color: interpolate from dim to primary based on intensity
+    const intensity = maxPts > 0 ? ptsByDay[idx] / maxPts : 0;
+    const r = Math.round(30 + intensity * 29);
+    const g = Math.round(41 + intensity * 89);
+    const b = Math.round(59 + intensity * 187);
     html += `<div class="heatmap-row">
       <span class="hm-label">${days[idx]}</span>
-      <div style="flex:1;display:flex;gap:4px;align-items:center;">
-        <div class="heatmap-bar" style="width:${pct}%"></div>
-        <div class="heatmap-bar green" style="width:${maxHrs > 0 ? (ptsByDay[idx] / Math.max(...ptsByDay, 1) * 100) : 0}%"></div>
+      <div style="flex:1;display:flex;align-items:center;">
+        <div style="height:24px;border-radius:4px;width:${Math.max(pct, 4)}%;background:rgb(${r},${g},${b});transition:width 0.3s;"></div>
       </div>
-      <span class="hm-value">${hoursByDay[idx].toFixed(0)}h / ${ptsByDay[idx].toFixed(0)}pts</span>
+      <span class="hm-value">${ptsByDay[idx].toFixed(0)}pts (${avg}/shift)</span>
     </div>`;
   }
   document.getElementById('dowContent').innerHTML = html || '<p style="color:var(--text-dim);font-size:0.85rem;">No data.</p>';
@@ -7267,20 +7270,28 @@ function renderWeekendVsWeekday() {
 }
 
 function renderNightCallFreq() {
-  const allShifts = Object.values(data.shifts);
-  const total = allShifts.length;
-  let nightCount = 0, callEligibleCount = 0, multiEntryCount = 0;
-  allShifts.forEach(s => {
-    const start = timeToMinutes(s.startTime);
-    if (start >= 1020) nightCount++;
-    if (UNRESTRICTED_CALL_TYPES.has(s.assignmentType)) callEligibleCount++;
-    if (s.timeEntries && s.timeEntries.length > 1) multiEntryCount++;
+  const recent = getRecentShifts(3);
+  const callLabels = {
+    'mole': 'Mole', '1st_call': '1st Call', '2nd_call': '2nd Call',
+    '3rd_call': '3rd Call', '4th_call': '4th Call', 'endo': 'Endo',
+    'SF1': 'SF 1', 'SF2': 'SF 2'
+  };
+  const callTypes = ['mole','1st_call','2nd_call','3rd_call','4th_call','endo','SF1','SF2'];
+  const counts = {};
+  callTypes.forEach(t => counts[t] = 0);
+  recent.forEach(s => {
+    if (counts.hasOwnProperty(s.assignmentType)) counts[s.assignmentType]++;
   });
-  let html = `<div class="efficiency-item"><span class="eff-label">Night Shifts (start >= 17:00)</span><span class="eff-value">${nightCount} (${total > 0 ? round2(nightCount/total*100).toFixed(0) : 0}%)</span></div>`;
-  html += `<div class="efficiency-item"><span class="eff-label">Call-Eligible Shifts</span><span class="eff-value">${callEligibleCount} (${total > 0 ? round2(callEligibleCount/total*100).toFixed(0) : 0}%)</span></div>`;
-  html += `<div class="efficiency-item"><span class="eff-label">Multi-Entry Shifts</span><span class="eff-value">${multiEntryCount}</span></div>`;
-  html += `<div class="efficiency-item"><span class="eff-label">Total Shifts</span><span class="eff-value">${total}</span></div>`;
-  document.getElementById('nightContent').innerHTML = html;
+  const totalCall = callTypes.reduce((sum, t) => sum + counts[t], 0);
+  let html = '';
+  callTypes.forEach(t => {
+    if (counts[t] > 0) {
+      html += `<div class="efficiency-item"><span class="eff-label">${callLabels[t]}</span><span class="eff-value">${counts[t]}</span></div>`;
+    }
+  });
+  html += `<div class="efficiency-item" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;"><span class="eff-label" style="font-weight:600;">Total Call Shifts</span><span class="eff-value" style="font-weight:600;">${totalCall}</span></div>`;
+  html += `<div class="efficiency-item"><span class="eff-label">Total Shifts (3 mo)</span><span class="eff-value">${recent.length}</span></div>`;
+  document.getElementById('nightContent').innerHTML = html || '<p style="color:var(--text-dim);font-size:0.85rem;">No call shifts in the past 3 months.</p>';
 }
 
 // ================================================================
