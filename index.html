@@ -8585,7 +8585,12 @@ function renderQgendaRecon() {
     } else if (qDay.length > 0 && !tShift) {
       dayStatus = 'missing'; diffType = 'missing_tracker';
     } else if (qDay.length === 0 && tShift) {
-      dayStatus = 'missing'; diffType = 'missing_qgenda';
+      if (tIsForcedOff) {
+        dayStatus = 'match'; diffType = 'forced_off_verify';
+        matchCount++;
+      } else {
+        dayStatus = 'missing'; diffType = 'missing_qgenda';
+      }
     }
 
     const diffObj = {
@@ -8597,7 +8602,8 @@ function renderQgendaRecon() {
     };
 
     if (dayStatus !== 'match') shiftReconDiffs.push(diffObj);
-    dayData.push({ date, qDay, tShift, qHours, tHours, qTask, qAssignType, tAssignType, dayStatus, diffObj, qTimeEntries, qPoints, tPoints });
+    const forcedOffVerify = diffType === 'forced_off_verify';
+    dayData.push({ date, qDay, tShift, qHours, tHours, qTask, qAssignType, tAssignType, dayStatus, diffObj, qTimeEntries, qPoints, tPoints, forcedOffVerify });
   });
 
   // Tracker points for the month
@@ -8631,9 +8637,10 @@ function renderQgendaRecon() {
     const isResolved = decision && (decision.accepted === 'qgenda' || decision.accepted === 'app');
     const isFlagged = decision && decision.flagged;
     let statusCls = dd.dayStatus;
+    if (dd.forcedOffVerify) statusCls = 'close';
     if (isResolved) statusCls = 'match';
 
-    const isExpanded = qgendaExpandedDays[dd.date] !== undefined ? qgendaExpandedDays[dd.date] : (dd.dayStatus !== 'match');
+    const isExpanded = qgendaExpandedDays[dd.date] !== undefined ? qgendaExpandedDays[dd.date] : (dd.dayStatus !== 'match' || dd.forcedOffVerify);
     if (qgendaExpandedDays[dd.date] === undefined) qgendaExpandedDays[dd.date] = isExpanded;
 
     const qTimes = dd.qDay.map(e => `${e.clockInTime || '?'}-${e.clockOutTime || '?'}`).join(', ');
@@ -8650,7 +8657,7 @@ function renderQgendaRecon() {
     html += `<div class="recon-day-header" onclick="toggleQgendaDay('${dd.date}')">`;
     html += `<span class="day-date">${formatDateShort(dd.date)}</span>`;
     html += `<span class="day-info">${dd.qPoints.toFixed(1)}pt Q / ${dd.tPoints.toFixed(1)}pt App</span>`;
-    html += `<span class="day-status s-${statusCls}">${isResolved ? 'Accepted' : (isFlagged ? 'Flagged' : (typeLabels[dd.diffObj.type] || dd.dayStatus))}</span>`;
+    html += `<span class="day-status s-${statusCls}">${isResolved ? 'Accepted' : (isFlagged ? 'Flagged' : (dd.forcedOffVerify ? 'Verify' : (typeLabels[dd.diffObj.type] || dd.dayStatus)))}</span>`;
     html += '<span class="day-chevron">&#9660;</span>';
     html += '</div>';
 
@@ -8665,7 +8672,11 @@ function renderQgendaRecon() {
       });
       html += `<tr style="border-top:1px solid var(--border)"><td></td><td style="color:var(--primary);font-weight:600">QGenda Total</td><td></td><td style="font-weight:600">${dd.qHours.toFixed(1)}h (${dd.qPoints.toFixed(1)} pts)</td></tr>`;
     } else {
-      html += '<tr><td style="color:var(--primary)">QGenda</td><td colspan="3"><span style="color:var(--danger)">No entry</span></td></tr>';
+      if (dd.forcedOffVerify) {
+        html += '<tr><td style="color:var(--primary)">QGenda</td><td colspan="3"><span style="color:var(--muted)">Force-off shifts are not included in QGenda time reports</span></td></tr>';
+      } else {
+        html += '<tr><td style="color:var(--primary)">QGenda</td><td colspan="3"><span style="color:var(--danger)">No entry</span></td></tr>';
+      }
     }
     if (dd.tShift) {
       const shiftTotals = calcShiftTotal(dd.tShift);
