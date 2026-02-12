@@ -1258,6 +1258,83 @@ input.mil-time.invalid {
 .sync-indicator.syncing { color: var(--primary); }
 .sync-indicator.synced { color: var(--accent); }
 .sync-indicator.error { color: var(--danger); }
+
+/* ===== TUTORIAL OVERLAY ===== */
+.tutorial-overlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.75);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.tutorial-overlay.hidden { display: none; }
+.tutorial-card {
+  background: var(--surface);
+  border-radius: 16px;
+  max-width: 360px;
+  width: 100%;
+  padding: 28px 24px 20px;
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  text-align: center;
+}
+.tutorial-skip {
+  position: absolute; top: 10px; right: 14px;
+  background: none; border: none; color: var(--text-dim);
+  font-size: 0.8rem; cursor: pointer;
+}
+.tutorial-skip:hover { color: var(--text); }
+.tutorial-step { display: none; }
+.tutorial-step.active { display: block; }
+.tutorial-step .tut-icon {
+  font-size: 2.2rem; margin-bottom: 8px; display: block;
+}
+.tutorial-step h3 {
+  font-size: 1.05rem; margin: 0 0 8px; color: var(--text);
+}
+.tutorial-step p {
+  font-size: 0.82rem; color: var(--text-dim); line-height: 1.5;
+  margin: 0 0 4px;
+}
+.tutorial-step .tut-instructions {
+  text-align: left; font-size: 0.78rem; color: var(--text-dim);
+  line-height: 1.6; margin: 10px 0 0;
+}
+.tutorial-step .tut-instructions strong {
+  color: var(--text); font-weight: 600;
+}
+.tutorial-options {
+  display: flex; flex-direction: column; gap: 8px; margin-top: 14px;
+}
+.tutorial-option {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+  cursor: pointer; text-align: left; transition: border-color 0.15s;
+}
+.tutorial-option:hover { border-color: var(--primary); }
+.tutorial-option .to-icon { font-size: 1.3rem; flex-shrink: 0; }
+.tutorial-option .to-text { flex: 1; }
+.tutorial-option .to-text strong { font-size: 0.82rem; display: block; color: var(--text); }
+.tutorial-option .to-text span { font-size: 0.72rem; color: var(--text-dim); }
+.tutorial-option .to-badge {
+  font-size: 0.6rem; background: var(--accent);
+  color: #000; padding: 2px 6px; border-radius: 8px;
+  font-weight: 700; text-transform: uppercase; flex-shrink: 0;
+}
+.tutorial-dots {
+  display: flex; justify-content: center; gap: 6px;
+  margin: 18px 0 14px;
+}
+.tutorial-dots .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border); transition: background 0.2s;
+}
+.tutorial-dots .dot.active { background: var(--primary); }
+.tutorial-nav {
+  display: flex; gap: 8px; justify-content: center;
+}
+.tutorial-nav .btn { min-width: 90px; font-size: 0.82rem; }
+
 .account-card {
   display: flex;
   align-items: center;
@@ -1302,6 +1379,98 @@ input.mil-time.invalid {
   </button>
   <p id="authError" style="color:var(--danger);font-size:0.8rem;margin-top:12px;" class="hidden"></p>
   <p class="auth-loading hidden" id="authLoading">Signing in...</p>
+</div>
+
+<!-- ===== TUTORIAL OVERLAY ===== -->
+<div class="tutorial-overlay hidden" id="tutorialOverlay">
+  <div class="tutorial-card">
+    <button class="tutorial-skip" onclick="closeTutorial()">Skip</button>
+
+    <!-- Step 1: Welcome -->
+    <div class="tutorial-step active" data-step="0">
+      <span class="tut-icon">&#128137;</span>
+      <h3>Welcome to MWA Point Tracker</h3>
+      <p>Track your anesthesia cases and production points — set up in 60 seconds.</p>
+    </div>
+
+    <!-- Step 2: Log Your Shift -->
+    <div class="tutorial-step" data-step="1">
+      <span class="tut-icon">&#128197;</span>
+      <h3>Log Your Shift</h3>
+      <div class="tut-instructions">
+        <strong>1.</strong> Tap the <strong>Work</strong> tab below<br>
+        <strong>2.</strong> Pick your assignment type (OR, OB, etc.)<br>
+        <strong>3.</strong> Enter your start &amp; end times<br>
+        <strong>4.</strong> Tap <strong>Save Shift</strong>
+      </div>
+    </div>
+
+    <!-- Step 3: Log Your Cases -->
+    <div class="tutorial-step" data-step="2">
+      <span class="tut-icon">&#128203;</span>
+      <h3>Log Your Cases</h3>
+      <div class="tut-instructions">
+        <strong>1.</strong> After saving a shift, the case form appears<br>
+        <strong>2.</strong> Select the procedure type<br>
+        <strong>3.</strong> Enter units and times<br>
+        <strong>4.</strong> Tap <strong>Save Case</strong> — repeat for each case
+      </div>
+    </div>
+
+    <!-- Step 4: Catch Up on Past Data -->
+    <div class="tutorial-step" data-step="3">
+      <span class="tut-icon">&#128202;</span>
+      <h3>Catch Up on Past Data</h3>
+      <p>How would you like to add your history?</p>
+      <div class="tutorial-options">
+        <div class="tutorial-option" onclick="tutorialHistoryChoice('fresh')">
+          <span class="to-icon">&#10024;</span>
+          <div class="to-text">
+            <strong>Start Fresh</strong>
+            <span>Begin tracking from today</span>
+          </div>
+        </div>
+        <div class="tutorial-option" onclick="tutorialHistoryChoice('import')">
+          <span class="to-icon">&#128229;</span>
+          <div class="to-text">
+            <strong>Import from File</strong>
+            <span>Upload a JSON or spreadsheet</span>
+          </div>
+        </div>
+        <div class="tutorial-option" onclick="tutorialHistoryChoice('override')">
+          <span class="to-icon">&#128221;</span>
+          <div class="to-text">
+            <strong>Enter Total Points</strong>
+            <span>Enter monthly point totals manually</span>
+          </div>
+          <span class="to-badge">Easiest</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: Revenue Projections -->
+    <div class="tutorial-step" data-step="4">
+      <span class="tut-icon">&#129689;</span>
+      <h3>Revenue Projections</h3>
+      <div class="tut-instructions">
+        <strong>1.</strong> Go to the <strong>Comp</strong> tab<br>
+        <strong>2.</strong> Enter your estimated <strong>$/point</strong> value<br>
+        <strong>3.</strong> This unlocks revenue projections on the Dashboard
+      </div>
+    </div>
+
+    <div class="tutorial-dots" id="tutorialDots">
+      <span class="dot active"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+    <div class="tutorial-nav">
+      <button class="btn btn-outline btn-sm" id="tutBackBtn" onclick="tutorialPrev()" style="display:none;">Back</button>
+      <button class="btn btn-primary btn-sm" id="tutNextBtn" onclick="tutorialNext()">Next</button>
+    </div>
+  </div>
 </div>
 
 <!-- ===== HEADER ===== -->
@@ -2288,6 +2457,7 @@ input.mil-time.invalid {
       <span class="sync-indicator synced" id="syncStatus">Synced</span>
     </div>
     <button class="btn btn-outline btn-sm" id="signOutBtn">Sign Out</button>
+    <button class="btn btn-outline btn-sm" onclick="showTutorial()" style="margin-top:8px;">Run Tutorial</button>
   </div>
 
   <!-- Export / Import -->
@@ -6608,6 +6778,108 @@ function navigateToWorkScan() {
   setTimeout(() => {
     const body = document.getElementById('deScanBody');
     const arrow = document.getElementById('deScanArrow');
+    if (body && (!body.style.maxHeight || body.style.maxHeight === '0px')) {
+      body.style.maxHeight = body.scrollHeight + 'px';
+      if (arrow) arrow.classList.add('open');
+    }
+    body && body.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 200);
+}
+
+// ================================================================
+// TUTORIAL
+// ================================================================
+let tutorialStep = 0;
+const TUTORIAL_TOTAL = 5;
+
+function showTutorial() {
+  tutorialStep = 0;
+  updateTutorialStep();
+  document.getElementById('tutorialOverlay').classList.remove('hidden');
+}
+
+function closeTutorial() {
+  document.getElementById('tutorialOverlay').classList.add('hidden');
+}
+
+function updateTutorialStep() {
+  const steps = document.querySelectorAll('#tutorialOverlay .tutorial-step');
+  steps.forEach((s, i) => s.classList.toggle('active', i === tutorialStep));
+  const dots = document.querySelectorAll('#tutorialDots .dot');
+  dots.forEach((d, i) => d.classList.toggle('active', i === tutorialStep));
+  const backBtn = document.getElementById('tutBackBtn');
+  const nextBtn = document.getElementById('tutNextBtn');
+  backBtn.style.display = tutorialStep === 0 ? 'none' : '';
+  // Step 4 (index 3) has its own option cards — hide Next
+  if (tutorialStep === 3) {
+    nextBtn.style.display = 'none';
+  } else if (tutorialStep === TUTORIAL_TOTAL - 1) {
+    nextBtn.style.display = '';
+    nextBtn.textContent = 'Get Started';
+  } else {
+    nextBtn.style.display = '';
+    nextBtn.textContent = 'Next';
+  }
+}
+
+function tutorialNext() {
+  if (tutorialStep >= TUTORIAL_TOTAL - 1) {
+    finishTutorial();
+    return;
+  }
+  tutorialStep++;
+  updateTutorialStep();
+}
+
+function tutorialPrev() {
+  if (tutorialStep > 0) {
+    tutorialStep--;
+    updateTutorialStep();
+  }
+}
+
+function tutorialHistoryChoice(choice) {
+  if (choice === 'fresh') {
+    tutorialStep = 4;
+    updateTutorialStep();
+  } else if (choice === 'import') {
+    closeTutorial();
+    navigateToImportPage();
+  } else if (choice === 'override') {
+    closeTutorial();
+    navigateToHistoryOverrides();
+  }
+}
+
+function finishTutorial() {
+  closeTutorial();
+  // Navigate to Work tab
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const workBtn = document.querySelector('.bottom-nav button[data-page="dataentry"]');
+  if (workBtn) workBtn.classList.add('active');
+  document.getElementById('page-dataentry').classList.add('active');
+  loadDataEntryPage();
+}
+
+function navigateToImportPage() {
+  closeDrawer();
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-import').classList.add('active');
+}
+
+function navigateToHistoryOverrides() {
+  closeDrawer();
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-history').classList.add('active');
+  renderHistory();
+  loadOverrideUI();
+  // Auto-expand the override collapsible
+  setTimeout(() => {
+    const body = document.getElementById('histOverrideBody');
+    const arrow = document.getElementById('histOverrideArrow');
     if (body && (!body.style.maxHeight || body.style.maxHeight === '0px')) {
       body.style.maxHeight = body.scrollHeight + 'px';
       if (arrow) arrow.classList.add('open');
@@ -11836,6 +12108,11 @@ auth.onAuthStateChanged(async (user) => {
       showToast('Local data synced to cloud');
     } else if (result === 'loaded') {
       showToast('Data loaded from cloud');
+    }
+
+    // Show tutorial for brand-new users (no data at all)
+    if (Object.keys(data.shifts).length === 0 && data.cases.length === 0) {
+      showTutorial();
     }
   } else {
     // Not signed in — show auth overlay
