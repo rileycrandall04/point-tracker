@@ -2948,7 +2948,7 @@ function getAssignmentTypeName(type) {
     endo: 'Endo', SF1: 'SF 1', SF2: 'SF 2', ACS: 'ACS', NORA: 'NORA',
     pre_call: 'Pre-Call',
     CRNA_supervision: 'CRNA Supervision',
-    forced_off: 'Forced Off',
+    forced_off: 'UVH Forced Off',
     vacation: 'Vacation / Off'
   };
   return names[type] || type;
@@ -8528,7 +8528,8 @@ function renderQgendaRecon() {
       tTotalHours += tHours;
     }
 
-    const qTask = qDay.length > 0 ? qDay[0].task : '';
+    const forcedOffEntry = qDay.find(e => /FORCED?\s*OFF/i.test(e.task || ''));
+    const qTask = forcedOffEntry ? forcedOffEntry.task : (qDay.length > 0 ? qDay[0].task : '');
     const qAssignType = qTask ? mapTaskToAssignmentType(qTask, date) : '';
     const tAssignType = tShift ? tShift.assignmentType : '';
 
@@ -8538,7 +8539,9 @@ function renderQgendaRecon() {
     let dayStatus = 'match', diffType = '';
     if (qDay.length > 0 && tShift) {
       const hourDiff = Math.abs(qHours - tHours);
-      if (hourDiff <= 0.25 && qAssignType === tAssignType) {
+      if (qAssignType === 'forced_off' && tAssignType === 'forced_off') {
+        matchCount++;
+      } else if (hourDiff <= 0.25 && qAssignType === tAssignType) {
         matchCount++;
       } else if (hourDiff > 0.25) {
         dayStatus = 'mismatch'; diffType = 'hour_mismatch';
@@ -8620,14 +8623,28 @@ function renderQgendaRecon() {
     // Day detail
     html += '<div class="recon-day-detail">';
     html += '<table class="recon-case-table"><thead><tr><th>Source</th><th>Type</th><th>Times</th><th>Hours</th></tr></thead><tbody>';
+    const isForcedOffDay = dd.qAssignType === 'forced_off' && dd.qDay.length > 1;
     if (dd.qDay.length > 0) {
-      html += `<tr><td style="color:var(--primary)">QGenda</td><td>${getAssignmentTypeName(dd.qAssignType)}</td><td>${qTimes}</td><td>${dd.qHours.toFixed(1)}h</td></tr>`;
+      if (isForcedOffDay) {
+        dd.qDay.forEach(entry => {
+          const entryType = mapTaskToAssignmentType(entry.task || '', dd.date);
+          const entryTimes = entry.clockInTime ? `${entry.clockInTime}-${entry.clockOutTime || '?'}` : '\u2014';
+          html += `<tr><td style="color:var(--primary)">QGenda</td><td>${getAssignmentTypeName(entryType)}</td><td>${entryTimes}</td><td>${entry.duration.toFixed(1)}h</td></tr>`;
+        });
+      } else {
+        html += `<tr><td style="color:var(--primary)">QGenda</td><td>${getAssignmentTypeName(dd.qAssignType)}</td><td>${qTimes}</td><td>${dd.qHours.toFixed(1)}h</td></tr>`;
+      }
     } else {
       html += '<tr><td style="color:var(--primary)">QGenda</td><td colspan="3"><span style="color:var(--danger)">No entry</span></td></tr>';
     }
     if (dd.tShift) {
       const shiftTotals = calcShiftTotal(dd.tShift);
-      html += `<tr><td style="color:var(--accent)">App</td><td>${getAssignmentTypeName(dd.tAssignType)}</td><td>${tTimes}</td><td>${dd.tHours.toFixed(1)}h (${shiftTotals.total.toFixed(1)} pts)</td></tr>`;
+      if (isForcedOffDay && dd.tAssignType === 'forced_off') {
+        html += `<tr><td style="color:var(--accent)">App</td><td>${getAssignmentTypeName('OR')}</td><td>${tTimes}</td><td>0.0h (0 pts)</td></tr>`;
+        html += `<tr><td style="color:var(--accent)">App</td><td>${getAssignmentTypeName('forced_off')}</td><td>\u2014</td><td>${shiftTotals.total.toFixed(1)} pts</td></tr>`;
+      } else {
+        html += `<tr><td style="color:var(--accent)">App</td><td>${getAssignmentTypeName(dd.tAssignType)}</td><td>${tTimes}</td><td>${dd.tHours.toFixed(1)}h (${shiftTotals.total.toFixed(1)} pts)</td></tr>`;
+      }
     } else {
       html += '<tr><td style="color:var(--accent)">App</td><td colspan="3"><span style="color:var(--danger)">No shift</span></td></tr>';
     }
@@ -9251,6 +9268,7 @@ function mapTaskToAssignmentType(task, dateStr) {
   if (t.includes('SF1') || t.includes('SF 1')) return 'SF1';
   if (t.includes('SF2') || t.includes('SF 2')) return 'SF2';
   if (t.includes('OB') || t.includes('UVOC')) return 'OB_restricted';
+  if (/FORCED?\s*OFF/i.test(t)) return 'forced_off';
   if (t.includes('OR')) return 'OR';
   return 'OR'; // fallback
 }
