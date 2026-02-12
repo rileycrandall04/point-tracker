@@ -4149,6 +4149,7 @@ document.getElementById('datePickerModal').addEventListener('click', (e) => {
 document.querySelectorAll('.bottom-nav button[data-page]').forEach(btn => {
   btn.addEventListener('click', () => {
     closeDrawer();
+    exitHistoryTutorialMode();
     document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
@@ -4195,6 +4196,7 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
   item.addEventListener('click', () => {
     const page = item.dataset.page;
     closeDrawer();
+    exitHistoryTutorialMode();
     document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
@@ -6874,18 +6876,57 @@ function navigateToHistoryOverrides() {
   document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-history').classList.add('active');
-  renderHistory();
   loadOverrideUI();
-  // Auto-expand the override collapsible
-  setTimeout(() => {
-    const body = document.getElementById('histOverrideBody');
-    const arrow = document.getElementById('histOverrideArrow');
-    if (body && (!body.style.maxHeight || body.style.maxHeight === '0px')) {
-      body.style.maxHeight = body.scrollHeight + 'px';
-      if (arrow) arrow.classList.add('open');
-    }
-    body && body.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 200);
+
+  // Hide everything except the override card
+  const histPage = document.getElementById('page-history');
+  const cards = histPage.querySelectorAll(':scope > .card');
+  cards.forEach((card, i) => {
+    if (i > 0) card.style.display = 'none';
+  });
+
+  // Force override open, hide collapse header
+  const body = document.getElementById('histOverrideBody');
+  const arrow = document.getElementById('histOverrideArrow');
+  const collapseHeader = body.parentElement.querySelector('.collapse-header');
+  if (collapseHeader) collapseHeader.style.display = 'none';
+  if (body) body.style.maxHeight = 'none';
+  if (arrow) arrow.classList.add('open');
+
+  // Add instruction tip
+  let tip = document.getElementById('overrideTutorialTip');
+  if (!tip) {
+    tip = document.createElement('p');
+    tip.id = 'overrideTutorialTip';
+    tip.style.cssText = 'font-size:0.8rem;color:var(--primary);margin-bottom:12px;font-weight:600;';
+    tip.textContent = 'Use the arrows to switch months and enter your point totals for each.';
+    body.querySelector('div').prepend(tip);
+  }
+
+  histPage.dataset.tutorialMode = 'true';
+}
+
+function exitHistoryTutorialMode() {
+  const histPage = document.getElementById('page-history');
+  if (!histPage || histPage.dataset.tutorialMode !== 'true') return;
+  delete histPage.dataset.tutorialMode;
+
+  // Restore hidden cards
+  histPage.querySelectorAll(':scope > .card').forEach(card => {
+    card.style.display = '';
+  });
+
+  // Restore collapse header and re-collapse
+  const body = document.getElementById('histOverrideBody');
+  const arrow = document.getElementById('histOverrideArrow');
+  const collapseHeader = body.parentElement.querySelector('.collapse-header');
+  if (collapseHeader) collapseHeader.style.display = '';
+  if (body) body.style.maxHeight = '0';
+  if (arrow) arrow.classList.remove('open');
+
+  // Remove tip
+  const tip = document.getElementById('overrideTutorialTip');
+  if (tip) tip.remove();
 }
 
 // ================================================================
