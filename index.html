@@ -2082,6 +2082,30 @@ input.mil-time.invalid {
     <input type="number" id="dashPointValue" min="0" step="0.01" placeholder="e.g. 55.00" style="max-width:120px;">
   </div>
 
+  <!-- PV Reminder Banner -->
+  <div class="card hidden" id="pvReminderBanner" style="background:var(--accent2); color:#000; padding:10px 16px; display:flex; align-items:center; justify-content:space-between;">
+    <span style="font-size:0.85rem; font-weight:600;" id="pvReminderText">Last month's $/point hasn't been confirmed yet.</span>
+    <button onclick="document.getElementById('pvReminderBanner').classList.add('hidden'); window._pvReminderDismissed=true;" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
+  </div>
+
+  <!-- Point Value History (collapsible) -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('pvHistory')">
+      <h3>Point Value History</h3>
+      <span class="arrow" id="pvHistoryArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="pvHistoryBody">
+      <div style="padding-top:12px;">
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+          Enter confirmed $/point values for past months. Revenue calculations will use confirmed values instead of the global estimate.
+        </p>
+        <div id="pvHistoryRows"></div>
+        <button class="btn btn-primary btn-sm" id="savePVHistoryBtn" style="margin-top:8px;">Save Point Values</button>
+        <div id="pvHistoryStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Stabilization Card -->
   <div class="card">
     <h2>Stabilization-Weighted Points</h2>
@@ -2204,6 +2228,33 @@ input.mil-time.invalid {
       <div id="momContent" style="padding-top:12px;"></div>
     </div>
   </div>
+
+  <!-- Monthly Stipends (collapsible) -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('compStipends')">
+      <h3>Monthly Stipends</h3>
+      <span class="arrow" id="compStipendsArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="compStipendsBody">
+      <div style="padding-top:12px;">
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+          Add fixed dollar amounts per month (e.g., medical director stipend, teaching pay). These contribute to revenue totals but not point calculations.
+        </p>
+        <div class="month-nav">
+          <button id="stipPrevMonth">&larr;</button>
+          <span id="stipMonthLabel">January 2026</span>
+          <button id="stipNextMonth">&rarr;</button>
+        </div>
+        <div id="stipendEntries" style="margin-top:12px;"></div>
+        <button type="button" class="add-entry-btn" id="addStipendBtn">+ Add Stipend</button>
+        <div style="margin-top:8px;display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" id="saveStipendBtn">Save Stipends</button>
+          <button class="btn btn-outline btn-sm" id="clearStipendBtn">Clear All</button>
+        </div>
+        <div id="stipendStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- SETTINGS PAGE -->
@@ -2261,139 +2312,6 @@ input.mil-time.invalid {
     </details>
   </div>
 
-  <!-- History -->
-  <div class="card">
-    <h2>Monthly History</h2>
-    <div class="month-nav">
-      <button id="prevMonth">&larr;</button>
-      <span id="historyMonth">January 2026</span>
-      <button id="nextMonth">&rarr;</button>
-    </div>
-    <div class="summary-grid">
-      <div class="summary-item">
-        <div class="label">Monthly Total</div>
-        <div class="value blue" id="monthTotal">0</div>
-      </div>
-      <div class="summary-item">
-        <div class="label">Days Worked</div>
-        <div class="value green" id="monthDays">0</div>
-      </div>
-    </div>
-    <div id="historyList">
-      <div class="empty-state"><p>No shifts recorded for this month.</p></div>
-    </div>
-  </div>
-
-  <!-- Monthly Override -->
-  <div class="card">
-    <h2>Monthly Point Override</h2>
-    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-      Override calculated points for a month to match QGenda or billing records.
-    </p>
-    <div class="month-nav">
-      <button id="ovPrevMonth">&larr;</button>
-      <span id="ovMonthLabel">January 2026</span>
-      <button id="ovNextMonth">&rarr;</button>
-    </div>
-    <div style="display:flex;gap:12px;margin-top:12px;">
-      <div style="flex:1;">
-        <label style="display:block;font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Time Points</label>
-        <input type="number" id="overrideTimePoints" min="0" step="0.01" placeholder="Calculated: —" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
-      </div>
-      <div style="flex:1;">
-        <label style="display:block;font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Production Points</label>
-        <input type="number" id="overrideProdPoints" min="0" step="0.01" placeholder="Calculated: —" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
-      </div>
-    </div>
-    <div style="margin-top:10px;display:flex;gap:8px;">
-      <button class="btn btn-primary btn-sm" id="saveOverrideBtn">Save Override</button>
-      <button class="btn btn-outline btn-sm" id="clearOverrideBtn">Clear</button>
-    </div>
-    <div id="overrideStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
-  </div>
-
-  <!-- Monthly Stipends -->
-  <div class="card">
-    <h2>Monthly Stipends</h2>
-    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-      Add fixed dollar amounts per month (e.g., medical director stipend, teaching pay). These contribute to revenue totals but not point calculations.
-    </p>
-    <div class="month-nav">
-      <button id="stipPrevMonth">&larr;</button>
-      <span id="stipMonthLabel">January 2026</span>
-      <button id="stipNextMonth">&rarr;</button>
-    </div>
-    <div id="stipendEntries" style="margin-top:12px;"></div>
-    <button type="button" class="add-entry-btn" id="addStipendBtn">+ Add Stipend</button>
-    <div style="margin-top:8px;display:flex;gap:8px;">
-      <button class="btn btn-primary btn-sm" id="saveStipendBtn">Save Stipends</button>
-      <button class="btn btn-outline btn-sm" id="clearStipendBtn">Clear All</button>
-    </div>
-    <div id="stipendStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
-  </div>
-
-  <!-- Import Data -->
-  <div class="card">
-    <h2>Import Shifts from QGenda</h2>
-    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-      Upload a QGenda time punch export (.xlsx, .csv, or screenshot) to import shifts into the tracker.
-      Dates with existing shifts will be skipped.
-    </p>
-    <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
-      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">Required CSV/Excel format</summary>
-      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;line-height:1.6;">
-        <strong>Required columns (exact header names):</strong><br>
-        Schedule Date, Effective Clock In Date, Effective Clock In Time,
-        Effective Clock Out Date, Effective Clock Out Time, Duration,
-        Scheduled Task Abbreviation<br><br>
-        <strong>Optional columns:</strong> Location Name, Notes<br><br>
-        <strong>Example row:</strong><br>
-        <code style="font-size:0.7rem;">1/5/2026 | 7:40 | 1/5/2026 | 17:03 | 9.38 | UVH 15</code><br><br>
-        Times should be in 24-hour format (7:00, 17:03) or Excel time values.
-        Dates should be M/D/YYYY or YYYY-MM-DD.
-        Multiple entries per date are grouped into one shift with multiple time entries.
-      </div>
-    </details>
-    <div class="upload-area" id="importTimeUploadArea">
-      <div style="font-size:2rem;">&#128197;</div>
-      <p>Tap to upload QGenda .xlsx, .csv, or screenshot</p>
-      <input type="file" id="importTimeFile" accept=".xlsx,.xls,.csv,.png,.jpg,.jpeg">
-    </div>
-    <div id="importTimePreview"></div>
-    <div id="importTimeAction" class="hidden" style="margin-top:12px;">
-      <button class="btn btn-primary" id="importShiftsBtn" style="width:100%;">Import Shifts</button>
-    </div>
-    <hr style="border-color:var(--border);margin:16px 0;">
-    <h2>Import Cases</h2>
-    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-      Upload cases from Excel (.xlsx), CSV (Google Sheet export), PDF (Charge Detail), or screenshot.
-      Duplicate cases (same date + start time) will be skipped.
-    </p>
-    <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
-      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">Required CSV format</summary>
-      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;line-height:1.6;">
-        <strong>Columns (in order, comma-separated):</strong><br>
-        Date, Surgeon, Startup (base units), Start, End, Time (min),
-        Modifiers, Block, Shared?, Points Earned<br><br>
-        <strong>Example row:</strong><br>
-        <code style="font-size:0.7rem;">1/5,A Hill,6,8:02:00 AM,11:08:00 AM,186.00,,,,21.6</code><br><br>
-        <strong>Date:</strong> M/D or M/D/YYYY (year inferred from current date if omitted)<br>
-        <strong>Start/End:</strong> H:MM AM/PM or H:MM:SS AM/PM or 24-hour HH:MM<br>
-        <strong>Modifiers:</strong> "E" for emergency, or numeric modifier point value<br>
-        <strong>Block:</strong> Nerve block point value (2.6 = other, 3.0 = brachial plexus)<br>
-        <strong>Shared?:</strong> "Y" if shared/split case<br>
-        Header row is optional and will be auto-skipped.
-        Shifts are auto-created for dates without an existing shift.
-      </div>
-    </details>
-    <div class="upload-area" id="csvUploadArea">
-      <div style="font-size:2rem;">&#128203;</div>
-      <p>Tap to upload .xlsx, .csv, .pdf, or screenshot</p>
-      <input type="file" id="csvFile" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg">
-    </div>
-    <div id="csvImportResults"></div>
-  </div>
-
   <!-- Flagged Items -->
   <div class="card" id="flaggedItemsCard">
     <details>
@@ -2438,6 +2356,151 @@ input.mil-time.invalid {
     </div>
     <div style="margin-top:12px;">
       <button class="btn btn-outline btn-sm" id="loadTestDataBtn" style="border-color:var(--accent2);color:var(--accent2);">Load Test Data (3 months)</button>
+    </div>
+  </div>
+</div>
+
+<!-- HISTORY PAGE -->
+<div class="page" id="page-history">
+  <!-- Monthly Point Override (collapsible) -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('histOverride')">
+      <h3>Monthly Point Override</h3>
+      <span class="arrow" id="histOverrideArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="histOverrideBody">
+      <div style="padding-top:12px;">
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+          Override calculated points for a month to match QGenda or billing records.
+        </p>
+        <div class="month-nav">
+          <button id="ovPrevMonth">&larr;</button>
+          <span id="ovMonthLabel">January 2026</span>
+          <button id="ovNextMonth">&rarr;</button>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:12px;">
+          <div style="flex:1;">
+            <label style="display:block;font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Time Points</label>
+            <input type="number" id="overrideTimePoints" min="0" step="0.01" placeholder="Calculated: —" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
+          </div>
+          <div style="flex:1;">
+            <label style="display:block;font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Production Points</label>
+            <input type="number" id="overrideProdPoints" min="0" step="0.01" placeholder="Calculated: —" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" id="saveOverrideBtn">Save Override</button>
+          <button class="btn btn-outline btn-sm" id="clearOverrideBtn">Clear</button>
+        </div>
+        <div id="overrideStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monthly History -->
+  <div class="card">
+    <h2>Monthly History</h2>
+    <div class="month-nav">
+      <button id="prevMonth">&larr;</button>
+      <span id="historyMonth">January 2026</span>
+      <button id="nextMonth">&rarr;</button>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-item">
+        <div class="label">Monthly Total</div>
+        <div class="value blue" id="monthTotal">0</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Days Worked</div>
+        <div class="value green" id="monthDays">0</div>
+      </div>
+    </div>
+    <div id="historyList">
+      <div class="empty-state"><p>No shifts recorded for this month.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- IMPORT PAGE -->
+<div class="page" id="page-import">
+  <!-- Import Shifts from QGenda -->
+  <div class="card">
+    <h2>Import Shifts from QGenda</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Upload a QGenda time punch export (.xlsx, .csv, or screenshot) to import shifts into the tracker.
+      Dates with existing shifts will be skipped.
+    </p>
+    <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
+      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">Required CSV/Excel format</summary>
+      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;line-height:1.6;">
+        <strong>Required columns (exact header names):</strong><br>
+        Schedule Date, Effective Clock In Date, Effective Clock In Time,
+        Effective Clock Out Date, Effective Clock Out Time, Duration,
+        Scheduled Task Abbreviation<br><br>
+        <strong>Optional columns:</strong> Location Name, Notes<br><br>
+        <strong>Example row:</strong><br>
+        <code style="font-size:0.7rem;">1/5/2026 | 7:40 | 1/5/2026 | 17:03 | 9.38 | UVH 15</code><br><br>
+        Times should be in 24-hour format (7:00, 17:03) or Excel time values.
+        Dates should be M/D/YYYY or YYYY-MM-DD.
+        Multiple entries per date are grouped into one shift with multiple time entries.
+      </div>
+    </details>
+    <div class="upload-area" id="importTimeUploadArea">
+      <div style="font-size:2rem;">&#128197;</div>
+      <p>Tap to upload QGenda .xlsx, .csv, or screenshot</p>
+      <input type="file" id="importTimeFile" accept=".xlsx,.xls,.csv,.png,.jpg,.jpeg">
+    </div>
+    <div id="importTimePreview"></div>
+    <div id="importTimeAction" class="hidden" style="margin-top:12px;">
+      <button class="btn btn-primary" id="importShiftsBtn" style="width:100%;">Import Shifts</button>
+    </div>
+  </div>
+
+  <!-- Import Cases -->
+  <div class="card">
+    <h2>Import Cases</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Upload cases from Excel (.xlsx), CSV (Google Sheet export), PDF (Charge Detail), or screenshot.
+      Duplicate cases (same date + start time) will be skipped.
+    </p>
+    <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
+      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">Required CSV format</summary>
+      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;line-height:1.6;">
+        <strong>Columns (in order, comma-separated):</strong><br>
+        Date, Surgeon, Startup (base units), Start, End, Time (min),
+        Modifiers, Block, Shared?, Points Earned<br><br>
+        <strong>Example row:</strong><br>
+        <code style="font-size:0.7rem;">1/5,A Hill,6,8:02:00 AM,11:08:00 AM,186.00,,,,21.6</code><br><br>
+        <strong>Date:</strong> M/D or M/D/YYYY (year inferred from current date if omitted)<br>
+        <strong>Start/End:</strong> H:MM AM/PM or H:MM:SS AM/PM or 24-hour HH:MM<br>
+        <strong>Modifiers:</strong> "E" for emergency, or numeric modifier point value<br>
+        <strong>Block:</strong> Nerve block point value (2.6 = other, 3.0 = brachial plexus)<br>
+        <strong>Shared?:</strong> "Y" if shared/split case<br>
+        Header row is optional and will be auto-skipped.
+        Shifts are auto-created for dates without an existing shift.
+      </div>
+    </details>
+    <div class="upload-area" id="csvUploadArea">
+      <div style="font-size:2rem;">&#128203;</div>
+      <p>Tap to upload .xlsx, .csv, .pdf, or screenshot</p>
+      <input type="file" id="csvFile" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg">
+    </div>
+    <div id="csvImportResults"></div>
+  </div>
+
+  <!-- Scan Billing Sheet -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('importScan')">
+      <h3>Scan Billing Sheet</h3>
+      <span class="arrow" id="importScanArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="importScanBody">
+      <div style="padding-top:12px;">
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+          Scan a paper billing sheet using your camera or a photo. This opens the Work page scanner.
+        </p>
+        <button class="btn btn-primary" onclick="navigateToWorkScan()" style="width:100%;">Open Scanner on Work Page</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2719,6 +2782,14 @@ input.mil-time.invalid {
 <div class="drawer-backdrop" id="drawerBackdrop"></div>
 <div class="drawer-panel" id="drawerPanel">
   <div class="drawer-handle"></div>
+  <div class="drawer-item" data-page="history">
+    <span class="drawer-icon">&#128197;</span>
+    <span>History</span>
+  </div>
+  <div class="drawer-item" data-page="import">
+    <span class="drawer-icon">&#128229;</span>
+    <span>Import</span>
+  </div>
   <div class="drawer-item" data-page="settings">
     <span class="drawer-icon">&#9881;</span>
     <span>Settings</span>
@@ -2866,6 +2937,24 @@ async function loadSettingsFromFirestore(uid) {
 
 let data = loadData();
 let settings = loadSettings();
+
+// Returns confirmed $/point for a month, or the global estimate
+function getPointValueForMonth(monthKey) {
+  if (settings.pointValues && settings.pointValues[monthKey] != null)
+    return settings.pointValues[monthKey];
+  return settings.pointValue || 0;
+}
+
+// Keep only last 6 months of confirmed point values
+function prunePointValues() {
+  if (!settings.pointValues) return;
+  const now = new Date();
+  const cutoff = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+  const cutoffKey = cutoff.getFullYear() + '-' + String(cutoff.getMonth()+1).padStart(2,'0');
+  Object.keys(settings.pointValues).forEach(k => {
+    if (k < cutoffKey) delete settings.pointValues[k];
+  });
+}
 
 // Data migration (idempotent)
 function migrateData(d) {
@@ -3971,7 +4060,9 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
     returnToShiftLogs = false;
-    if (page === 'settings') { renderHistory(); loadOverrideUI(); loadStipendUI(); renderFlaggedEmail(); }
+    if (page === 'settings') { renderFlaggedEmail(); }
+    if (page === 'history') { renderHistory(); loadOverrideUI(); }
+    if (page === 'import') { /* no special init needed */ }
   });
 });
 
@@ -5291,14 +5382,18 @@ function toggleCollapse(sectionId) {
     projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projCaseEff: 'projCaseEffBody', projMoM: 'projMoMBody', projPtsPerType: 'projPtsPerTypeBody',
     timeDOW: 'timeDOWBody', timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
     analAddOns: 'analAddOnsBody', analTopProc: 'analTopProcBody',
-    analTopSurgeons: 'analTopSurgeonsBody', analSlowSurgeons: 'analSlowSurgeonsBody'
+    analTopSurgeons: 'analTopSurgeonsBody', analSlowSurgeons: 'analSlowSurgeonsBody',
+    histOverride: 'histOverrideBody', compStipends: 'compStipendsBody',
+    pvHistory: 'pvHistoryBody', importScan: 'importScanBody'
   };
   const arrowMap = {
     deScan: 'deScanArrow',
     projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projCaseEff: 'projCaseEffArrow', projMoM: 'projMoMArrow', projPtsPerType: 'projPtsPerTypeArrow',
     timeDOW: 'timeDOWArrow', timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
     analAddOns: 'analAddOnsArrow', analTopProc: 'analTopProcArrow',
-    analTopSurgeons: 'analTopSurgeonsArrow', analSlowSurgeons: 'analSlowSurgeonsArrow'
+    analTopSurgeons: 'analTopSurgeonsArrow', analSlowSurgeons: 'analSlowSurgeonsArrow',
+    histOverride: 'histOverrideArrow', compStipends: 'compStipendsArrow',
+    pvHistory: 'pvHistoryArrow', importScan: 'importScanArrow'
   };
   const body = document.getElementById(bodyMap[sectionId]);
   const arrow = document.getElementById(arrowMap[sectionId]);
@@ -6506,6 +6601,100 @@ document.getElementById('clearStipendBtn').addEventListener('click', () => {
 });
 
 // ================================================================
+// NAVIGATE TO WORK SCAN
+// ================================================================
+function navigateToWorkScan() {
+  closeDrawer();
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const workBtn = document.querySelector('.bottom-nav button[data-page="dataentry"]');
+  if (workBtn) workBtn.classList.add('active');
+  document.getElementById('page-dataentry').classList.add('active');
+  loadDataEntryPage();
+  // Open scan collapsible
+  setTimeout(() => {
+    const body = document.getElementById('deScanBody');
+    const arrow = document.getElementById('deScanArrow');
+    if (body && (!body.style.maxHeight || body.style.maxHeight === '0px')) {
+      body.style.maxHeight = body.scrollHeight + 'px';
+      if (arrow) arrow.classList.add('open');
+    }
+    body && body.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 200);
+}
+
+// ================================================================
+// POINT VALUE HISTORY
+// ================================================================
+function renderPVHistory() {
+  const container = document.getElementById('pvHistoryRows');
+  if (!container) return;
+  const now = new Date();
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  if (!settings.pointValues) settings.pointValues = {};
+  let html = '';
+  for (let i = 1; i <= 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const mk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    const label = monthNames[d.getMonth()] + ' ' + d.getFullYear();
+    const val = settings.pointValues[mk];
+    const isConfirmed = val != null;
+    const displayVal = isConfirmed ? val : '';
+    const statusText = isConfirmed ? '<span style="color:var(--accent);font-weight:600;">Confirmed</span>' : '<span style="color:var(--text-dim);">Estimate: $' + (settings.pointValue || 0).toFixed(2) + '</span>';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">';
+    html += '<span style="font-size:0.82rem;min-width:100px;">' + label + '</span>';
+    html += '<input type="number" data-pvmonth="' + mk + '" min="0" step="0.01" placeholder="$/pt" value="' + displayVal + '" style="max-width:100px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">';
+    html += '<span style="font-size:0.72rem;">' + statusText + '</span>';
+    html += '</div>';
+  }
+  container.innerHTML = html;
+}
+
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.id === 'savePVHistoryBtn') {
+    if (!settings.pointValues) settings.pointValues = {};
+    const inputs = document.querySelectorAll('[data-pvmonth]');
+    inputs.forEach(inp => {
+      const mk = inp.dataset.pvmonth;
+      const val = inp.value.trim();
+      if (val !== '') {
+        settings.pointValues[mk] = parseFloat(val);
+      } else {
+        delete settings.pointValues[mk];
+      }
+    });
+    prunePointValues();
+    saveSettings(settings);
+    renderPVHistory();
+    // Re-render revenue charts with updated values
+    renderMonthlyChart();
+    renderStabilization();
+    renderProjectedAnnual();
+    renderPipelineChart();
+    const status = document.getElementById('pvHistoryStatus');
+    if (status) { status.innerHTML = '<span style="color:var(--accent);">Point values saved</span>'; setTimeout(() => { status.textContent = ''; }, 3000); }
+  }
+});
+
+function checkPVReminder() {
+  const banner = document.getElementById('pvReminderBanner');
+  if (!banner) return;
+  if (window._pvReminderDismissed) { banner.classList.add('hidden'); return; }
+  const now = new Date();
+  if (now.getDate() < 20) { banner.classList.add('hidden'); return; }
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevKey = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth()+1).padStart(2,'0');
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  if (!settings.pointValues || settings.pointValues[prevKey] == null) {
+    document.getElementById('pvReminderText').textContent = monthNames[prevMonth.getMonth()] + ' $/point hasn\'t been confirmed yet.';
+    banner.classList.remove('hidden');
+    banner.style.display = 'flex';
+  } else {
+    banner.classList.add('hidden');
+  }
+}
+
+// ================================================================
 // PROJECTIONS TAB
 // ================================================================
 function renderProjections() {
@@ -6516,6 +6705,9 @@ function renderProjections() {
   renderMonthlyPace();
   renderPipelineChart();
   renderMoMChange();
+  loadStipendUI();
+  renderPVHistory();
+  checkPVReminder();
 }
 
 function getMonthlyTotals() {
@@ -6583,13 +6775,20 @@ function renderMonthlyChart() {
       }
     }
   });
-  // Summary text below chart
+  // Summary text below chart — use per-month revenue where confirmed
   const summaryEl = document.getElementById('monthlyChartSummary');
   let summaryText = values.length > 0 ? `6-Month Avg: ${avg.toFixed(1)} pts` : '';
-  const pv = settings.pointValue;
-  if (pv && pv > 0 && avg > 0) {
-    const projected = avg * pv;
-    summaryText += ` &nbsp;|&nbsp; Projected Monthly: $${projected.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (last6.length > 0) {
+    let totalRevenue = 0;
+    let hasAnyPv = false;
+    last6.forEach(k => {
+      const mpv = getPointValueForMonth(k);
+      if (mpv > 0) { totalRevenue += (totals[k] || 0) * mpv; hasAnyPv = true; }
+    });
+    if (hasAnyPv && totalRevenue > 0) {
+      const avgRevenue = totalRevenue / last6.length;
+      summaryText += ` &nbsp;|&nbsp; Avg Monthly Revenue: $${avgRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
   }
   summaryEl.innerHTML = summaryText;
 }
@@ -6628,7 +6827,8 @@ function renderStabilization() {
   const weighted = round2(0.10 * raw + 0.40 * (mt[mk(1)]||0) + 0.25 * (mt[mk(2)]||0) + 0.15 * (mt[mk(3)]||0) + 0.10 * (mt[mk(4)]||0));
   document.getElementById('stabRaw').textContent = raw.toFixed(1);
   document.getElementById('stabWeighted').textContent = weighted.toFixed(1);
-  const pv = settings.pointValue;
+  const currentMonthKey = mk(0);
+  const pv = getPointValueForMonth(currentMonthKey);
   const decAdv = settings.decemberAdvance !== false;
   const paycheckLabel = document.getElementById('stabPaycheckLabel');
 
@@ -6644,8 +6844,9 @@ function renderStabilization() {
       // December: add January's advance paycheck
       function mkFwd(month) { const d = new Date(now.getFullYear() + 1, month, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
       const janWeighted = round2(0.10 * (mt[mkFwd(0)]||0) + 0.40 * raw + 0.25 * (mt[mk(1)]||0) + 0.15 * (mt[mk(2)]||0) + 0.10 * (mt[mk(3)]||0));
-      const decStipend = getMonthlyStipendTotal(mk(0)); // Dec stipend → Jan paycheck
-      paycheck += janWeighted * pv + decStipend;
+      const decStipend = getMonthlyStipendTotal(mk(0)); // Dec stipend -> Jan paycheck
+      const janPv = getPointValueForMonth(mkFwd(0));
+      paycheck += janWeighted * janPv + decStipend;
       paycheckLabel.textContent = "Projected Dec paycheck + Jan advance";
     } else {
       paycheckLabel.textContent = "Projected next month\u2019s paycheck";
@@ -6669,17 +6870,23 @@ function renderProjectedAnnual() {
   const last3 = [mt[mk(0)]||0, mt[mk(1)]||0, mt[mk(2)]||0].filter(v => v > 0);
   const avg = last3.length > 0 ? last3.reduce((a,b)=>a+b,0) / last3.length : 0;
   document.getElementById('projRollingAvg').textContent = avg.toFixed(1);
-  const pv = settings.pointValue;
+  const globalPv = settings.pointValue;
 
-  // YTD points + stipends: sum all months in current year
+  // YTD revenue: sum each month's pts * that month's confirmed point value
+  let ytdRevenue = 0;
   let ytdPts = 0;
   let ytdMonths = 0;
   let ytdStipends = 0;
   for (let m = 0; m <= now.getMonth(); m++) {
     const key = thisYear + '-' + String(m + 1).padStart(2, '0');
-    if (mt[key]) { ytdPts += mt[key]; ytdMonths++; }
+    if (mt[key]) {
+      ytdPts += mt[key];
+      ytdRevenue += mt[key] * getPointValueForMonth(key);
+      ytdMonths++;
+    }
     ytdStipends += getMonthlyStipendTotal(key);
   }
+  ytdRevenue += ytdStipends;
   const remainingMonths = 12 - now.getMonth() - 1; // full months left after current
 
   // Average monthly stipend for projection
@@ -6691,11 +6898,11 @@ function renderProjectedAnnual() {
   }
   const avgStipend = stipMonths.length > 0 ? stipMonths.reduce((a,b)=>a+b,0) / stipMonths.length : 0;
 
+  const pv = globalPv; // use global estimate for projections of future months
   if (pv && pv > 0 && avg > 0) {
     const annualPts = avg * 12 * pv;
     const annualStipend = avgStipend * 12;
     const annual = annualPts + annualStipend;
-    const ytdRevenue = ytdPts * pv + ytdStipends;
     const projRemaining = avg * remainingMonths * pv + avgStipend * remainingMonths;
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projYTDRevenue').textContent = '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -6927,12 +7134,20 @@ function renderPipelineChart() {
     }
   }
 
+  // Build per-target point values for each bar
+  const targetPvs = [];
+  for (let target = 0; target < 5; target++) {
+    const targetDate = new Date(now.getFullYear(), now.getMonth() + target, 1);
+    const targetKey = mkKey(targetDate.getFullYear(), targetDate.getMonth());
+    targetPvs.push(getPointValueForMonth(targetKey));
+  }
+
   const ctx = document.getElementById('pipelineChart').getContext('2d');
   if (pipelineChart) pipelineChart.destroy();
 
   const useDollars = pv > 0;
-  const realData = useDollars ? realValues.map((v, i) => round2(v * pv + stipendValues[i])) : realValues;
-  const projData = useDollars ? projectedValues.map(v => round2(v * pv)) : projectedValues;
+  const realData = useDollars ? realValues.map((v, i) => round2(v * targetPvs[i] + stipendValues[i])) : realValues;
+  const projData = useDollars ? projectedValues.map((v, i) => round2(v * targetPvs[i])) : projectedValues;
   const hasAnyProjections = projectedValues.some(v => v > 0);
 
   const datasets = [{
@@ -6977,7 +7192,8 @@ function renderPipelineChart() {
               const total = round2(realValues[idx] + projectedValues[idx]);
               const stip = stipendValues[idx];
               if (useDollars) {
-                let line = `  Total: ${total.toFixed(1)} pts \u2192 $${round2(total * pv).toLocaleString('en-US', {maximumFractionDigits:0})}`;
+                const tpv = targetPvs[idx];
+                let line = `  Total: ${total.toFixed(1)} pts \u2192 $${round2(total * tpv).toLocaleString('en-US', {maximumFractionDigits:0})}`;
                 if (stip > 0) line += ` + $${stip.toLocaleString('en-US', {maximumFractionDigits:0})} stipend`;
                 if (flags.isDec) line += ' (incl. Jan advance)';
                 lines.push(line);
@@ -7003,7 +7219,7 @@ function renderPipelineChart() {
   const currentPts = mt[mkKey(now.getFullYear(), now.getMonth())] || 0;
   let summary = `Current month: ${currentPts.toFixed(0)} pts`;
   if (useDollars) {
-    const nextPaycheck = round2((realValues[0] + projectedValues[0]) * pv + stipendValues[0]);
+    const nextPaycheck = round2((realValues[0] + projectedValues[0]) * targetPvs[0] + stipendValues[0]);
     const isCurrentJan = decAdv && now.getMonth() === 0;
     if (isCurrentJan) {
       summary += ' \u2022 Next paycheck: $0 (advanced in Dec)';
