@@ -59,7 +59,7 @@ header {
   z-index: 100;
 }
 header > * { flex: 1; }
-header > .header-date-btn { flex: 0 0 auto; }
+header > .header-date-btn, header > .header-nav-btn { flex: 0 0 auto; }
 
 header h1 { font-size: 1.1rem; font-weight: 700; color: var(--primary); min-width: 0; }
 .header-pts { text-align: right; line-height: 1.2; }
@@ -68,6 +68,20 @@ header h1 { font-size: 1.1rem; font-weight: 700; color: var(--primary); min-widt
 .header-pts .pace { font-size: 0.62rem; font-weight: 600; }
 .header-pts .pace.ahead { color: var(--accent); }
 .header-pts .pace.behind { color: var(--accent2); }
+.header-nav-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  width: 40px;
+  height: 40px;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 .header-date-btn {
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -368,28 +382,58 @@ textarea { resize: vertical; min-height: 60px; }
 .recon-table tr.warn { background: rgba(245,158,11,0.07); }
 .recon-table tr.miss { background: rgba(239,68,68,0.07); }
 
-/* ===== DIFFERENCE REVIEWER STEPPER ===== */
-.diff-stepper { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin: 12px 0; }
-.diff-stepper-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); }
-.diff-stepper-header .counter { font-size: 0.85rem; color: var(--text-dim); font-weight: 600; }
-.diff-stepper-nav { display: flex; gap: 8px; }
-.diff-stepper-nav button { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); width: 36px; height: 36px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.diff-stepper-nav button:disabled { opacity: 0.3; cursor: default; }
-.diff-stepper-body { padding: 16px; }
-.diff-stepper-body .diff-date { font-weight: 600; font-size: 0.95rem; margin-bottom: 4px; }
-.diff-stepper-body .diff-acct { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 12px; }
-.diff-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-.diff-col { background: var(--bg); border-radius: 8px; padding: 12px; }
-.diff-col h4 { font-size: 0.7rem; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
-.diff-col .val { font-size: 1.1rem; font-weight: 700; }
-.diff-col .detail { font-size: 0.75rem; color: var(--text-dim); margin-top: 4px; }
-.diff-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.diff-actions .btn { flex: 1; min-width: 90px; font-size: 0.8rem; padding: 10px 8px; }
+/* ===== RECON DASHBOARD ===== */
+.recon-summary-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.recon-summary-bar .stat { text-align: center; padding: 10px 8px; border-radius: 8px; background: var(--surface2); }
+.recon-summary-bar .stat .num { font-size: 1.4rem; font-weight: 700; }
+.recon-summary-bar .stat .lbl { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; margin-top: 2px; }
+.recon-summary-bar .stat.green .num { color: var(--accent); }
+.recon-summary-bar .stat.yellow .num { color: var(--accent2); }
+.recon-summary-bar .stat.red .num { color: var(--danger); }
+.recon-summary-bar .stat.purple .num { color: #a78bfa; }
+.recon-pts-compare { display: flex; justify-content: center; gap: 24px; margin: 8px 0; font-size: 0.8rem; color: var(--text-dim); }
+.recon-pts-compare span { font-weight: 600; }
+.recon-batch-actions { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+.recon-batch-actions .btn { flex: 1; min-width: 120px; }
+
+/* Expandable day rows */
+.recon-day { border-radius: 8px; margin-bottom: 6px; overflow: hidden; border-left: 4px solid var(--border); background: var(--surface); }
+.recon-day.status-match { border-left-color: var(--accent); }
+.recon-day.status-close { border-left-color: var(--accent2); }
+.recon-day.status-mismatch { border-left-color: var(--danger); }
+.recon-day.status-missing { border-left-color: #a78bfa; }
+.recon-day-header { display: flex; align-items: center; padding: 10px 14px; cursor: pointer; gap: 10px; user-select: none; }
+.recon-day-header:hover { background: var(--surface2); }
+.recon-day-header .day-date { font-weight: 600; font-size: 0.85rem; min-width: 60px; }
+.recon-day-header .day-info { flex: 1; font-size: 0.75rem; color: var(--text-dim); }
+.recon-day-header .day-status { font-size: 0.7rem; font-weight: 600; padding: 3px 8px; border-radius: 12px; text-transform: uppercase; }
+.recon-day-header .day-status.s-match { background: rgba(16,185,129,0.15); color: var(--accent); }
+.recon-day-header .day-status.s-close { background: rgba(245,158,11,0.15); color: var(--accent2); }
+.recon-day-header .day-status.s-mismatch { background: rgba(239,68,68,0.15); color: var(--danger); }
+.recon-day-header .day-status.s-missing { background: rgba(167,139,250,0.15); color: #a78bfa; }
+.recon-day-header .day-chevron { font-size: 0.9rem; color: var(--text-dim); transition: transform 0.2s; }
+.recon-day.expanded .day-chevron { transform: rotate(180deg); }
+.recon-day-detail { display: none; padding: 0 14px 12px; }
+.recon-day.expanded .recon-day-detail { display: block; }
+
+/* Case row inside day detail */
+.recon-case-table { width: 100%; border-collapse: collapse; font-size: 0.73rem; }
+.recon-case-table th { color: var(--text-dim); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; padding: 6px 4px; text-align: left; border-bottom: 1px solid var(--border); }
+.recon-case-table td { padding: 6px 4px; vertical-align: middle; border-bottom: 1px solid var(--surface2); }
+.recon-case-table tr.case-match td { }
+.recon-case-table tr.case-close td { background: rgba(245,158,11,0.05); }
+.recon-case-table tr.case-mismatch td { background: rgba(239,68,68,0.05); }
+.recon-case-table tr.case-missing td { background: rgba(167,139,250,0.05); }
+.recon-case-table .case-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.recon-case-table .case-actions button { font-size: 0.65rem; padding: 3px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; white-space: nowrap; }
+.recon-case-table .case-actions button:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+.recon-case-table .case-actions button.act-flag:hover { background: var(--accent2); color: #000; border-color: var(--accent2); }
+.recon-case-table .case-resolved { font-size: 0.7rem; font-weight: 600; color: var(--accent); }
+
+/* Inline action buttons */
 .btn-accept-billing { background: var(--primary); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
 .btn-accept-app { background: var(--accent); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
 .btn-flag { background: var(--accent2); color: #000; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-.diff-stepper.resolved { border-color: var(--accent); }
-.diff-stepper.flagged { border-color: var(--accent2); }
 
 /* Add-on tally */
 .addon-tally-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; margin: 8px 0; }
@@ -1229,7 +1273,9 @@ input.mil-time.invalid {
 <!-- ===== HEADER ===== -->
 <header>
   <h1>MWA Points</h1>
+  <button class="header-nav-btn" id="headerPrevDay">&#9664;</button>
   <button class="header-date-btn" id="headerDateBtn"></button>
+  <button class="header-nav-btn" id="headerNextDay">&#9654;</button>
   <span class="header-pts" id="headerPoints"><span class="daily">0 pts</span><br><span class="monthly">0 mo</span></span>
 </header>
 
@@ -3801,6 +3847,19 @@ function setWorkingDate(d) {
     renderToday();
   }
 }
+
+// Header prev/next day navigation
+document.getElementById('headerPrevDay').addEventListener('click', () => {
+  const d = new Date(workingDate + 'T12:00:00');
+  d.setDate(d.getDate() - 1);
+  setWorkingDate(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+});
+
+document.getElementById('headerNextDay').addEventListener('click', () => {
+  const d = new Date(workingDate + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  setWorkingDate(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+});
 
 // Header date picker
 document.getElementById('headerDateBtn').addEventListener('click', () => {
@@ -8240,6 +8299,7 @@ let qMonth = new Date().getMonth();
 let shiftReconDiffs = [];
 let shiftReconCurrentDiff = 0;
 let shiftReconDecisions = {};
+let qgendaExpandedDays = {};
 
 function loadShiftReconDecisions() {
   try {
@@ -8416,7 +8476,6 @@ function renderQgendaRecon() {
   const container = document.getElementById('qgendaResults');
   const prefix = `${qYear}-${String(qMonth+1).padStart(2,'0')}`;
 
-  // Filter QGenda entries for month (by Schedule Date)
   const qEntries = qgendaData.filter(e => e.scheduleDate && e.scheduleDate.startsWith(prefix));
   const trackerShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix));
 
@@ -8424,7 +8483,6 @@ function renderQgendaRecon() {
     container.innerHTML = '<div class="empty-state"><p>Upload a QGenda export file to begin reconciliation.</p></div>';
     return;
   }
-
   if (qEntries.length === 0 && trackerShifts.length === 0) {
     container.innerHTML = '<div class="empty-state"><p>No data for this month in QGenda or Tracker.</p></div>';
     return;
@@ -8437,15 +8495,15 @@ function renderQgendaRecon() {
     qByDate[e.scheduleDate].push(e);
   });
 
-  // Get all unique dates
   const allDates = new Set([...Object.keys(qByDate), ...trackerShifts.map(s => s.date)]);
   const sortedDates = [...allDates].sort();
 
   // Build diffs and totals
-  let qTotalHours = 0;
-  let tTotalHours = 0;
-  let matchCount = 0;
+  let qTotalHours = 0, tTotalHours = 0, matchCount = 0;
   shiftReconDiffs = [];
+
+  // Build per-day data for dashboard
+  const dayData = [];
 
   sortedDates.forEach(date => {
     const qDay = qByDate[date] || [];
@@ -8460,196 +8518,141 @@ function renderQgendaRecon() {
       tTotalHours += tHours;
     }
 
-    // Determine QGenda assignment info
     const qTask = qDay.length > 0 ? qDay[0].task : '';
     const qAssignType = qTask ? mapTaskToAssignmentType(qTask, date) : '';
     const tAssignType = tShift ? tShift.assignmentType : '';
 
-    // Build QGenda time entries for potential shift creation/update
     const sortedQ = [...qDay].filter(e => e.clockInTime).sort((a, b) => a.clockInTime.localeCompare(b.clockInTime));
     const qTimeEntries = sortedQ.map(e => ({ start: e.clockInTime, end: e.clockOutTime || '' }));
 
+    let dayStatus = 'match', diffType = '';
     if (qDay.length > 0 && tShift) {
       const hourDiff = Math.abs(qHours - tHours);
       if (hourDiff <= 0.25 && qAssignType === tAssignType) {
         matchCount++;
       } else if (hourDiff > 0.25) {
-        shiftReconDiffs.push({
-          date, type: 'hour_mismatch',
-          qgendaEntries: qDay, qgendaHours: qHours, qgendaTask: qTask,
-          qgendaAssignmentType: qAssignType, qgendaTimeEntries: qTimeEntries,
-          trackerShift: tShift, trackerHours: tHours, trackerAssignmentType: tAssignType,
-          hourDiff
-        });
+        dayStatus = 'mismatch'; diffType = 'hour_mismatch';
       } else {
-        shiftReconDiffs.push({
-          date, type: 'type_mismatch',
-          qgendaEntries: qDay, qgendaHours: qHours, qgendaTask: qTask,
-          qgendaAssignmentType: qAssignType, qgendaTimeEntries: qTimeEntries,
-          trackerShift: tShift, trackerHours: tHours, trackerAssignmentType: tAssignType,
-          hourDiff: hourDiff
-        });
+        dayStatus = 'close'; diffType = 'type_mismatch';
       }
     } else if (qDay.length > 0 && !tShift) {
-      shiftReconDiffs.push({
-        date, type: 'missing_tracker',
-        qgendaEntries: qDay, qgendaHours: qHours, qgendaTask: qTask,
-        qgendaAssignmentType: qAssignType, qgendaTimeEntries: qTimeEntries,
-        trackerShift: null, trackerHours: 0, trackerAssignmentType: '',
-        hourDiff: qHours
-      });
+      dayStatus = 'missing'; diffType = 'missing_tracker';
     } else if (qDay.length === 0 && tShift) {
-      shiftReconDiffs.push({
-        date, type: 'missing_qgenda',
-        qgendaEntries: [], qgendaHours: 0, qgendaTask: '',
-        qgendaAssignmentType: '', qgendaTimeEntries: [],
-        trackerShift: tShift, trackerHours: tHours, trackerAssignmentType: tAssignType,
-        hourDiff: tHours
-      });
+      dayStatus = 'missing'; diffType = 'missing_qgenda';
     }
+
+    const diffObj = {
+      date, type: diffType || 'match',
+      qgendaEntries: qDay, qgendaHours: qHours, qgendaTask: qTask,
+      qgendaAssignmentType: qAssignType, qgendaTimeEntries: qTimeEntries,
+      trackerShift: tShift, trackerHours: tHours, trackerAssignmentType: tAssignType,
+      hourDiff: Math.abs(qHours - tHours)
+    };
+
+    if (dayStatus !== 'match') shiftReconDiffs.push(diffObj);
+    dayData.push({ date, qDay, tShift, qHours, tHours, qTask, qAssignType, tAssignType, dayStatus, diffObj, qTimeEntries });
   });
 
-  // Clamp stepper index
-  if (shiftReconCurrentDiff >= shiftReconDiffs.length) shiftReconCurrentDiff = Math.max(0, shiftReconDiffs.length - 1);
-
-  // Calculate tracker points for the month
+  // Tracker points for the month
   let tTotalPoints = 0;
-  trackerShifts.forEach(s => {
-    const t = calcShiftTotal(s);
-    tTotalPoints += t.total;
-  });
+  trackerShifts.forEach(s => { tTotalPoints += calcShiftTotal(s).total; });
   tTotalPoints = round2(tTotalPoints);
 
-  // Summary card
   const issueCount = shiftReconDiffs.length;
-  let html = '<div class="card"><h2>Summary</h2><div class="summary-grid">';
-  html += `<div class="summary-item"><div class="label">QGenda Hours</div><div class="value blue">${qTotalHours.toFixed(1)}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Tracker Hours</div><div class="value green">${tTotalHours.toFixed(1)}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Tracker Points</div><div class="value green">${tTotalPoints.toFixed(1)}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Matched</div><div class="value green">${matchCount}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Issues</div><div class="value" style="color:var(--danger)">${issueCount}</div></div>`;
-  html += '</div></div>';
 
-  if (issueCount === 0) {
-    html += '<div class="card" style="text-align:center;padding:24px;"><p style="color:var(--accent);font-size:1.1rem;font-weight:600;">All shifts match!</p></div>';
-  } else {
-    html += '<div id="shiftReconStepperContainer"></div>';
-    html += '<div id="shiftReconFlaggedSection"></div>';
-  }
-
-  container.innerHTML = html;
-
-  if (issueCount > 0) {
-    renderShiftReconStepper();
-    renderShiftReconFlagged();
-  }
-}
-
-// ================================================================
-// QGENDA SHIFT RECON — INTERACTIVE DIFFERENCE REVIEWER
-// ================================================================
-function renderShiftReconStepper() {
-  const container = document.getElementById('shiftReconStepperContainer');
-  if (!container || shiftReconDiffs.length === 0) return;
-
-  const d = shiftReconDiffs[shiftReconCurrentDiff];
-  const key = d.date;
-  const decision = shiftReconDecisions[key];
-  const isResolved = decision && (decision.accepted === 'qgenda' || decision.accepted === 'app');
-  const isFlagged = decision && decision.flagged;
-
-  let html = `<div class="diff-stepper${isResolved ? ' resolved' : ''}${isFlagged ? ' flagged' : ''}">`;
-  html += '<div class="diff-stepper-header">';
-  html += `<span class="counter">Difference ${shiftReconCurrentDiff + 1} of ${shiftReconDiffs.length}</span>`;
-  html += '<div class="diff-stepper-nav">';
-  html += `<button onclick="shiftReconNav(-1)"${shiftReconCurrentDiff === 0 ? ' disabled' : ''}>&larr;</button>`;
-  html += `<button onclick="shiftReconNav(1)"${shiftReconCurrentDiff >= shiftReconDiffs.length - 1 ? ' disabled' : ''}>&rarr;</button>`;
-  html += '</div></div>';
-
-  html += '<div class="diff-stepper-body">';
-  html += `<div class="diff-date">${formatDateShort(d.date)}</div>`;
-
-  // Type label
-  const typeLabels = {
-    hour_mismatch: 'Hour Mismatch',
-    type_mismatch: 'Assignment Type Mismatch',
-    missing_tracker: 'Missing from Tracker',
-    missing_qgenda: 'Missing from QGenda'
-  };
-  html += `<div style="font-size:0.75rem;color:var(--accent2);margin-bottom:8px;">${typeLabels[d.type] || d.type}</div>`;
-
-  if (isResolved) {
-    html += `<p style="color:var(--accent);font-size:0.85rem;font-weight:600;">Accepted: ${decision.accepted === 'qgenda' ? 'QGenda' : 'App'} value</p>`;
-  } else if (isFlagged) {
-    html += `<p style="color:var(--accent2);font-size:0.85rem;font-weight:600;">Flagged for office</p>`;
-  }
-
-  html += '<div class="diff-compare">';
-
-  // QGenda column
-  html += '<div class="diff-col">';
-  html += '<h4>QGenda</h4>';
-  if (d.qgendaEntries.length > 0) {
-    html += `<div class="detail">${escHtml(d.qgendaTask || '-')}</div>`;
-    html += `<div class="val">${getAssignmentTypeName(d.qgendaAssignmentType)}</div>`;
-    d.qgendaEntries.forEach(e => {
-      html += `<div class="detail">${e.clockInTime || '?'} - ${e.clockOutTime || '?'}</div>`;
-    });
-    html += `<div class="val">${d.qgendaHours.toFixed(1)}h</div>`;
-  } else {
-    html += '<div class="val" style="color:var(--danger)">No QGenda entry</div>';
-  }
+  // === Summary Dashboard ===
+  let html = '<div class="card">';
+  html += '<div class="recon-summary-bar">';
+  html += `<div class="stat green"><div class="num">${matchCount}</div><div class="lbl">Matched</div></div>`;
+  html += `<div class="stat yellow"><div class="num">${issueCount}</div><div class="lbl">Issues</div></div>`;
+  html += `<div class="stat"><div class="num">${tTotalPoints.toFixed(0)}</div><div class="lbl">Tracker Pts</div></div>`;
+  html += '</div>';
+  html += '<div class="recon-pts-compare">';
+  html += `<div>QGenda: <span style="color:var(--primary)">${qTotalHours.toFixed(1)}h</span></div>`;
+  html += `<div>Tracker: <span style="color:var(--accent)">${tTotalHours.toFixed(1)}h</span></div>`;
+  html += '</div>';
   html += '</div>';
 
-  // App column
-  html += '<div class="diff-col">';
-  html += '<h4>App</h4>';
-  if (d.trackerShift) {
-    html += `<div class="val">${getAssignmentTypeName(d.trackerAssignmentType)}</div>`;
-    const tEntries = d.trackerShift.timeEntries || [{ start: d.trackerShift.startTime, end: d.trackerShift.endTime }];
-    tEntries.forEach(e => {
-      html += `<div class="detail">${e.start || '?'} - ${e.end || '?'}</div>`;
-    });
-    html += `<div class="val">${d.trackerHours.toFixed(1)}h</div>`;
-    const shiftTotals = calcShiftTotal(d.trackerShift);
-    html += `<div class="val" style="font-size:0.8rem;color:var(--accent)">${shiftTotals.total.toFixed(1)} pts</div>`;
-  } else {
-    html += '<div class="val" style="color:var(--danger)">No shift</div>';
+  if (issueCount === 0 && matchCount > 0) {
+    html += '<div class="card" style="text-align:center;padding:24px;"><p style="color:var(--accent);font-size:1.1rem;font-weight:600;">All shifts match!</p></div>';
   }
-  html += '</div></div>';
 
-  // Action buttons
-  if (!isResolved && !isFlagged) {
-    html += '<div class="diff-actions">';
-    html += `<button class="btn btn-accept-billing" onclick="shiftReconAcceptQgenda(${shiftReconCurrentDiff})">Accept QGenda</button>`;
-    if (d.trackerShift) {
-      html += `<button class="btn btn-accept-app" onclick="shiftReconAcceptApp(${shiftReconCurrentDiff})">Accept App</button>`;
-    }
-    html += `<button class="btn btn-flag" onclick="shiftReconFlag(${shiftReconCurrentDiff})">Flag for Office</button>`;
+  // === Daily Breakdown (expandable days) ===
+  html += '<div class="card"><h2>Daily Breakdown</h2>';
+  dayData.forEach(dd => {
+    const decision = shiftReconDecisions[dd.date];
+    const isResolved = decision && (decision.accepted === 'qgenda' || decision.accepted === 'app');
+    const isFlagged = decision && decision.flagged;
+    let statusCls = dd.dayStatus;
+    if (isResolved) statusCls = 'match';
+
+    const isExpanded = qgendaExpandedDays[dd.date] !== undefined ? qgendaExpandedDays[dd.date] : (dd.dayStatus !== 'match');
+    if (qgendaExpandedDays[dd.date] === undefined) qgendaExpandedDays[dd.date] = isExpanded;
+
+    const qTimes = dd.qDay.map(e => `${e.clockInTime || '?'}-${e.clockOutTime || '?'}`).join(', ');
+    const tEntries = dd.tShift && dd.tShift.timeEntries ? dd.tShift.timeEntries : (dd.tShift ? [{ start: dd.tShift.startTime, end: dd.tShift.endTime }] : []);
+    const tTimes = tEntries.map(e => `${e.start || '?'}-${e.end || '?'}`).join(', ');
+
+    // Status label
+    const typeLabels = {
+      match: 'Match', hour_mismatch: 'Hours', type_mismatch: 'Type',
+      missing_tracker: 'No App', missing_qgenda: 'No QGenda'
+    };
+
+    html += `<div class="recon-day status-${statusCls}${isExpanded ? ' expanded' : ''}" data-date="${dd.date}">`;
+    html += `<div class="recon-day-header" onclick="toggleQgendaDay('${dd.date}')">`;
+    html += `<span class="day-date">${formatDateShort(dd.date)}</span>`;
+    html += `<span class="day-info">${dd.qHours.toFixed(1)}h Q / ${dd.tHours.toFixed(1)}h App</span>`;
+    html += `<span class="day-status s-${statusCls}">${isResolved ? 'Accepted' : (isFlagged ? 'Flagged' : (typeLabels[dd.diffObj.type] || dd.dayStatus))}</span>`;
+    html += '<span class="day-chevron">&#9660;</span>';
     html += '</div>';
-  }
 
-  html += '</div></div>';
+    // Day detail
+    html += '<div class="recon-day-detail">';
+    html += '<table class="recon-case-table"><thead><tr><th>Source</th><th>Type</th><th>Times</th><th>Hours</th></tr></thead><tbody>';
+    if (dd.qDay.length > 0) {
+      html += `<tr><td style="color:var(--primary)">QGenda</td><td>${getAssignmentTypeName(dd.qAssignType)}</td><td>${qTimes}</td><td>${dd.qHours.toFixed(1)}h</td></tr>`;
+    } else {
+      html += '<tr><td style="color:var(--primary)">QGenda</td><td colspan="3"><span style="color:var(--danger)">No entry</span></td></tr>';
+    }
+    if (dd.tShift) {
+      const shiftTotals = calcShiftTotal(dd.tShift);
+      html += `<tr><td style="color:var(--accent)">App</td><td>${getAssignmentTypeName(dd.tAssignType)}</td><td>${tTimes}</td><td>${dd.tHours.toFixed(1)}h (${shiftTotals.total.toFixed(1)} pts)</td></tr>`;
+    } else {
+      html += '<tr><td style="color:var(--accent)">App</td><td colspan="3"><span style="color:var(--danger)">No shift</span></td></tr>';
+    }
+    html += '</tbody></table>';
 
-  // Progress
-  const reviewed = Object.keys(shiftReconDecisions).filter(k => {
-    return shiftReconDiffs.some(diff => diff.date === k);
-  }).length;
-  html += `<p style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;text-align:center;">${reviewed} of ${shiftReconDiffs.length} reviewed</p>`;
+    // Inline actions for issues
+    if (dd.dayStatus !== 'match' && !isResolved && !isFlagged) {
+      html += '<div class="case-actions" style="margin-top:8px;">';
+      html += `<button onclick="shiftReconAcceptQgendaInline('${dd.date}')">Accept QGenda</button>`;
+      if (dd.tShift) {
+        html += `<button onclick="shiftReconAcceptAppInline('${dd.date}')">Accept App</button>`;
+      }
+      html += `<button class="act-flag" onclick="shiftReconFlagInline('${dd.date}')">Flag</button>`;
+      html += '</div>';
+    }
+    html += '</div></div>';
+  });
+  html += '</div>';
+
+  // === Flagged section ===
+  html += '<div id="shiftReconFlaggedSection"></div>';
 
   container.innerHTML = html;
+  renderShiftReconFlagged();
 }
 
-function shiftReconNav(dir) {
-  shiftReconCurrentDiff = Math.max(0, Math.min(shiftReconDiffs.length - 1, shiftReconCurrentDiff + dir));
-  renderShiftReconStepper();
+function toggleQgendaDay(dateStr) {
+  qgendaExpandedDays[dateStr] = !qgendaExpandedDays[dateStr];
+  const dayEl = document.querySelector(`#qgendaResults .recon-day[data-date="${dateStr}"]`);
+  if (dayEl) dayEl.classList.toggle('expanded');
 }
 
-function shiftReconAcceptQgenda(idx) {
-  const d = shiftReconDiffs[idx];
-
+// Apply QGenda data to tracker shift (inline version)
+function applyQgendaToShift(d) {
   if (d.type === 'missing_tracker') {
-    // Create new shift from QGenda data
     const entries = d.qgendaEntries;
     const sortedEntries = [...entries].filter(e => e.clockInTime).sort((a, b) => a.clockInTime.localeCompare(b.clockInTime));
     const timeEntries = sortedEntries.map(e => ({ start: e.clockInTime, end: e.clockOutTime || '' }));
@@ -8660,26 +8663,15 @@ function shiftReconAcceptQgenda(idx) {
     });
     const reconAssignType = d.qgendaAssignmentType || 'OR';
     const reconHasPager = getPagerPayWindow(reconAssignType, isWeekend(d.date)) !== null;
-    const reconTimeEntries = timeEntries.length > 0
-      ? timeEntries
-      : reconHasPager ? [] : [{ start: earliest, end: latest }];
+    const reconTimeEntries = timeEntries.length > 0 ? timeEntries : reconHasPager ? [] : [{ start: earliest, end: latest }];
     data.shifts[d.date] = {
-      date: d.date,
-      assignmentType: reconAssignType,
+      date: d.date, assignmentType: reconAssignType,
       startTime: timeEntries.length > 0 ? earliest : '',
       endTime: timeEntries.length > 0 ? latest : '',
-      timeEntries: reconTimeEntries,
-      isHoliday: false,
-      forcedOff: false,
-      subspecCoverage: false,
-      teeCount: 0,
-      supervisionStart: '',
-      supervisionEnd: '',
-      preCallStart: '',
-      preCallEnd: '',
-      tempCoverage: []
+      timeEntries: reconTimeEntries, isHoliday: false, forcedOff: false,
+      subspecCoverage: false, teeCount: 0, supervisionStart: '', supervisionEnd: '',
+      preCallStart: '', preCallEnd: '', tempCoverage: []
     };
-    // Detect pre-call entries in QGenda data
     const pcPattern = /UVH\/SFH\s*WORK/i;
     const pcEntries = entries.filter(e => e.clockInTime && pcPattern.test(e.task || ''));
     if (pcEntries.length > 0 && ['mole','OB_restricted'].includes(reconAssignType)) {
@@ -8689,7 +8681,6 @@ function shiftReconAcceptQgenda(idx) {
     }
     showToast(`Created shift for ${formatDateShort(d.date)}`);
   } else if (d.type === 'hour_mismatch' || d.type === 'type_mismatch') {
-    // Update existing shift to match QGenda
     const shift = data.shifts[d.date];
     if (shift) {
       if (d.qgendaTimeEntries.length > 0) {
@@ -8708,36 +8699,32 @@ function shiftReconAcceptQgenda(idx) {
       showToast(`Updated shift for ${formatDateShort(d.date)}`);
     }
   } else if (d.type === 'missing_qgenda') {
-    // QGenda has nothing — accepting QGenda means removing app shift
     delete data.shifts[d.date];
     showToast(`Removed shift for ${formatDateShort(d.date)}`);
   }
-
   saveData(data);
   updateHeaderPoints();
-  shiftReconDecisions[d.date] = { accepted: 'qgenda', flagged: false };
-  saveShiftReconDecisions();
-  if (shiftReconCurrentDiff < shiftReconDiffs.length - 1) shiftReconCurrentDiff++;
-  renderShiftReconStepper();
-  renderShiftReconFlagged();
 }
 
-function shiftReconAcceptApp(idx) {
-  const d = shiftReconDiffs[idx];
-  shiftReconDecisions[d.date] = { accepted: 'app', flagged: true };
+function shiftReconAcceptQgendaInline(date) {
+  const d = shiftReconDiffs.find(x => x.date === date);
+  if (!d) return;
+  applyQgendaToShift(d);
+  shiftReconDecisions[date] = { accepted: 'qgenda', flagged: false };
   saveShiftReconDecisions();
-  if (shiftReconCurrentDiff < shiftReconDiffs.length - 1) shiftReconCurrentDiff++;
-  renderShiftReconStepper();
-  renderShiftReconFlagged();
+  renderQgendaRecon();
 }
 
-function shiftReconFlag(idx) {
-  const d = shiftReconDiffs[idx];
-  shiftReconDecisions[d.date] = { accepted: '', flagged: true };
+function shiftReconAcceptAppInline(date) {
+  shiftReconDecisions[date] = { accepted: 'app', flagged: false };
   saveShiftReconDecisions();
-  if (shiftReconCurrentDiff < shiftReconDiffs.length - 1) shiftReconCurrentDiff++;
-  renderShiftReconStepper();
-  renderShiftReconFlagged();
+  renderQgendaRecon();
+}
+
+function shiftReconFlagInline(date) {
+  shiftReconDecisions[date] = { accepted: '', flagged: true };
+  saveShiftReconDecisions();
+  renderQgendaRecon();
 }
 
 function renderShiftReconFlagged() {
@@ -8747,13 +8734,10 @@ function renderShiftReconFlagged() {
   const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const monthLabel = `${mn[qMonth]} ${qYear}`;
 
-  // Collect all flagged from decisions
   const allFlagged = [];
   shiftReconDiffs.forEach(d => {
     const dec = shiftReconDecisions[d.date];
-    if (dec && dec.flagged) {
-      allFlagged.push(d);
-    }
+    if (dec && dec.flagged) allFlagged.push(d);
   });
 
   if (allFlagged.length === 0) {
@@ -8765,9 +8749,6 @@ function renderShiftReconFlagged() {
   html += '<ul class="flagged-list">';
   allFlagged.forEach(f => {
     const qTimes = f.qgendaEntries.map(e => `${e.clockInTime || '?'}-${e.clockOutTime || '?'}`).join(', ');
-    const tEntries = f.trackerShift && f.trackerShift.timeEntries ? f.trackerShift.timeEntries : (f.trackerShift ? [{ start: f.trackerShift.startTime, end: f.trackerShift.endTime }] : []);
-    const tTimes = tEntries.map(e => `${e.start || '?'}-${e.end || '?'}`).join(', ');
-
     if (f.type === 'missing_tracker') {
       html += `<li>${formatDateShort(f.date)} — Missing from Tracker (QGenda: ${f.qgendaHours.toFixed(1)}h, ${qTimes})</li>`;
     } else if (f.type === 'missing_qgenda') {
@@ -8796,9 +8777,7 @@ function generateShiftReconEmail() {
   const allFlagged = [];
   shiftReconDiffs.forEach(d => {
     const dec = shiftReconDecisions[d.date];
-    if (dec && dec.flagged) {
-      allFlagged.push(d);
-    }
+    if (dec && dec.flagged) allFlagged.push(d);
   });
 
   let emailText = `Subject: QGenda Time Discrepancies — ${monthLabel}\n\nHi,\n\nI found the following time discrepancies during QGenda reconciliation for ${monthLabel}:\n\n`;
@@ -8856,18 +8835,24 @@ document.getElementById('prodFile').addEventListener('change', async (e) => {
   const isImage = /\.(png|jpg|jpeg)$/i.test(file.name);
 
   try {
-    let allText = '';
     if (isImage) {
       showToast('Running OCR on image...');
-      allText = await ocrImage(file);
-      // Normalize OCR output: replace multiple spaces with tab for parseProdText
-      allText = allText.split('\n').map(line => line.replace(/\s{2,}/g, '\t')).join('\n');
+      const allText = await ocrImage(file);
+      const normalized = allText.split('\n').map(line => line.replace(/\s{2,}/g, '\t')).join('\n');
+      prodData = parseProdText(normalized);
     } else {
       showToast('Parsing PDF...');
-      allText = await extractPDFText(file);
+      // Try coordinate-based extraction first
+      const structured = await extractPDFTabular(file);
+      if (structured.length > 0) {
+        prodData = parseProdStructured(structured);
+      }
+      // Fallback to legacy text extraction if coordinate-based found nothing
+      if (prodData.length === 0) {
+        const allText = await extractPDFTextLegacy(file);
+        prodData = parseProdText(allText);
+      }
     }
-
-    prodData = parseProdText(allText);
     localStorage.setItem(PROD_KEY, JSON.stringify(prodData));
     showToast(`Loaded ${prodData.length} billing cases`);
 
@@ -8905,7 +8890,7 @@ async function ocrImage(file) {
   return data.text;
 }
 
-async function extractPDFText(file) {
+async function extractPDFTextLegacy(file) {
   if (!window.pdfjsLib) {
     const pdfjs = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.mjs');
     window.pdfjsLib = pdfjs;
@@ -8960,6 +8945,209 @@ async function extractPDFText(file) {
   // Normalize OCR output: replace multiple spaces with tab
   ocrText = ocrText.split('\n').map(line => line.replace(/\s{2,}/g, '\t')).join('\n');
   return ocrText;
+}
+
+// ================================================================
+// COORDINATE-BASED PDF EXTRACTION
+// ================================================================
+async function extractPDFTabular(file) {
+  if (!window.pdfjsLib) {
+    const pdfjs = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.mjs');
+    window.pdfjsLib = pdfjs;
+    pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.mjs';
+  }
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  // Known column header tokens (in order) — the billing PDF uses these
+  const HEADER_TOKENS = [
+    'Date of', 'Patient', 'Loc', 'CPT', 'Start', 'End',
+    'Shared', 'M.D.', 'Bonus', 'Time', 'Units', '20%', '37.5%', '50%', '100%', 'Total'
+  ];
+
+  const allRows = [];
+
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const textContent = await page.getTextContent();
+    const items = textContent.items.filter(it => it.str.trim());
+
+    if (items.length === 0) continue;
+
+    // Group items by Y-coordinate (±3 tolerance)
+    const yGroups = [];
+    const sorted = [...items].sort((a, b) => b.transform[5] - a.transform[5]); // top to bottom
+    sorted.forEach(item => {
+      const y = item.transform[5];
+      let found = false;
+      for (const g of yGroups) {
+        if (Math.abs(g.y - y) <= 3) {
+          g.items.push({ x: item.transform[4], text: item.str.trim(), width: item.width || 0 });
+          g.y = (g.y * g.items.length + y) / (g.items.length); // running avg
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        yGroups.push({ y, items: [{ x: item.transform[4], text: item.str.trim(), width: item.width || 0 }] });
+      }
+    });
+
+    // Sort groups top-to-bottom, items left-to-right
+    yGroups.sort((a, b) => b.y - a.y);
+    yGroups.forEach(g => g.items.sort((a, b) => a.x - b.x));
+
+    // Find header row: look for a row containing several of the known tokens
+    let headerCols = null;
+    for (const g of yGroups) {
+      const rowText = g.items.map(it => it.text).join(' ');
+      let tokenHits = 0;
+      for (const tok of HEADER_TOKENS) {
+        if (rowText.includes(tok)) tokenHits++;
+      }
+      if (tokenHits >= 5) {
+        // Map header token positions
+        headerCols = [];
+        for (const tok of HEADER_TOKENS) {
+          const match = g.items.find(it => it.text.includes(tok));
+          if (match) {
+            headerCols.push({ name: tok, x: match.x });
+          }
+        }
+        headerCols.sort((a, b) => a.x - b.x);
+        break;
+      }
+    }
+
+    if (!headerCols || headerCols.length < 5) continue;
+
+    // Build column boundaries: midpoint between consecutive headers
+    const colBounds = headerCols.map((col, i) => {
+      const left = i === 0 ? 0 : (headerCols[i - 1].x + col.x) / 2;
+      const right = i === headerCols.length - 1 ? 9999 : (col.x + headerCols[i + 1].x) / 2;
+      return { name: col.name, left, right };
+    });
+
+    // Process data rows (everything after header, skip totals)
+    let pastHeader = false;
+    for (const g of yGroups) {
+      const rowText = g.items.map(it => it.text).join(' ');
+
+      if (!pastHeader) {
+        let tokenHits = 0;
+        for (const tok of HEADER_TOKENS) {
+          if (rowText.includes(tok)) tokenHits++;
+        }
+        if (tokenHits >= 5) { pastHeader = true; continue; }
+        continue;
+      }
+
+      // Skip total rows
+      if (/Day Total|Grand Total|Page\s+\d/i.test(rowText)) continue;
+      // Skip empty-ish rows
+      if (g.items.length < 2) continue;
+
+      // Assign each item to a column
+      const row = {};
+      for (const item of g.items) {
+        let bestCol = null, bestDist = 9999;
+        for (const col of colBounds) {
+          if (item.x >= col.left && item.x < col.right) { bestCol = col.name; break; }
+          const dist = Math.min(Math.abs(item.x - col.left), Math.abs(item.x - col.right));
+          if (dist < bestDist) { bestDist = dist; bestCol = col.name; }
+        }
+        if (bestCol) {
+          row[bestCol] = row[bestCol] ? row[bestCol] + ' ' + item.text : item.text;
+        }
+      }
+
+      allRows.push(row);
+    }
+  }
+
+  return allRows;
+}
+
+function parseProdStructured(rows) {
+  const cases = [];
+  let currentDate = '';
+
+  for (const row of rows) {
+    // Carry-forward date
+    const dateField = row['Date of'] || '';
+    const dateMatch = dateField.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (dateMatch) {
+      let [, m, d, y] = dateMatch;
+      y = parseInt(y);
+      if (y < 100) y += 2000;
+      currentDate = y + '-' + String(parseInt(m)).padStart(2, '0') + '-' + String(parseInt(d)).padStart(2, '0');
+    }
+    if (!currentDate) continue;
+
+    // Extract fields
+    const accountNumber = (row['Patient'] || '').replace(/\D/g, '').substring(0, 10) || '';
+    const locCode = (row['Loc'] || '').replace(/[^A-Z]/gi, '').substring(0, 4) || '';
+    const cptCode = ((row['CPT'] || '').match(/\d{5}/) || [''])[0];
+    const startRaw = (row['Start'] || '').replace(/[^0-9:]/g, '');
+    const endRaw = (row['End'] || '').replace(/[^0-9:]/g, '');
+    const sharedRaw = (row['Shared'] || '').trim().toUpperCase();
+    const isShared = sharedRaw === 'Y' || sharedRaw === 'YES';
+    const mdMinutes = parseInt((row['M.D.'] || '').replace(/\D/g, '')) || 0;
+
+    // Parse start/end times
+    let startTime = '', endTime = '';
+    if (startRaw) {
+      const clean = startRaw.replace(':', '');
+      if (clean.length >= 3 && clean.length <= 4) startTime = formatMilitaryTime(clean);
+    }
+    if (endRaw) {
+      const clean = endRaw.replace(':', '');
+      if (clean.length >= 3 && clean.length <= 4) endTime = formatMilitaryTime(clean);
+    }
+
+    // Parse numeric fields — grab from specific columns
+    const unitsRaw = row['Units'] || '';
+    const units = parseFloat(unitsRaw) || 0;
+    const totalRaw = row['Total'] || '';
+    const totalPoints = parseFloat(totalRaw) || 0;
+    const timePointsRaw = row['Time'] || '';
+    const timePoints = parseFloat(timePointsRaw) || 0;
+
+    // Skip rows with no useful data
+    if (!cptCode && !startTime && totalPoints === 0 && units === 0) continue;
+
+    // Classify row type
+    const addOnType = cptCode ? (CPT_ADDON_MAP[cptCode] || '') : '';
+    const isRoundingCPT = cptCode === '01996' || cptCode === '99231';
+
+    if (addOnType && !startTime && !endTime) {
+      // Add-on row
+      cases.push({
+        date: currentDate, startTime: '', endTime: '',
+        mdMinutes: 0, totalPoints, units,
+        locCode, cptCode, accountNumber,
+        isAddOn: true, addOnType, isShared, timePoints
+      });
+    } else if (isRoundingCPT && !startTime && !endTime) {
+      // Rounding row
+      cases.push({
+        date: currentDate, startTime: '', endTime: '',
+        mdMinutes, totalPoints, units,
+        locCode, cptCode, accountNumber,
+        isAddOn: false, addOnType: '', isRounding: true, isShared, timePoints
+      });
+    } else if (startTime || endTime || totalPoints > 0 || units > 0) {
+      // Standard case row
+      cases.push({
+        date: currentDate, startTime, endTime,
+        mdMinutes, totalPoints, units,
+        locCode, cptCode, accountNumber,
+        isAddOn: false, addOnType, isShared, timePoints
+      });
+    }
+  }
+
+  return cases;
 }
 
 // ================================================================
@@ -9665,7 +9853,7 @@ async function parseCaseExcel(file) {
 }
 
 async function parseCasePDF(file) {
-  const allText = await extractPDFText(file);
+  const allText = await extractPDFTextLegacy(file);
 
   const prodCases = parseProdText(allText);
   // Convert production format to case import format, skipping add-on rows
@@ -9851,6 +10039,8 @@ let reconFlaggedItems = [];
 let reconAutoAdjusted = [];
 let reconCurrentDiff = 0;
 let reconDecisions = {};
+let reconMatchesByDate = {}; // { date: [{ billing, tracker, score, status, ptsDiff }] }
+let reconExpandedDays = {}; // { date: true/false }
 
 function loadReconDecisions() {
   try {
@@ -9998,6 +10188,128 @@ function flagAddonForOffice(date, type, appCount, billingCount) {
   renderProdRecon();
 }
 
+// ================================================================
+// SCORED MATCHING ALGORITHM
+// ================================================================
+function matchCases(bDay, tDay, shift) {
+  // Score all billing-tracker pairs
+  const pairs = [];
+  bDay.forEach((bc, bi) => {
+    tDay.forEach((tc, ti) => {
+      let score = 0;
+
+      // Date always matches within a day
+      score += 100;
+
+      // CPT code match: billing CPT matches tracker case type or ASA code
+      if (bc.cptCode) {
+        const tcType = tc.caseType || '';
+        if (bc.cptCode === tcType) score += 50;
+        else if (bc.isRounding && tc.caseType === 'aps_rounding') score += 40;
+      }
+
+      // Start time proximity
+      const bStart = timeToMinutes(bc.startTime);
+      const tStart = timeToMinutes(tc.startTime || '');
+      if (bStart > 0 && tStart > 0) {
+        const timeDiff = Math.abs(bStart - tStart);
+        if (timeDiff <= 30) score += 30 - timeDiff;
+      }
+
+      // Both shared
+      if (bc.isShared && tc.isSharedCase) score += 10;
+
+      // Location match
+      if (bc.locCode && tc.location && bc.locCode === tc.location) score += 5;
+
+      pairs.push({ bi, ti, score });
+    });
+  });
+
+  // Greedy assignment: sort by score descending, assign best non-conflicting match
+  pairs.sort((a, b) => b.score - a.score);
+  const usedBilling = new Set();
+  const usedTracker = new Set();
+  const matches = [];
+
+  for (const pair of pairs) {
+    if (usedBilling.has(pair.bi) || usedTracker.has(pair.ti)) continue;
+    if (pair.score < 50) continue; // threshold
+
+    usedBilling.add(pair.bi);
+    usedTracker.add(pair.ti);
+
+    const bc = bDay[pair.bi];
+    const tc = tDay[pair.ti];
+    const tcPts = calcCasePoints(tc, shift);
+    const ptsDiff = Math.abs(bc.totalPoints - tcPts);
+
+    let status;
+    if (ptsDiff < 3) status = 'match';
+    else if (ptsDiff <= 10) status = 'close';
+    else status = 'mismatch';
+
+    matches.push({
+      billing: bc, tracker: tc, score: pair.score,
+      status, billingPts: bc.totalPoints, trackerPts: tcPts, ptsDiff
+    });
+  }
+
+  // Unmatched billing cases
+  bDay.forEach((bc, bi) => {
+    if (usedBilling.has(bi)) return;
+    matches.push({
+      billing: bc, tracker: null, score: 0,
+      status: 'missing', billingPts: bc.totalPoints, trackerPts: 0, ptsDiff: bc.totalPoints,
+      missingFrom: 'tracker'
+    });
+  });
+
+  // Unmatched tracker cases
+  tDay.forEach((tc, ti) => {
+    if (usedTracker.has(ti)) return;
+    const tcPts = calcCasePoints(tc, shift);
+    matches.push({
+      billing: null, tracker: tc, score: 0,
+      status: 'missing', billingPts: 0, trackerPts: tcPts, ptsDiff: tcPts,
+      missingFrom: 'billing'
+    });
+  });
+
+  return matches;
+}
+
+function getMatchKey(m) {
+  const date = m.billing ? m.billing.date : m.tracker.shiftDate;
+  const time = m.billing ? (m.billing.startTime || 'none') : (m.tracker.startTime || 'tc');
+  const cpt = m.billing ? (m.billing.cptCode || '') : '';
+  return `${date}_${time}_${cpt}`;
+}
+
+function batchAcceptAllMatches() {
+  let count = 0;
+  for (const date of Object.keys(reconMatchesByDate)) {
+    const matches = reconMatchesByDate[date];
+    const shift = data.shifts[date];
+    for (const m of matches) {
+      if (m.status !== 'match') continue;
+      const key = getMatchKey(m);
+      if (reconDecisions[key] && (reconDecisions[key].accepted || reconDecisions[key].flagged)) continue;
+      reconDecisions[key] = { accepted: 'match', flagged: false };
+      count++;
+    }
+  }
+  saveReconDecisions();
+  showToast(`Accepted ${count} matching cases`);
+  renderProdRecon();
+}
+
+function toggleReconDay(dateStr) {
+  reconExpandedDays[dateStr] = !reconExpandedDays[dateStr];
+  const dayEl = document.querySelector(`.recon-day[data-date="${dateStr}"]`);
+  if (dayEl) dayEl.classList.toggle('expanded');
+}
+
 function renderProdRecon() {
   loadReconDecisions();
   reconFlaggedItems = [];
@@ -10037,201 +10349,148 @@ function renderProdRecon() {
   const allDates = new Set([...Object.keys(bByDate), ...Object.keys(tByDate)]);
   const sortedDates = [...allDates].sort();
 
-  let bTotalPts = 0, tTotalPts = 0, bTotalCases = 0, tTotalCases = 0, matchCount = 0, issueCount = 0;
-
-  // Build differences list for the stepper
-  reconDifferences = [];
-
-  // Day-level summary table
-  let dayHtml = '<div class="card"><h2>Billing vs Tracker by Day</h2>';
-  dayHtml += '<table class="recon-table"><thead><tr><th>Date</th><th>Billing</th><th>Tracker</th><th>Status</th></tr></thead><tbody>';
+  // Run scored matching for each day
+  reconMatchesByDate = {};
+  let totalMatched = 0, totalClose = 0, totalMismatch = 0, totalMissing = 0;
+  let bTotalPts = 0, tTotalPts = 0;
 
   sortedDates.forEach(date => {
-    const bDay = (bByDate[date] || []);
-    const tDay = (tByDate[date] || []);
+    const bDay = bByDate[date] || [];
+    const tDay = tByDate[date] || [];
     const shift = data.shifts[date];
 
-    const bPts = bDay.reduce((s, c) => s + c.totalPoints, 0);
-    const tPts = tDay.reduce((s, c) => s + calcCasePoints(c, shift), 0);
-    bTotalPts += bPts; tTotalPts += tPts;
-    bTotalCases += bDay.length; tTotalCases += tDay.length;
+    const matches = matchCases(bDay, tDay, shift);
+    reconMatchesByDate[date] = matches;
 
-    const caseDiff = Math.abs(bDay.length - tDay.length);
-    const ptDiff = Math.abs(bPts - tPts);
-    let status = '', rowClass = '';
-    if (bDay.length === 0) { status = 'Not in billing'; rowClass = 'warn'; issueCount++; }
-    else if (tDay.length === 0) { status = 'Not in tracker'; rowClass = 'miss'; issueCount++; }
-    else if (caseDiff === 0 && ptDiff < 5) { status = 'Match'; rowClass = 'match'; matchCount++; }
-    else if (caseDiff <= 1 && ptDiff < 15) { status = 'Close'; rowClass = 'warn'; issueCount++; }
-    else { status = 'Mismatch'; rowClass = 'miss'; issueCount++; }
-
-    dayHtml += `<tr class="${rowClass}"><td>${formatDateShort(date)}</td>
-      <td>${bDay.length} cases<br><span style="font-size:0.7rem;color:var(--text-dim)">${bPts.toFixed(1)} pts</span></td>
-      <td>${tDay.length} cases<br><span style="font-size:0.7rem;color:var(--text-dim)">${tPts.toFixed(1)} pts</span></td>
-      <td>${status}</td></tr>`;
-
-    // Per-case matching for difference building
-    if (bDay.length > 0 || tDay.length > 0) {
-      const usedTracker = new Set();
-      const usedBilling = new Set();
-
-      // Pass 1: Match rounding billing rows (no times) by CPT code
-      bDay.forEach((bc, bIdx) => {
-        if (bc.startTime && bc.endTime) return; // skip timed cases
-        if (!bc.isRounding) return;
-        const roundingType = bc.cptCode === '01996' ? '01996' : (bc.cptCode === '99231' ? '99231' : null);
-        if (!roundingType) return;
-
-        // Find an unmatched app case of matching type on this date
-        let bestMatch = null;
-        tDay.forEach((tc, idx) => {
-          if (usedTracker.has(idx)) return;
-          // Match against standalone rounding case types or APS rounding
-          if (tc.caseType === roundingType) { bestMatch = idx; return; }
-          if (tc.caseType === 'aps_rounding' && roundingType === '01996' && (parseInt(tc.epiduralRounds) || 0) > 0) { bestMatch = idx; return; }
-          if (tc.caseType === 'aps_rounding' && roundingType === '99231' && (parseInt(tc.painRounds) || 0) > 0) { bestMatch = idx; return; }
-        });
-
-        if (bestMatch !== null) {
-          usedTracker.add(bestMatch);
-          usedBilling.add(bIdx);
-          const tc = tDay[bestMatch];
-          const tcPts = calcCasePoints(tc, shift);
-          const ptsDiff = Math.abs(bc.totalPoints - tcPts);
-          if (ptsDiff >= 3) {
-            reconDifferences.push({ date, shift, billingCase: bc, trackerCase: tc, billingPts: bc.totalPoints, trackerPts: tcPts, type: 'mismatch' });
-          }
-        } else {
-          usedBilling.add(bIdx);
-          reconDifferences.push({ date, shift, billingCase: bc, trackerCase: null, billingPts: bc.totalPoints, trackerPts: 0, type: 'missing_tracker' });
+    // Auto-adjust shared cases with small differences
+    matches.forEach(m => {
+      if (m.status === 'close' && m.tracker && m.billing && m.tracker.isSharedCase && m.ptsDiff < 5) {
+        const tc = m.tracker;
+        const bc = m.billing;
+        const oldPts = m.trackerPts;
+        const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
+        const obMult = (isOBShift && !tc.isORCase) ? 2 : 1;
+        const addOns = calcAddOnPoints(tc);
+        let caseStartMin = timeToMinutes(tc.startTime);
+        let caseEndMin = timeToMinutes(tc.endTime);
+        if (caseEndMin <= caseStartMin) caseEndMin += 1440;
+        const caseHours = (caseEndMin - caseStartMin) / 60;
+        const tm = getTimeMultiplier(tc.physicalStatus, shift ? shift.isHoliday : false, shift ? isWeekend(shift.date) : false, caseStartMin, tc.isHighRiskPeds);
+        const timePts = caseHours * tm * 6;
+        const emergPts = tc.isEmergency ? 1 : 0;
+        const medPts = tc.isMedicalProc ? 0.20 * (parseFloat(tc.medicalUnits) || 0) : 0;
+        const acutePts = tc.isAcutePain ? 0.375 * (parseFloat(tc.acutePainUnits) || 0) : 0;
+        const targetBase = bc.totalPoints / obMult - timePts - medPts - acutePts - emergPts - addOns;
+        const pct = (parseFloat(tc.sharedStartupPct) || 50) / 100;
+        if (pct > 0) {
+          tc.baseUnits = String(round2(targetBase / (0.5 * pct)));
+          const realCase = data.cases.find(c => c.id === tc.id);
+          if (realCase) realCase.baseUnits = tc.baseUnits;
+          saveData(data);
+          m.status = 'match';
+          m.trackerPts = bc.totalPoints;
+          m.ptsDiff = 0;
+          reconAutoAdjusted.push({ date, startTime: tc.startTime, procedure: tc.procedure, oldPts, newPts: bc.totalPoints });
         }
-      });
+      }
+    });
 
-      // Pass 2: Match timed cases by start time overlap
-      bDay.forEach((bc, bIdx) => {
-        if (usedBilling.has(bIdx)) return;
-        const bStart = timeToMinutes(bc.startTime);
-        let bestMatch = null, bestDiff = 999;
-        tDay.forEach((tc, idx) => {
-          if (usedTracker.has(idx)) return;
-          const tStart = timeToMinutes(tc.startTime || '');
-          if (!tStart) return;
-          const diff = Math.abs(bStart - tStart);
-          if (diff < bestDiff && diff <= 30) { bestDiff = diff; bestMatch = idx; }
-        });
-
-        if (bestMatch !== null) {
-          usedTracker.add(bestMatch);
-          const tc = tDay[bestMatch];
-          const tcPts = calcCasePoints(tc, shift);
-          const ptsDiff = Math.abs(bc.totalPoints - tcPts);
-
-          // Auto-adjust shared cases with < 5pt difference
-          if (tc.isSharedCase && ptsDiff > 0 && ptsDiff < 5) {
-            const oldPts = tcPts;
-            // Back-calculate baseUnits to match billing total
-            const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
-            const obMult = (isOBShift && !tc.isORCase) ? 2 : 1;
-            const addOns = calcAddOnPoints(tc);
-            let caseStartMin = timeToMinutes(tc.startTime);
-            let caseEndMin = timeToMinutes(tc.endTime);
-            if (caseEndMin <= caseStartMin) caseEndMin += 1440;
-            const caseHours = (caseEndMin - caseStartMin) / 60;
-            const tm = getTimeMultiplier(tc.physicalStatus, shift.isHoliday, isWeekend(shift.date), caseStartMin, tc.isHighRiskPeds);
-            const timePts = caseHours * tm * 6;
-            const emergPts = tc.isEmergency ? 1 : 0;
-            const medPts = tc.isMedicalProc ? 0.20 * (parseFloat(tc.medicalUnits) || 0) : 0;
-            const acutePts = tc.isAcutePain ? 0.375 * (parseFloat(tc.acutePainUnits) || 0) : 0;
-            // billingTotal = (basePts + timePts + medPts + acutePts + emergPts + addOns) * obMult
-            // basePts = billingTotal/obMult - timePts - medPts - acutePts - emergPts - addOns
-            const targetBase = bc.totalPoints / obMult - timePts - medPts - acutePts - emergPts - addOns;
-            const pct = (parseFloat(tc.sharedStartupPct) || 50) / 100;
-            if (pct > 0) {
-              tc.baseUnits = String(round2(targetBase / (0.5 * pct)));
-            }
-            saveData(data);
-            reconAutoAdjusted.push({ date, startTime: tc.startTime, procedure: tc.procedure, oldPts, newPts: bc.totalPoints });
-          } else if (ptsDiff >= 3) {
-            // Add to difference reviewer
-            reconDifferences.push({
-              date, shift,
-              billingCase: bc,
-              trackerCase: tc,
-              billingPts: bc.totalPoints,
-              trackerPts: tcPts,
-              type: 'mismatch'
-            });
-          }
-        } else {
-          // Billing case not in tracker
-          reconDifferences.push({
-            date, shift,
-            billingCase: bc,
-            trackerCase: null,
-            billingPts: bc.totalPoints,
-            trackerPts: 0,
-            type: 'missing_tracker'
-          });
-        }
-      });
-
-      // Unmatched tracker cases
-      tDay.forEach((tc, idx) => {
-        if (usedTracker.has(idx)) return;
-        const tcPts = calcCasePoints(tc, shift);
-        reconDifferences.push({
-          date, shift,
-          billingCase: null,
-          trackerCase: tc,
-          billingPts: 0,
-          trackerPts: tcPts,
-          type: 'missing_billing'
-        });
-      });
-    }
+    matches.forEach(m => {
+      bTotalPts += m.billingPts;
+      tTotalPts += m.trackerPts;
+      if (m.status === 'match') totalMatched++;
+      else if (m.status === 'close') totalClose++;
+      else if (m.status === 'mismatch') totalMismatch++;
+      else if (m.status === 'missing') totalMissing++;
+    });
   });
 
-  dayHtml += '</tbody></table></div>';
+  const unresolvedCount = totalClose + totalMismatch + totalMissing;
 
-  // Summary
-  let summary = '<div class="card"><h2>Production Summary</h2><div class="summary-grid">';
-  summary += `<div class="summary-item"><div class="label">Billing Points</div><div class="value blue">${bTotalPts.toFixed(1)}</div></div>`;
-  summary += `<div class="summary-item"><div class="label">Tracker Points</div><div class="value green">${tTotalPts.toFixed(1)}</div></div>`;
-  summary += `<div class="summary-item"><div class="label">Billing Cases</div><div class="value blue">${bTotalCases}</div></div>`;
-  summary += `<div class="summary-item"><div class="label">Tracker Cases</div><div class="value green">${tTotalCases}</div></div>`;
-  summary += `<div class="summary-item"><div class="label">Days Matched</div><div class="value green">${matchCount}</div></div>`;
-  summary += `<div class="summary-item"><div class="label">Days w/ Issues</div><div class="value" style="color:var(--danger)">${issueCount}</div></div>`;
-  summary += '</div></div>';
+  // === Summary Dashboard ===
+  let html = '<div class="card">';
+  html += '<div class="recon-summary-bar">';
+  html += `<div class="stat green"><div class="num">${totalMatched}</div><div class="lbl">Matched</div></div>`;
+  html += `<div class="stat yellow"><div class="num">${totalClose + totalMismatch}</div><div class="lbl">Discrepancies</div></div>`;
+  html += `<div class="stat purple"><div class="num">${totalMissing}</div><div class="lbl">Missing</div></div>`;
+  html += '</div>';
+  html += '<div class="recon-pts-compare">';
+  html += `<div>Billing: <span style="color:var(--primary)">${bTotalPts.toFixed(1)} pts</span></div>`;
+  html += `<div>Tracker: <span style="color:var(--accent)">${tTotalPts.toFixed(1)} pts</span></div>`;
+  html += '</div>';
 
-  // Add-on tally
-  const addonHtml = renderAddOnTally(allBilling, data.cases, prefix);
+  // Batch actions
+  if (totalMatched > 0) {
+    const unacceptedMatches = Object.values(reconMatchesByDate).flat().filter(m => {
+      if (m.status !== 'match') return false;
+      const key = getMatchKey(m);
+      return !reconDecisions[key] || (!reconDecisions[key].accepted && !reconDecisions[key].flagged);
+    }).length;
+    if (unacceptedMatches > 0) {
+      html += '<div class="recon-batch-actions">';
+      html += `<button class="btn btn-accept-app" onclick="batchAcceptAllMatches()" style="padding:10px 16px;font-size:0.85rem;">Accept All Matches (${unacceptedMatches})</button>`;
+      html += '</div>';
+    }
+  }
+  html += '</div>';
 
-  // Auto-adjusted shared cases summary
-  let autoAdjHtml = '';
+  // === Auto-adjusted shared cases ===
   if (reconAutoAdjusted.length > 0) {
-    autoAdjHtml = '<div class="card"><h2>Auto-Adjusted Shared Cases</h2>';
-    autoAdjHtml += `<p style="font-size:0.8rem;color:var(--accent);margin-bottom:8px;">${reconAutoAdjusted.length} shared case${reconAutoAdjusted.length > 1 ? 's' : ''} auto-adjusted to match billing</p>`;
-    autoAdjHtml += '<details><summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">Show details</summary>';
-    autoAdjHtml += '<table class="recon-table"><thead><tr><th>Date</th><th>Case</th><th>Old</th><th>New</th></tr></thead><tbody>';
+    html += '<div class="card"><h2>Auto-Adjusted Shared Cases</h2>';
+    html += `<p style="font-size:0.8rem;color:var(--accent);margin-bottom:8px;">${reconAutoAdjusted.length} shared case${reconAutoAdjusted.length > 1 ? 's' : ''} auto-adjusted to match billing</p>`;
+    html += '<details><summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">Show details</summary>';
+    html += '<table class="recon-table"><thead><tr><th>Date</th><th>Case</th><th>Old</th><th>New</th></tr></thead><tbody>';
     reconAutoAdjusted.forEach(a => {
-      autoAdjHtml += `<tr class="match"><td>${formatDateShort(a.date)}</td><td>${a.startTime} ${escHtml(a.procedure || '')}</td><td>${a.oldPts.toFixed(1)} pts</td><td>${a.newPts.toFixed(1)} pts</td></tr>`;
+      html += `<tr class="match"><td>${formatDateShort(a.date)}</td><td>${a.startTime} ${escHtml(a.procedure || '')}</td><td>${a.oldPts.toFixed(1)} pts</td><td>${a.newPts.toFixed(1)} pts</td></tr>`;
     });
-    autoAdjHtml += '</tbody></table></details></div>';
+    html += '</tbody></table></details></div>';
   }
 
-  // Difference reviewer stepper
-  let reviewerHtml = '';
-  if (reconDifferences.length > 0) {
-    reviewerHtml = '<div class="card" id="reconReviewerCard">';
-    reviewerHtml += `<h2>Review Differences (${reconDifferences.length})</h2>`;
-    reviewerHtml += '<div id="reconStepperContainer"></div>';
-    reviewerHtml += '</div>';
-  }
+  // === Add-on tally ===
+  html += renderAddOnTally(allBilling, data.cases, prefix);
 
-  // Flagged items + email section
-  let flaggedHtml = '<div id="reconFlaggedSection"></div>';
+  // === Daily Breakdown (expandable days) ===
+  html += '<div class="card"><h2>Daily Breakdown</h2>';
+  sortedDates.forEach(date => {
+    const matches = reconMatchesByDate[date];
+    const dayBPts = matches.reduce((s, m) => s + m.billingPts, 0);
+    const dayTPts = matches.reduce((s, m) => s + m.trackerPts, 0);
+    const caseCount = matches.length;
 
-  container.innerHTML = summary + addonHtml + autoAdjHtml + dayHtml + reviewerHtml + flaggedHtml;
+    // Determine day status
+    const hasIssue = matches.some(m => m.status !== 'match');
+    const hasMissing = matches.some(m => m.status === 'missing');
+    const hasMismatch = matches.some(m => m.status === 'mismatch');
+    let dayStatus, dayStatusCls;
+    if (hasMissing) { dayStatus = 'Missing'; dayStatusCls = 'missing'; }
+    else if (hasMismatch) { dayStatus = 'Mismatch'; dayStatusCls = 'mismatch'; }
+    else if (hasIssue) { dayStatus = 'Close'; dayStatusCls = 'close'; }
+    else { dayStatus = 'Match'; dayStatusCls = 'match'; }
+
+    // Expand by default if issues, collapse if match
+    const isExpanded = reconExpandedDays[date] !== undefined ? reconExpandedDays[date] : (dayStatusCls !== 'match');
+    if (reconExpandedDays[date] === undefined) reconExpandedDays[date] = isExpanded;
+
+    html += `<div class="recon-day status-${dayStatusCls}${isExpanded ? ' expanded' : ''}" data-date="${date}">`;
+    html += `<div class="recon-day-header" onclick="toggleReconDay('${date}')">`;
+    html += `<span class="day-date">${formatDateShort(date)}</span>`;
+    html += `<span class="day-info">${caseCount} case${caseCount !== 1 ? 's' : ''} &middot; ${dayBPts.toFixed(1)} pts</span>`;
+    html += `<span class="day-status s-${dayStatusCls}">${dayStatus}</span>`;
+    html += '<span class="day-chevron">&#9660;</span>';
+    html += '</div>';
+
+    // Day detail (case table)
+    html += '<div class="recon-day-detail">';
+    html += renderReconDayDetail(date, matches);
+    html += '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // === Flagged section ===
+  html += '<div id="reconFlaggedSection"></div>';
+
+  container.innerHTML = html;
 
   // Wire up add-on select dropdowns
   container.querySelectorAll('.addon-select').forEach(sel => {
@@ -10241,7 +10500,6 @@ function renderProdRecon() {
       const type = this.dataset.type;
       const c = data.cases.find(x => x.id === caseId);
       if (!c) return;
-      // Add the add-on to the case
       if (type === 'brachial_plexus') c.nerveBlock = 'brachial_plexus';
       else if (type === 'other_nerve') c.nerveBlock = 'other';
       else if (type === 'central_line') c.hasCentralLine = true;
@@ -10255,109 +10513,77 @@ function renderProdRecon() {
     });
   });
 
-  // Render stepper if differences exist
-  if (reconDifferences.length > 0) {
-    reconCurrentDiff = 0;
-    renderDiffStepper();
-  }
-
   renderFlaggedSection(monthLabel);
 }
 
-function renderDiffStepper() {
-  const container = document.getElementById('reconStepperContainer');
-  if (!container || reconDifferences.length === 0) return;
+function renderReconDayDetail(date, matches) {
+  let html = '<table class="recon-case-table"><thead><tr>';
+  html += '<th>Time</th><th>CPT</th><th>Billing</th><th>App</th><th>Status</th><th>Action</th>';
+  html += '</tr></thead><tbody>';
 
-  const d = reconDifferences[reconCurrentDiff];
-  const key = `${d.date}_${d.billingCase ? d.billingCase.startTime : 'none'}_${d.billingCase ? d.billingCase.cptCode : 'tc'}`;
-  const decision = reconDecisions[key];
-  const isResolved = decision && (decision.accepted === 'app' || decision.accepted === 'billing');
-  const isFlagged = decision && decision.flagged;
+  matches.forEach((m, idx) => {
+    const key = getMatchKey(m);
+    const decision = reconDecisions[key];
+    const isResolved = decision && (decision.accepted || decision.flagged);
+    const rowCls = `case-${m.status}`;
 
-  let html = `<div class="diff-stepper${isResolved ? ' resolved' : ''}${isFlagged ? ' flagged' : ''}">`;
-  html += '<div class="diff-stepper-header">';
-  html += `<span class="counter">Difference ${reconCurrentDiff + 1} of ${reconDifferences.length}</span>`;
-  html += '<div class="diff-stepper-nav">';
-  html += `<button onclick="reconNav(-1)"${reconCurrentDiff === 0 ? ' disabled' : ''}>&larr;</button>`;
-  html += `<button onclick="reconNav(1)"${reconCurrentDiff >= reconDifferences.length - 1 ? ' disabled' : ''}>&rarr;</button>`;
-  html += '</div></div>';
+    // Time column
+    const timeStr = m.billing
+      ? `${m.billing.startTime || '-'}-${m.billing.endTime || '-'}`
+      : (m.tracker ? `${m.tracker.startTime || '-'}-${m.tracker.endTime || '-'}` : '-');
 
-  html += '<div class="diff-stepper-body">';
-  html += `<div class="diff-date">${formatDateShort(d.date)} ${d.type === 'mismatch' ? '— ' + (d.billingCase.startTime || '') : ''}</div>`;
+    // CPT column
+    const cptStr = m.billing ? (m.billing.cptCode || '-') : '-';
 
-  if (d.billingCase && d.billingCase.accountNumber) {
-    html += `<div class="diff-acct">Acct# ${d.billingCase.accountNumber}</div>`;
-  }
+    // Billing pts
+    const bPtsStr = m.billing ? m.billingPts.toFixed(1) : '<span style="color:var(--danger);font-size:0.7rem">Missing</span>';
 
-  if (isResolved) {
-    html += `<p style="color:var(--accent);font-size:0.85rem;font-weight:600;">Accepted: ${decision.accepted === 'billing' ? 'Billing' : 'App'} value</p>`;
-  } else if (isFlagged) {
-    html += `<p style="color:var(--accent2);font-size:0.85rem;font-weight:600;">Flagged for office</p>`;
-  }
+    // App pts
+    const aPtsStr = m.tracker ? m.trackerPts.toFixed(1) : '<span style="color:var(--danger);font-size:0.7rem">Missing</span>';
 
-  html += '<div class="diff-compare">';
+    // Status
+    let statusStr;
+    if (m.status === 'match') statusStr = '<span style="color:var(--accent)">Match</span>';
+    else if (m.status === 'close') statusStr = `<span style="color:var(--accent2)">${m.ptsDiff.toFixed(1)} diff</span>`;
+    else if (m.status === 'mismatch') statusStr = `<span style="color:var(--danger)">${m.ptsDiff.toFixed(1)} diff</span>`;
+    else if (m.missingFrom === 'tracker') statusStr = '<span style="color:#a78bfa">Not in app</span>';
+    else statusStr = '<span style="color:#a78bfa">Not in billing</span>';
 
-  // Billing column
-  html += '<div class="diff-col">';
-  html += '<h4>Billing</h4>';
-  if (d.billingCase) {
-    html += `<div class="val">${d.billingPts.toFixed(1)} pts</div>`;
-    html += `<div class="detail">${d.billingCase.units || '-'} units</div>`;
-    html += `<div class="detail">CPT ${d.billingCase.cptCode || '-'}</div>`;
-    html += `<div class="detail">${d.billingCase.startTime || '-'} - ${d.billingCase.endTime || '-'}</div>`;
-  } else {
-    html += '<div class="val" style="color:var(--danger)">Not in billing</div>';
-  }
-  html += '</div>';
-
-  // App column
-  html += '<div class="diff-col">';
-  html += '<h4>App</h4>';
-  if (d.trackerCase) {
-    const tcPts = calcCasePoints(d.trackerCase, d.shift);
-    html += `<div class="val">${tcPts.toFixed(1)} pts</div>`;
-    html += `<div class="detail">${d.trackerCase.baseUnits || '-'} units</div>`;
-    html += `<div class="detail">${escHtml(d.trackerCase.procedure || d.trackerCase.caseType)}</div>`;
-    html += `<div class="detail">${d.trackerCase.startTime || '-'} - ${d.trackerCase.endTime || '-'}</div>`;
-    if (d.trackerCase.isSharedCase) html += `<div class="detail" style="color:var(--accent2)">Shared (${d.trackerCase.sharedStartupPct || 50}%)</div>`;
-  } else {
-    html += '<div class="val" style="color:var(--danger)">Not in app</div>';
-  }
-  html += '</div></div>';
-
-  // Action buttons
-  if (!isResolved && !isFlagged) {
-    html += '<div class="diff-actions">';
-    if (d.billingCase && d.trackerCase) {
-      html += `<button class="btn btn-accept-billing" onclick="reconAcceptBilling(${reconCurrentDiff})">Accept Billing</button>`;
-      html += `<button class="btn btn-accept-app" onclick="reconAcceptApp(${reconCurrentDiff})">Accept App</button>`;
+    // Action column
+    let actionHtml;
+    if (isResolved) {
+      if (decision.flagged) actionHtml = '<span class="case-resolved" style="color:var(--accent2)">Flagged</span>';
+      else actionHtml = '<span class="case-resolved">Accepted</span>';
+    } else if (m.status === 'match') {
+      actionHtml = '<span style="color:var(--accent)">&#10003;</span>';
+    } else {
+      const escDate = date.replace(/'/g, "\\'");
+      actionHtml = '<div class="case-actions">';
+      if (m.billing && m.tracker) {
+        actionHtml += `<button onclick="reconAcceptBillingInline('${escDate}',${idx})">Billing</button>`;
+        actionHtml += `<button onclick="reconAcceptAppInline('${escDate}',${idx})">App</button>`;
+      }
+      actionHtml += `<button class="act-flag" onclick="reconFlagInline('${escDate}',${idx})">Flag</button>`;
+      actionHtml += '</div>';
     }
-    html += `<button class="btn btn-flag" onclick="reconFlag(${reconCurrentDiff})">Flag for Office</button>`;
-    html += '</div>';
-  }
 
-  html += '</div></div>';
+    html += `<tr class="${rowCls}"><td>${timeStr}</td><td>${cptStr}</td><td>${bPtsStr}</td><td>${aPtsStr}</td><td>${statusStr}</td><td>${actionHtml}</td></tr>`;
+  });
 
-  // Progress bar
-  const reviewed = Object.keys(reconDecisions).length;
-  html += `<p style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;text-align:center;">${reviewed} of ${reconDifferences.length} reviewed</p>`;
-
-  container.innerHTML = html;
+  html += '</tbody></table>';
+  return html;
 }
 
-function reconNav(dir) {
-  reconCurrentDiff = Math.max(0, Math.min(reconDifferences.length - 1, reconCurrentDiff + dir));
-  renderDiffStepper();
-}
+// Inline action handlers for the new dashboard UI
+function reconAcceptBillingInline(date, idx) {
+  const matches = reconMatchesByDate[date];
+  if (!matches || !matches[idx]) return;
+  const m = matches[idx];
+  const key = getMatchKey(m);
 
-function reconAcceptBilling(idx) {
-  const d = reconDifferences[idx];
-  const key = `${d.date}_${d.billingCase ? d.billingCase.startTime : 'none'}_${d.billingCase ? d.billingCase.cptCode : 'tc'}`;
-
-  if (d.trackerCase && d.billingCase) {
-    // Back-calculate baseUnits so calcCasePoints matches billing total
-    const tc = d.trackerCase;
-    const shift = d.shift;
+  if (m.tracker && m.billing) {
+    const tc = m.tracker;
+    const shift = data.shifts[date];
     const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
     const obMult = (isOBShift && !tc.isORCase) ? 2 : 1;
     const addOns = calcAddOnPoints(tc);
@@ -10370,59 +10596,41 @@ function reconAcceptBilling(idx) {
     const emergPts = tc.isEmergency ? 1 : 0;
     const medPts = tc.isMedicalProc ? 0.20 * (parseFloat(tc.medicalUnits) || 0) : 0;
     const acutePts = tc.isAcutePain ? 0.375 * (parseFloat(tc.acutePainUnits) || 0) : 0;
-
-    const targetBase = d.billingCase.totalPoints / obMult - timePts - medPts - acutePts - emergPts - addOns;
+    const targetBase = m.billing.totalPoints / obMult - timePts - medPts - acutePts - emergPts - addOns;
     const pct = tc.isSharedCase ? ((parseFloat(tc.sharedStartupPct) || 50) / 100) : 1;
     if (pct > 0) {
       tc.baseUnits = String(round2(targetBase / (0.5 * pct)));
     }
-
-    // Update in data array
     const realCase = data.cases.find(c => c.id === tc.id);
     if (realCase) realCase.baseUnits = tc.baseUnits;
     saveData(data);
-    showToast(`Case updated to match billing (${d.billingCase.totalPoints.toFixed(1)} pts)`);
+    showToast(`Case updated to match billing (${m.billing.totalPoints.toFixed(1)} pts)`);
   }
 
   reconDecisions[key] = { accepted: 'billing', flagged: false };
   saveReconDecisions();
   updateHeaderPoints();
-  if (reconCurrentDiff < reconDifferences.length - 1) reconCurrentDiff++;
-  renderDiffStepper();
-  renderFlaggedSection();
+  renderProdRecon();
 }
 
-function reconAcceptApp(idx) {
-  const d = reconDifferences[idx];
-  const key = `${d.date}_${d.billingCase ? d.billingCase.startTime : 'none'}_${d.billingCase ? d.billingCase.cptCode : 'tc'}`;
+function reconAcceptAppInline(date, idx) {
+  const matches = reconMatchesByDate[date];
+  if (!matches || !matches[idx]) return;
+  const m = matches[idx];
+  const key = getMatchKey(m);
   reconDecisions[key] = { accepted: 'app', flagged: false };
   saveReconDecisions();
-  if (reconCurrentDiff < reconDifferences.length - 1) reconCurrentDiff++;
-  renderDiffStepper();
-  renderFlaggedSection();
+  renderProdRecon();
 }
 
-function reconFlag(idx) {
-  const d = reconDifferences[idx];
-  const key = `${d.date}_${d.billingCase ? d.billingCase.startTime : 'none'}_${d.billingCase ? d.billingCase.cptCode : 'tc'}`;
+function reconFlagInline(date, idx) {
+  const matches = reconMatchesByDate[date];
+  if (!matches || !matches[idx]) return;
+  const m = matches[idx];
+  const key = getMatchKey(m);
   reconDecisions[key] = { accepted: '', flagged: true };
   saveReconDecisions();
-
-  // Add to flagged items
-  reconFlaggedItems.push({
-    type: 'case',
-    date: d.date,
-    startTime: d.billingCase ? d.billingCase.startTime : (d.trackerCase ? d.trackerCase.startTime : ''),
-    endTime: d.billingCase ? d.billingCase.endTime : (d.trackerCase ? d.trackerCase.endTime : ''),
-    accountNumber: d.billingCase ? (d.billingCase.accountNumber || '') : '',
-    billingPts: d.billingPts,
-    trackerPts: d.trackerPts,
-    diffType: d.type
-  });
-
-  if (reconCurrentDiff < reconDifferences.length - 1) reconCurrentDiff++;
-  renderDiffStepper();
-  renderFlaggedSection();
+  renderProdRecon();
 }
 
 function renderFlaggedSection(monthLabel) {
@@ -10434,20 +10642,24 @@ function renderFlaggedSection(monthLabel) {
     monthLabel = `${mn[pMonth]} ${pYear}`;
   }
 
-  // Collect all flagged from decisions
+  // Collect all flagged from match decisions
   const allFlagged = [];
-  reconDifferences.forEach(d => {
-    const key = `${d.date}_${d.billingCase ? d.billingCase.startTime : 'none'}_${d.billingCase ? d.billingCase.cptCode : 'tc'}`;
-    if (reconDecisions[key] && reconDecisions[key].flagged) {
-      allFlagged.push({
-        type: 'case', date: d.date,
-        startTime: d.billingCase ? d.billingCase.startTime : (d.trackerCase ? d.trackerCase.startTime : ''),
-        endTime: d.billingCase ? d.billingCase.endTime : (d.trackerCase ? d.trackerCase.endTime : ''),
-        accountNumber: d.billingCase ? (d.billingCase.accountNumber || '') : '',
-        billingPts: d.billingPts, trackerPts: d.trackerPts, diffType: d.type
-      });
-    }
-  });
+  for (const date of Object.keys(reconMatchesByDate)) {
+    const matches = reconMatchesByDate[date];
+    matches.forEach(m => {
+      const key = getMatchKey(m);
+      if (reconDecisions[key] && reconDecisions[key].flagged) {
+        allFlagged.push({
+          type: 'case', date,
+          startTime: m.billing ? m.billing.startTime : (m.tracker ? m.tracker.startTime : ''),
+          endTime: m.billing ? m.billing.endTime : (m.tracker ? m.tracker.endTime : ''),
+          accountNumber: m.billing ? (m.billing.accountNumber || '') : '',
+          billingPts: m.billingPts, trackerPts: m.trackerPts,
+          diffType: m.missingFrom === 'tracker' ? 'missing_tracker' : (m.missingFrom === 'billing' ? 'missing_billing' : 'mismatch')
+        });
+      }
+    });
+  }
 
   // Also include addon flags
   reconFlaggedItems.filter(f => f.type === 'addon').forEach(f => allFlagged.push(f));
@@ -10491,18 +10703,22 @@ function generateReconEmail() {
 
   // Collect all flagged
   const allFlagged = [];
-  reconDifferences.forEach(d => {
-    const key = `${d.date}_${d.billingCase ? d.billingCase.startTime : 'none'}_${d.billingCase ? d.billingCase.cptCode : 'tc'}`;
-    if (reconDecisions[key] && reconDecisions[key].flagged) {
-      allFlagged.push({
-        type: 'case', date: d.date,
-        startTime: d.billingCase ? d.billingCase.startTime : (d.trackerCase ? d.trackerCase.startTime : ''),
-        endTime: d.billingCase ? d.billingCase.endTime : (d.trackerCase ? d.trackerCase.endTime : ''),
-        accountNumber: d.billingCase ? (d.billingCase.accountNumber || '') : '',
-        billingPts: d.billingPts, trackerPts: d.trackerPts, diffType: d.type
-      });
-    }
-  });
+  for (const date of Object.keys(reconMatchesByDate)) {
+    const matches = reconMatchesByDate[date];
+    matches.forEach(m => {
+      const key = getMatchKey(m);
+      if (reconDecisions[key] && reconDecisions[key].flagged) {
+        allFlagged.push({
+          type: 'case', date,
+          startTime: m.billing ? m.billing.startTime : (m.tracker ? m.tracker.startTime : ''),
+          endTime: m.billing ? m.billing.endTime : (m.tracker ? m.tracker.endTime : ''),
+          accountNumber: m.billing ? (m.billing.accountNumber || '') : '',
+          billingPts: m.billingPts, trackerPts: m.trackerPts,
+          diffType: m.missingFrom === 'tracker' ? 'missing_tracker' : (m.missingFrom === 'billing' ? 'missing_billing' : 'mismatch')
+        });
+      }
+    });
+  }
   reconFlaggedItems.filter(f => f.type === 'addon').forEach(f => allFlagged.push(f));
 
   let emailText = `Subject: Billing Discrepancies — ${monthLabel}\n\nHi,\n\nI found the following discrepancies during reconciliation for ${monthLabel}:\n\n`;
@@ -10529,8 +10745,6 @@ function generateReconEmail() {
   const preview = document.getElementById('reconEmailPreview');
   preview.innerHTML = `<div class="email-preview">${escHtml(emailText)}</div>`;
   preview.innerHTML += '<button class="btn btn-primary" onclick="copyReconEmail()" style="width:100%;margin-top:8px;">Copy to Clipboard</button>';
-
-  // Store for clipboard
   preview.dataset.emailText = emailText;
 }
 
