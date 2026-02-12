@@ -1705,33 +1705,11 @@ input.mil-time.invalid {
   <div id="todayBackBar" class="hidden" style="display:none;align-items:center;gap:8px;margin-bottom:8px;">
     <button class="btn btn-outline btn-sm" id="todayBackBtn" style="padding:4px 12px;font-size:0.8rem;">&larr; Daily</button>
   </div>
-  <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;">
-      <h2 id="todayTitle" style="margin:0;">Today's Summary</h2>
-      <button class="btn btn-outline btn-sm hidden" id="todayEditShiftBtn" style="padding:4px 10px;font-size:0.72rem;">Edit Shift</button>
-    </div>
-    <div class="summary-grid">
-      <div class="summary-item">
-        <div class="label">Availability (AR)</div>
-        <div class="value blue" id="todayAR">0</div>
-      </div>
-      <div class="summary-item">
-        <div class="label">Productivity</div>
-        <div class="value green" id="todayProd">0</div>
-      </div>
-      <div class="summary-item">
-        <div class="label">Call / Other</div>
-        <div class="value yellow" id="todayCall">0</div>
-      </div>
-      <div class="summary-item">
-        <div class="label">Total Points</div>
-        <div class="value" id="todayTotal">0</div>
-      </div>
-    </div>
-  </div>
-
   <div class="card" id="todayBreakdownCard">
-    <h2>Point Breakdown</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 id="todayTitle" style="margin:0;">Point Breakdown</h2>
+      <button class="btn btn-sm hidden" id="todayEditShiftBtn" style="padding:4px 10px;font-size:0.72rem;background:none;color:var(--primary);">Edit Shift</button>
+    </div>
     <div id="todayBreakdown"></div>
   </div>
 
@@ -2676,8 +2654,8 @@ input.mil-time.invalid {
 <!-- BOTTOM NAV -->
 <div class="bottom-nav">
   <button data-page="dataentry">
-    <span class="nav-icon">&#128221;</span>
-    <span>Data Entry</span>
+    <span class="nav-icon">&#128137;&#128339;</span>
+    <span>Work</span>
   </button>
   <button class="active" data-page="today">
     <span class="nav-icon">&#11088;</span>
@@ -4894,7 +4872,7 @@ function renderToday() {
   const date = workingDate;
   const shift = data.shifts[date];
   const shiftCases = data.cases.filter(c => c.shiftDate === date);
-  document.getElementById('todayTitle').textContent = date === todayStr() ? "Today's Summary" : formatDate(date);
+  document.getElementById('todayTitle').textContent = date === todayStr() ? "Point Breakdown" : formatDate(date);
 
   // Back bar and edit shift button
   const backBar = document.getElementById('todayBackBar');
@@ -4913,10 +4891,6 @@ function renderToday() {
   }
 
   if (!shift) {
-    document.getElementById('todayAR').textContent = '0';
-    document.getElementById('todayProd').textContent = '0';
-    document.getElementById('todayCall').textContent = '0';
-    document.getElementById('todayTotal').textContent = '0';
     document.getElementById('todayBreakdown').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No shift saved for this date.</p>';
     document.getElementById('todayCaseList').innerHTML = '<div class="empty-state"><p>No cases logged yet.</p></div>';
     document.getElementById('todayCaseCount').textContent = '';
@@ -4924,10 +4898,6 @@ function renderToday() {
   }
 
   const totals = calcShiftTotal(shift);
-  document.getElementById('todayAR').textContent = totals.ar.toFixed(1);
-  document.getElementById('todayProd').textContent = totals.prod.toFixed(1);
-  document.getElementById('todayCall').textContent = (totals.call + totals.subspec + totals.supervision).toFixed(1);
-  document.getElementById('todayTotal').textContent = totals.total.toFixed(1);
 
   let bdHtml = '<div class="point-breakdown">';
   const isWkndOrHol = shift.isHoliday || isWeekend(shift.date);
