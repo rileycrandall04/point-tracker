@@ -1948,26 +1948,15 @@ input.mil-time.invalid {
       </div>
     </div>
 
-    <!-- Collapsible: Average Units per Case -->
+    <!-- Top Surgeons by Points/Hour -->
     <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('analAvgUnits')">
-        <h3>Average Units per Case</h3>
-        <span class="arrow" id="analAvgUnitsArrow">&#9660;</span>
+      <div class="collapse-header" onclick="toggleCollapse('analTopSurgeons')">
+        <h3>Top Surgeons (pts/hr)</h3>
+        <span class="arrow" id="analTopSurgeonsArrow">&#9660;</span>
       </div>
-      <div class="collapse-body" id="analAvgUnitsBody">
-        <div id="avgUnitsContent" style="padding-top:12px;"></div>
-      </div>
-    </div>
-
-    <!-- Shift Type Distribution -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('analShiftDist')">
-        <h3>Shift Type Distribution</h3>
-        <span class="arrow" id="analShiftDistArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="analShiftDistBody">
+      <div class="collapse-body" id="analTopSurgeonsBody">
         <div class="chart-container" style="margin-top:12px;">
-          <canvas id="shiftDistChart"></canvas>
+          <canvas id="topSurgeonsChart"></canvas>
         </div>
       </div>
     </div>
@@ -5247,7 +5236,7 @@ let monthlyChart = null;
 let breakdownChart = null;
 let pipelineChart = null;
 let productionTrendChart = null;
-let shiftDistChart = null;
+let topSurgeonsChart = null;
 let activeDashTab = 'daily';
 
 // Dashboard sub-tab switching
@@ -5287,15 +5276,15 @@ function toggleCollapse(sectionId) {
     deScan: 'deScanBody',
     projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projCaseEff: 'projCaseEffBody', projMoM: 'projMoMBody', projPtsPerType: 'projPtsPerTypeBody',
     timeDOW: 'timeDOWBody', timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
-    analAddOns: 'analAddOnsBody', analTopProc: 'analTopProcBody', analAvgUnits: 'analAvgUnitsBody',
-    analShiftDist: 'analShiftDistBody'
+    analAddOns: 'analAddOnsBody', analTopProc: 'analTopProcBody',
+    analTopSurgeons: 'analTopSurgeonsBody'
   };
   const arrowMap = {
     deScan: 'deScanArrow',
     projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projCaseEff: 'projCaseEffArrow', projMoM: 'projMoMArrow', projPtsPerType: 'projPtsPerTypeArrow',
     timeDOW: 'timeDOWArrow', timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
-    analAddOns: 'analAddOnsArrow', analTopProc: 'analTopProcArrow', analAvgUnits: 'analAvgUnitsArrow',
-    analShiftDist: 'analShiftDistArrow'
+    analAddOns: 'analAddOnsArrow', analTopProc: 'analTopProcArrow',
+    analTopSurgeons: 'analTopSurgeonsArrow'
   };
   const body = document.getElementById(bodyMap[sectionId]);
   const arrow = document.getElementById(arrowMap[sectionId]);
@@ -7496,8 +7485,7 @@ function renderAnalyticsTab() {
   renderCaseMix();
   renderAddOnUtil();
   renderTopProcedures();
-  renderAvgUnits();
-  renderShiftDistChart();
+  renderTopSurgeonsChart();
 }
 
 function renderCaseMix() {
@@ -7568,41 +7556,53 @@ function renderTopProcedures() {
   document.getElementById('topProcContent').innerHTML = html;
 }
 
-function renderAvgUnits() {
-  const stdCases = data.cases.filter(c => c.caseType === 'standard' && parseFloat(c.baseUnits) > 0);
-  if (stdCases.length === 0) { document.getElementById('avgUnitsContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No standard cases with units.</p>'; return; }
-  const totalUnits = stdCases.reduce((s, c) => s + (parseFloat(c.baseUnits) || 0), 0);
-  const avg = round2(totalUnits / stdCases.length);
-  const maxUnits = Math.max(...stdCases.map(c => parseFloat(c.baseUnits) || 0));
-  const minUnits = Math.min(...stdCases.map(c => parseFloat(c.baseUnits) || 0));
-  let html = '<div class="summary-grid">';
-  html += `<div class="summary-item"><div class="label">Average</div><div class="value blue">${avg.toFixed(1)}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Cases</div><div class="value green">${stdCases.length}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Min</div><div class="value">${minUnits}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Max</div><div class="value">${maxUnits}</div></div>`;
-  html += '</div>';
-  document.getElementById('avgUnitsContent').innerHTML = html;
-}
-
-function renderShiftDistChart() {
-  const counts = {};
-  Object.values(data.shifts).forEach(s => {
-    const name = getAssignmentTypeName(s.assignmentType);
-    counts[name] = (counts[name] || 0) + 1;
+function renderTopSurgeonsChart() {
+  const surgeonStats = {};
+  data.cases.forEach(c => {
+    const surgeon = (c.notes || '').trim();
+    if (!surgeon) return;
+    const shift = data.shifts[c.shiftDate];
+    const pts = calcCasePoints(c, shift || {});
+    let caseHrs = 0;
+    if (c.startTime && c.endTime) {
+      let cs = timeToMinutes(c.startTime);
+      let ce = timeToMinutes(c.endTime);
+      if (ce <= cs) ce += 1440;
+      caseHrs = (ce - cs) / 60;
+    }
+    if (caseHrs <= 0) return;
+    if (!surgeonStats[surgeon]) surgeonStats[surgeon] = { pts: 0, hrs: 0, cases: 0 };
+    surgeonStats[surgeon].pts += pts;
+    surgeonStats[surgeon].hrs += caseHrs;
+    surgeonStats[surgeon].cases++;
   });
-  const labels = Object.keys(counts);
-  const values = Object.values(counts);
-  if (labels.length === 0) return;
-  const ctx = document.getElementById('shiftDistChart').getContext('2d');
-  if (shiftDistChart) shiftDistChart.destroy();
-  const colors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#ef4444','#06b6d4','#84cc16','#f97316','#6366f1','#14b8a6','#e11d48','#a855f7'];
-  shiftDistChart = new Chart(ctx, {
-    type: 'doughnut',
+  const entries = Object.entries(surgeonStats)
+    .filter(([, s]) => s.hrs > 0 && s.cases >= 2)
+    .map(([name, s]) => ({ name, pph: round2(s.pts / s.hrs), cases: s.cases }))
+    .sort((a, b) => b.pph - a.pph)
+    .slice(0, 15);
+  if (entries.length === 0) return;
+  const ctx = document.getElementById('topSurgeonsChart').getContext('2d');
+  if (topSurgeonsChart) topSurgeonsChart.destroy();
+  topSurgeonsChart = new Chart(ctx, {
+    type: 'bar',
     data: {
-      labels,
-      datasets: [{ data: values, backgroundColor: colors.slice(0, labels.length), borderWidth: 0 }]
+      labels: entries.map(e => e.name),
+      datasets: [{ label: 'pts/hr', data: entries.map(e => e.pph), backgroundColor: '#3b82f6', borderRadius: 4 }]
     },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 12, font: { size: 11 } } } } }
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { afterLabel: (ctx) => `${entries[ctx.dataIndex].cases} cases` } }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(148,163,184,0.1)' }, ticks: { color: '#94a3b8' } },
+        y: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11 } } }
+      }
+    }
   });
 }
 
