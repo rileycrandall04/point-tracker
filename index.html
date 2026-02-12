@@ -2275,22 +2275,6 @@ input.mil-time.invalid {
     </details>
   </div>
 
-  <!-- Flagged Items -->
-  <div class="card" id="flaggedItemsCard">
-    <details>
-      <summary style="cursor:pointer;font-weight:600;font-size:1.1rem;">
-        Flagged Items — Missing Time Punches
-        <span id="flaggedCount" style="font-size:0.8rem;color:var(--text-dim);margin-left:8px;">(0)</span>
-      </summary>
-      <div id="flaggedEmailPreview" style="margin-top:12px;"></div>
-      <div style="margin-top:8px;display:flex;gap:8px;">
-        <button class="btn btn-primary btn-sm" id="copyFlaggedEmailBtn">Copy to Clipboard</button>
-        <button class="btn btn-outline btn-sm" id="clearAllFlagsBtn">Clear All Flags</button>
-      </div>
-      <div id="flaggedCopyStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
-    </details>
-  </div>
-
   <!-- Account -->
   <div class="card" id="accountCard">
     <h2>Account</h2>
@@ -2465,6 +2449,23 @@ input.mil-time.invalid {
         <button class="btn btn-primary" onclick="navigateToWorkScan()" style="width:100%;">Open Scanner on Work Page</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- FLAGGED PAGE -->
+<div class="page" id="page-flagged">
+  <div class="card">
+    <h2>Flagged Cases &amp; Shifts</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Items flagged for missing time punches or follow-up. Tap the flag icon to unflag.
+    </p>
+    <div id="flaggedCount" style="font-size:0.85rem;font-weight:600;margin-bottom:12px;"></div>
+    <div id="flaggedList"></div>
+    <div style="margin-top:12px;display:flex;gap:8px;">
+      <button class="btn btn-primary btn-sm" id="copyFlaggedEmailBtn">Copy to Clipboard</button>
+      <button class="btn btn-outline btn-sm" id="clearAllFlagsBtn">Clear All Flags</button>
+    </div>
+    <div id="flaggedCopyStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
   </div>
 </div>
 
@@ -2752,6 +2753,10 @@ input.mil-time.invalid {
   <div class="drawer-item" data-page="import">
     <span class="drawer-icon">&#128229;</span>
     <span>Import</span>
+  </div>
+  <div class="drawer-item" data-page="flagged">
+    <span class="drawer-icon">&#9873;</span>
+    <span>Flagged</span>
   </div>
   <div class="drawer-item" data-page="settings">
     <span class="drawer-icon">&#9881;</span>
@@ -4023,9 +4028,10 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
     returnToShiftLogs = false;
-    if (page === 'settings') { renderFlaggedEmail(); }
+    if (page === 'settings') { /* no special init needed */ }
     if (page === 'history') { renderHistory(); loadOverrideUI(); }
     if (page === 'import') { /* no special init needed */ }
+    if (page === 'flagged') { renderFlaggedPage(); }
   });
 });
 
@@ -6222,20 +6228,22 @@ function toggleShiftFlag(dateStr) {
   if (s) { s.flagged = !s.flagged; saveData(); renderShiftLogTable(); }
 }
 
-function renderFlaggedEmail() {
+function renderFlaggedPage() {
   const flaggedShifts = Object.values(data.shifts).filter(s => s.flagged).sort((a,b) => a.date.localeCompare(b.date));
   const flaggedCases = data.cases.filter(c => c.flagged).sort((a,b) => (a.shiftDate||'').localeCompare(b.shiftDate||''));
   const total = flaggedShifts.length + flaggedCases.length;
-  document.getElementById('flaggedCount').textContent = `(${total})`;
-  const preview = document.getElementById('flaggedEmailPreview');
+  const countEl = document.getElementById('flaggedCount');
+  const listEl = document.getElementById('flaggedList');
+  countEl.textContent = total > 0 ? `${total} flagged item${total !== 1 ? 's' : ''}` : '';
+
   if (total === 0) {
-    preview.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No flagged items.</p>';
-    preview.dataset.emailText = '';
+    listEl.innerHTML = '<div class="empty-state"><p>No flagged items.</p></div>';
+    listEl.dataset.emailText = '';
     return;
   }
-  const userName = data.settings?.name || 'Provider';
-  let emailText = `Subject: Missing Time Punches — ${userName}\n\nHi,\n\nThe following items are missing time punches on the compensation sheet:\n\n`;
-  let idx = 1;
+
+  // Build combined list sorted by date
+  const items = [];
   flaggedShifts.forEach(s => {
     const d = new Date(s.date + 'T12:00:00');
     const dateStr = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
@@ -6244,20 +6252,43 @@ function renderFlaggedEmail() {
     const times = entries.length > 0 && entries[0].start
       ? entries[0].start + (entries[entries.length-1].end ? ' \u2013 ' + entries[entries.length-1].end : '')
       : 'no times recorded';
-    emailText += `${idx}. ${dateStr} \u2014 ${typeName} (${times})\n`;
-    idx++;
+    items.push({ date: s.date, dateStr, type: 'shift', label: typeName, detail: times, id: s.date });
   });
   flaggedCases.forEach(c => {
     const d = new Date(c.shiftDate + 'T12:00:00');
     const dateStr = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
     const times = (c.startTime || '?') + ' \u2013 ' + (c.endTime || '?');
-    emailText += `${idx}. ${dateStr} \u2014 Case: ${name} (${times})\n`;
-    idx++;
+    items.push({ date: c.shiftDate, dateStr, type: 'case', label: name, detail: times, id: c.id });
+  });
+  items.sort((a, b) => a.date.localeCompare(b.date));
+
+  let html = '<ul class="flagged-list">';
+  items.forEach(item => {
+    const badge = item.type === 'shift'
+      ? '<span style="background:var(--primary);color:#fff;font-size:0.65rem;padding:1px 6px;border-radius:4px;margin-right:6px;">SHIFT</span>'
+      : '<span style="background:var(--accent2);color:#000;font-size:0.65rem;padding:1px 6px;border-radius:4px;margin-right:6px;">CASE</span>';
+    html += `<li style="display:flex;align-items:center;justify-content:space-between;">`;
+    html += `<div>${badge}<strong>${item.dateStr}</strong> &mdash; ${escHtml(item.label)} <span style="color:var(--text-dim);font-size:0.75rem;">(${item.detail})</span></div>`;
+    if (item.type === 'shift') {
+      html += `<button class="flag-btn flagged" onclick="toggleShiftFlag('${item.id}');renderFlaggedPage()" style="font-size:1.1rem;">&#9873;</button>`;
+    } else {
+      html += `<button class="flag-btn flagged" onclick="toggleCaseFlag('${item.id}');renderFlaggedPage()" style="font-size:1.1rem;">&#9873;</button>`;
+    }
+    html += '</li>';
+  });
+  html += '</ul>';
+  listEl.innerHTML = html;
+
+  // Build email text for clipboard
+  const userName = data.settings?.name || settings.name || 'Provider';
+  let emailText = `Subject: Missing Time Punches \u2014 ${userName}\n\nHi,\n\nThe following items are missing time punches on the compensation sheet:\n\n`;
+  items.forEach((item, i) => {
+    const prefix = item.type === 'case' ? 'Case: ' : '';
+    emailText += `${i+1}. ${item.dateStr} \u2014 ${prefix}${item.label} (${item.detail})\n`;
   });
   emailText += `\nPlease update accordingly.\n\nThanks,\n${userName}`;
-  preview.innerHTML = `<div class="email-preview">${escHtml(emailText)}</div>`;
-  preview.dataset.emailText = emailText;
+  listEl.dataset.emailText = emailText;
 }
 
 // ================================================================
@@ -8023,7 +8054,8 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
 });
 
 document.getElementById('copyFlaggedEmailBtn').addEventListener('click', () => {
-  const text = document.getElementById('flaggedEmailPreview').dataset.emailText || '';
+  const text = document.getElementById('flaggedList').dataset.emailText || '';
+  if (!text) { document.getElementById('flaggedCopyStatus').textContent = 'Nothing to copy'; setTimeout(() => document.getElementById('flaggedCopyStatus').textContent = '', 2000); return; }
   navigator.clipboard.writeText(text).then(() => {
     document.getElementById('flaggedCopyStatus').textContent = 'Copied!';
     setTimeout(() => document.getElementById('flaggedCopyStatus').textContent = '', 2000);
@@ -8033,7 +8065,7 @@ document.getElementById('clearAllFlagsBtn').addEventListener('click', () => {
   Object.values(data.shifts).forEach(s => s.flagged = false);
   data.cases.forEach(c => c.flagged = false);
   saveData();
-  renderFlaggedEmail();
+  renderFlaggedPage();
   if (activeDashTab === 'caselogs') renderCaseLogTable();
   if (activeDashTab === 'shiftlogs') renderShiftLogTable();
 });
