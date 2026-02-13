@@ -10,6 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -3289,9 +3290,40 @@ async function fetchCalendarEvents(token, calId, timeMin, timeMax) {
   return resp.json();
 }
 
+const GOOGLE_CLIENT_ID = '523311146529-2g67858jcplc0hr71e54kdneeh9crv7t.apps.googleusercontent.com';
+
+function requestCalendarToken() {
+  return new Promise((resolve, reject) => {
+    if (typeof google === 'undefined' || !google.accounts) {
+      reject(new Error('Google Identity Services not loaded'));
+      return;
+    }
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/calendar.events.readonly',
+      callback: (resp) => {
+        if (resp.error) {
+          reject(new Error(resp.error_description || resp.error));
+        } else {
+          googleAccessToken = resp.access_token;
+          resolve(resp.access_token);
+        }
+      },
+      error_callback: (err) => {
+        reject(new Error(err.message || 'Token request failed'));
+      }
+    });
+    client.requestAccessToken();
+  });
+}
+
 async function syncCalendarEvents() {
-  if (!googleAccessToken) return;
   try {
+    // Get token via GIS if we don't have one
+    if (!googleAccessToken) {
+      await requestCalendarToken();
+    }
+
     // Find the "Riley" calendar
     const calList = await fetchCalendarList(googleAccessToken);
     const rileyCal = calList.items.find(c => c.summary && c.summary.toLowerCase().includes('riley'));
@@ -8874,25 +8906,8 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
   }
 });
 
-// Calendar sync button
+// Calendar sync button — uses GIS to get a properly-scoped token
 document.getElementById('syncCalendarBtn').addEventListener('click', async () => {
-  if (!googleAccessToken) {
-    // Re-authenticate to get a fresh token with calendar scope
-    try {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      provider.addScope('https://www.googleapis.com/auth/calendar.events.readonly');
-      provider.setCustomParameters({ prompt: 'consent' });
-      const result = await auth.signInWithPopup(provider);
-      const cred = result.credential || firebase.auth.GoogleAuthProvider.credentialFromResult(result);
-      if (cred && cred.accessToken) {
-        googleAccessToken = cred.accessToken;
-      }
-    } catch(err) {
-      console.error('Calendar re-auth error:', err);
-      showToast('Calendar auth failed: ' + (err.message || err));
-      return;
-    }
-  }
   await syncCalendarEvents();
 });
 
@@ -12626,14 +12641,7 @@ document.getElementById('googleSignInBtn').addEventListener('click', async () =>
   loadEl.classList.remove('hidden');
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
-    provider.addScope('https://www.googleapis.com/auth/calendar.events.readonly');
-    provider.setCustomParameters({ prompt: 'consent' });
-    const result = await auth.signInWithPopup(provider);
-    const cred = result.credential || firebase.auth.GoogleAuthProvider.credentialFromResult(result);
-    if (cred && cred.accessToken) {
-      googleAccessToken = cred.accessToken;
-      syncCalendarEvents();
-    }
+    await auth.signInWithPopup(provider);
   } catch(err) {
     console.error('Sign-in error:', err);
     loadEl.classList.add('hidden');
