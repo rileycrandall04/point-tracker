@@ -8881,6 +8881,7 @@ document.getElementById('syncCalendarBtn').addEventListener('click', async () =>
     try {
       const provider = new firebase.auth.GoogleAuthProvider();
       provider.addScope('https://www.googleapis.com/auth/calendar.events.readonly');
+      provider.setCustomParameters({ prompt: 'consent' });
       const result = await auth.signInWithPopup(provider);
       const cred = result.credential || firebase.auth.GoogleAuthProvider.credentialFromResult(result);
       if (cred && cred.accessToken) {
@@ -12626,6 +12627,7 @@ document.getElementById('googleSignInBtn').addEventListener('click', async () =>
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/calendar.events.readonly');
+    provider.setCustomParameters({ prompt: 'consent' });
     const result = await auth.signInWithPopup(provider);
     const cred = result.credential || firebase.auth.GoogleAuthProvider.credentialFromResult(result);
     if (cred && cred.accessToken) {
