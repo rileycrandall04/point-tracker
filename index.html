@@ -1984,9 +1984,9 @@ input.mil-time.invalid {
     <div id="weeklySummary" style="text-align:center;font-size:0.8rem;color:var(--text-dim);"></div>
   </div>
 
-  <div class="card" id="todayBreakdownCard">
+  <div class="card" id="todayBreakdownCard" style="padding:12px 16px;">
     <div style="display:flex;align-items:center;justify-content:space-between;">
-      <h2 id="todayTitle" style="margin:0;">Point Breakdown</h2>
+      <h2 id="todayTitle" style="margin:0;font-size:0.9rem;">Today</h2>
       <button class="btn btn-sm hidden" id="todayEditShiftBtn" style="padding:4px 10px;font-size:0.72rem;background:none;color:var(--primary);">Edit Shift</button>
     </div>
     <div id="todayBreakdown"></div>
@@ -4121,7 +4121,7 @@ function calcShiftTotal(shift) {
 
 function getShiftPointsForDate(dateStr, estimate) {
   const shift = data.shifts[dateStr];
-  if (!shift) return { total: 0, isInProgress: false };
+  if (!shift) return { total: 0, isInProgress: false, ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0 };
   const entries = shift.timeEntries || [];
   const lastEntry = entries.length > 0 ? entries[entries.length - 1] : null;
   const hasNoEnd = lastEntry && lastEntry.start && !lastEntry.end;
@@ -4136,10 +4136,10 @@ function getShiftPointsForDate(dateStr, estimate) {
     }
     clone.timeEntries = cloneEntries;
     const totals = calcShiftTotal(clone);
-    return { total: totals.total, isInProgress: true };
+    return { total: totals.total, isInProgress: true, ar: totals.ar, prod: totals.prod, call: totals.call, subspec: totals.subspec, supervision: totals.supervision };
   }
   const totals = calcShiftTotal(shift);
-  return { total: totals.total, isInProgress: isInProgress };
+  return { total: totals.total, isInProgress: isInProgress, ar: totals.ar, prod: totals.prod, call: totals.call, subspec: totals.subspec, supervision: totals.supervision };
 }
 
 function getCaseTypeName(type) {
@@ -5348,7 +5348,7 @@ function renderToday() {
   const date = workingDate;
   const shift = data.shifts[date];
   const shiftCases = data.cases.filter(c => c.shiftDate === date);
-  document.getElementById('todayTitle').textContent = date === todayStr() ? "Point Breakdown" : formatDate(date);
+  document.getElementById('todayTitle').textContent = date === todayStr() ? "Today" : formatDate(date);
 
   // Back bar and edit shift button
   const backBar = document.getElementById('todayBackBar');
@@ -5373,100 +5373,24 @@ function renderToday() {
     return;
   }
 
-  const totals = calcShiftTotal(shift);
+  // Compact breakdown using getShiftPointsForDate
+  const result = getShiftPointsForDate(date, true);
+  const estTag = result.isInProgress ? ' <span style="font-size:0.75rem;color:var(--text-dim);">(est.)</span>' : '';
 
-  let bdHtml = '<div class="point-breakdown">';
-  const isWkndOrHol = shift.isHoliday || isWeekend(shift.date);
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
-  const isCoveringShift = shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering';
+  // Build component sub-line (only non-zero values)
+  const components = [];
+  if (result.ar > 0) components.push('Avail: ' + result.ar.toFixed(2));
+  if (result.prod > 0) components.push('Prod: ' + result.prod.toFixed(2));
+  if (result.call > 0) components.push('Call: ' + result.call.toFixed(2));
+  if (result.subspec > 0) components.push('Subspec: ' + result.subspec.toFixed(2));
+  if (result.supervision > 0) components.push('Supv: ' + result.supervision.toFixed(2));
+  const compLine = components.length > 0 ? components.join(' \u00B7 ') : '';
 
-  if (isCoveringShift) {
-    // Covering shift: show coverage interval + time punches only
-    const tc = shift.tempCoverage[0];
-    bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Coverage Pager: ${tc.start} - ${tc.end}</span><span></span></div>`;
-    const tcEntries = tc.timeEntries || [];
-    tcEntries.forEach(e => {
-      if (e.start) bdHtml += `<div class="row" style="font-size:0.75rem;"><span>Clocked in: ${e.start} - ${e.end || '?'}</span><span></span></div>`;
-    });
-    bdHtml += `<div class="row"><span>Coverage AR</span><span>${totals.ar.toFixed(2)}</span></div>`;
-    bdHtml += `<div class="row"><span>Productivity (${shiftCases.length} cases)</span><span>${totals.prod.toFixed(2)}</span></div>`;
-    const pagerHrs = round2(totals.call / 3.5);
-    bdHtml += `<div class="row"><span>Coverage Pager Pay (${pagerHrs.toFixed(1)} hrs × 3.5)</span><span>${totals.call.toFixed(2)}</span></div>`;
-  } else {
-    // Regular shift: show time entries + standard breakdown
-    const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
-    if (entries.length > 1) {
-      bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:4px;"><span>Time Entries (${entries.length})</span><span></span></div>`;
-      for (let i = 0; i < entries.length; i++) {
-        if (i === 0 && pagerWindow && entries[i].start) {
-          const entryStart = timeToMinutes(entries[i].start);
-          if (pagerWindow.start < entryStart) {
-            bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${minutesToTimeStr(pagerWindow.start)} - ${entries[i].start}</span><span></span></div>`;
-          }
-        }
-        bdHtml += `<div class="row" style="font-size:0.75rem;"><span>Clocked in: ${entries[i].start} - ${entries[i].end || '?'}</span><span></span></div>`;
-        if (i < entries.length - 1 && entries[i].end && entries[i+1].start) {
-          if (pagerWindow) {
-            bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${entries[i].end} - ${entries[i+1].start}</span><span></span></div>`;
-          } else {
-            bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim)"><span>Gap: ${entries[i].end} - ${entries[i+1].start}</span><span></span></div>`;
-          }
-        }
-        if (i === entries.length - 1 && pagerWindow && entries[i].end) {
-          const entryEnd = timeToMinutes(entries[i].end);
-          const adjustedEnd = entryEnd <= timeToMinutes(entries[0].start) ? entryEnd + 1440 : entryEnd;
-          if (adjustedEnd < pagerWindow.end) {
-            bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${entries[i].end} - ${minutesToTimeStr(pagerWindow.end)}</span><span></span></div>`;
-          }
-        }
-      }
-    } else if (entries.length === 1) {
-      if (pagerWindow && entries[0].start) {
-        const entryStart = timeToMinutes(entries[0].start);
-        if (pagerWindow.start < entryStart) {
-          bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${minutesToTimeStr(pagerWindow.start)} - ${entries[0].start}</span><span></span></div>`;
-        }
-      }
-      bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--text-dim);"><span>Clocked in: ${entries[0].start} - ${entries[0].end || '?'}</span><span></span></div>`;
-      if (pagerWindow && entries[0].end) {
-        const entryEnd = timeToMinutes(entries[0].end);
-        const entryStart = timeToMinutes(entries[0].start);
-        const adjustedEnd = entryEnd <= entryStart ? entryEnd + 1440 : entryEnd;
-        if (adjustedEnd < pagerWindow.end) {
-          bdHtml += `<div class="row" style="font-size:0.75rem;color:var(--accent2)"><span>Pager: ${entries[0].end} - ${minutesToTimeStr(pagerWindow.end)}</span><span></span></div>`;
-        }
-      }
-    }
-    // Show AR breakdown: split for pre-call shifts
-    const arBreakdown = calcARBreakdown(shift);
-    if (arBreakdown.preCallAR !== undefined) {
-      const eveningName = getAssignmentTypeName(shift.assignmentType);
-      bdHtml += `<div class="row"><span>Pre-Call AR</span><span>${arBreakdown.preCallAR.toFixed(2)}</span></div>`;
-      bdHtml += `<div class="row"><span>${escHtml(eveningName)} AR</span><span>${arBreakdown.eveningAR.toFixed(2)}</span></div>`;
-    } else {
-      bdHtml += `<div class="row"><span>Availability Rate</span><span>${totals.ar.toFixed(2)}</span></div>`;
-    }
-    bdHtml += `<div class="row"><span>Productivity (${shiftCases.length} cases)</span><span>${totals.prod.toFixed(2)}</span></div>`;
-    // Show pager pay line item
-    if (pagerWindow) {
-      const pagerHrs = round2(totals.call / 3.5);
-      bdHtml += `<div class="row"><span>Pager Pay (${pagerHrs.toFixed(1)} hrs × 3.5)</span><span>${totals.call.toFixed(2)}</span></div>`;
-    } else if (totals.call > 0) {
-      bdHtml += `<div class="row"><span>Pager Pay</span><span>${totals.call.toFixed(2)}</span></div>`;
-    }
-    // Temp coverage (covered) line item
-    if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covered') {
-      const tcPts = calcTempCoveragePoints(shift);
-      const tcTotal = round2(tcPts.pagerAdj);
-      if (tcTotal !== 0) {
-        const tc = shift.tempCoverage[0];
-        bdHtml += `<div class="row"><span>Temp Coverage (Covered) ${tc.start}-${tc.end}</span><span>${tcTotal.toFixed(2)}</span></div>`;
-      }
-    }
+  let bdHtml = '<div style="margin-top:6px;">';
+  bdHtml += `<div style="font-size:1.8rem;font-weight:700;line-height:1.1;">${result.total.toFixed(2)} <span style="font-size:0.9rem;font-weight:400;color:var(--text-dim);">pts</span>${estTag}</div>`;
+  if (compLine) {
+    bdHtml += `<div style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;">${compLine}</div>`;
   }
-  if (totals.subspec > 0) bdHtml += `<div class="row"><span>Subspecialty</span><span>${totals.subspec.toFixed(2)}</span></div>`;
-  if (totals.supervision > 0) bdHtml += `<div class="row"><span>CRNA Supervision</span><span>${totals.supervision.toFixed(2)}</span></div>`;
-  bdHtml += `<div class="row total"><span>Total</span><span>${totals.total.toFixed(2)} pts</span></div>`;
   bdHtml += '</div>';
   document.getElementById('todayBreakdown').innerHTML = bdHtml;
 
@@ -5548,6 +5472,28 @@ function renderWeeklyChart() {
       borderColors.push('rgba(66,133,244,0.6)');
     }
   });
+
+  // Bar value labels plugin
+  const barValueLabels = {
+    id: 'barValueLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      meta.data.forEach((bar, i) => {
+        const v = values[i];
+        if (v > 0) {
+          const label = (weeklyShowDollars ? '$' : '') + v.toFixed(1);
+          ctx.fillText(label, bar.x, bar.y - 3);
+        }
+      });
+      ctx.restore();
+    }
+  };
 
   // Month boundary plugin
   const monthBoundaryPlugin = {
@@ -5645,12 +5591,29 @@ function renderWeeklyChart() {
         }
       }
     },
-    plugins: [monthBoundaryPlugin]
+    plugins: [monthBoundaryPlugin, barValueLabels]
   });
+
+  // Compute month total
+  const monthPrefix = workingDate.substring(0, 7);
+  let monthTotal = 0;
+  Object.keys(data.shifts).forEach(d => {
+    if (d.substring(0, 7) === monthPrefix) {
+      const r = getShiftPointsForDate(d, true);
+      let v = r.total;
+      if (weeklyShowDollars) {
+        const pv = getPointValueForMonth(monthPrefix);
+        v = round2(v * pv);
+      }
+      monthTotal += v;
+    }
+  });
+  monthTotal = round2(monthTotal);
 
   const prefix = weeklyShowDollars ? '$' : '';
   const suffix = weeklyShowDollars ? '' : ' pts';
-  document.getElementById('weeklySummary').textContent = 'Week total: ' + prefix + weekTotal.toFixed(2) + suffix;
+  const monthName = new Date(workingDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' });
+  document.getElementById('weeklySummary').textContent = 'Week: ' + prefix + weekTotal.toFixed(2) + suffix + '  \u00B7  ' + monthName + ': ' + prefix + monthTotal.toFixed(2) + suffix;
 }
 
 document.getElementById('weeklyToggleBtn').addEventListener('click', () => {
