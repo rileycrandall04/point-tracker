@@ -3323,13 +3323,12 @@ async function syncCalendarEvents() {
     // Always get a fresh token via GIS to ensure calendar scope
     await requestCalendarToken();
 
-    // DEBUG: Check what scopes the token actually has
+    // DEBUG: Show token scopes before attempting API call
     const tokenCheck = await fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + googleAccessToken);
     const tokenInfo = await tokenCheck.json();
-    console.log('Calendar token scopes:', tokenInfo.scope);
-    console.log('Calendar token audience:', tokenInfo.aud);
+    alert('DEBUG Token Info:\nScopes: ' + (tokenInfo.scope || 'NONE') + '\nAudience: ' + (tokenInfo.aud || 'NONE') + '\nError: ' + (tokenInfo.error_description || 'none'));
     if (!tokenInfo.scope || !tokenInfo.scope.includes('calendar')) {
-      showToast('Token missing calendar scope. Scopes: ' + (tokenInfo.scope || 'none'));
+      showToast('Token missing calendar scope');
       return;
     }
 
