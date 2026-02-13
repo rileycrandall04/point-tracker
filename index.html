@@ -2495,6 +2495,28 @@ input.mil-time.invalid {
     <button class="btn btn-outline btn-sm" onclick="showTutorial()" style="margin-top:8px;">Run Tutorial</button>
   </div>
 
+  <!-- Calendar Sync -->
+  <div class="card" style="margin-top:12px;">
+    <h2>Calendar Sync</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:10px;">
+      Sync your Google Calendar assignments to auto-fill shift types and label the weekly chart.
+    </p>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <button class="btn btn-outline btn-sm" id="syncCalendarBtn">Sync Calendar</button>
+      <span id="calendarLastSync" style="font-size:0.75rem;color:var(--text-dim);"></span>
+    </div>
+    <details style="margin-top:10px;">
+      <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">Setup instructions</summary>
+      <ol style="font-size:0.75rem;color:var(--text-dim);margin:8px 0 0 0;padding-left:20px;line-height:1.6;">
+        <li>Go to <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener" style="color:var(--primary);">Google Cloud Console</a></li>
+        <li>Select the <strong>mwa-point-tracker</strong> project</li>
+        <li>Click <strong>Enable</strong> for the Google Calendar API</li>
+        <li>Sign out and sign back in to grant calendar permission</li>
+        <li>Your calendar named "Riley" will be synced automatically</li>
+      </ol>
+    </details>
+  </div>
+
   <!-- Export / Import -->
   <div class="card">
     <h2>Data Management</h2>
@@ -2992,6 +3014,7 @@ db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 let currentUser = null;
 let firestoreSyncEnabled = false;
 let syncDebounceTimer = null;
+let googleAccessToken = null;
 
 // ================================================================
 // DATA STORE
@@ -3010,10 +3033,11 @@ function loadData() {
       const d = JSON.parse(raw);
       if (!d.overrides) d.overrides = {};
       if (!d.stipends) d.stipends = {};
+      if (!d.calendarAssignments) d.calendarAssignments = {};
       return d;
     }
   } catch(e) {}
-  return { shifts: {}, cases: [], overrides: {}, stipends: {} };
+  return { shifts: {}, cases: [], overrides: {}, stipends: {}, calendarAssignments: {} };
 }
 
 function saveData(d) {
@@ -3067,6 +3091,7 @@ async function loadFromFirestore(uid) {
       const d = dataDoc.data();
       if (!d.overrides) d.overrides = {};
       if (!d.stipends) d.stipends = {};
+      if (!d.calendarAssignments) d.calendarAssignments = {};
       // Ensure cases is an array
       if (!Array.isArray(d.cases)) d.cases = [];
       data = d;
@@ -3179,9 +3204,147 @@ function migrateData(d) {
   });
   // Ensure overrides object exists
   if (!d.overrides) { d.overrides = {}; changed = true; }
+  if (!d.calendarAssignments) { d.calendarAssignments = {}; changed = true; }
   if (changed) saveData(d);
 }
 migrateData(data);
+
+// ================================================================
+// GOOGLE CALENDAR INTEGRATION
+// ================================================================
+
+function parseCalendarEventTitle(title) {
+  if (!title || !title.trim()) return null;
+  const t = title.trim();
+
+  // Pure number → OR workbench
+  if (/^\d+$/.test(t)) return { type: 'OR', label: 'WB: ' + t };
+
+  // SF variants
+  if (/^SF\s*1$/i.test(t)) return { type: 'SF1', label: 'SF 1' };
+  if (/^SF\s*2$/i.test(t)) return { type: 'SF2', label: 'SF 2' };
+
+  // Mole / Endo
+  if (/^mole$/i.test(t)) return { type: 'mole', label: 'Mole' };
+  if (/^endo[\s/]*mole$/i.test(t)) return { type: 'mole', label: 'Mole' };
+  if (/^endo$/i.test(t)) return { type: 'mole', label: 'Mole' };
+
+  // Call assignments
+  if (/^1st\s*call$/i.test(t)) return { type: '1st_call', label: '1st Call' };
+  if (/^2nd\s*call$/i.test(t)) return { type: '2nd_call', label: '2nd Call' };
+  if (/^3rd\s*call$/i.test(t)) return { type: '3rd_call', label: '3rd Call' };
+  if (/^4th\s*call$/i.test(t)) return { type: '4th_call', label: '4th Call' };
+
+  // Trauma → ACS
+  if (/^trauma$/i.test(t)) return { type: 'ACS', label: 'Trauma' };
+
+  // OB
+  if (/^OB$/i.test(t)) return { type: 'OB_restricted', label: 'OB' };
+
+  // NORA
+  if (/^NORA$/i.test(t)) return { type: 'NORA', label: 'NORA' };
+
+  // Cardiac / Liver
+  if (/^cardiac$/i.test(t)) return { type: 'cardiac_liver', label: 'Cardiac' };
+  if (/^liver$/i.test(t)) return { type: 'cardiac_liver', label: 'Liver' };
+
+  // Post Call and similar generic OR assignments
+  if (/^post\s*call$/i.test(t)) return { type: 'OR', label: 'Post Call' };
+
+  // Known skip words
+  if (/^(off|vacation|vac|holiday|sick|conference|away)$/i.test(t)) return null;
+
+  // Fallback: unrecognized
+  return null;
+}
+
+async function fetchCalendarList(token) {
+  const resp = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  if (resp.status === 401) throw new Error('TOKEN_EXPIRED');
+  if (!resp.ok) throw new Error('Calendar list fetch failed: ' + resp.status);
+  return resp.json();
+}
+
+async function fetchCalendarEvents(token, calId, timeMin, timeMax) {
+  const params = new URLSearchParams({
+    timeMin: timeMin,
+    timeMax: timeMax,
+    singleEvents: 'true',
+    maxResults: '500',
+    orderBy: 'startTime'
+  });
+  const resp = await fetch('https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(calId) + '/events?' + params, {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  if (resp.status === 401) throw new Error('TOKEN_EXPIRED');
+  if (!resp.ok) throw new Error('Calendar events fetch failed: ' + resp.status);
+  return resp.json();
+}
+
+async function syncCalendarEvents() {
+  if (!googleAccessToken) return;
+  try {
+    // Find the "Riley" calendar
+    const calList = await fetchCalendarList(googleAccessToken);
+    const rileyCal = calList.items.find(c => c.summary && c.summary.toLowerCase().includes('riley'));
+    if (!rileyCal) {
+      showToast('No "Riley" calendar found');
+      return;
+    }
+
+    // 90-day window: past 30 + future 60
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(start.getDate() - 30);
+    const end = new Date(now);
+    end.setDate(end.getDate() + 60);
+    const timeMin = start.toISOString();
+    const timeMax = end.toISOString();
+
+    const eventsData = await fetchCalendarEvents(googleAccessToken, rileyCal.id, timeMin, timeMax);
+    const events = eventsData.items || [];
+
+    // Clear stale entries within sync window, preserve outside
+    const startStr = start.toISOString().substring(0, 10);
+    const endStr = end.toISOString().substring(0, 10);
+    Object.keys(data.calendarAssignments).forEach(k => {
+      if (k >= startStr && k <= endStr) delete data.calendarAssignments[k];
+    });
+
+    let count = 0;
+    events.forEach(ev => {
+      const dateStr = ev.start && (ev.start.date || (ev.start.dateTime && ev.start.dateTime.substring(0, 10)));
+      if (!dateStr) return;
+      const parsed = parseCalendarEventTitle(ev.summary);
+      if (!parsed) return;
+      data.calendarAssignments[dateStr] = parsed;
+      count++;
+    });
+
+    data.calendarLastSync = new Date().toISOString();
+    saveData(data);
+
+    // Update UI
+    const syncTimeEl = document.getElementById('calendarLastSync');
+    if (syncTimeEl) syncTimeEl.textContent = 'Last synced: ' + new Date(data.calendarLastSync).toLocaleString();
+
+    showToast('Calendar synced: ' + count + ' assignment' + (count !== 1 ? 's' : ''));
+
+    // Refresh views if on relevant pages
+    if (typeof renderWeeklyChart === 'function') renderWeeklyChart();
+    if (typeof loadShiftForDate === 'function') loadShiftForDate();
+  } catch (err) {
+    if (err.message === 'TOKEN_EXPIRED') {
+      googleAccessToken = null;
+      showToast('Calendar token expired — use Sync Calendar in Settings');
+    } else {
+      console.error('Calendar sync error:', err);
+      showToast('Calendar sync failed');
+    }
+  }
+}
 
 // ================================================================
 // CONSTANTS & HELPERS
@@ -4704,8 +4867,20 @@ function loadShiftForDate() {
       document.getElementById('timeEntriesGroup').classList.remove('hidden');
     }
   } else {
-    banner.classList.add('hidden');
-    document.getElementById('shiftAssignmentType').value = 'OR';
+    // Check for calendar assignment auto-fill
+    const calAssignment = data.calendarAssignments[date];
+    if (calAssignment) {
+      banner.textContent = 'Calendar: ' + calAssignment.label;
+      banner.style.borderColor = 'var(--accent2)';
+      banner.style.background = 'rgba(52,211,153,0.12)';
+      banner.style.color = 'var(--accent2)';
+      banner.classList.remove('hidden');
+      document.getElementById('shiftAssignmentType').value = calAssignment.type;
+      document.getElementById('shiftAssignmentType').dispatchEvent(new Event('change'));
+    } else {
+      banner.classList.add('hidden');
+      document.getElementById('shiftAssignmentType').value = 'OR';
+    }
     populateTimeEntries([{ start: '07:00', end: '' }]);
     document.getElementById('shiftHoliday').checked = false;
     document.getElementById('cardiacLiverOptions').classList.add('hidden');
@@ -5473,6 +5648,18 @@ function renderWeeklyChart() {
     }
   });
 
+  // Build assignment labels for chart
+  const calendarLabels = weekDates.map(d => {
+    const shift = data.shifts[d];
+    if (shift && shift.assignmentType) {
+      const sel = document.getElementById('shiftAssignmentType');
+      const opt = sel && sel.querySelector('option[value="' + shift.assignmentType + '"]');
+      return opt ? opt.textContent : shift.assignmentType;
+    }
+    const cal = data.calendarAssignments[d];
+    return cal ? cal.label : '';
+  });
+
   // Bar value labels plugin
   const barValueLabels = {
     id: 'barValueLabels',
@@ -5530,6 +5717,45 @@ function renderWeeklyChart() {
     }
   };
 
+  // Assignment label plugin
+  const assignmentLabelPlugin = {
+    id: 'assignmentLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      const xAxis = chart.scales.x;
+      ctx.save();
+      meta.data.forEach((bar, i) => {
+        const lbl = calendarLabels[i];
+        if (!lbl) return;
+        const v = values[i];
+        const isToday = weekDates[i] === today;
+        if (v > 0) {
+          // Draw inside bar near bottom
+          ctx.font = 'bold 9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          if (isToday) {
+            ctx.fillStyle = 'rgba(30,58,138,0.9)';
+          } else {
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+          }
+          const barBottom = chart.scales.y.getPixelForValue(0);
+          ctx.fillText(lbl, bar.x, barBottom - 14);
+        } else {
+          // No bar — draw below x-axis
+          ctx.font = '8px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillStyle = 'rgba(255,255,255,0.3)';
+          const axisBottom = chart.scales.x.bottom;
+          ctx.fillText(lbl, bar.x, axisBottom + 4);
+        }
+      });
+      ctx.restore();
+    }
+  };
+
   const canvas = document.getElementById('weeklyBarCanvas');
   if (weeklyBarChart) {
     weeklyBarChart.destroy();
@@ -5551,7 +5777,7 @@ function renderWeeklyChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      layout: { padding: { top: 18 } },
+      layout: { padding: { top: 18, bottom: 16 } },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -5592,7 +5818,7 @@ function renderWeeklyChart() {
         }
       }
     },
-    plugins: [monthBoundaryPlugin, barValueLabels]
+    plugins: [monthBoundaryPlugin, barValueLabels, assignmentLabelPlugin]
   });
 
   // Compute month total
@@ -8633,7 +8859,7 @@ document.getElementById('importFile').addEventListener('change', (e) => {
 document.getElementById('clearAllBtn').addEventListener('click', () => {
   if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
     if (confirm('Really delete everything?')) {
-      data = { shifts: {}, cases: [] };
+      data = { shifts: {}, cases: [], calendarAssignments: {} };
       saveData(data);
       updateHeaderPoints();
       showToast('All data cleared');
@@ -8641,6 +8867,32 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
     }
   }
 });
+
+// Calendar sync button
+document.getElementById('syncCalendarBtn').addEventListener('click', async () => {
+  if (!googleAccessToken) {
+    // Re-authenticate to get a fresh token with calendar scope
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.addScope('https://www.googleapis.com/auth/calendar.events.readonly');
+      const result = await auth.signInWithPopup(provider);
+      if (result.credential) {
+        googleAccessToken = result.credential.accessToken;
+      }
+    } catch(err) {
+      console.error('Calendar re-auth error:', err);
+      showToast('Calendar auth failed');
+      return;
+    }
+  }
+  await syncCalendarEvents();
+});
+
+// Initialize last sync display
+if (data.calendarLastSync) {
+  const el = document.getElementById('calendarLastSync');
+  if (el) el.textContent = 'Last synced: ' + new Date(data.calendarLastSync).toLocaleString();
+}
 
 document.getElementById('copyFlaggedEmailBtn').addEventListener('click', () => {
   const text = document.getElementById('flaggedList').dataset.emailText || '';
@@ -12366,7 +12618,12 @@ document.getElementById('googleSignInBtn').addEventListener('click', async () =>
   loadEl.classList.remove('hidden');
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
-    await auth.signInWithPopup(provider);
+    provider.addScope('https://www.googleapis.com/auth/calendar.events.readonly');
+    const result = await auth.signInWithPopup(provider);
+    if (result.credential) {
+      googleAccessToken = result.credential.accessToken;
+      syncCalendarEvents();
+    }
   } catch(err) {
     console.error('Sign-in error:', err);
     loadEl.classList.add('hidden');
