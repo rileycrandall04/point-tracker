@@ -3300,7 +3300,7 @@ function requestCalendarToken() {
     }
     const client = google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/calendar.events.readonly',
+      scope: 'https://www.googleapis.com/auth/calendar.readonly',
       callback: (resp) => {
         if (resp.error) {
           reject(new Error(resp.error_description || resp.error));
@@ -3322,15 +3322,6 @@ async function syncCalendarEvents() {
   try {
     // Always get a fresh token via GIS to ensure calendar scope
     await requestCalendarToken();
-
-    // DEBUG: Show token scopes before attempting API call
-    const tokenCheck = await fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + googleAccessToken);
-    const tokenInfo = await tokenCheck.json();
-    alert('DEBUG Token Info:\nScopes: ' + (tokenInfo.scope || 'NONE') + '\nAudience: ' + (tokenInfo.aud || 'NONE') + '\nError: ' + (tokenInfo.error_description || 'none'));
-    if (!tokenInfo.scope || !tokenInfo.scope.includes('calendar')) {
-      showToast('Token missing calendar scope');
-      return;
-    }
 
     // Find the "Riley" calendar
     const calList = await fetchCalendarList(googleAccessToken);
