@@ -1971,6 +1971,19 @@ input.mil-time.invalid {
   <div id="todayBackBar" class="hidden" style="display:none;align-items:center;gap:8px;margin-bottom:8px;">
     <button class="btn btn-outline btn-sm" id="todayBackBtn" style="padding:4px 12px;font-size:0.8rem;">&larr; Daily</button>
   </div>
+  <div class="card" id="weeklyChartCard">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 style="margin:0;">This Week</h2>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button class="btn btn-sm btn-outline" id="weeklyToggleBtn" style="padding:2px 8px;font-size:0.7rem;min-width:32px;">$</button>
+      </div>
+    </div>
+    <div style="position:relative;height:200px;margin:8px 0;">
+      <canvas id="weeklyBarCanvas"></canvas>
+    </div>
+    <div id="weeklySummary" style="text-align:center;font-size:0.8rem;color:var(--text-dim);"></div>
+  </div>
+
   <div class="card" id="todayBreakdownCard">
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <h2 id="todayTitle" style="margin:0;">Point Breakdown</h2>
@@ -3274,6 +3287,20 @@ function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
+function getWeekDates(refDateStr) {
+  const d = new Date(refDateStr + 'T12:00:00');
+  const dow = d.getDay();
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - ((dow + 6) % 7));
+  const dates = [];
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(monday);
+    dt.setDate(monday.getDate() + i);
+    dates.push(dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0'));
+  }
+  return dates;
+}
+
 // ================================================================
 // MILITARY TIME INPUT HANDLING
 // ================================================================
@@ -4090,6 +4117,29 @@ function calcShiftTotal(shift) {
   const subspecPts = (shift.assignmentType === 'cardiac_liver') ? calcSubspecPoints(shift) : 0;
   const supervisionPts = calcSupervisionPoints(shift);
   return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, supervision: supervisionPts, total: round2(arPts + prodPts + callPts + subspecPts + supervisionPts) };
+}
+
+function getShiftPointsForDate(dateStr, estimate) {
+  const shift = data.shifts[dateStr];
+  if (!shift) return { total: 0, isInProgress: false };
+  const entries = shift.timeEntries || [];
+  const lastEntry = entries.length > 0 ? entries[entries.length - 1] : null;
+  const hasNoEnd = lastEntry && lastEntry.start && !lastEntry.end;
+  const isInProgress = hasNoEnd && dateStr === todayStr();
+  if (estimate && isInProgress) {
+    const clone = JSON.parse(JSON.stringify(shift));
+    const cloneEntries = clone.timeEntries || [];
+    const now = new Date();
+    const nowStr = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+    if (cloneEntries.length > 0) {
+      cloneEntries[cloneEntries.length - 1].end = nowStr;
+    }
+    clone.timeEntries = cloneEntries;
+    const totals = calcShiftTotal(clone);
+    return { total: totals.total, isInProgress: true };
+  }
+  const totals = calcShiftTotal(shift);
+  return { total: totals.total, isInProgress: isInProgress };
 }
 
 function getCaseTypeName(type) {
@@ -5294,6 +5344,7 @@ function resetCaseForm() {
 // TODAY PAGE
 // ================================================================
 function renderToday() {
+  renderWeeklyChart();
   const date = workingDate;
   const shift = data.shifts[date];
   const shiftCases = data.cases.filter(c => c.shiftDate === date);
@@ -5460,6 +5511,154 @@ function renderToday() {
   document.getElementById('todayCaseList').innerHTML = listHtml;
 }
 
+function renderWeeklyChart() {
+  const weekDates = getWeekDates(workingDate);
+  const today = todayStr();
+  const labels = weekDates.map(d => {
+    const dt = new Date(d + 'T12:00:00');
+    return dt.toLocaleDateString('en-US', { weekday: 'short' });
+  });
+
+  const values = [];
+  const bgColors = [];
+  const borderColors = [];
+  const inProgressFlags = [];
+  let weekTotal = 0;
+
+  weekDates.forEach((d, i) => {
+    const result = getShiftPointsForDate(d, true);
+    let val = result.total;
+    if (weeklyShowDollars) {
+      const monthKey = d.substring(0, 7);
+      const pv = getPointValueForMonth(monthKey);
+      val = round2(val * pv);
+    }
+    values.push(val);
+    weekTotal += val;
+    inProgressFlags.push(result.isInProgress);
+
+    if (result.isInProgress) {
+      bgColors.push('rgba(245,166,35,0.55)');
+      borderColors.push('rgba(245,166,35,1)');
+    } else if (d === today) {
+      bgColors.push('rgba(66,133,244,0.85)');
+      borderColors.push('rgba(66,133,244,1)');
+    } else {
+      bgColors.push('rgba(66,133,244,0.3)');
+      borderColors.push('rgba(66,133,244,0.6)');
+    }
+  });
+
+  // Month boundary plugin
+  const monthBoundaryPlugin = {
+    id: 'weeklyMonthBoundary',
+    afterDraw(chart) {
+      const xAxis = chart.scales.x;
+      const yAxis = chart.scales.y;
+      for (let i = 1; i < weekDates.length; i++) {
+        const prevMonth = weekDates[i-1].substring(5,7);
+        const currMonth = weekDates[i].substring(5,7);
+        if (prevMonth !== currMonth) {
+          const x = (xAxis.getPixelForValue(i-1) + xAxis.getPixelForValue(i)) / 2;
+          const ctx = chart.ctx;
+          ctx.save();
+          ctx.setLineDash([4,4]);
+          ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x, yAxis.top);
+          ctx.lineTo(x, yAxis.bottom);
+          ctx.stroke();
+          // Month labels
+          const prevName = new Date(weekDates[i-1] + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' });
+          const currName = new Date(weekDates[i] + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' });
+          ctx.font = '10px sans-serif';
+          ctx.fillStyle = 'rgba(255,255,255,0.45)';
+          ctx.textAlign = 'right';
+          ctx.fillText(prevName, x - 4, yAxis.top + 12);
+          ctx.textAlign = 'left';
+          ctx.fillText(currName, x + 4, yAxis.top + 12);
+          ctx.restore();
+        }
+      }
+    }
+  };
+
+  const canvas = document.getElementById('weeklyBarCanvas');
+  if (weeklyBarChart) {
+    weeklyBarChart.destroy();
+    weeklyBarChart = null;
+  }
+  const ctx = canvas.getContext('2d');
+  weeklyBarChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        backgroundColor: bgColors,
+        borderColor: borderColors,
+        borderWidth: 1,
+        borderRadius: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: function(items) {
+              const i = items[0].dataIndex;
+              return formatDate(weekDates[i]);
+            },
+            label: function(item) {
+              const i = item.dataIndex;
+              const suffix = weeklyShowDollars ? '' : ' pts';
+              const prefix = weeklyShowDollars ? '$' : '';
+              const est = inProgressFlags[i] ? ' (est.)' : '';
+              return prefix + item.raw.toFixed(2) + suffix + est;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: 'rgba(255,255,255,0.6)', font: { size: 11 } }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(255,255,255,0.08)' },
+          ticks: {
+            color: 'rgba(255,255,255,0.5)',
+            font: { size: 10 },
+            callback: function(v) { return weeklyShowDollars ? '$' + v : v; }
+          }
+        }
+      },
+      onClick: function(evt, elements) {
+        if (elements.length > 0) {
+          const i = elements[0].index;
+          setWorkingDate(weekDates[i]);
+        }
+      }
+    },
+    plugins: [monthBoundaryPlugin]
+  });
+
+  const prefix = weeklyShowDollars ? '$' : '';
+  const suffix = weeklyShowDollars ? '' : ' pts';
+  document.getElementById('weeklySummary').textContent = 'Week total: ' + prefix + weekTotal.toFixed(2) + suffix;
+}
+
+document.getElementById('weeklyToggleBtn').addEventListener('click', () => {
+  weeklyShowDollars = !weeklyShowDollars;
+  document.getElementById('weeklyToggleBtn').textContent = weeklyShowDollars ? 'pts' : '$';
+  renderWeeklyChart();
+});
+
 // Add Cases button: navigate to Data Entry page
 document.getElementById('todayAddCasesBtn').addEventListener('click', () => {
   document.querySelector('.bottom-nav button[data-page="dataentry"]').click();
@@ -5582,6 +5781,8 @@ document.getElementById('dayModal').addEventListener('click', (e) => {
 // ================================================================
 // DASHBOARD — Tabs & Rendering
 // ================================================================
+let weeklyBarChart = null;
+let weeklyShowDollars = false;
 let monthlyChart = null;
 let breakdownChart = null;
 let pipelineChart = null;
