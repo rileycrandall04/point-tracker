@@ -1068,6 +1068,27 @@ input.mil-time.invalid {
 .proc-suggestions .proc-item:hover .proc-units,
 .proc-suggestions .proc-item.active .proc-units { color: rgba(255,255,255,0.7); }
 
+/* ===== SURGEON / NOTES AUTOCOMPLETE ===== */
+.notes-autocomplete { position: relative; }
+.surgeon-suggestions {
+  position: absolute; bottom: 100%; left: 0; right: 0; z-index: 110;
+  background: var(--surface); border: 1px solid var(--border); border-bottom: none;
+  border-radius: 8px 8px 0 0; max-height: 180px; overflow-y: auto;
+  box-shadow: 0 -4px 12px rgba(0,0,0,0.3);
+}
+.surgeon-suggestions .surg-item {
+  padding: 10px 12px; cursor: pointer; font-size: 0.85rem;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.surgeon-suggestions .surg-item:hover, .surgeon-suggestions .surg-item.active {
+  background: var(--primary); color: #fff;
+}
+.surgeon-suggestions .surg-count {
+  font-size: 0.75rem; color: var(--text-dim); margin-left: 8px;
+}
+.surgeon-suggestions .surg-item:hover .surg-count,
+.surgeon-suggestions .surg-item.active .surg-count { color: rgba(255,255,255,0.7); }
+
 /* ===== TIME ENTRY ROWS ===== */
 .time-entry-row {
   display: flex;
@@ -1879,9 +1900,10 @@ input.mil-time.invalid {
         </div>
       </div>
 
-      <div class="form-group">
+      <div class="form-group notes-autocomplete">
         <label>Notes (optional)</label>
-        <textarea id="caseNotes" placeholder="Surgeon, location, or other notes"></textarea>
+        <textarea id="caseNotes" placeholder="Surgeon, location, or other notes" autocomplete="off"></textarea>
+        <div class="surgeon-suggestions hidden" id="surgeonSuggestions"></div>
       </div>
 
       <div id="casePointPreview" class="point-breakdown hidden">
@@ -2810,9 +2832,10 @@ input.mil-time.invalid {
         <input type="text" id="editSimpleNotes" placeholder="Optional notes">
       </div>
     </div>
-    <div class="form-group">
+    <div class="form-group notes-autocomplete">
       <label>Notes (optional)</label>
-      <textarea id="editCaseNotes" placeholder="Notes"></textarea>
+      <textarea id="editCaseNotes" placeholder="Surgeon, location, or other notes" autocomplete="off"></textarea>
+      <div class="surgeon-suggestions hidden" id="editSurgeonSuggestions"></div>
     </div>
     <div class="modal-actions" style="justify-content:space-between;">
       <button class="btn btn-danger btn-sm" id="deleteCaseEdit">Delete</button>
@@ -5054,6 +5077,87 @@ document.getElementById('caseShared').addEventListener('change', function() {
   document.addEventListener('click', function(e) {
     if (!e.target.closest('.proc-autocomplete')) hideSuggestions();
   });
+})();
+
+// Surgeon name autocomplete for Notes fields
+(function() {
+  function getSurgeonHistory() {
+    const map = {};
+    data.cases.forEach(c => {
+      const name = (c.notes || '').trim();
+      if (!name) return;
+      if (!map[name]) map[name] = 0;
+      map[name]++;
+    });
+    return map;
+  }
+
+  function initSurgeonAutocomplete(textareaId, sugBoxId) {
+    const textarea = document.getElementById(textareaId);
+    const sugBox = document.getElementById(sugBoxId);
+    if (!textarea || !sugBox) return;
+    let activeIdx = -1;
+
+    function showSurgSuggestions() {
+      const query = textarea.value.trim().toLowerCase();
+      if (!query) { hideSurgSuggestions(); return; }
+      const history = getSurgeonHistory();
+      const matches = Object.entries(history)
+        .filter(([name]) => name.toLowerCase().includes(query))
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8);
+      if (matches.length === 0) { hideSurgSuggestions(); return; }
+      activeIdx = -1;
+      sugBox.innerHTML = matches.map(([name, count], i) =>
+        `<div class="surg-item" data-idx="${i}" data-name="${escHtml(name)}">${escHtml(name)}<span class="surg-count">(${count})</span></div>`
+      ).join('');
+      sugBox.classList.remove('hidden');
+    }
+
+    function hideSurgSuggestions() { sugBox.classList.add('hidden'); sugBox.innerHTML = ''; activeIdx = -1; }
+
+    function selectSurgItem(el) {
+      textarea.value = el.dataset.name;
+      hideSurgSuggestions();
+      textarea.focus();
+    }
+
+    textarea.addEventListener('input', showSurgSuggestions);
+    textarea.addEventListener('focus', () => { if (textarea.value.trim()) showSurgSuggestions(); });
+
+    textarea.addEventListener('keydown', function(e) {
+      const items = sugBox.querySelectorAll('.surg-item');
+      if (items.length === 0) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIdx = Math.min(activeIdx + 1, items.length - 1);
+        items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+        items[activeIdx].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIdx = Math.max(activeIdx - 1, 0);
+        items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+        items[activeIdx].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter' && activeIdx >= 0) {
+        e.preventDefault();
+        selectSurgItem(items[activeIdx]);
+      } else if (e.key === 'Escape') {
+        hideSurgSuggestions();
+      }
+    });
+
+    sugBox.addEventListener('click', function(e) {
+      const item = e.target.closest('.surg-item');
+      if (item) selectSurgItem(item);
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.notes-autocomplete')) hideSurgSuggestions();
+    });
+  }
+
+  initSurgeonAutocomplete('caseNotes', 'surgeonSuggestions');
+  initSurgeonAutocomplete('editCaseNotes', 'editSurgeonSuggestions');
 })();
 
 ['caseBaseUnits','caseStart','caseEnd','casePhysicalStatus','laborStart','laborEnd','caseNerveBlock','apsEpiduralCount','apsPainCount','caseSharedPct'].forEach(id => {
