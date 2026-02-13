@@ -5685,16 +5685,17 @@ function renderWeeklyChart() {
     }
   });
 
-  // Build assignment labels for chart
+  // Build assignment labels for chart (calendar label preferred, shift type as fallback)
   const calendarLabels = weekDates.map(d => {
+    const cal = data.calendarAssignments[d];
+    if (cal) return cal.label;
     const shift = data.shifts[d];
     if (shift && shift.assignmentType) {
       const sel = document.getElementById('shiftAssignmentType');
       const opt = sel && sel.querySelector('option[value="' + shift.assignmentType + '"]');
       return opt ? opt.textContent : shift.assignmentType;
     }
-    const cal = data.calendarAssignments[d];
-    return cal ? cal.label : '';
+    return '';
   });
 
   // Bar value labels plugin
