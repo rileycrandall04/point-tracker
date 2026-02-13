@@ -3263,7 +3263,10 @@ async function fetchCalendarList(token) {
     headers: { 'Authorization': 'Bearer ' + token }
   });
   if (resp.status === 401) throw new Error('TOKEN_EXPIRED');
-  if (!resp.ok) throw new Error('Calendar list fetch failed: ' + resp.status);
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error('Calendar list ' + resp.status + ': ' + body.substring(0, 200));
+  }
   return resp.json();
 }
 
@@ -3279,7 +3282,10 @@ async function fetchCalendarEvents(token, calId, timeMin, timeMax) {
     headers: { 'Authorization': 'Bearer ' + token }
   });
   if (resp.status === 401) throw new Error('TOKEN_EXPIRED');
-  if (!resp.ok) throw new Error('Calendar events fetch failed: ' + resp.status);
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error('Calendar events ' + resp.status + ': ' + body.substring(0, 200));
+  }
   return resp.json();
 }
 
@@ -3341,7 +3347,7 @@ async function syncCalendarEvents() {
       showToast('Calendar token expired — use Sync Calendar in Settings');
     } else {
       console.error('Calendar sync error:', err);
-      showToast('Calendar sync failed');
+      showToast('Calendar: ' + (err.message || 'sync failed'));
     }
   }
 }
@@ -8876,12 +8882,13 @@ document.getElementById('syncCalendarBtn').addEventListener('click', async () =>
       const provider = new firebase.auth.GoogleAuthProvider();
       provider.addScope('https://www.googleapis.com/auth/calendar.events.readonly');
       const result = await auth.signInWithPopup(provider);
-      if (result.credential) {
-        googleAccessToken = result.credential.accessToken;
+      const cred = result.credential || firebase.auth.GoogleAuthProvider.credentialFromResult(result);
+      if (cred && cred.accessToken) {
+        googleAccessToken = cred.accessToken;
       }
     } catch(err) {
       console.error('Calendar re-auth error:', err);
-      showToast('Calendar auth failed');
+      showToast('Calendar auth failed: ' + (err.message || err));
       return;
     }
   }
@@ -12620,8 +12627,9 @@ document.getElementById('googleSignInBtn').addEventListener('click', async () =>
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/calendar.events.readonly');
     const result = await auth.signInWithPopup(provider);
-    if (result.credential) {
-      googleAccessToken = result.credential.accessToken;
+    const cred = result.credential || firebase.auth.GoogleAuthProvider.credentialFromResult(result);
+    if (cred && cred.accessToken) {
+      googleAccessToken = cred.accessToken;
       syncCalendarEvents();
     }
   } catch(err) {
