@@ -2234,17 +2234,30 @@ input.mil-time.invalid {
     <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
 
-  <!-- Point Value (estimate + history combined) -->
+  <!-- 1. Monthly Pace (hero, compact) -->
+  <div class="card" style="padding:12px 16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <span style="font-size:0.82rem;font-weight:600;">Monthly Pace</span>
+      <span style="font-size:0.82rem;"><span id="paceCurrentPts" style="color:var(--primary);font-weight:600;">0</span> <span style="color:var(--text-dim);font-size:0.75rem;">/ <span id="paceProjected">0</span> projected</span></span>
+    </div>
+    <div style="background:var(--surface2); border-radius:6px; height:8px; overflow:hidden;">
+      <div id="paceBar" style="height:100%; background:var(--primary); border-radius:6px; transition:width 0.3s; width:0%;"></div>
+    </div>
+    <div id="paceLabel" style="font-size:0.72rem; color:var(--text-dim); margin-top:4px; text-align:center;"></div>
+  </div>
+
+  <!-- 2. Paycheck Projection (with $/point inline) -->
   <div class="card">
-    <div style="display:flex; align-items:center; gap:12px; justify-content:space-between;">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <label style="font-size:0.85rem; font-weight:600; white-space:nowrap;">$/point estimate</label>
-        <input type="number" id="dashPointValue" min="0" step="0.01" placeholder="e.g. 55.00" style="max-width:120px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <h2 style="margin:0;">Paycheck Projection</h2>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:0.75rem;color:var(--text-dim);white-space:nowrap;">$/pt</label>
+        <input type="number" id="dashPointValue" min="0" step="0.01" placeholder="55.00" style="max-width:90px;padding:4px 8px;font-size:0.8rem;">
+        <button class="btn btn-outline btn-sm" id="pvHistoryToggle" onclick="togglePVHistory()" style="padding:3px 8px;font-size:0.7rem;white-space:nowrap;">History &#9660;</button>
       </div>
-      <button class="btn btn-outline btn-sm" id="pvHistoryToggle" onclick="togglePVHistory()" style="padding:4px 10px;font-size:0.75rem;white-space:nowrap;">History &#9660;</button>
     </div>
     <div id="pvHistoryPanel" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;">
-      <div style="padding-top:12px;">
+      <div style="padding-bottom:12px;border-bottom:1px solid var(--surface2);margin-bottom:12px;">
         <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
           Enter confirmed $/point values for past months. Revenue calculations will use confirmed values instead of the global estimate.
         </p>
@@ -2253,11 +2266,6 @@ input.mil-time.invalid {
         <div id="pvHistoryStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
       </div>
     </div>
-  </div>
-
-  <!-- Paycheck Projection Card -->
-  <div class="card">
-    <h2>Paycheck Projection</h2>
     <p style="font-size:0.8rem; color:var(--text-dim); margin-bottom:12px;">
       Your paycheck is based on a weighted blend of the last 5 months, not just this month alone.
     </p>
@@ -2281,7 +2289,7 @@ input.mil-time.invalid {
     <div id="stabBreakdown" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;"></div>
   </div>
 
-  <!-- Income Pipeline -->
+  <!-- 3. Income Pipeline -->
   <div class="card">
     <h2>Income Pipeline</h2>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -2303,81 +2311,38 @@ input.mil-time.invalid {
     <div id="pipelineUnreceived" style="margin-top:8px; text-align:center;"></div>
   </div>
 
-  <!-- Monthly Pace (compact) -->
-  <div class="card" style="padding:12px 16px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <span style="font-size:0.82rem;font-weight:600;">Monthly Pace</span>
-      <span style="font-size:0.82rem;"><span id="paceCurrentPts" style="color:var(--primary);font-weight:600;">0</span> <span style="color:var(--text-dim);font-size:0.75rem;">/ <span id="paceProjected">0</span> projected</span></span>
-    </div>
-    <div style="background:var(--surface2); border-radius:6px; height:8px; overflow:hidden;">
-      <div id="paceBar" style="height:100%; background:var(--primary); border-radius:6px; transition:width 0.3s; width:0%;"></div>
-    </div>
-    <div id="paceLabel" style="font-size:0.72rem; color:var(--text-dim); margin-top:4px; text-align:center;"></div>
-  </div>
-
-  <!-- Projected Annual Income -->
-  <div class="card">
-    <h2>Projected Annual Income</h2>
-    <div class="summary-grid">
-      <div class="summary-item">
-        <div class="label">3-Month Rolling Avg</div>
-        <div class="value blue" id="projRollingAvg">0</div>
-      </div>
-      <div class="summary-item">
-        <div class="label">Annual Projection</div>
-        <div class="value green" id="projAnnualIncome">&mdash;</div>
-      </div>
-    </div>
-    <div class="summary-grid" style="margin-top:8px;">
-      <div class="summary-item">
-        <div class="label">YTD Revenue</div>
-        <div class="value yellow" id="projYTDRevenue">&mdash;</div>
-      </div>
-      <div class="summary-item">
-        <div class="label">Projected Remaining</div>
-        <div class="value purple" id="projRemaining">&mdash;</div>
-      </div>
-    </div>
-    <div id="projYTDDetail" style="margin-top:8px; font-size:0.78rem; color:var(--text-dim); text-align:center;"></div>
-  </div>
-
-  <!-- Monthly Trend Chart -->
+  <!-- 4. Monthly Trend (with annual income stats above chart) -->
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <h2 style="margin:0;">Monthly Trend</h2>
       <button class="btn btn-sm btn-outline" id="monthlyTrendToggle" style="padding:2px 8px;font-size:0.7rem;min-width:32px;">$</button>
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:12px 0;padding:10px 12px;background:var(--surface2);border-radius:8px;">
+      <div style="text-align:center;">
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">3-Mo Avg</div>
+        <div style="font-size:0.95rem;font-weight:600;color:var(--primary);" id="projRollingAvg">0</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Annual Proj</div>
+        <div style="font-size:0.95rem;font-weight:600;color:var(--accent2);" id="projAnnualIncome">&mdash;</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">YTD Revenue</div>
+        <div style="font-size:0.95rem;font-weight:600;color:#facc15;" id="projYTDRevenue">&mdash;</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Remaining</div>
+        <div style="font-size:0.95rem;font-weight:600;color:#a78bfa;" id="projRemaining">&mdash;</div>
+      </div>
+    </div>
+    <div id="projYTDDetail" style="font-size:0.72rem; color:var(--text-dim); text-align:center; margin-bottom:8px;"></div>
     <div class="chart-container">
       <canvas id="monthlyChart"></canvas>
     </div>
     <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
   </div>
 
-  <!-- Collapsible: Breakdown Chart -->
-  <div class="card collapse-section">
-    <div class="collapse-header" onclick="toggleCollapse('projBreakdown')">
-      <h3>Points Breakdown (This Month)</h3>
-      <span class="arrow" id="projBreakdownArrow">&#9660;</span>
-    </div>
-    <div class="collapse-body" id="projBreakdownBody">
-      <div class="chart-container" style="margin-top:12px;">
-        <canvas id="breakdownChart"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <!-- Collapsible: Month-over-Month -->
-  <div class="card collapse-section">
-    <div class="collapse-header" onclick="toggleCollapse('projMoM')">
-      <h3>Month-over-Month Change</h3>
-      <span class="arrow" id="projMoMArrow">&#9660;</span>
-    </div>
-    <div class="collapse-body" id="projMoMBody">
-      <div id="momContent" style="padding-top:12px;"></div>
-    </div>
-  </div>
-
-  <!-- Monthly Stipends (collapsible) -->
+  <!-- 5. Monthly Stipends (collapsible) -->
   <div class="card collapse-section">
     <div class="collapse-header" onclick="toggleCollapse('compStipends')">
       <h3>Monthly Stipends</h3>
@@ -6020,7 +5985,7 @@ let weeklyBarChart = null;
 let weeklyShowDollars = false;
 let monthlyChart = null;
 let monthlyShowDollars = false;
-let breakdownChart = null;
+let breakdownChart = null; // unused, kept for compat
 let pipelineChart = null;
 let productionTrendChart = null;
 let activeDashTab = 'daily';
@@ -6060,7 +6025,6 @@ function updateDashStickyHeaderSpacer() {
 function toggleCollapse(sectionId) {
   const bodyMap = {
     deScan: 'deScanBody',
-    projBreakdown: 'projBreakdownBody', projMoM: 'projMoMBody',
     timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
     analTopProc: 'analTopProcBody',
     analTopSurgeons: 'analTopSurgeonsBody',
@@ -6069,7 +6033,6 @@ function toggleCollapse(sectionId) {
   };
   const arrowMap = {
     deScan: 'deScanArrow',
-    projBreakdown: 'projBreakdownArrow', projMoM: 'projMoMArrow',
     timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
     analTopProc: 'analTopProcArrow',
     analTopSurgeons: 'analTopSurgeonsArrow',
@@ -7599,13 +7562,11 @@ function checkPVReminder() {
 // PROJECTIONS TAB
 // ================================================================
 function renderProjections() {
-  renderMonthlyChart();
-  renderBreakdownChart();
-  renderStabilization();
-  renderProjectedAnnual();
   renderMonthlyPace();
+  renderStabilization();
   renderPipelineChart();
-  renderMoMChange();
+  renderProjectedAnnual();
+  renderMonthlyChart();
   loadStipendUI();
   renderPVHistory();
   checkPVReminder();
@@ -7703,32 +7664,6 @@ function renderMonthlyChart() {
   document.getElementById('monthlyTrendToggle').textContent = monthlyShowDollars ? 'pts' : '$';
 }
 
-function renderBreakdownChart() {
-  const now = new Date();
-  const prefix = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-  const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix));
-  let obProd = 0, orProd = 0, totalAR = 0, totalCall = 0, totalSupervision = 0;
-  monthShifts.forEach(shift => {
-    const t = calcShiftTotal(shift);
-    totalAR += t.ar;
-    totalCall += t.call + t.subspec;
-    totalSupervision += t.supervision;
-    // Split prod by OB vs OR shift type
-    if (['OB_restricted','SF1','SF2'].includes(shift.assignmentType)) obProd += t.prod;
-    else orProd += t.prod;
-  });
-  const ctx = document.getElementById('breakdownChart').getContext('2d');
-  if (breakdownChart) breakdownChart.destroy();
-  breakdownChart = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: ['OB','OR','Supervision','Availability','Call'],
-      datasets: [{ data: [round2(obProd), round2(orProd), round2(totalSupervision), round2(totalAR), round2(totalCall)], backgroundColor: ['#ec4899','#10b981','#8b5cf6','#3b82f6','#f59e0b'], borderWidth: 0 }]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 16 } } } }
-  });
-}
-
 function toggleStabBreakdown() {
   const panel = document.getElementById('stabBreakdown');
   const link = document.getElementById('stabBreakdownToggle');
@@ -7800,7 +7735,7 @@ function renderStabilization() {
 }
 
 // ================================================================
-// PROJECTED ANNUAL, SHIFT EFFICIENCY, MOM CHANGE
+// PROJECTED ANNUAL INCOME
 // ================================================================
 function renderProjectedAnnual() {
   const mt = getMonthlyTotals();
@@ -8298,33 +8233,6 @@ function buildWorkerBeeAvg() {
     });
   }
   return html || '<p style="font-size:0.85rem;color:var(--text-dim);">No calendar assignment data yet. Sync your calendar in Settings.</p>';
-}
-
-function renderMoMChange() {
-  const mt = getMonthlyTotals();
-  const now = new Date();
-  function mk(offset) { const d = new Date(now.getFullYear(), now.getMonth() - offset, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
-  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  let html = '';
-  for (let i = 0; i < 3; i++) {
-    const key = mk(i);
-    const prevKey = mk(i + 1);
-    const curr = mt[key] || 0;
-    const prev = mt[prevKey] || 0;
-    const [y, m] = key.split('-');
-    const label = monthNames[parseInt(m)-1] + ' ' + y;
-    let change = '', cls = 'trend-flat';
-    if (prev > 0) {
-      const pct = round2(((curr - prev) / prev) * 100);
-      if (pct > 0) { change = `+${pct.toFixed(1)}%`; cls = 'trend-up'; }
-      else if (pct < 0) { change = `${pct.toFixed(1)}%`; cls = 'trend-down'; }
-      else { change = '0%'; }
-    } else {
-      change = curr > 0 ? 'New' : '-';
-    }
-    html += `<div class="efficiency-item"><span class="eff-label">${label}: ${curr.toFixed(0)} pts</span><span class="eff-value ${cls}">${change}</span></div>`;
-  }
-  document.getElementById('momContent').innerHTML = html || '<p style="font-size:0.85rem;color:var(--text-dim);">Not enough data.</p>';
 }
 
 // ================================================================
