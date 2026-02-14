@@ -1969,6 +1969,10 @@ input.mil-time.invalid {
 
 <!-- TODAY PAGE -->
 <div class="page active" id="page-today">
+  <div class="card hidden" id="todayPVReminder" style="background:var(--accent2); color:#000; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+    <span style="font-size:0.85rem; font-weight:600;" id="todayPVReminderText"></span>
+    <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
+  </div>
   <div id="todayBackBar" class="hidden" style="display:none;align-items:center;gap:8px;margin-bottom:8px;">
     <button class="btn btn-outline btn-sm" id="todayBackBtn" style="padding:4px 12px;font-size:0.8rem;">&larr; Daily</button>
   </div>
@@ -2233,7 +2237,7 @@ input.mil-time.invalid {
   <!-- PV Reminder Banner -->
   <div class="card hidden" id="pvReminderBanner" style="background:var(--accent2); color:#000; padding:10px 16px; display:flex; align-items:center; justify-content:space-between;">
     <span style="font-size:0.85rem; font-weight:600;" id="pvReminderText">Last month's $/point hasn't been confirmed yet.</span>
-    <button onclick="document.getElementById('pvReminderBanner').classList.add('hidden'); window._pvReminderDismissed=true;" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
+    <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
 
   <!-- Point Value History (collapsible) -->
@@ -5539,6 +5543,7 @@ function resetCaseForm() {
 // TODAY PAGE
 // ================================================================
 function renderToday() {
+  checkPVReminder();
   renderWeeklyChart();
   const date = workingDate;
   const shift = data.shifts[date];
@@ -7498,21 +7503,46 @@ document.addEventListener('click', function(e) {
   }
 });
 
+function dismissPVReminder() {
+  window._pvReminderDismissed = true;
+  const today = document.getElementById('todayPVReminder');
+  const comp = document.getElementById('pvReminderBanner');
+  if (today) today.classList.add('hidden');
+  if (comp) comp.classList.add('hidden');
+}
+
 function checkPVReminder() {
-  const banner = document.getElementById('pvReminderBanner');
-  if (!banner) return;
-  if (window._pvReminderDismissed) { banner.classList.add('hidden'); return; }
+  const todayBanner = document.getElementById('todayPVReminder');
+  const compBanner = document.getElementById('pvReminderBanner');
+  if (window._pvReminderDismissed) {
+    if (todayBanner) todayBanner.classList.add('hidden');
+    if (compBanner) compBanner.classList.add('hidden');
+    return;
+  }
   const now = new Date();
-  if (now.getDate() < 20) { banner.classList.add('hidden'); return; }
+  if (now.getDate() < 20) {
+    if (todayBanner) todayBanner.classList.add('hidden');
+    if (compBanner) compBanner.classList.add('hidden');
+    return;
+  }
   const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevKey = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth()+1).padStart(2,'0');
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   if (!settings.pointValues || settings.pointValues[prevKey] == null) {
-    document.getElementById('pvReminderText').textContent = monthNames[prevMonth.getMonth()] + ' $/point hasn\'t been confirmed yet.';
-    banner.classList.remove('hidden');
-    banner.style.display = 'flex';
+    const msg = monthNames[prevMonth.getMonth()] + ' $/point hasn\'t been confirmed yet.';
+    if (todayBanner) {
+      document.getElementById('todayPVReminderText').textContent = msg;
+      todayBanner.classList.remove('hidden');
+      todayBanner.style.display = 'flex';
+    }
+    if (compBanner) {
+      document.getElementById('pvReminderText').textContent = msg;
+      compBanner.classList.remove('hidden');
+      compBanner.style.display = 'flex';
+    }
   } else {
-    banner.classList.add('hidden');
+    if (todayBanner) todayBanner.classList.add('hidden');
+    if (compBanner) compBanner.classList.add('hidden');
   }
 }
 
