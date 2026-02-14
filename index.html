@@ -2359,6 +2359,7 @@ input.mil-time.invalid {
       <canvas id="pipelineChart"></canvas>
     </div>
     <div id="pipelineSummary" style="margin-top:8px; font-size:0.78rem; color:var(--text-dim); text-align:center;"></div>
+    <div id="pipelineUnreceived" style="margin-top:8px; text-align:center;"></div>
   </div>
 
   <!-- Collapsible: Breakdown Chart -->
@@ -8163,8 +8164,10 @@ function renderPipelineChart() {
     }
   });
 
-  // Summary
+  // Summary — next paycheck date and amount
   const currentPts = mt[mkKey(now.getFullYear(), now.getMonth())] || 0;
+  const nextPayDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const nextPayDateStr = monthNames[nextPayDate.getMonth()] + ' 1, ' + nextPayDate.getFullYear();
   let summary = `Current month: ${currentPts.toFixed(0)} pts`;
   if (useDollars) {
     const nextPaycheck = round2((realValues[0] + projectedValues[0]) * targetPvs[0] + stipendValues[0]);
@@ -8172,11 +8175,26 @@ function renderPipelineChart() {
     if (isCurrentJan) {
       summary += ' \u2022 Next paycheck: $0 (advanced in Dec)';
     } else {
-      summary += ` \u2022 Next paycheck: $${nextPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
+      summary += ` \u2022 Next paycheck (${nextPayDateStr}): $${nextPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
       if (decAdv && now.getMonth() === 11) summary += ' (incl. Jan)';
     }
+  } else {
+    summary += ` \u2022 Next paycheck: ${nextPayDateStr}`;
   }
   document.getElementById('pipelineSummary').textContent = summary;
+
+  // Earnings not yet received
+  const unreceivedEl = document.getElementById('pipelineUnreceived');
+  if (useDollars) {
+    let totalUnreceived = 0;
+    for (let i = 0; i < 5; i++) {
+      totalUnreceived += realData[i] + (projData[i] || 0);
+    }
+    totalUnreceived = round2(totalUnreceived);
+    unreceivedEl.innerHTML = `<div style="font-size:1.1rem;font-weight:700;color:var(--accent2);">$${totalUnreceived.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px;">Total earnings not yet received</div>`;
+  } else {
+    unreceivedEl.innerHTML = '';
+  }
 }
 
 let activeAssignDataTab = 'totals';
