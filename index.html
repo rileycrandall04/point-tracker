@@ -5586,8 +5586,13 @@ function renderToday() {
   if (result.supervision > 0) components.push('Supv: ' + result.supervision.toFixed(2));
   const compLine = components.length > 0 ? components.join(' \u00B7 ') : '';
 
+  const shiftHrs = calcShiftHours(shift);
+  const ptsPerHr = shiftHrs > 0 ? (result.total / shiftHrs).toFixed(2) : null;
+
   let bdHtml = '<div style="margin-top:6px;">';
-  bdHtml += `<div style="font-size:1.8rem;font-weight:700;line-height:1.1;">${result.total.toFixed(2)} <span style="font-size:0.9rem;font-weight:400;color:var(--text-dim);">pts</span>${estTag}</div>`;
+  bdHtml += `<div style="font-size:1.8rem;font-weight:700;line-height:1.1;">${result.total.toFixed(2)} <span style="font-size:0.9rem;font-weight:400;color:var(--text-dim);">pts</span>${estTag}`;
+  if (ptsPerHr) bdHtml += ` <span style="font-size:0.85rem;font-weight:500;color:var(--text-dim);">(${ptsPerHr} pts/hr)</span>`;
+  bdHtml += `</div>`;
   if (compLine) {
     bdHtml += `<div style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;">${compLine}</div>`;
   }
@@ -5644,6 +5649,8 @@ function renderWeeklyChart() {
   });
 
   const values = [];
+  const rawPts = [];
+  const hoursArr = [];
   const bgColors = [];
   const borderColors = [];
   const inProgressFlags = [];
@@ -5651,6 +5658,10 @@ function renderWeeklyChart() {
 
   weekDates.forEach((d, i) => {
     const result = getShiftPointsForDate(d, true);
+    const shift = data.shifts[d];
+    const hrs = shift ? calcShiftHours(shift) : 0;
+    rawPts.push(result.total);
+    hoursArr.push(hrs);
     let val = result.total;
     if (weeklyShowDollars) {
       const monthKey = d.substring(0, 7);
@@ -5817,7 +5828,12 @@ function renderWeeklyChart() {
               const suffix = weeklyShowDollars ? '' : ' pts';
               const prefix = weeklyShowDollars ? '$' : '';
               const est = inProgressFlags[i] ? ' (est.)' : '';
-              return prefix + item.raw.toFixed(2) + suffix + est;
+              const lines = [prefix + item.raw.toFixed(2) + suffix + est];
+              if (hoursArr[i] > 0) {
+                const pph = rawPts[i] / hoursArr[i];
+                lines.push(pph.toFixed(2) + ' pts/hr (' + hoursArr[i].toFixed(1) + ' hrs)');
+              }
+              return lines;
             }
           }
         }
