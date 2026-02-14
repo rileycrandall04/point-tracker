@@ -2121,37 +2121,15 @@ input.mil-time.invalid {
       </div>
     </div>
 
-    <!-- Points Per Shift Type -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('projPtsPerType')">
-        <h3>Avg Points by Shift Type</h3>
-        <span class="arrow" id="projPtsPerTypeArrow">&#9660;</span>
+    <!-- Assignment Data (combined) -->
+    <div class="card">
+      <h2>Assignment Data</h2>
+      <div style="display:flex;gap:6px;margin-bottom:12px;">
+        <button class="tab-btn active" id="adTabTotals" onclick="switchAssignDataTab('totals')">Average Shift Totals</button>
+        <button class="tab-btn" id="adTabEfficiency" onclick="switchAssignDataTab('efficiency')">Shift Efficiency</button>
+        <button class="tab-btn" id="adTabWorkerBee" onclick="switchAssignDataTab('workerBee')">Worker Bee Averages</button>
       </div>
-      <div class="collapse-body" id="projPtsPerTypeBody">
-        <div id="ptsPerTypeContent" style="padding-top:12px;"></div>
-      </div>
-    </div>
-
-    <!-- Collapsible: Shift Efficiency -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('projEfficiency')">
-        <h3>Most / Least Efficient Assignments</h3>
-        <span class="arrow" id="projEfficiencyArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="projEfficiencyBody">
-        <div id="efficiencyContent" style="padding-top:12px;"></div>
-      </div>
-    </div>
-
-    <!-- Calendar Assignment Averages -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('calAssignAvg')">
-        <h3>Worker Bee Averages</h3>
-        <span class="arrow" id="calAssignAvgArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="calAssignAvgBody">
-        <div id="calAssignAvgContent" style="padding-top:12px;"></div>
-      </div>
+      <div id="assignDataContent"></div>
     </div>
   </div>
 
@@ -6067,8 +6045,7 @@ function updateDashStickyHeaderSpacer() {
 function toggleCollapse(sectionId) {
   const bodyMap = {
     deScan: 'deScanBody',
-    projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projMoM: 'projMoMBody', projPtsPerType: 'projPtsPerTypeBody',
-    calAssignAvg: 'calAssignAvgBody',
+    projBreakdown: 'projBreakdownBody', projMoM: 'projMoMBody',
     timeDOW: 'timeDOWBody', timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
     analTopProc: 'analTopProcBody',
     analTopSurgeons: 'analTopSurgeonsBody',
@@ -6077,8 +6054,7 @@ function toggleCollapse(sectionId) {
   };
   const arrowMap = {
     deScan: 'deScanArrow',
-    projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projMoM: 'projMoMArrow', projPtsPerType: 'projPtsPerTypeArrow',
-    calAssignAvg: 'calAssignAvgArrow',
+    projBreakdown: 'projBreakdownArrow', projMoM: 'projMoMArrow',
     timeDOW: 'timeDOWArrow', timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
     analTopProc: 'analTopProcArrow',
     analTopSurgeons: 'analTopSurgeonsArrow',
@@ -8087,7 +8063,28 @@ function renderPipelineChart() {
   document.getElementById('pipelineSummary').textContent = summary;
 }
 
-function renderPtsPerShiftType() {
+let activeAssignDataTab = 'totals';
+
+function switchAssignDataTab(tab) {
+  activeAssignDataTab = tab;
+  document.getElementById('adTabTotals').classList.toggle('active', tab === 'totals');
+  document.getElementById('adTabEfficiency').classList.toggle('active', tab === 'efficiency');
+  document.getElementById('adTabWorkerBee').classList.toggle('active', tab === 'workerBee');
+  renderAssignData();
+}
+
+function renderAssignData() {
+  const el = document.getElementById('assignDataContent');
+  if (activeAssignDataTab === 'totals') {
+    el.innerHTML = buildAvgShiftTotals();
+  } else if (activeAssignDataTab === 'efficiency') {
+    el.innerHTML = buildShiftEfficiency();
+  } else {
+    el.innerHTML = buildWorkerBeeAvg();
+  }
+}
+
+function buildAvgShiftTotals() {
   const groups = {};
   Object.values(data.shifts).forEach(shift => {
     const t = calcShiftTotal(shift).total;
@@ -8096,11 +8093,9 @@ function renderPtsPerShiftType() {
     groups[type].totalPts += t;
     groups[type].count++;
   });
-
   const ranked = Object.entries(groups)
-    .map(([type, g]) => ({ type, name: getAssignmentTypeName(type), avgPts: round2(g.totalPts / g.count), count: g.count, totalPts: round2(g.totalPts) }))
+    .map(([type, g]) => ({ name: getAssignmentTypeName(type), avgPts: round2(g.totalPts / g.count), count: g.count }))
     .sort((a, b) => b.avgPts - a.avgPts);
-
   let html = '';
   if (ranked.length > 0) {
     html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Average total points per shift (AR + production + call)</div>';
@@ -8108,11 +8103,10 @@ function renderPtsPerShiftType() {
       html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count} shift${r.count !== 1 ? 's' : ''})</span></span><span class="eff-value" style="color:var(--primary);">${r.avgPts.toFixed(1)}</span></div>`;
     });
   }
-  if (!html) html = '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet.</p>';
-  document.getElementById('ptsPerTypeContent').innerHTML = html;
+  return html || '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet.</p>';
 }
 
-function renderShiftEfficiency() {
+function buildShiftEfficiency() {
   const groups = {};
   Object.values(data.shifts).forEach(shift => {
     const hrs = calcShiftHours(shift);
@@ -8126,30 +8120,20 @@ function renderShiftEfficiency() {
   });
   const ranked = Object.entries(groups)
     .filter(([, g]) => g.count >= 1)
-    .map(([type, g]) => ({ type, name: getAssignmentTypeName(type), ptsPerHr: round2(g.totalPts / g.totalHrs), count: g.count }))
+    .map(([type, g]) => ({ name: getAssignmentTypeName(type), ptsPerHr: round2(g.totalPts / g.totalHrs), count: g.count }))
     .sort((a, b) => b.ptsPerHr - a.ptsPerHr);
   let html = '';
   if (ranked.length > 0) {
-    const top = ranked.slice(0, 5);
-    html += '<h4 style="font-size:0.82rem;color:var(--accent);margin-bottom:6px;">Most Efficient (pts/hr)</h4>';
-    top.forEach(r => {
-      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count} shift${r.count !== 1 ? 's' : ''})</span></span><span class="eff-value good">${r.ptsPerHr.toFixed(1)}</span></div>`;
+    html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Points per hour by shift type — most to least efficient</div>';
+    ranked.forEach(r => {
+      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count} shift${r.count !== 1 ? 's' : ''})</span></span><span class="eff-value" style="color:var(--primary);">${r.ptsPerHr.toFixed(1)}</span></div>`;
     });
-    if (ranked.length > 5) {
-      const bottom = ranked.slice(-Math.min(5, ranked.length - 5)).reverse();
-      html += '<h4 style="font-size:0.82rem;color:var(--danger);margin-top:12px;margin-bottom:6px;">Least Efficient (pts/hr)</h4>';
-      bottom.forEach(r => {
-        html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count} shift${r.count !== 1 ? 's' : ''})</span></span><span class="eff-value bad">${r.ptsPerHr.toFixed(1)}</span></div>`;
-      });
-    }
   }
-  if (!html) html = '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet.</p>';
-  document.getElementById('efficiencyContent').innerHTML = html;
+  return html || '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet.</p>';
 }
 
-function renderCalAssignAvg() {
+function buildWorkerBeeAvg() {
   const groups = {};
-  // Match shifts to their calendar assignment label
   Object.values(data.shifts).forEach(shift => {
     const cal = data.calendarAssignments[shift.date];
     if (!cal || !cal.label) return;
@@ -8161,28 +8145,27 @@ function renderCalAssignAvg() {
     groups[label].totalHrs += hrs;
     groups[label].count++;
   });
-
   const ranked = Object.entries(groups)
+    .filter(([, g]) => g.totalHrs > 0)
     .map(([label, g]) => ({
       label,
       avgPts: round2(g.totalPts / g.count),
       avgHrs: round2(g.totalHrs / g.count),
+      ptsPerHr: round2(g.totalPts / g.totalHrs),
       count: g.count
     }))
-    .sort((a, b) => b.count - a.count || b.avgPts - a.avgPts);
-
+    .sort((a, b) => b.ptsPerHr - a.ptsPerHr);
   let html = '';
   if (ranked.length > 0) {
-    html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Shifts matched to calendar labels — avg points &amp; hours per assignment</div>';
+    html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Calendar assignments — sorted by efficiency (pts/hr)</div>';
     ranked.forEach(r => {
       html += `<div class="efficiency-item" style="flex-wrap:wrap;gap:2px;">`;
       html += `<span class="eff-label">${escHtml(r.label)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count})</span></span>`;
-      html += `<span style="font-size:0.82rem;"><span class="eff-value" style="color:var(--primary);">${r.avgPts.toFixed(1)} pts</span> <span style="color:var(--text-dim);font-size:0.75rem;">&middot; ${r.avgHrs.toFixed(1)} hrs</span></span>`;
+      html += `<span style="font-size:0.82rem;"><span class="eff-value" style="color:var(--primary);">${r.ptsPerHr.toFixed(1)} pts/hr</span> <span style="color:var(--text-dim);font-size:0.75rem;">&middot; ${r.avgPts.toFixed(1)} pts &middot; ${r.avgHrs.toFixed(1)} hrs</span></span>`;
       html += `</div>`;
     });
   }
-  if (!html) html = '<p style="font-size:0.85rem;color:var(--text-dim);">No calendar assignment data yet. Sync your calendar in Settings.</p>';
-  document.getElementById('calAssignAvgContent').innerHTML = html;
+  return html || '<p style="font-size:0.85rem;color:var(--text-dim);">No calendar assignment data yet. Sync your calendar in Settings.</p>';
 }
 
 function renderMoMChange() {
@@ -8221,9 +8204,7 @@ function renderTimeTab() {
   renderDayOfWeekHeatmap();
   renderWeekendVsWeekday();
   renderNightCallFreq();
-  renderPtsPerShiftType();
-  renderShiftEfficiency();
-  renderCalAssignAvg();
+  renderAssignData();
 }
 
 function getRecentShifts(months) {
