@@ -2255,26 +2255,27 @@ input.mil-time.invalid {
     </div>
   </div>
 
-  <!-- Stabilization Card -->
+  <!-- Paycheck Projection Card -->
   <div class="card">
-    <h2>Stabilization-Weighted Points</h2>
+    <h2>Paycheck Projection</h2>
     <p style="font-size:0.8rem; color:var(--text-dim); margin-bottom:12px;">
-      Weighted: 10% current + 40% prior + 25% 2-mo + 15% 3-mo + 10% 4-mo
+      Your paycheck is based on a weighted blend of the last 5 months, not just this month alone.
     </p>
+    <div id="stabPaycheckRow" style="text-align:center; margin-bottom:12px;">
+      <div style="font-size:1.6rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
+      <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px;" id="stabPaycheckLabel">Projected next month's paycheck</div>
+    </div>
     <div class="summary-grid">
       <div class="summary-item">
-        <div class="label">Raw This Month</div>
+        <div class="label">This Month (raw)</div>
         <div class="value blue" id="stabRaw">0</div>
       </div>
       <div class="summary-item">
-        <div class="label">Stabilized</div>
+        <div class="label">Blended Points</div>
         <div class="value green" id="stabWeighted">0</div>
       </div>
     </div>
-    <div id="stabPaycheckRow" style="margin-top:12px; text-align:center;">
-      <div style="font-size:1.3rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
-      <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px;" id="stabPaycheckLabel">Projected next month's paycheck</div>
-    </div>
+    <div id="stabBreakdown" style="margin-top:12px;"></div>
   </div>
 
   <!-- Monthly Trend Chart -->
@@ -7716,11 +7717,29 @@ function renderBreakdownChart() {
 function renderStabilization() {
   const now = new Date();
   const mt = getMonthlyTotals();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function mk(offset) { const d = new Date(now.getFullYear(), now.getMonth() - offset, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
-  const raw = mt[mk(0)] || 0;
-  const weighted = round2(0.10 * raw + 0.40 * (mt[mk(1)]||0) + 0.25 * (mt[mk(2)]||0) + 0.15 * (mt[mk(3)]||0) + 0.10 * (mt[mk(4)]||0));
+  const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
+  const labels = ['This month', 'Last month', '2 months ago', '3 months ago', '4 months ago'];
+  const vals = [0,1,2,3,4].map(i => mt[mk(i)] || 0);
+  const raw = vals[0];
+  const weighted = round2(weights.reduce((sum, w, i) => sum + w * vals[i], 0));
   document.getElementById('stabRaw').textContent = raw.toFixed(1);
   document.getElementById('stabWeighted').textContent = weighted.toFixed(1);
+
+  // Render breakdown
+  let bdHtml = '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:6px;">How the blend is calculated:</div>';
+  weights.forEach((w, i) => {
+    const pct = (w * 100).toFixed(0);
+    const mDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const mLabel = monthNames[mDate.getMonth()] + ' ' + mDate.getFullYear();
+    const contribution = round2(w * vals[i]);
+    bdHtml += `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:0.8rem;">`;
+    bdHtml += `<span style="color:var(--text-dim);">${mLabel} <span style="opacity:0.6;">(${pct}%)</span></span>`;
+    bdHtml += `<span>${vals[i].toFixed(1)} &times; ${pct}% = <strong>${contribution.toFixed(1)}</strong></span>`;
+    bdHtml += `</div>`;
+  });
+  document.getElementById('stabBreakdown').innerHTML = bdHtml;
   const currentMonthKey = mk(0);
   const pv = getPointValueForMonth(currentMonthKey);
   const decAdv = settings.decemberAdvance !== false;
