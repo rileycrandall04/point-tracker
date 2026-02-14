@@ -5570,11 +5570,10 @@ function renderToday() {
   const result = getShiftPointsForDate(date, true);
   const estTag = result.isInProgress ? ' <span style="font-size:0.75rem;color:var(--text-dim);">(est.)</span>' : '';
 
-  // Build component sub-line (only non-zero values)
+  // Build component sub-line (only non-zero values, excluding call which gets its own card)
   const components = [];
   if (result.ar > 0) components.push('Avail: ' + result.ar.toFixed(2));
   if (result.prod > 0) components.push('Prod: ' + result.prod.toFixed(2));
-  if (result.call > 0) components.push('Call: ' + result.call.toFixed(2));
   if (result.subspec > 0) components.push('Subspec: ' + result.subspec.toFixed(2));
   if (result.supervision > 0) components.push('Supv: ' + result.supervision.toFixed(2));
   const compLine = components.length > 0 ? components.join(' \u00B7 ') : '';
@@ -5586,6 +5585,30 @@ function renderToday() {
   bdHtml += `<div style="font-size:1.8rem;font-weight:700;line-height:1.1;">${result.total.toFixed(2)} <span style="font-size:0.9rem;font-weight:400;color:var(--text-dim);">pts</span>${estTag}`;
   if (ptsPerHr) bdHtml += ` <span style="font-size:0.85rem;font-weight:500;color:var(--text-dim);">(${ptsPerHr} pts/hr)</span>`;
   bdHtml += `</div>`;
+
+  // Pager pay card (when call points exist)
+  if (result.call > 0) {
+    const monthKey = date.substring(0, 7);
+    const pv = getPointValueForMonth(monthKey);
+    const pagerDollars = round2(result.call * pv);
+    const dt = new Date(date + 'T12:00:00');
+    const dayOfWeek = dt.getDay();
+    const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
+    const isHol = shift.isHoliday || false;
+    const isWkndOrHol = isWknd || isHol;
+    const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+    let pagerTimeStr = '';
+    if (pagerWin) {
+      pagerTimeStr = minutesToTimeStr(pagerWin.start) + ' – ' + minutesToTimeStr(pagerWin.end);
+    }
+    bdHtml += `<div style="margin-top:8px;padding:8px 12px;border-left:3px solid rgba(245,166,35,0.8);background:rgba(245,166,35,0.12);border-radius:0 6px 6px 0;">`;
+    bdHtml += `<div style="font-size:0.95rem;font-weight:600;color:rgba(245,166,35,1);">Pager: ${result.call.toFixed(2)} pts <span style="font-size:0.8rem;font-weight:400;color:var(--text-dim);">($${pagerDollars.toFixed(2)})</span></div>`;
+    if (pagerTimeStr) {
+      bdHtml += `<div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px;">${pagerTimeStr}</div>`;
+    }
+    bdHtml += `</div>`;
+  }
+
   if (compLine) {
     bdHtml += `<div style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;">${compLine}</div>`;
   }
@@ -5641,11 +5664,15 @@ function renderWeeklyChart() {
     return dt.toLocaleDateString('en-US', { weekday: 'short' });
   });
 
-  const values = [];
+  const baseValues = [];
+  const pagerValues = [];
+  const totalValues = [];
   const rawPts = [];
   const hoursArr = [];
-  const bgColors = [];
-  const borderColors = [];
+  const baseBgColors = [];
+  const baseBorderColors = [];
+  const pagerBgColors = [];
+  const pagerBorderColors = [];
   const inProgressFlags = [];
   let weekTotal = 0;
 
@@ -5655,25 +5682,38 @@ function renderWeeklyChart() {
     const hrs = shift ? calcShiftHours(shift) : 0;
     rawPts.push(result.total);
     hoursArr.push(hrs);
-    let val = result.total;
+
+    const baseRaw = result.ar + result.prod + result.subspec + result.supervision;
+    const pagerRaw = result.call;
+    let baseVal = baseRaw;
+    let pagerVal = pagerRaw;
     if (weeklyShowDollars) {
       const monthKey = d.substring(0, 7);
       const pv = getPointValueForMonth(monthKey);
-      val = round2(val * pv);
+      baseVal = round2(baseRaw * pv);
+      pagerVal = round2(pagerRaw * pv);
     }
-    values.push(val);
-    weekTotal += val;
+    baseValues.push(baseVal);
+    pagerValues.push(pagerVal);
+    totalValues.push(round2(baseVal + pagerVal));
+    weekTotal += baseVal + pagerVal;
     inProgressFlags.push(result.isInProgress);
 
     if (result.isInProgress) {
-      bgColors.push('rgba(245,166,35,0.55)');
-      borderColors.push('rgba(245,166,35,1)');
+      baseBgColors.push('rgba(66,133,244,0.35)');
+      baseBorderColors.push('rgba(66,133,244,0.6)');
+      pagerBgColors.push('rgba(245,166,35,0.45)');
+      pagerBorderColors.push('rgba(245,166,35,0.8)');
     } else if (d === today) {
-      bgColors.push('rgba(66,133,244,0.85)');
-      borderColors.push('rgba(66,133,244,1)');
+      baseBgColors.push('rgba(66,133,244,0.85)');
+      baseBorderColors.push('rgba(66,133,244,1)');
+      pagerBgColors.push('rgba(245,166,35,0.85)');
+      pagerBorderColors.push('rgba(245,166,35,1)');
     } else {
-      bgColors.push('rgba(66,133,244,0.3)');
-      borderColors.push('rgba(66,133,244,0.6)');
+      baseBgColors.push('rgba(66,133,244,0.3)');
+      baseBorderColors.push('rgba(66,133,244,0.6)');
+      pagerBgColors.push('rgba(245,166,35,0.3)');
+      pagerBorderColors.push('rgba(245,166,35,0.6)');
     }
   });
 
@@ -5690,24 +5730,36 @@ function renderWeeklyChart() {
     return '';
   });
 
-  // Bar value labels plugin
+  // Bar value labels plugin — draws total on top of stacked bar
   const barValueLabels = {
     id: 'barValueLabels',
     afterDatasetsDraw(chart) {
       const { ctx } = chart;
-      const meta = chart.getDatasetMeta(0);
       ctx.save();
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      meta.data.forEach((bar, i) => {
-        const v = values[i];
+      const numBars = totalValues.length;
+      for (let i = 0; i < numBars; i++) {
+        const v = totalValues[i];
         if (v > 0) {
-          const label = (weeklyShowDollars ? '$' : '') + v.toFixed(1);
-          ctx.fillText(label, bar.x, bar.y - 3);
+          // Find topmost visible segment
+          let topY = Infinity;
+          let barX = 0;
+          for (let ds = chart.data.datasets.length - 1; ds >= 0; ds--) {
+            const meta = chart.getDatasetMeta(ds);
+            if (meta.data[i] && chart.data.datasets[ds].data[i] > 0) {
+              topY = Math.min(topY, meta.data[i].y);
+              barX = meta.data[i].x;
+            }
+          }
+          if (topY < Infinity) {
+            const label = (weeklyShowDollars ? '$' : '') + v.toFixed(1);
+            ctx.fillText(label, barX, topY - 3);
+          }
         }
-      });
+      }
       ctx.restore();
     }
   };
@@ -5753,12 +5805,11 @@ function renderWeeklyChart() {
     afterDatasetsDraw(chart) {
       const { ctx } = chart;
       const meta = chart.getDatasetMeta(0);
-      const xAxis = chart.scales.x;
       ctx.save();
       meta.data.forEach((bar, i) => {
         const lbl = calendarLabels[i];
         if (!lbl) return;
-        const v = values[i];
+        const v = totalValues[i];
         const isToday = weekDates[i] === today;
         if (v > 0) {
           // Draw inside bar near bottom
@@ -5796,13 +5847,40 @@ function renderWeeklyChart() {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        data: values,
-        backgroundColor: bgColors,
-        borderColor: borderColors,
-        borderWidth: 1,
-        borderRadius: 3
-      }]
+      datasets: [
+        {
+          label: 'Base',
+          data: baseValues,
+          backgroundColor: baseBgColors,
+          borderColor: baseBorderColors,
+          borderWidth: 1,
+          borderRadius: function(ctx) {
+            const i = ctx.dataIndex;
+            const hasPager = pagerValues[i] > 0;
+            // Base gets top rounding only if no pager segment above it
+            return hasPager ? { bottomLeft: 3, bottomRight: 3, topLeft: 0, topRight: 0 }
+                            : { bottomLeft: 3, bottomRight: 3, topLeft: 3, topRight: 3 };
+          },
+          borderSkipped: false,
+          stack: 'stack0'
+        },
+        {
+          label: 'Pager',
+          data: pagerValues,
+          backgroundColor: pagerBgColors,
+          borderColor: pagerBorderColors,
+          borderWidth: 1,
+          borderRadius: function(ctx) {
+            const i = ctx.dataIndex;
+            const hasBase = baseValues[i] > 0;
+            // Pager gets bottom rounding only if no base segment below it
+            return hasBase ? { bottomLeft: 0, bottomRight: 0, topLeft: 3, topRight: 3 }
+                           : { bottomLeft: 3, bottomRight: 3, topLeft: 3, topRight: 3 };
+          },
+          borderSkipped: false,
+          stack: 'stack0'
+        }
+      ]
     },
     options: {
       responsive: true,
@@ -5811,17 +5889,24 @@ function renderWeeklyChart() {
       plugins: {
         legend: { display: false },
         tooltip: {
+          mode: 'index',
+          filter: function(item) { return item.raw > 0; },
           callbacks: {
             title: function(items) {
               const i = items[0].dataIndex;
               return formatDate(weekDates[i]);
             },
             label: function(item) {
-              const i = item.dataIndex;
+              const suffix = weeklyShowDollars ? '' : ' pts';
+              const prefix = weeklyShowDollars ? '$' : '';
+              return item.dataset.label + ': ' + prefix + item.raw.toFixed(2) + suffix;
+            },
+            afterBody: function(items) {
+              const i = items[0].dataIndex;
               const suffix = weeklyShowDollars ? '' : ' pts';
               const prefix = weeklyShowDollars ? '$' : '';
               const est = inProgressFlags[i] ? ' (est.)' : '';
-              const lines = [prefix + item.raw.toFixed(2) + suffix + est];
+              const lines = ['Total: ' + prefix + totalValues[i].toFixed(2) + suffix + est];
               if (hoursArr[i] > 0) {
                 if (weeklyShowDollars) {
                   const monthKey = weekDates[i].substring(0, 7);
@@ -5840,10 +5925,12 @@ function renderWeeklyChart() {
       },
       scales: {
         x: {
+          stacked: true,
           grid: { display: false },
           ticks: { color: 'rgba(255,255,255,0.6)', font: { size: 11 } }
         },
         y: {
+          stacked: true,
           beginAtZero: true,
           grid: { color: 'rgba(255,255,255,0.08)' },
           ticks: {
