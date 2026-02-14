@@ -2095,17 +2095,6 @@ input.mil-time.invalid {
       </div>
     </div>
 
-    <!-- Collapsible: Weekend vs Weekday -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('timeWknd')">
-        <h3>Weekend vs Weekday</h3>
-        <span class="arrow" id="timeWkndArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="timeWkndBody">
-        <div id="wkndContent" style="padding-top:12px;"></div>
-      </div>
-    </div>
-
     <!-- Assignment Data (combined) -->
     <div class="card">
       <h2>Assignment Data</h2>
@@ -2116,6 +2105,17 @@ input.mil-time.invalid {
         <button class="tab-btn" id="adTabWorkerBee" onclick="switchAssignDataTab('workerBee')">Worker Bee Averages</button>
       </div>
       <div id="assignDataContent"></div>
+    </div>
+
+    <!-- Collapsible: Weekend vs Weekday -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('timeWknd')">
+        <h3>Weekend vs Weekday</h3>
+        <span class="arrow" id="timeWkndArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="timeWkndBody">
+        <div id="wkndContent" style="padding-top:12px;"></div>
+      </div>
     </div>
 
     <!-- Collapsible: Night & Call Frequency -->
