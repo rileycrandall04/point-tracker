@@ -2142,6 +2142,17 @@ input.mil-time.invalid {
         <div id="efficiencyContent" style="padding-top:12px;"></div>
       </div>
     </div>
+
+    <!-- Calendar Assignment Averages -->
+    <div class="card collapse-section">
+      <div class="collapse-header" onclick="toggleCollapse('calAssignAvg')">
+        <h3>Avg by Calendar Assignment</h3>
+        <span class="arrow" id="calAssignAvgArrow">&#9660;</span>
+      </div>
+      <div class="collapse-body" id="calAssignAvgBody">
+        <div id="calAssignAvgContent" style="padding-top:12px;"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Analytics Tab -->
@@ -6057,6 +6068,7 @@ function toggleCollapse(sectionId) {
   const bodyMap = {
     deScan: 'deScanBody',
     projBreakdown: 'projBreakdownBody', projEfficiency: 'projEfficiencyBody', projMoM: 'projMoMBody', projPtsPerType: 'projPtsPerTypeBody',
+    calAssignAvg: 'calAssignAvgBody',
     timeDOW: 'timeDOWBody', timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
     analTopProc: 'analTopProcBody',
     analTopSurgeons: 'analTopSurgeonsBody',
@@ -6066,6 +6078,7 @@ function toggleCollapse(sectionId) {
   const arrowMap = {
     deScan: 'deScanArrow',
     projBreakdown: 'projBreakdownArrow', projEfficiency: 'projEfficiencyArrow', projMoM: 'projMoMArrow', projPtsPerType: 'projPtsPerTypeArrow',
+    calAssignAvg: 'calAssignAvgArrow',
     timeDOW: 'timeDOWArrow', timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
     analTopProc: 'analTopProcArrow',
     analTopSurgeons: 'analTopSurgeonsArrow',
@@ -8134,6 +8147,44 @@ function renderShiftEfficiency() {
   document.getElementById('efficiencyContent').innerHTML = html;
 }
 
+function renderCalAssignAvg() {
+  const groups = {};
+  // Match shifts to their calendar assignment label
+  Object.values(data.shifts).forEach(shift => {
+    const cal = data.calendarAssignments[shift.date];
+    if (!cal || !cal.label) return;
+    const label = cal.label;
+    const pts = calcShiftTotal(shift).total;
+    const hrs = calcShiftHours(shift);
+    if (!groups[label]) groups[label] = { totalPts: 0, totalHrs: 0, count: 0 };
+    groups[label].totalPts += pts;
+    groups[label].totalHrs += hrs;
+    groups[label].count++;
+  });
+
+  const ranked = Object.entries(groups)
+    .map(([label, g]) => ({
+      label,
+      avgPts: round2(g.totalPts / g.count),
+      avgHrs: round2(g.totalHrs / g.count),
+      count: g.count
+    }))
+    .sort((a, b) => b.count - a.count || b.avgPts - a.avgPts);
+
+  let html = '';
+  if (ranked.length > 0) {
+    html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Shifts matched to calendar labels — avg points &amp; hours per assignment</div>';
+    ranked.forEach(r => {
+      html += `<div class="efficiency-item" style="flex-wrap:wrap;gap:2px;">`;
+      html += `<span class="eff-label">${escHtml(r.label)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count})</span></span>`;
+      html += `<span style="font-size:0.82rem;"><span class="eff-value" style="color:var(--primary);">${r.avgPts.toFixed(1)} pts</span> <span style="color:var(--text-dim);font-size:0.75rem;">&middot; ${r.avgHrs.toFixed(1)} hrs</span></span>`;
+      html += `</div>`;
+    });
+  }
+  if (!html) html = '<p style="font-size:0.85rem;color:var(--text-dim);">No calendar assignment data yet. Sync your calendar in Settings.</p>';
+  document.getElementById('calAssignAvgContent').innerHTML = html;
+}
+
 function renderMoMChange() {
   const mt = getMonthlyTotals();
   const now = new Date();
@@ -8172,6 +8223,7 @@ function renderTimeTab() {
   renderNightCallFreq();
   renderPtsPerShiftType();
   renderShiftEfficiency();
+  renderCalAssignAvg();
 }
 
 function getRecentShifts(months) {
@@ -8406,13 +8458,15 @@ function renderDailyTab() {
     if (isToday) classes += ' today';
     if (isVac) classes += ' vacation';
 
-    const typeName = shiftType ? getAssignmentTypeName(shiftType) : '';
+    // Calendar label preferred, shift type as fallback
+    const cal = data.calendarAssignments[dateStr];
+    const typeName = cal ? cal.label : (shiftType ? getAssignmentTypeName(shiftType) : '');
     const ptsClass = pts > 0 ? '' : ' zero';
 
     html += `<div class="${classes}" onclick="openDayDetail('${dateStr}')">`;
     html += `<div class="daily-cal-day">${d}</div>`;
     html += `<div class="daily-cal-pts${ptsClass}">${pts > 0 ? pts.toFixed(1) : (isVac ? 'VAC' : '—')}</div>`;
-    if (typeName) html += `<div class="daily-cal-type">${typeName}</div>`;
+    if (typeName) html += `<div class="daily-cal-type">${escHtml(typeName)}</div>`;
     html += '</div>';
   }
   html += '</div>';
