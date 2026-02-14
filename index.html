@@ -2281,16 +2281,38 @@ input.mil-time.invalid {
     <div id="stabBreakdown" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;"></div>
   </div>
 
-  <!-- Monthly Trend Chart -->
+  <!-- Income Pipeline -->
   <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;">
-      <h2 style="margin:0;">Monthly Trend</h2>
-      <button class="btn btn-sm btn-outline" id="monthlyTrendToggle" style="padding:2px 8px;font-size:0.7rem;min-width:32px;">$</button>
+    <h2>Income Pipeline</h2>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <p style="font-size:0.78rem; color:var(--text-dim); margin:0;">
+        Estimated paychecks from recorded data
+      </p>
+      <label class="toggle-row">
+        <span>Include projections</span>
+        <span class="toggle-switch">
+          <input type="checkbox" id="pipelineProjectToggle">
+          <span class="slider"></span>
+        </span>
+      </label>
     </div>
     <div class="chart-container">
-      <canvas id="monthlyChart"></canvas>
+      <canvas id="pipelineChart"></canvas>
     </div>
-    <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
+    <div id="pipelineSummary" style="margin-top:8px; font-size:0.78rem; color:var(--text-dim); text-align:center;"></div>
+    <div id="pipelineUnreceived" style="margin-top:8px; text-align:center;"></div>
+  </div>
+
+  <!-- Monthly Pace (compact) -->
+  <div class="card" style="padding:12px 16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <span style="font-size:0.82rem;font-weight:600;">Monthly Pace</span>
+      <span style="font-size:0.82rem;"><span id="paceCurrentPts" style="color:var(--primary);font-weight:600;">0</span> <span style="color:var(--text-dim);font-size:0.75rem;">/ <span id="paceProjected">0</span> projected</span></span>
+    </div>
+    <div style="background:var(--surface2); border-radius:6px; height:8px; overflow:hidden;">
+      <div id="paceBar" style="height:100%; background:var(--primary); border-radius:6px; transition:width 0.3s; width:0%;"></div>
+    </div>
+    <div id="paceLabel" style="font-size:0.72rem; color:var(--text-dim); margin-top:4px; text-align:center;"></div>
   </div>
 
   <!-- Projected Annual Income -->
@@ -2319,47 +2341,16 @@ input.mil-time.invalid {
     <div id="projYTDDetail" style="margin-top:8px; font-size:0.78rem; color:var(--text-dim); text-align:center;"></div>
   </div>
 
-  <!-- Pace Tracker -->
+  <!-- Monthly Trend Chart -->
   <div class="card">
-    <h2>Monthly Pace</h2>
-    <div class="summary-grid">
-      <div class="summary-item">
-        <div class="label">This Month So Far</div>
-        <div class="value blue" id="paceCurrentPts">0</div>
-      </div>
-      <div class="summary-item">
-        <div class="label">Projected End-of-Month</div>
-        <div class="value green" id="paceProjected">0</div>
-      </div>
-    </div>
-    <div style="margin-top:8px;">
-      <div style="background:var(--surface2); border-radius:6px; height:10px; overflow:hidden;">
-        <div id="paceBar" style="height:100%; background:var(--primary); border-radius:6px; transition:width 0.3s; width:0%;"></div>
-      </div>
-      <div id="paceLabel" style="font-size:0.75rem; color:var(--text-dim); margin-top:4px; text-align:center;"></div>
-    </div>
-  </div>
-
-  <!-- Stabilization Pipeline -->
-  <div class="card">
-    <h2>Income Pipeline</h2>
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <p style="font-size:0.78rem; color:var(--text-dim); margin:0;">
-        Estimated paychecks from recorded data
-      </p>
-      <label class="toggle-row">
-        <span>Include projections</span>
-        <span class="toggle-switch">
-          <input type="checkbox" id="pipelineProjectToggle">
-          <span class="slider"></span>
-        </span>
-      </label>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 style="margin:0;">Monthly Trend</h2>
+      <button class="btn btn-sm btn-outline" id="monthlyTrendToggle" style="padding:2px 8px;font-size:0.7rem;min-width:32px;">$</button>
     </div>
     <div class="chart-container">
-      <canvas id="pipelineChart"></canvas>
+      <canvas id="monthlyChart"></canvas>
     </div>
-    <div id="pipelineSummary" style="margin-top:8px; font-size:0.78rem; color:var(--text-dim); text-align:center;"></div>
-    <div id="pipelineUnreceived" style="margin-top:8px; text-align:center;"></div>
+    <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
   </div>
 
   <!-- Collapsible: Breakdown Chart -->
@@ -7948,7 +7939,7 @@ function renderMonthlyPace() {
   }
 
   document.getElementById('paceCurrentPts').textContent = currentPts.toFixed(1) + ' pts';
-  document.getElementById('paceProjected').textContent = projected.toFixed(1) + ' pts';
+  document.getElementById('paceProjected').textContent = projected.toFixed(0) + ' pts';
 
   // Progress bar
   let pct = 0;
