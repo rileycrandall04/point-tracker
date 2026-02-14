@@ -2283,7 +2283,10 @@ input.mil-time.invalid {
 
   <!-- Monthly Trend Chart -->
   <div class="card">
-    <h2>Monthly Trend</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 style="margin:0;">Monthly Trend</h2>
+      <button class="btn btn-sm btn-outline" id="monthlyTrendToggle" style="padding:2px 8px;font-size:0.7rem;min-width:32px;">$</button>
+    </div>
     <div class="chart-container">
       <canvas id="monthlyChart"></canvas>
     </div>
@@ -6017,6 +6020,7 @@ document.getElementById('dayModal').addEventListener('click', (e) => {
 let weeklyBarChart = null;
 let weeklyShowDollars = false;
 let monthlyChart = null;
+let monthlyShowDollars = false;
 let breakdownChart = null;
 let pipelineChart = null;
 let productionTrendChart = null;
@@ -7647,12 +7651,17 @@ function renderMonthlyChart() {
   const last6 = sortedKeys.slice(-6);
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const labels = last6.map(k => { const [y,m] = k.split('-'); return monthNames[parseInt(m)-1] + ' ' + y; });
-  const values = last6.map(k => round2(totals[k]));
+  const rawValues = last6.map(k => round2(totals[k]));
+  const values = monthlyShowDollars
+    ? last6.map((k, i) => { const pv = getPointValueForMonth(k); return round2(rawValues[i] * (pv || 0)); })
+    : rawValues;
   const avg = values.length > 0 ? round2(values.reduce((a, b) => a + b, 0) / values.length) : 0;
+  const prefix = monthlyShowDollars ? '$' : '';
+  const suffix = monthlyShowDollars ? '' : ' pts';
   const ctx = document.getElementById('monthlyChart').getContext('2d');
   if (monthlyChart) monthlyChart.destroy();
   const datasets = [
-    { label: 'Total Points', data: values, backgroundColor: 'rgba(59,130,246,0.7)', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 4 }
+    { label: monthlyShowDollars ? 'Revenue' : 'Total Points', data: values, backgroundColor: 'rgba(59,130,246,0.7)', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 4 }
   ];
   if (values.length > 1) {
     datasets.push({
@@ -7668,27 +7677,31 @@ function renderMonthlyChart() {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: values.length > 1, labels: { color: '#94a3b8' } } },
       scales: {
-        y: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(71,85,105,0.3)' } },
+        y: { beginAtZero: true, ticks: { color: '#94a3b8', callback: function(v) { return monthlyShowDollars ? '$' + v.toLocaleString() : v; } }, grid: { color: 'rgba(71,85,105,0.3)' } },
         x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
       }
     }
   });
-  // Summary text below chart — use per-month revenue where confirmed
   const summaryEl = document.getElementById('monthlyChartSummary');
-  let summaryText = values.length > 0 ? `6-Month Avg: ${avg.toFixed(1)} pts` : '';
-  if (last6.length > 0) {
-    let totalRevenue = 0;
-    let hasAnyPv = false;
-    last6.forEach(k => {
-      const mpv = getPointValueForMonth(k);
-      if (mpv > 0) { totalRevenue += (totals[k] || 0) * mpv; hasAnyPv = true; }
-    });
-    if (hasAnyPv && totalRevenue > 0) {
-      const avgRevenue = totalRevenue / last6.length;
-      summaryText += ` &nbsp;|&nbsp; Avg Monthly Revenue: $${avgRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (monthlyShowDollars) {
+    summaryEl.innerHTML = values.length > 0 ? `6-Month Avg: $${avg.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '';
+  } else {
+    let summaryText = values.length > 0 ? `6-Month Avg: ${avg.toFixed(1)} pts` : '';
+    if (last6.length > 0) {
+      let totalRevenue = 0;
+      let hasAnyPv = false;
+      last6.forEach((k, i) => {
+        const mpv = getPointValueForMonth(k);
+        if (mpv > 0) { totalRevenue += rawValues[i] * mpv; hasAnyPv = true; }
+      });
+      if (hasAnyPv && totalRevenue > 0) {
+        const avgRevenue = totalRevenue / last6.length;
+        summaryText += ` &nbsp;|&nbsp; Avg Monthly Revenue: $${avgRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
     }
+    summaryEl.innerHTML = summaryText;
   }
-  summaryEl.innerHTML = summaryText;
+  document.getElementById('monthlyTrendToggle').textContent = monthlyShowDollars ? 'pts' : '$';
 }
 
 function renderBreakdownChart() {
@@ -9483,6 +9496,11 @@ pointValueInput.addEventListener('change', () => {
 dashPointValueInput.addEventListener('change', () => {
   syncPointValue(dashPointValueInput);
   showToast('Point value saved');
+});
+
+document.getElementById('monthlyTrendToggle').addEventListener('click', () => {
+  monthlyShowDollars = !monthlyShowDollars;
+  renderMonthlyChart();
 });
 
 // December advance paycheck toggle
