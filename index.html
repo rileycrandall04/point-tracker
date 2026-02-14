@@ -5834,8 +5834,15 @@ function renderWeeklyChart() {
               const est = inProgressFlags[i] ? ' (est.)' : '';
               const lines = [prefix + item.raw.toFixed(2) + suffix + est];
               if (hoursArr[i] > 0) {
-                const pph = rawPts[i] / hoursArr[i];
-                lines.push(pph.toFixed(2) + ' pts/hr (' + hoursArr[i].toFixed(1) + ' hrs)');
+                if (weeklyShowDollars) {
+                  const monthKey = weekDates[i].substring(0, 7);
+                  const pv = getPointValueForMonth(monthKey);
+                  const dph = (rawPts[i] * pv) / hoursArr[i];
+                  lines.push('$' + dph.toFixed(2) + '/hr (' + hoursArr[i].toFixed(1) + ' hrs)');
+                } else {
+                  const pph = rawPts[i] / hoursArr[i];
+                  lines.push(pph.toFixed(2) + ' pts/hr (' + hoursArr[i].toFixed(1) + ' hrs)');
+                }
               }
               return lines;
             }
