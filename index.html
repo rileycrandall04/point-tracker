@@ -8192,7 +8192,7 @@ function renderPipelineChart() {
   if (useDollars) {
     let totalUnreceived = 0;
     for (let i = 0; i < 5; i++) {
-      totalUnreceived += realData[i] + (projData[i] || 0);
+      totalUnreceived += realData[i];
     }
     totalUnreceived = round2(totalUnreceived);
     unreceivedEl.innerHTML = `<div style="font-size:1.1rem;font-weight:700;color:var(--accent2);">$${totalUnreceived.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px;">Total earnings not yet received</div>`;
