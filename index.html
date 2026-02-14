@@ -2140,15 +2140,15 @@ input.mil-time.invalid {
       </div>
     </div>
 
-    <!-- Collapsible: Top Procedures by Points/Hour -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('analTopProc')">
-        <h3>Top Procedures by Pts/Hr</h3>
-        <span class="arrow" id="analTopProcArrow">&#9660;</span>
+    <!-- Procedure Efficiency -->
+    <div class="card">
+      <h2>Procedure Efficiency (pts/hr)</h2>
+      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="tab-btn active" id="peTabTop" onclick="switchProcTab('top')">Top Procedures</button>
+        <button class="tab-btn" id="peTabGrow" onclick="switchProcTab('grow')">Room to Grow</button>
+        <button class="tab-btn" id="peTabAll" onclick="switchProcTab('all')">All Procedures</button>
       </div>
-      <div class="collapse-body" id="analTopProcBody">
-        <div id="topProcContent" style="padding-top:12px;"></div>
-      </div>
+      <div id="topProcContent"></div>
     </div>
 
     <!-- Surgeon Efficiency -->
@@ -6030,14 +6030,12 @@ function toggleCollapse(sectionId) {
   const bodyMap = {
     deScan: 'deScanBody',
     timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
-    analTopProc: 'analTopProcBody',
     histOverride: 'histOverrideBody', compStipends: 'compStipendsBody',
     importScan: 'importScanBody'
   };
   const arrowMap = {
     deScan: 'deScanArrow',
     timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
-    analTopProc: 'analTopProcArrow',
     histOverride: 'histOverrideArrow', compStipends: 'compStipendsArrow',
     importScan: 'importScanArrow'
   };
@@ -8655,6 +8653,17 @@ function renderCaseMix() {
   document.getElementById('caseMixContent').innerHTML = html;
 }
 
+let procEffData = { ranked: [], unranked: [] };
+let activeProcTab = 'top';
+
+function switchProcTab(tab) {
+  activeProcTab = tab;
+  ['top','grow','all'].forEach(t => {
+    document.getElementById('peTab' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
+  });
+  renderProcTabContent();
+}
+
 function renderTopProcedures() {
   const procData = {};
   data.cases.forEach(c => {
@@ -8672,26 +8681,43 @@ function renderTopProcedures() {
     procData[name].totalHrs += hrs;
     procData[name].count++;
   });
-  const entries = Object.entries(procData).filter(([, d]) => d.count >= 2);
-  const sorted = entries.map(([name, d]) => ({ name, ptsPerHr: d.totalPts / d.totalHrs, count: d.count }))
-    .sort((a, b) => b.ptsPerHr - a.ptsPerHr).slice(0, 10);
-  if (sorted.length === 0) { document.getElementById('topProcContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No data (need 2+ timed cases per procedure).</p>'; return; }
-  let topHtml = '';
-  sorted.slice(0, 5).forEach((p, i) => {
-    topHtml += `<div class="efficiency-item"><span class="eff-label">${i+1}. ${escHtml(p.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${p.count})</span></span><span class="eff-value">${p.ptsPerHr.toFixed(1)} pts/hr</span></div>`;
-  });
-  let extraHtml = '';
-  if (sorted.length > 5) {
-    sorted.slice(5).forEach((p, i) => {
-      extraHtml += `<div class="efficiency-item"><span class="eff-label">${i+6}. ${escHtml(p.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${p.count})</span></span><span class="eff-value">${p.ptsPerHr.toFixed(1)} pts/hr</span></div>`;
-    });
+  const all = Object.entries(procData).map(([name, d]) => ({ name, ptsPerHr: d.totalPts / d.totalHrs, count: d.count }));
+  procEffData.ranked = all.filter(p => p.count >= 4).sort((a, b) => b.ptsPerHr - a.ptsPerHr);
+  procEffData.unranked = all.filter(p => p.count < 4).sort((a, b) => a.name.localeCompare(b.name));
+  renderProcTabContent();
+}
+
+function renderProcTabContent() {
+  const { ranked, unranked } = procEffData;
+  const el = document.getElementById('topProcContent');
+  if (ranked.length === 0 && unranked.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No procedure data yet.</p>';
+    return;
   }
-  let html = topHtml;
-  if (extraHtml) {
-    html += `<div id="topProcExtra" style="display:none;">${extraHtml}</div>`;
-    html += `<a href="javascript:void(0)" id="topProcToggle" style="display:inline-block;margin-top:8px;font-size:0.82rem;color:var(--primary);" onclick="var ex=document.getElementById('topProcExtra');var tg=document.getElementById('topProcToggle');if(ex.style.display==='none'){ex.style.display='block';tg.textContent='Show less';}else{ex.style.display='none';tg.textContent='Show all '+${sorted.length};}">Show all ${sorted.length}</a>`;
+  let html = '';
+  if (activeProcTab === 'top') {
+    const top10 = ranked.slice(0, 10);
+    if (top10.length === 0) { html = '<p style="color:var(--text-dim);font-size:0.85rem;">Not enough data (need 4+ cases per procedure).</p>'; }
+    else { top10.forEach((p, i) => { html += procRow(i + 1, p, '#22c55e'); }); }
+  } else if (activeProcTab === 'grow') {
+    const bottom10 = ranked.slice(-Math.min(10, ranked.length)).reverse();
+    if (bottom10.length === 0) { html = '<p style="color:var(--text-dim);font-size:0.85rem;">Not enough data (need 4+ cases per procedure).</p>'; }
+    else { bottom10.forEach((p, i) => { html += procRow(ranked.length - i, p, '#f59e0b'); }); }
+  } else {
+    if (ranked.length > 0) { ranked.forEach((p, i) => { html += procRow(i + 1, p); }); }
+    if (unranked.length > 0) {
+      if (ranked.length > 0) html += '<div style="border-top:1px solid var(--border);margin:10px 0;"></div>';
+      unranked.forEach(p => {
+        html += `<div class="efficiency-item"><span class="eff-label">${escHtml(p.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${p.count} case${p.count !== 1 ? 's' : ''})</span></span><span class="eff-value" style="color:var(--text-dim);font-size:0.75rem;">Need more data</span></div>`;
+      });
+    }
   }
-  document.getElementById('topProcContent').innerHTML = html;
+  el.innerHTML = html;
+}
+
+function procRow(rank, p, color) {
+  const c = color ? ` style="color:${color}"` : '';
+  return `<div class="efficiency-item"><span class="eff-label">${rank}. ${escHtml(p.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${p.count} cases)</span></span><span class="eff-value"${c}>${p.ptsPerHr.toFixed(1)} pts/hr</span></div>`;
 }
 
 let surgeonEffData = { ranked: [], unranked: [] };
@@ -8749,7 +8775,7 @@ function renderSurgeonTabContent() {
   } else if (activeSurgeonTab === 'grow') {
     const bottom10 = ranked.slice(-Math.min(10, ranked.length)).reverse();
     if (bottom10.length === 0) { html = '<p style="color:var(--text-dim);font-size:0.85rem;">Not enough data (need 4+ cases per surgeon).</p>'; }
-    else { bottom10.forEach((s, i) => { const rank = ranked.length - bottom10.length + i + 1; html += surgeonRow(rank, s, '#f59e0b'); }); }
+    else { bottom10.forEach((s, i) => { html += surgeonRow(ranked.length - i, s, '#f59e0b'); }); }
   } else {
     if (ranked.length > 0) { ranked.forEach((s, i) => { html += surgeonRow(i + 1, s); }); }
     if (unranked.length > 0) {
