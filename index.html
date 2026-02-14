@@ -2228,25 +2228,22 @@ input.mil-time.invalid {
 
 <!-- COMPENSATION PAGE -->
 <div class="page" id="page-compensation">
-  <!-- Point Value Input -->
-  <div class="card" style="display:flex; align-items:center; gap:12px; padding:12px 16px;">
-    <label style="font-size:0.85rem; font-weight:600; white-space:nowrap;">$/point estimate</label>
-    <input type="number" id="dashPointValue" min="0" step="0.01" placeholder="e.g. 55.00" style="max-width:120px;">
-  </div>
-
   <!-- PV Reminder Banner -->
   <div class="card hidden" id="pvReminderBanner" style="background:var(--accent2); color:#000; padding:10px 16px; display:flex; align-items:center; justify-content:space-between;">
     <span style="font-size:0.85rem; font-weight:600;" id="pvReminderText">Last month's $/point hasn't been confirmed yet.</span>
     <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
 
-  <!-- Point Value History (collapsible) -->
-  <div class="card collapse-section">
-    <div class="collapse-header" onclick="toggleCollapse('pvHistory')">
-      <h3>Point Value History</h3>
-      <span class="arrow" id="pvHistoryArrow">&#9660;</span>
+  <!-- Point Value (estimate + history combined) -->
+  <div class="card">
+    <div style="display:flex; align-items:center; gap:12px; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <label style="font-size:0.85rem; font-weight:600; white-space:nowrap;">$/point estimate</label>
+        <input type="number" id="dashPointValue" min="0" step="0.01" placeholder="e.g. 55.00" style="max-width:120px;">
+      </div>
+      <button class="btn btn-outline btn-sm" id="pvHistoryToggle" onclick="togglePVHistory()" style="padding:4px 10px;font-size:0.75rem;white-space:nowrap;">History &#9660;</button>
     </div>
-    <div class="collapse-body" id="pvHistoryBody">
+    <div id="pvHistoryPanel" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;">
       <div style="padding-top:12px;">
         <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
           Enter confirmed $/point values for past months. Revenue calculations will use confirmed values instead of the global estimate.
@@ -6061,7 +6058,7 @@ function toggleCollapse(sectionId) {
     analTopProc: 'analTopProcBody',
     analTopSurgeons: 'analTopSurgeonsBody',
     histOverride: 'histOverrideBody', compStipends: 'compStipendsBody',
-    pvHistory: 'pvHistoryBody', importScan: 'importScanBody'
+    importScan: 'importScanBody'
   };
   const arrowMap = {
     deScan: 'deScanArrow',
@@ -6070,7 +6067,7 @@ function toggleCollapse(sectionId) {
     analTopProc: 'analTopProcArrow',
     analTopSurgeons: 'analTopSurgeonsArrow',
     histOverride: 'histOverrideArrow', compStipends: 'compStipendsArrow',
-    pvHistory: 'pvHistoryArrow', importScan: 'importScanArrow'
+    importScan: 'importScanArrow'
   };
   const body = document.getElementById(bodyMap[sectionId]);
   const arrow = document.getElementById(arrowMap[sectionId]);
@@ -7469,6 +7466,18 @@ function exitHistoryTutorialMode() {
 // ================================================================
 // POINT VALUE HISTORY
 // ================================================================
+function togglePVHistory() {
+  const panel = document.getElementById('pvHistoryPanel');
+  const btn = document.getElementById('pvHistoryToggle');
+  if (panel.style.maxHeight && panel.style.maxHeight !== '0px') {
+    panel.style.maxHeight = '0';
+    btn.innerHTML = 'History &#9660;';
+  } else {
+    panel.style.maxHeight = panel.scrollHeight + 'px';
+    btn.innerHTML = 'History &#9650;';
+  }
+}
+
 function renderPVHistory() {
   const container = document.getElementById('pvHistoryRows');
   if (!container) return;
