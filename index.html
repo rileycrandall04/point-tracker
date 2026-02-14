@@ -7890,7 +7890,13 @@ function renderMonthlyPace() {
     label = `Day ${dayOfMonth} of ${daysInMonth} \u2022 No prior data for comparison`;
   }
   document.getElementById('paceBar').style.width = pct + '%';
-  document.getElementById('paceBar').style.background = (expectedByNow > 0 && currentPts >= expectedByNow) ? 'var(--accent)' : 'var(--primary)';
+  let paceColor = 'var(--primary)';
+  if (expectedByNow > 0) {
+    if (currentPts >= expectedByNow) paceColor = 'var(--accent)';
+    else if (currentPts >= expectedByNow * 0.9) paceColor = 'var(--accent2)';
+    else paceColor = 'var(--danger)';
+  }
+  document.getElementById('paceBar').style.background = paceColor;
   document.getElementById('paceLabel').textContent = label;
 }
 
