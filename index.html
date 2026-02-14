@@ -2152,14 +2152,14 @@ input.mil-time.invalid {
     </div>
 
     <!-- Surgeon Efficiency -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('analTopSurgeons')">
-        <h3>Surgeon Efficiency (pts/hr)</h3>
-        <span class="arrow" id="analTopSurgeonsArrow">&#9660;</span>
+    <div class="card">
+      <h2>Surgeon Efficiency (pts/hr)</h2>
+      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="tab-btn active" id="seTabTop" onclick="switchSurgeonTab('top')">Top Surgeons</button>
+        <button class="tab-btn" id="seTabGrow" onclick="switchSurgeonTab('grow')">Room to Grow</button>
+        <button class="tab-btn" id="seTabAll" onclick="switchSurgeonTab('all')">All Surgeons</button>
       </div>
-      <div class="collapse-body" id="analTopSurgeonsBody">
-        <div id="surgeonEffContent" style="padding-top:12px;"></div>
-      </div>
+      <div id="surgeonEffContent"></div>
     </div>
   </div>
 
@@ -6031,7 +6031,6 @@ function toggleCollapse(sectionId) {
     deScan: 'deScanBody',
     timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
     analTopProc: 'analTopProcBody',
-    analTopSurgeons: 'analTopSurgeonsBody',
     histOverride: 'histOverrideBody', compStipends: 'compStipendsBody',
     importScan: 'importScanBody'
   };
@@ -6039,7 +6038,6 @@ function toggleCollapse(sectionId) {
     deScan: 'deScanArrow',
     timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
     analTopProc: 'analTopProcArrow',
-    analTopSurgeons: 'analTopSurgeonsArrow',
     histOverride: 'histOverrideArrow', compStipends: 'compStipendsArrow',
     importScan: 'importScanArrow'
   };
@@ -8696,6 +8694,17 @@ function renderTopProcedures() {
   document.getElementById('topProcContent').innerHTML = html;
 }
 
+let surgeonEffData = { ranked: [], unranked: [] };
+let activeSurgeonTab = 'top';
+
+function switchSurgeonTab(tab) {
+  activeSurgeonTab = tab;
+  ['top','grow','all'].forEach(t => {
+    document.getElementById('seTab' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
+  });
+  renderSurgeonTabContent();
+}
+
 function renderSurgeonEfficiency() {
   const surgeonData = {};
   data.cases.forEach(c => {
@@ -8715,66 +8724,47 @@ function renderSurgeonEfficiency() {
     if (dateEntry.earliest === null || startMin < dateEntry.earliest) dateEntry.earliest = startMin;
     if (dateEntry.latest === null || endMin > dateEntry.latest) dateEntry.latest = endMin;
   });
-  const ranked = Object.entries(surgeonData)
-    .filter(([, d]) => d.caseCount >= 2)
-    .map(([name, d]) => {
-      let totalHrs = 0;
-      Object.values(d.dates).forEach(dt => {
-        totalHrs += (dt.latest - dt.earliest) / 60;
-      });
-      return { name, pph: totalHrs > 0 ? round2(d.totalPts / totalHrs) : 0, cases: d.caseCount, totalHrs };
-    })
-    .filter(r => r.totalHrs > 0)
-    .sort((a, b) => b.pph - a.pph);
-  if (ranked.length === 0) {
-    document.getElementById('surgeonEffContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No data (need 2+ timed cases per surgeon).</p>';
+  const all = Object.entries(surgeonData).map(([name, d]) => {
+    let totalHrs = 0;
+    Object.values(d.dates).forEach(dt => { totalHrs += (dt.latest - dt.earliest) / 60; });
+    return { name, pph: totalHrs > 0 ? round2(d.totalPts / totalHrs) : 0, cases: d.caseCount, totalHrs };
+  }).filter(r => r.totalHrs > 0);
+  surgeonEffData.ranked = all.filter(s => s.cases >= 4).sort((a, b) => b.pph - a.pph);
+  surgeonEffData.unranked = all.filter(s => s.cases < 4).sort((a, b) => a.name.localeCompare(b.name));
+  renderSurgeonTabContent();
+}
+
+function renderSurgeonTabContent() {
+  const { ranked, unranked } = surgeonEffData;
+  const el = document.getElementById('surgeonEffContent');
+  if (ranked.length === 0 && unranked.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No surgeon data yet.</p>';
     return;
   }
-  const top5 = ranked.slice(0, 5);
-  const topRest = ranked.slice(5);
-  const bottom5 = ranked.slice(-Math.min(5, ranked.length)).reverse();
-  const bottomRest = ranked.slice(0, -Math.min(5, ranked.length)).reverse();
   let html = '';
-  // Top Surgeons section
-  html += '<h4 style="font-size:0.82rem;color:#22c55e;margin-bottom:6px;">Top Surgeons</h4>';
-  top5.forEach((s, i) => {
-    html += `<div class="efficiency-item"><span class="eff-label">${i+1}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span><span class="eff-value">${s.pph.toFixed(1)} pts/hr</span></div>`;
-  });
-  if (topRest.length > 0) {
-    let topExtraHtml = '';
-    topRest.forEach((s, i) => {
-      topExtraHtml += `<div class="efficiency-item"><span class="eff-label">${i+6}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span><span class="eff-value">${s.pph.toFixed(1)} pts/hr</span></div>`;
-    });
-    html += `<div id="surgTopExtra" style="display:none;">${topExtraHtml}</div>`;
-    html += `<a href="javascript:void(0)" id="surgTopToggle" style="display:inline-block;margin-top:4px;font-size:0.82rem;color:var(--primary);" onclick="var ex=document.getElementById('surgTopExtra');var tg=document.getElementById('surgTopToggle');if(ex.style.display==='none'){ex.style.display='block';tg.textContent='Show less';}else{ex.style.display='none';tg.textContent='Show all';}">Show all</a>`;
-  }
-  // Room to Grow section
-  if (ranked.length > 5) {
-    html += '<h4 style="font-size:0.82rem;color:#f59e0b;margin-top:16px;margin-bottom:6px;">Room to Grow</h4>';
-    bottom5.forEach((s, i) => {
-      const rank = ranked.length - bottom5.length + i + 1;
-      html += `<div class="efficiency-item"><span class="eff-label">${rank}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span><span class="eff-value">${s.pph.toFixed(1)} pts/hr</span></div>`;
-    });
-    if (bottomRest.length > 0) {
-      let bottomExtraHtml = '';
-      bottomRest.forEach((s) => {
-        const rank = ranked.indexOf(s) + 1;
-        bottomExtraHtml += `<div class="efficiency-item"><span class="eff-label">${rank}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span><span class="eff-value">${s.pph.toFixed(1)} pts/hr</span></div>`;
+  if (activeSurgeonTab === 'top') {
+    const top10 = ranked.slice(0, 10);
+    if (top10.length === 0) { html = '<p style="color:var(--text-dim);font-size:0.85rem;">Not enough data (need 4+ cases per surgeon).</p>'; }
+    else { top10.forEach((s, i) => { html += surgeonRow(i + 1, s, '#22c55e'); }); }
+  } else if (activeSurgeonTab === 'grow') {
+    const bottom10 = ranked.slice(-Math.min(10, ranked.length)).reverse();
+    if (bottom10.length === 0) { html = '<p style="color:var(--text-dim);font-size:0.85rem;">Not enough data (need 4+ cases per surgeon).</p>'; }
+    else { bottom10.forEach((s, i) => { const rank = ranked.length - bottom10.length + i + 1; html += surgeonRow(rank, s, '#f59e0b'); }); }
+  } else {
+    if (ranked.length > 0) { ranked.forEach((s, i) => { html += surgeonRow(i + 1, s); }); }
+    if (unranked.length > 0) {
+      if (ranked.length > 0) html += '<div style="border-top:1px solid var(--border);margin:10px 0;"></div>';
+      unranked.forEach(s => {
+        html += `<div class="efficiency-item"><span class="eff-label">${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} case${s.cases !== 1 ? 's' : ''})</span></span><span class="eff-value" style="color:var(--text-dim);font-size:0.75rem;">Need more data</span></div>`;
       });
-      html += `<div id="surgBottomExtra" style="display:none;">${bottomExtraHtml}</div>`;
-      html += `<a href="javascript:void(0)" id="surgBottomToggle" style="display:inline-block;margin-top:4px;font-size:0.82rem;color:var(--primary);" onclick="var ex=document.getElementById('surgBottomExtra');var tg=document.getElementById('surgBottomToggle');if(ex.style.display==='none'){ex.style.display='block';tg.textContent='Show less';}else{ex.style.display='none';tg.textContent='Show all';}">Show all</a>`;
     }
   }
-  // View all surgeons link
-  if (ranked.length > 10) {
-    let allHtml = '';
-    ranked.forEach((s, i) => {
-      allHtml += `<div class="efficiency-item"><span class="eff-label">${i+1}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span><span class="eff-value">${s.pph.toFixed(1)} pts/hr</span></div>`;
-    });
-    html += `<div id="surgAllList" style="display:none;margin-top:16px;"><h4 style="font-size:0.82rem;color:var(--text-dim);margin-bottom:6px;">All Surgeons (ranked)</h4>${allHtml}</div>`;
-    html += `<a href="javascript:void(0)" id="surgAllToggle" style="display:inline-block;margin-top:12px;font-size:0.82rem;color:var(--primary);" onclick="var ex=document.getElementById('surgAllList');var tg=document.getElementById('surgAllToggle');if(ex.style.display==='none'){ex.style.display='block';tg.textContent='Hide full list';}else{ex.style.display='none';tg.textContent='View all surgeons';}">View all surgeons</a>`;
-  }
-  document.getElementById('surgeonEffContent').innerHTML = html;
+  el.innerHTML = html;
+}
+
+function surgeonRow(rank, s, color) {
+  const c = color ? ` style="color:${color}"` : '';
+  return `<div class="efficiency-item"><span class="eff-label">${rank}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span><span class="eff-value"${c}>${s.pph.toFixed(1)} pts/hr</span></div>`;
 }
 
 let editingCaseId = null;
