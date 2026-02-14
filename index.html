@@ -3515,6 +3515,16 @@ function bindMilTimeInput(input) {
     this.classList.toggle('invalid', this.value && !isValidMilTime(this.value));
   });
 
+  // Format and blur on Enter
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (this.value) this.value = formatMilTimeInput(this.value);
+      this.classList.toggle('invalid', this.value && !isValidMilTime(this.value));
+      this.blur();
+    }
+  });
+
   // Allow typing only digits and colon
   input.addEventListener('keypress', function(e) {
     if (e.key.length === 1 && !/[0-9:]/.test(e.key)) {
