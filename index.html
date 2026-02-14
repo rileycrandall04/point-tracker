@@ -2107,6 +2107,14 @@ input.mil-time.invalid {
       <div id="assignDataContent"></div>
     </div>
 
+    <!-- Procedure Time Lookup -->
+    <div class="card">
+      <h2>Procedure Time Lookup</h2>
+      <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;">Search a procedure to see average case duration by surgeon</p>
+      <input type="text" id="procLookupSearch" placeholder="Type procedure name..." oninput="renderProcLookup()" autocomplete="off" style="width:100%;margin-bottom:8px;">
+      <div id="procLookupResults"></div>
+    </div>
+
     <!-- Collapsible: Weekend vs Weekday -->
     <div class="card collapse-section">
       <div class="collapse-header" onclick="toggleCollapse('timeWknd')">
@@ -8427,6 +8435,61 @@ function renderNightCallFreq() {
   html += `<div class="efficiency-item" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;"><span class="eff-label" style="font-weight:600;">Total Call Shifts</span><span class="eff-value" style="font-weight:600;">${totalCall}</span></div>`;
   html += `<div class="efficiency-item"><span class="eff-label">Total Shifts (3 mo)</span><span class="eff-value">${recent.length}</span></div>`;
   document.getElementById('nightContent').innerHTML = html || '<p style="color:var(--text-dim);font-size:0.85rem;">No call shifts in the past 3 months.</p>';
+}
+
+function renderProcLookup() {
+  const query = (document.getElementById('procLookupSearch').value || '').trim().toLowerCase();
+  const el = document.getElementById('procLookupResults');
+  if (!query) { el.innerHTML = ''; return; }
+
+  // Find matching procedures
+  const procNames = {};
+  data.cases.forEach(c => {
+    if (!c.startTime || !c.endTime) return;
+    const name = c.caseType === 'standard' ? (c.procedure || '') : getCaseTypeName(c.caseType);
+    if (!name || !name.toLowerCase().includes(query)) return;
+    if (!procNames[name]) procNames[name] = [];
+    const surgeon = (c.notes || '').trim();
+    let s = timeToMinutes(c.startTime);
+    let e = timeToMinutes(c.endTime);
+    if (e <= s) e += 1440;
+    const mins = e - s;
+    if (mins <= 0) return;
+    procNames[name].push({ surgeon, mins });
+  });
+
+  const procs = Object.keys(procNames);
+  if (procs.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No matching procedures found.</p>'; return; }
+
+  let html = '';
+  procs.sort().forEach(proc => {
+    const cases = procNames[proc];
+    // Overall average
+    const totalMins = cases.reduce((s, c) => s + c.mins, 0);
+    const avgAll = Math.round(totalMins / cases.length);
+    html += `<div style="margin-bottom:12px;">`;
+    html += `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">`;
+    html += `<span style="font-weight:600;font-size:0.85rem;">${escHtml(proc)}</span>`;
+    html += `<span style="font-size:0.78rem;color:var(--text-dim);">${cases.length} case${cases.length !== 1 ? 's' : ''} &middot; avg ${avgAll} min</span>`;
+    html += `</div>`;
+
+    // Group by surgeon
+    const bySurgeon = {};
+    cases.forEach(c => {
+      const key = c.surgeon || 'Unknown';
+      if (!bySurgeon[key]) bySurgeon[key] = { total: 0, count: 0 };
+      bySurgeon[key].total += c.mins;
+      bySurgeon[key].count++;
+    });
+    const surgeons = Object.entries(bySurgeon)
+      .map(([name, d]) => ({ name, avg: Math.round(d.total / d.count), count: d.count }))
+      .sort((a, b) => a.avg - b.avg);
+    surgeons.forEach(s => {
+      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.count})</span></span><span class="eff-value">${s.avg} min</span></div>`;
+    });
+    html += `</div>`;
+  });
+  el.innerHTML = html;
 }
 
 // ================================================================
