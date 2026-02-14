@@ -2060,25 +2060,28 @@ input.mil-time.invalid {
 
   <!-- Time Tab -->
   <div id="dtab-time" class="hidden">
-    <!-- Summary Cards -->
-    <div class="card">
-      <h2>Time Summary (Past 3 Months)</h2>
-      <div class="summary-grid">
-        <div class="summary-item">
-          <div class="label">Avg Hours/Month</div>
-          <div class="value blue" id="timeAvgMonth">0</div>
+    <!-- Time Summary (compact) -->
+    <div class="card" style="padding:10px 14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <span style="font-size:0.78rem;font-weight:600;">Time Summary</span>
+        <span style="font-size:0.68rem;color:var(--text-dim);">Past 3 Months</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;text-align:center;">
+        <div>
+          <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Hrs/Mo</div>
+          <div style="font-size:0.9rem;font-weight:600;color:var(--primary);" id="timeAvgMonth">0</div>
         </div>
-        <div class="summary-item">
-          <div class="label">Avg Hours/Week</div>
-          <div class="value green" id="timeAvgWeek">0</div>
+        <div>
+          <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Hrs/Wk</div>
+          <div style="font-size:0.9rem;font-weight:600;color:var(--accent);" id="timeAvgWeek">0</div>
         </div>
-        <div class="summary-item">
-          <div class="label">Avg Shift Start</div>
-          <div class="value yellow" id="timeAvgStart">--:--</div>
+        <div>
+          <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Avg Start</div>
+          <div style="font-size:0.9rem;font-weight:600;color:#facc15;" id="timeAvgStart">--:--</div>
         </div>
-        <div class="summary-item">
-          <div class="label">Avg Shift End</div>
-          <div class="value purple" id="timeAvgEnd">--:--</div>
+        <div>
+          <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Avg End</div>
+          <div style="font-size:0.9rem;font-weight:600;color:#a78bfa;" id="timeAvgEnd">--:--</div>
         </div>
       </div>
     </div>
@@ -8397,17 +8400,10 @@ function renderWeekendVsWeekday() {
     if (isWeekend(s.date)) { weHrs += hrs; wePts += pts; weN++; }
     else { wdHrs += hrs; wdPts += pts; wdN++; }
   });
-  let html = '<h4 style="font-size:0.82rem;color:var(--primary);margin-bottom:6px;">Weekday</h4>';
-  html += '<div class="summary-grid">';
-  html += `<div class="summary-item"><div class="label">Avg Pts</div><div class="value blue">${wdN > 0 ? (wdPts/wdN).toFixed(1) : '0'}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Avg Hrs</div><div class="value blue">${wdN > 0 ? (wdHrs/wdN).toFixed(1) : '0'}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Shifts</div><div class="value blue">${wdN}</div></div>`;
-  html += '</div>';
-  html += '<h4 style="font-size:0.82rem;color:#22c55e;margin-top:12px;margin-bottom:6px;">Weekend</h4>';
-  html += '<div class="summary-grid">';
-  html += `<div class="summary-item"><div class="label">Avg Pts</div><div class="value green">${weN > 0 ? (wePts/weN).toFixed(1) : '0'}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Avg Hrs</div><div class="value green">${weN > 0 ? (weHrs/weN).toFixed(1) : '0'}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Shifts</div><div class="value green">${weN}</div></div>`;
+  let html = '<div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:2px 12px;align-items:center;font-size:0.8rem;">';
+  html += '<div style="font-size:0.62rem;color:var(--text-dim);"></div><div style="font-size:0.62rem;color:var(--text-dim);text-align:center;text-transform:uppercase;">Avg Pts</div><div style="font-size:0.62rem;color:var(--text-dim);text-align:center;text-transform:uppercase;">Avg Hrs</div><div style="font-size:0.62rem;color:var(--text-dim);text-align:center;text-transform:uppercase;">Shifts</div>';
+  html += `<div style="font-weight:600;color:var(--primary);">Weekday</div><div style="text-align:center;color:var(--primary);">${wdN > 0 ? (wdPts/wdN).toFixed(1) : '0'}</div><div style="text-align:center;color:var(--primary);">${wdN > 0 ? (wdHrs/wdN).toFixed(1) : '0'}</div><div style="text-align:center;color:var(--primary);">${wdN}</div>`;
+  html += `<div style="font-weight:600;color:var(--accent);">Weekend</div><div style="text-align:center;color:var(--accent);">${weN > 0 ? (wePts/weN).toFixed(1) : '0'}</div><div style="text-align:center;color:var(--accent);">${weN > 0 ? (weHrs/weN).toFixed(1) : '0'}</div><div style="text-align:center;color:var(--accent);">${weN}</div>`;
   html += '</div>';
   document.getElementById('wkndContent').innerHTML = html;
 }
