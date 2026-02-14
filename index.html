@@ -8147,14 +8147,14 @@ function buildWorkerBeeAvg() {
       ptsPerHr: round2(g.totalPts / g.totalHrs),
       count: g.count
     }))
-    .sort((a, b) => b.ptsPerHr - a.ptsPerHr);
+    .sort((a, b) => b.avgPts - a.avgPts);
   let html = '';
   if (ranked.length > 0) {
-    html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Calendar assignments — sorted by efficiency (pts/hr)</div>';
+    html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Calendar assignments — sorted by average total points</div>';
     ranked.forEach(r => {
       html += `<div class="efficiency-item" style="flex-wrap:wrap;gap:2px;">`;
       html += `<span class="eff-label">${escHtml(r.label)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count})</span></span>`;
-      html += `<span style="font-size:0.82rem;"><span class="eff-value" style="color:var(--primary);">${r.ptsPerHr.toFixed(1)} pts/hr</span> <span style="color:var(--text-dim);font-size:0.75rem;">&middot; ${r.avgPts.toFixed(1)} pts &middot; ${r.avgHrs.toFixed(1)} hrs</span></span>`;
+      html += `<span style="font-size:0.82rem;"><span class="eff-value" style="color:var(--primary);">${r.avgPts.toFixed(1)} pts</span> <span style="color:var(--text-dim);font-size:0.75rem;">&middot; ${r.avgHrs.toFixed(1)} hrs</span></span>`;
       html += `</div>`;
     });
   }
