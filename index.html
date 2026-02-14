@@ -2088,17 +2088,6 @@ input.mil-time.invalid {
       </div>
     </div>
 
-    <!-- Collapsible: Day-of-Week Breakdown -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('timeDOW')">
-        <h3>Points by Day of Week (3 mo)</h3>
-        <span class="arrow" id="timeDOWArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="timeDOWBody">
-        <div id="dowContent" style="padding-top:12px;"></div>
-      </div>
-    </div>
-
     <!-- Collapsible: Weekend vs Weekday -->
     <div class="card collapse-section">
       <div class="collapse-header" onclick="toggleCollapse('timeWknd')">
@@ -2110,6 +2099,18 @@ input.mil-time.invalid {
       </div>
     </div>
 
+    <!-- Assignment Data (combined) -->
+    <div class="card">
+      <h2>Assignment Data</h2>
+      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="tab-btn active" id="adTabTotals" onclick="switchAssignDataTab('totals')">Average Shift Totals</button>
+        <button class="tab-btn" id="adTabDOW" onclick="switchAssignDataTab('dow')">Day of Week</button>
+        <button class="tab-btn" id="adTabEfficiency" onclick="switchAssignDataTab('efficiency')">Shift Efficiency</button>
+        <button class="tab-btn" id="adTabWorkerBee" onclick="switchAssignDataTab('workerBee')">Worker Bee Averages</button>
+      </div>
+      <div id="assignDataContent"></div>
+    </div>
+
     <!-- Collapsible: Night & Call Frequency -->
     <div class="card collapse-section">
       <div class="collapse-header" onclick="toggleCollapse('timeNight')">
@@ -2119,17 +2120,6 @@ input.mil-time.invalid {
       <div class="collapse-body" id="timeNightBody">
         <div id="nightContent" style="padding-top:12px;"></div>
       </div>
-    </div>
-
-    <!-- Assignment Data (combined) -->
-    <div class="card">
-      <h2>Assignment Data</h2>
-      <div style="display:flex;gap:6px;margin-bottom:12px;">
-        <button class="tab-btn active" id="adTabTotals" onclick="switchAssignDataTab('totals')">Average Shift Totals</button>
-        <button class="tab-btn" id="adTabEfficiency" onclick="switchAssignDataTab('efficiency')">Shift Efficiency</button>
-        <button class="tab-btn" id="adTabWorkerBee" onclick="switchAssignDataTab('workerBee')">Worker Bee Averages</button>
-      </div>
-      <div id="assignDataContent"></div>
     </div>
   </div>
 
@@ -6046,7 +6036,7 @@ function toggleCollapse(sectionId) {
   const bodyMap = {
     deScan: 'deScanBody',
     projBreakdown: 'projBreakdownBody', projMoM: 'projMoMBody',
-    timeDOW: 'timeDOWBody', timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
+    timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
     analTopProc: 'analTopProcBody',
     analTopSurgeons: 'analTopSurgeonsBody',
     histOverride: 'histOverrideBody', compStipends: 'compStipendsBody',
@@ -6055,7 +6045,7 @@ function toggleCollapse(sectionId) {
   const arrowMap = {
     deScan: 'deScanArrow',
     projBreakdown: 'projBreakdownArrow', projMoM: 'projMoMArrow',
-    timeDOW: 'timeDOWArrow', timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
+    timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
     analTopProc: 'analTopProcArrow',
     analTopSurgeons: 'analTopSurgeonsArrow',
     histOverride: 'histOverrideArrow', compStipends: 'compStipendsArrow',
@@ -8068,6 +8058,7 @@ let activeAssignDataTab = 'totals';
 function switchAssignDataTab(tab) {
   activeAssignDataTab = tab;
   document.getElementById('adTabTotals').classList.toggle('active', tab === 'totals');
+  document.getElementById('adTabDOW').classList.toggle('active', tab === 'dow');
   document.getElementById('adTabEfficiency').classList.toggle('active', tab === 'efficiency');
   document.getElementById('adTabWorkerBee').classList.toggle('active', tab === 'workerBee');
   renderAssignData();
@@ -8077,6 +8068,8 @@ function renderAssignData() {
   const el = document.getElementById('assignDataContent');
   if (activeAssignDataTab === 'totals') {
     el.innerHTML = buildAvgShiftTotals();
+  } else if (activeAssignDataTab === 'dow') {
+    el.innerHTML = buildDayOfWeek();
   } else if (activeAssignDataTab === 'efficiency') {
     el.innerHTML = buildShiftEfficiency();
   } else {
@@ -8201,10 +8194,9 @@ function renderMoMChange() {
 function renderTimeTab() {
   renderTimeSummary();
   renderProductionTrend();
-  renderDayOfWeekHeatmap();
   renderWeekendVsWeekday();
-  renderNightCallFreq();
   renderAssignData();
+  renderNightCallFreq();
 }
 
 function getRecentShifts(months) {
@@ -8295,7 +8287,7 @@ function renderProductionTrend() {
   });
 }
 
-function renderDayOfWeekHeatmap() {
+function buildDayOfWeek() {
   const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const ptsByDay = [0,0,0,0,0,0,0];
   const countByDay = [0,0,0,0,0,0,0];
@@ -8307,12 +8299,11 @@ function renderDayOfWeekHeatmap() {
     countByDay[dow]++;
   });
   const maxPts = Math.max(...ptsByDay, 1);
-  let html = '';
+  let html = '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Total points by day of week (past 3 months)</div>';
   for (let i = 1; i <= 7; i++) {
     const idx = i % 7;
     const pct = maxPts > 0 ? (ptsByDay[idx] / maxPts * 100) : 0;
     const avg = countByDay[idx] > 0 ? (ptsByDay[idx] / countByDay[idx]).toFixed(1) : '0';
-    // Heat color: interpolate from dim to primary based on intensity
     const intensity = maxPts > 0 ? ptsByDay[idx] / maxPts : 0;
     const r = Math.round(30 + intensity * 29);
     const g = Math.round(41 + intensity * 89);
@@ -8325,7 +8316,7 @@ function renderDayOfWeekHeatmap() {
       <span class="hm-value">${ptsByDay[idx].toFixed(0)}pts (${avg}/shift)</span>
     </div>`;
   }
-  document.getElementById('dowContent').innerHTML = html || '<p style="color:var(--text-dim);font-size:0.85rem;">No data.</p>';
+  return html || '<p style="color:var(--text-dim);font-size:0.85rem;">No data.</p>';
 }
 
 function renderWeekendVsWeekday() {
