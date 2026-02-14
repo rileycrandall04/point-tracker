@@ -1970,7 +1970,7 @@ input.mil-time.invalid {
 <!-- TODAY PAGE -->
 <div class="page active" id="page-today">
   <div class="card hidden" id="todayPVReminder" style="background:var(--accent2); color:#000; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-    <span style="font-size:0.85rem; font-weight:600;" id="todayPVReminderText"></span>
+    <span style="font-size:0.85rem; font-weight:600;"><span id="todayPVReminderText"></span> <a href="#" onclick="goToPVHistory(); return false;" style="color:#000; text-decoration:underline; font-weight:400;">Update now</a></span>
     <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
   <div id="todayBackBar" class="hidden" style="display:none;align-items:center;gap:8px;margin-bottom:8px;">
@@ -2230,7 +2230,7 @@ input.mil-time.invalid {
 <div class="page" id="page-compensation">
   <!-- PV Reminder Banner -->
   <div class="card hidden" id="pvReminderBanner" style="background:var(--accent2); color:#000; padding:10px 16px; display:flex; align-items:center; justify-content:space-between;">
-    <span style="font-size:0.85rem; font-weight:600;" id="pvReminderText">Last month's $/point hasn't been confirmed yet.</span>
+    <span style="font-size:0.85rem; font-weight:600;"><span id="pvReminderText">Last month's $/point hasn't been confirmed yet.</span> <a href="#" onclick="togglePVHistory(); return false;" style="color:#000; text-decoration:underline; font-weight:400;">Update now</a></span>
     <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
 
@@ -7466,6 +7466,23 @@ function exitHistoryTutorialMode() {
 // ================================================================
 // POINT VALUE HISTORY
 // ================================================================
+function goToPVHistory() {
+  // Navigate to compensation page
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const compBtn = document.querySelector('.bottom-nav button[data-page="compensation"]');
+  if (compBtn) compBtn.classList.add('active');
+  document.getElementById('page-compensation').classList.add('active');
+  renderProjections();
+  // Open the history panel
+  const panel = document.getElementById('pvHistoryPanel');
+  const btn = document.getElementById('pvHistoryToggle');
+  if (panel && panel.style.maxHeight === '0px' || panel && !panel.style.maxHeight) {
+    panel.style.maxHeight = panel.scrollHeight + 'px';
+    btn.innerHTML = 'History &#9650;';
+  }
+}
+
 function togglePVHistory() {
   const panel = document.getElementById('pvHistoryPanel');
   const btn = document.getElementById('pvHistoryToggle');
