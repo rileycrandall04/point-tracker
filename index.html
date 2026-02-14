@@ -2275,7 +2275,10 @@ input.mil-time.invalid {
         <div class="value green" id="stabWeighted">0</div>
       </div>
     </div>
-    <div id="stabBreakdown" style="margin-top:12px;"></div>
+    <div style="margin-top:12px;text-align:center;">
+      <a href="#" id="stabBreakdownToggle" onclick="toggleStabBreakdown(); return false;" style="font-size:0.8rem;color:var(--primary);">Show breakdown &#9660;</a>
+    </div>
+    <div id="stabBreakdown" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;"></div>
   </div>
 
   <!-- Monthly Trend Chart -->
@@ -7712,6 +7715,18 @@ function renderBreakdownChart() {
     },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 16 } } } }
   });
+}
+
+function toggleStabBreakdown() {
+  const panel = document.getElementById('stabBreakdown');
+  const link = document.getElementById('stabBreakdownToggle');
+  if (panel.style.maxHeight && panel.style.maxHeight !== '0px') {
+    panel.style.maxHeight = '0';
+    link.innerHTML = 'Show breakdown &#9660;';
+  } else {
+    panel.style.maxHeight = panel.scrollHeight + 'px';
+    link.innerHTML = 'Hide breakdown &#9650;';
+  }
 }
 
 function renderStabilization() {
