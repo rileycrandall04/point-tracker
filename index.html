@@ -3249,8 +3249,8 @@ function parseCalendarEventTitle(title) {
   if (/^cardiac$/i.test(t)) return { type: 'cardiac_liver', label: 'Cardiac' };
   if (/^liver$/i.test(t)) return { type: 'cardiac_liver', label: 'Liver' };
 
-  // Post Call and similar generic OR assignments
-  if (/^post\s*call$/i.test(t)) return { type: 'OR', label: 'Post Call' };
+  // Post shifts (Post Call, Post 1-4, Post SF 1/2, etc.) → OR with specific label
+  if (/^post\b/i.test(t)) return { type: 'OR', label: t };
 
   // Known skip words
   if (/^(off|vacation|vac|holiday|sick|conference|away)$/i.test(t)) return null;
@@ -3292,7 +3292,7 @@ async function fetchCalendarEvents(token, calId, timeMin, timeMax) {
 
 const GOOGLE_CLIENT_ID = '523311146529-2g67858jcplc0hr71e54kdneeh9crv7t.apps.googleusercontent.com';
 
-function requestCalendarToken() {
+function requestCalendarToken(silent) {
   return new Promise((resolve, reject) => {
     if (typeof google === 'undefined' || !google.accounts) {
       reject(new Error('Google Identity Services not loaded — try refreshing'));
@@ -3313,21 +3313,21 @@ function requestCalendarToken() {
         reject(new Error(err.message || 'Token request failed'));
       }
     });
-    // Force consent to ensure calendar scope is granted (not cached from Firebase sign-in)
-    client.requestAccessToken({ prompt: 'consent' });
+    // silent: reuse prior consent (no popup); manual: force consent prompt
+    client.requestAccessToken({ prompt: silent ? '' : 'consent' });
   });
 }
 
-async function syncCalendarEvents() {
+async function syncCalendarEvents(silent) {
   try {
-    // Always get a fresh token via GIS to ensure calendar scope
-    await requestCalendarToken();
+    // Get token — silent mode reuses prior consent, manual forces prompt
+    await requestCalendarToken(silent);
 
     // Find the "Riley" calendar
     const calList = await fetchCalendarList(googleAccessToken);
     const rileyCal = calList.items.find(c => c.summary && c.summary.toLowerCase().includes('riley'));
     if (!rileyCal) {
-      showToast('No "Riley" calendar found');
+      if (!silent) showToast('No "Riley" calendar found');
       return;
     }
 
@@ -3367,12 +3367,16 @@ async function syncCalendarEvents() {
     const syncTimeEl = document.getElementById('calendarLastSync');
     if (syncTimeEl) syncTimeEl.textContent = 'Last synced: ' + new Date(data.calendarLastSync).toLocaleString();
 
-    showToast('Calendar synced: ' + count + ' assignment' + (count !== 1 ? 's' : ''));
+    if (!silent) showToast('Calendar synced: ' + count + ' assignment' + (count !== 1 ? 's' : ''));
 
     // Refresh views if on relevant pages
     if (typeof renderWeeklyChart === 'function') renderWeeklyChart();
     if (typeof loadShiftForDate === 'function') loadShiftForDate();
   } catch (err) {
+    if (silent) {
+      console.log('Auto calendar sync skipped:', err.message);
+      return;
+    }
     if (err.message === 'TOKEN_EXPIRED') {
       googleAccessToken = null;
       showToast('Calendar token expired — use Sync Calendar in Settings');
@@ -12698,6 +12702,12 @@ auth.onAuthStateChanged(async (user) => {
     // Show tutorial for brand-new users (no data at all)
     if (Object.keys(data.shifts).length === 0 && data.cases.length === 0) {
       showTutorial();
+    }
+
+    // Auto-sync calendar if last sync was >24 hours ago
+    const lastSync = data.calendarLastSync ? new Date(data.calendarLastSync).getTime() : 0;
+    if (Date.now() - lastSync > 24 * 60 * 60 * 1000) {
+      syncCalendarEvents(true);
     }
   } else {
     // Not signed in — show auth overlay
