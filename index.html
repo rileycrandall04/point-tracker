@@ -2272,6 +2272,7 @@ input.mil-time.invalid {
     <div id="stabPaycheckRow" style="text-align:center; margin-bottom:12px;">
       <div style="font-size:1.6rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
       <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px;" id="stabPaycheckLabel">Projected next month's paycheck</div>
+      <div style="font-size:0.78rem; color:var(--text-dim); margin-top:6px;" id="stabCurrentPaycheck"></div>
     </div>
     <div class="summary-grid">
       <div class="summary-item">
@@ -7731,6 +7732,22 @@ function renderStabilization() {
   } else {
     document.getElementById('stabPaycheck').innerHTML = '&mdash;';
     paycheckLabel.textContent = "Projected next month\u2019s paycheck";
+  }
+
+  // Current month's paycheck (blend shifted back 1 month)
+  const curEl = document.getElementById('stabCurrentPaycheck');
+  const lastMonthKey = mk(1);
+  const lastPv = getPointValueForMonth(lastMonthKey);
+  if (decAdv && now.getMonth() === 0) {
+    curEl.textContent = 'This month: received in Dec advance';
+  } else if (lastPv && lastPv > 0) {
+    const curVals = [1,2,3,4,5].map(i => mt[mk(i)] || 0);
+    const curWeighted = round2(weights.reduce((sum, w, i) => sum + w * curVals[i], 0));
+    const curStipend = getMonthlyStipendTotal(mk(1));
+    const curPaycheck = curWeighted * lastPv + curStipend;
+    curEl.textContent = 'This month: $' + curPaycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  } else {
+    curEl.textContent = '';
   }
 }
 
