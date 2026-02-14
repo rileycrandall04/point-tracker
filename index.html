@@ -8327,13 +8327,17 @@ function renderWeekendVsWeekday() {
     if (isWeekend(s.date)) { weHrs += hrs; wePts += pts; weN++; }
     else { wdHrs += hrs; wdPts += pts; wdN++; }
   });
-  let html = '<div class="summary-grid">';
-  html += `<div class="summary-item"><div class="label">Weekday Avg Pts</div><div class="value blue">${wdN > 0 ? (wdPts/wdN).toFixed(1) : '0'}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Weekend Avg Pts</div><div class="value green">${weN > 0 ? (wePts/weN).toFixed(1) : '0'}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Weekday Avg Hrs</div><div class="value blue">${wdN > 0 ? (wdHrs/wdN).toFixed(1) : '0'}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Weekend Avg Hrs</div><div class="value green">${weN > 0 ? (weHrs/weN).toFixed(1) : '0'}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Weekday Shifts</div><div class="value">${wdN}</div></div>`;
-  html += `<div class="summary-item"><div class="label">Weekend Shifts</div><div class="value">${weN}</div></div>`;
+  let html = '<h4 style="font-size:0.82rem;color:var(--primary);margin-bottom:6px;">Weekday</h4>';
+  html += '<div class="summary-grid">';
+  html += `<div class="summary-item"><div class="label">Avg Pts</div><div class="value blue">${wdN > 0 ? (wdPts/wdN).toFixed(1) : '0'}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Avg Hrs</div><div class="value blue">${wdN > 0 ? (wdHrs/wdN).toFixed(1) : '0'}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Shifts</div><div class="value blue">${wdN}</div></div>`;
+  html += '</div>';
+  html += '<h4 style="font-size:0.82rem;color:#22c55e;margin-top:12px;margin-bottom:6px;">Weekend</h4>';
+  html += '<div class="summary-grid">';
+  html += `<div class="summary-item"><div class="label">Avg Pts</div><div class="value green">${weN > 0 ? (wePts/weN).toFixed(1) : '0'}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Avg Hrs</div><div class="value green">${weN > 0 ? (weHrs/weN).toFixed(1) : '0'}</div></div>`;
+  html += `<div class="summary-item"><div class="label">Shifts</div><div class="value green">${weN}</div></div>`;
   html += '</div>';
   document.getElementById('wkndContent').innerHTML = html;
 }
