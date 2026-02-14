@@ -8166,8 +8166,12 @@ function renderPipelineChart() {
 
   // Summary — next paycheck date and amount
   const currentPts = mt[mkKey(now.getFullYear(), now.getMonth())] || 0;
-  const nextPayDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const nextPayDateStr = monthNames[nextPayDate.getMonth()] + ' 1, ' + nextPayDate.getFullYear();
+  // Paid on the 20th: if before the 20th, next payday is this month's 20th;
+  // if on/after the 20th, next payday is next month's 20th
+  const nextPayDate = now.getDate() < 20
+    ? new Date(now.getFullYear(), now.getMonth(), 20)
+    : new Date(now.getFullYear(), now.getMonth() + 1, 20);
+  const nextPayDateStr = monthNames[nextPayDate.getMonth()] + ' 20, ' + nextPayDate.getFullYear();
   let summary = `Current month: ${currentPts.toFixed(0)} pts`;
   if (useDollars) {
     const nextPaycheck = round2((realValues[0] + projectedValues[0]) * targetPvs[0] + stipendValues[0]);
