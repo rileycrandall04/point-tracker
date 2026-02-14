@@ -3869,7 +3869,10 @@ function calcARBreakdown(shift) {
   if (!hasEntries || !hasEnd) {
     if (pagerWindow) {
       const pagerMinutes = pagerWindow.end - pagerWindow.start;
-      return { ar: 0, call: round2((pagerMinutes / 60) * 3.5) };
+      let callPts = (pagerMinutes / 60) * 3.5;
+      const tcAdj = calcTempCoveragePoints(shift);
+      callPts += tcAdj.pagerAdj;
+      return { ar: round2(tcAdj.ar), call: round2(callPts) };
     }
     return { ar: 0, call: 0 };
   }
@@ -3906,7 +3909,10 @@ function calcARBreakdown(shift) {
   if (clockedRanges.length === 0) {
     if (pagerWindow) {
       const pagerMinutes = pagerWindow.end - pagerWindow.start;
-      return { ar: 0, call: round2((pagerMinutes / 60) * 3.5) };
+      let callPts = (pagerMinutes / 60) * 3.5;
+      const tcAdj = calcTempCoveragePoints(shift);
+      callPts += tcAdj.pagerAdj;
+      return { ar: round2(tcAdj.ar), call: round2(callPts) };
     }
     return { ar: 0, call: 0 };
   }
@@ -3916,7 +3922,10 @@ function calcARBreakdown(shift) {
   if (spanEnd <= spanStart) {
     if (pagerWindow) {
       const pagerMinutes = pagerWindow.end - pagerWindow.start;
-      return { ar: 0, call: round2((pagerMinutes / 60) * 3.5) };
+      let callPts = (pagerMinutes / 60) * 3.5;
+      const tcAdj = calcTempCoveragePoints(shift);
+      callPts += tcAdj.pagerAdj;
+      return { ar: round2(tcAdj.ar), call: round2(callPts) };
     }
     return { ar: 0, call: 0 };
   }
