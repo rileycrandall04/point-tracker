@@ -8455,7 +8455,7 @@ function renderProcLookup() {
   // Find matching procedures
   const procNames = {};
   data.cases.forEach(c => {
-    if (!c.startTime || !c.endTime) return;
+    if (!c.startTime || !c.endTime || c.isSharedCase) return;
     const name = c.caseType === 'standard' ? (c.procedure || '') : getCaseTypeName(c.caseType);
     if (!name || !name.toLowerCase().includes(query)) return;
     if (!procNames[name]) procNames[name] = [];
@@ -8740,7 +8740,7 @@ function switchProcTab(tab) {
 function renderTopProcedures() {
   const procData = {};
   data.cases.forEach(c => {
-    if (!c.startTime || !c.endTime) return;
+    if (!c.startTime || !c.endTime || c.isSharedCase) return;
     let s = timeToMinutes(c.startTime);
     let e = timeToMinutes(c.endTime);
     if (e <= s) e += 1440;
@@ -8807,6 +8807,7 @@ function switchSurgeonTab(tab) {
 function renderSurgeonEfficiency() {
   const surgeonData = {};
   data.cases.forEach(c => {
+    if (c.isSharedCase) return;
     const surgeon = (c.notes || '').trim();
     if (!surgeon || !c.startTime || !c.endTime) return;
     const shift = data.shifts[c.shiftDate];
