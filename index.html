@@ -1973,6 +1973,10 @@ input.mil-time.invalid {
     <span style="font-size:0.85rem; font-weight:600;"><span id="todayPVReminderText"></span> <a href="#" onclick="goToPVHistory(); return false;" style="color:#000; text-decoration:underline; font-weight:400;">Update now</a></span>
     <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
+  <div class="card hidden" id="openLaborReminder" style="background:var(--danger); color:#fff; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+    <span style="font-size:0.85rem; font-weight:600;" id="openLaborReminderText"></span>
+    <button onclick="document.getElementById('openLaborReminder').classList.add('hidden')" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
+  </div>
   <div id="todayBackBar" class="hidden" style="display:none;align-items:center;gap:8px;margin-bottom:8px;">
     <button class="btn btn-outline btn-sm" id="todayBackBtn" style="padding:4px 12px;font-size:0.8rem;">&larr; Daily</button>
   </div>
@@ -4075,7 +4079,20 @@ function calcCasePoints(caseData, shift) {
 
   if (ct === 'labor_epidural') {
     let cs = timeToMinutes(caseData.startTime);
-    let ce = timeToMinutes(caseData.endTime);
+    if (!cs && !caseData.startTime) return 0;
+    let ce;
+    if (caseData.endTime) {
+      ce = timeToMinutes(caseData.endTime);
+    } else {
+      // No end time: estimate with current time if case is today
+      const caseDate = caseData.shiftDate || (shift && shift.date);
+      if (caseDate === todayStr()) {
+        const now = new Date();
+        ce = now.getHours() * 60 + now.getMinutes();
+      } else {
+        return 0; // past date with no end time — can't estimate
+      }
+    }
     if (ce <= cs) ce += 1440;
     const durationHrs = Math.min((ce - cs) / 60, 24);
     let pts = 0;
@@ -4135,13 +4152,28 @@ function getCaseBreakdown(caseData, shift) {
 
   if (ct === 'labor_epidural') {
     let cs = timeToMinutes(caseData.startTime);
-    let ce = timeToMinutes(caseData.endTime);
+    if (!cs && !caseData.startTime) return bd;
+    let ce;
+    let isEst = false;
+    if (caseData.endTime) {
+      ce = timeToMinutes(caseData.endTime);
+    } else {
+      const caseDate = caseData.shiftDate || (shift && shift.date);
+      if (caseDate === todayStr()) {
+        const now = new Date();
+        ce = now.getHours() * 60 + now.getMinutes();
+        isEst = true;
+      } else {
+        return bd;
+      }
+    }
     if (ce <= cs) ce += 1440;
     const durationHrs = Math.min((ce - cs) / 60, 24);
+    const estLabel = isEst ? ' (est.)' : '';
     let subtotal = 0;
     if (cs === 420) { // 0700 start: flat hourly rate
       const p = round2(durationHrs * 1.25);
-      bd.push({label: `Hourly (${round2(durationHrs)}h x 1.25, 0700 start)`, pts: p});
+      bd.push({label: `Hourly (${round2(durationHrs)}h x 1.25, 0700 start)${estLabel}`, pts: p});
       subtotal += p;
     } else {
       if (durationHrs > 0) {
@@ -4157,7 +4189,7 @@ function getCaseBreakdown(caseData, shift) {
       if (durationHrs > 2) {
         const hrs = round2(durationHrs - 2);
         const p = round2(hrs * 1.25);
-        bd.push({label: `Additional (${hrs}h x 1.25)`, pts: p});
+        bd.push({label: `Additional (${hrs}h x 1.25)${estLabel}`, pts: p});
         subtotal += p;
       }
     }
@@ -5030,10 +5062,13 @@ function renderDECaseList() {
   shiftCases.forEach(c => {
     const pts = shift ? calcCasePoints(c, shift) : 0;
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
-    const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : '';
+    const isOpenLabor = c.caseType === 'labor_epidural' && c.startTime && !c.endTime;
+    const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` :
+                    (isOpenLabor ? `${c.startTime} - now` : '');
+    const estTag = isOpenLabor ? ' <span style="font-size:0.65rem;color:var(--accent2);">(est.)</span>' : '';
     html += `<div class="de-case-list-item" onclick="openCaseEdit('${c.id}')" style="cursor:pointer;">
       <div class="de-info">
-        <div class="de-name">${escHtml(name)}</div>
+        <div class="de-name">${escHtml(name)}${estTag}</div>
         ${timeStr ? `<div class="de-detail">${escHtml(timeStr)}</div>` : ''}
       </div>
       <div class="de-actions">
@@ -5492,7 +5527,7 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   caseData.shiftDate = date;
   caseData.timestamp = new Date().toISOString();
   if (caseData.caseType === 'labor_epidural') {
-    if (!caseData.startTime || !caseData.endTime) { showToast('Please enter start and end times'); return; }
+    if (!caseData.startTime) { showToast('Please enter a start time'); return; }
   }
   if (caseData.caseType === 'standard') {
     if (!caseData.startTime) { showToast('Please enter a start time'); return; }
@@ -5546,6 +5581,7 @@ function resetCaseForm() {
 // ================================================================
 function renderToday() {
   checkPVReminder();
+  checkOpenLaborReminder();
   renderWeeklyChart();
   const date = workingDate;
   const shift = data.shifts[date];
@@ -5637,7 +5673,10 @@ function renderToday() {
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
     const orTag = c.isORCase ? ' <span style="color:var(--accent2);font-size:0.75rem;">[OR]</span>' : '';
     const sharedTag = c.isSharedCase ? ` <span style="color:var(--purple);font-size:0.75rem;">[Shared ${c.sharedStartupPct || 50}%]</span>` : '';
-    const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : '';
+    const isOpenLabor = c.caseType === 'labor_epidural' && c.startTime && !c.endTime;
+    const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` :
+                    (isOpenLabor ? `${c.startTime} - now` : '');
+    const openLaborTag = isOpenLabor ? ' <span style="color:var(--accent2);font-size:0.75rem;">(est.)</span>' : '';
     const details = [];
     if (c.physicalStatus && c.caseType === 'standard') details.push(c.physicalStatus);
     if (c.baseUnits && c.caseType === 'standard') details.push(`${c.baseUnits} base`);
@@ -5651,7 +5690,7 @@ function renderToday() {
     listHtml += `
       <div class="case-list-item">
         <div class="info">
-          <h4>${escHtml(name)}${orTag}${sharedTag}</h4>
+          <h4>${escHtml(name)}${orTag}${sharedTag}${openLaborTag}</h4>
           <p>${escHtml(details.join(' | '))}</p>
           ${c.notes ? `<p style="margin-top:2px;font-style:italic;">${escHtml(c.notes)}</p>` : ''}
         </div>
@@ -7645,6 +7684,28 @@ function dismissPVReminder() {
   const comp = document.getElementById('pvReminderBanner');
   if (today) today.classList.add('hidden');
   if (comp) comp.classList.add('hidden');
+}
+
+function checkOpenLaborReminder() {
+  const banner = document.getElementById('openLaborReminder');
+  if (!banner) return;
+  const now = new Date();
+  const openCases = data.cases.filter(c => {
+    if (c.caseType !== 'labor_epidural' || !c.startTime || c.endTime) return false;
+    const caseDate = new Date(c.shiftDate + 'T' + c.startTime + ':00');
+    return (now - caseDate) > 24 * 60 * 60 * 1000;
+  });
+  if (openCases.length > 0) {
+    const dates = [...new Set(openCases.map(c => formatDate(c.shiftDate)))];
+    const textEl = document.getElementById('openLaborReminderText');
+    textEl.textContent = openCases.length === 1
+      ? `Open labor epidural from ${dates[0]} needs an end time.`
+      : `${openCases.length} open labor epidurals need end times (${dates.join(', ')}).`;
+    banner.classList.remove('hidden');
+    banner.style.display = 'flex';
+  } else {
+    banner.classList.add('hidden');
+  }
 }
 
 function checkPVReminder() {
