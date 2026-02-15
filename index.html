@@ -1814,7 +1814,7 @@ input.mil-time.invalid {
               <label for="caseHighRiskPeds">High Risk Pediatrics (1.33x time)</label>
             </div>
             <div class="checkbox-group hidden" id="orCaseRow">
-              <input type="checkbox" id="caseORCase">
+              <input type="checkbox" id="caseORCase" checked>
               <label for="caseORCase">OR Case (use OR rates, no OB doubling)</label>
             </div>
             <div class="checkbox-group">
@@ -5555,7 +5555,7 @@ function resetCaseForm() {
   document.getElementById('caseEnd').value = '';
   document.getElementById('caseEmergency').checked = false;
   document.getElementById('caseHighRiskPeds').checked = false;
-  document.getElementById('caseORCase').checked = false;
+  document.getElementById('caseORCase').checked = true;
   document.getElementById('caseShared').checked = false;
   document.getElementById('caseSharedPct').value = '50';
   document.getElementById('sharedPctRow').classList.add('hidden');
@@ -5741,7 +5741,6 @@ function updateTodayRateChips() {
     // In-progress production rate (open cases without end time)
     let prodRate = 0;
     const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
-    const isOBShift = ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
     openCases.forEach(c => {
       const cs = timeToMinutes(c.startTime);
       let elapsed = currentMin - cs;
@@ -5757,11 +5756,8 @@ function updateTodayRateChips() {
           else prodRate += 1.25 * 2;
         }
       } else if (c.caseType === 'standard') {
-        // Standard/OR: 6 pts/hr * timeMultiplier, OB doubled if non-OR on OB shift
-        const timeMult = getTimeMultiplier(c.physicalStatus, isHol, isWknd, cs, c.isHighRiskPeds);
-        let rate = 6 * timeMult;
-        if (isOBShift && !c.isORCase) rate *= 2;
-        prodRate += rate;
+        // Standard/OR: flat 6 pts/hr (multiplier is in AR, no OB doubling)
+        prodRate += 6;
       }
     });
 
