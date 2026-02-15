@@ -5631,85 +5631,17 @@ function renderToday() {
   if (ptsPerHr) bdHtml += ` <span style="font-size:0.85rem;font-weight:500;color:var(--text-dim);">(${ptsPerHr} pts/hr)</span>`;
   bdHtml += `</div>`;
 
-  // Pager pay card (when call points exist)
-  if (result.call > 0) {
-    const monthKey = date.substring(0, 7);
-    const pv = getPointValueForMonth(monthKey);
-    const pagerDollars = round2(result.call * pv);
-    const dt = new Date(date + 'T12:00:00');
-    const dayOfWeek = dt.getDay();
-    const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
-    const isHol = shift.isHoliday || false;
-    const isWkndOrHol = isWknd || isHol;
-    const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
-    let pagerTimeStr = '';
-    if (pagerWin) {
-      pagerTimeStr = minutesToTimeStr(pagerWin.start) + ' – ' + minutesToTimeStr(pagerWin.end);
-    }
-    bdHtml += `<div style="margin-top:8px;padding:8px 12px;border-left:3px solid rgba(245,166,35,0.8);background:rgba(245,166,35,0.12);border-radius:0 6px 6px 0;">`;
-    bdHtml += `<div style="font-size:0.95rem;font-weight:600;color:rgba(245,166,35,1);">Pager: ${result.call.toFixed(2)} pts <span style="font-size:0.8rem;font-weight:400;color:var(--text-dim);">($${pagerDollars.toFixed(2)})</span></div>`;
-    if (pagerTimeStr) {
-      bdHtml += `<div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px;">${pagerTimeStr}</div>`;
-    }
-    bdHtml += `</div>`;
+  // Component sub-line (includes call/pager inline)
+  if (result.call > 0) components.push('Pager: ' + result.call.toFixed(2));
+  const fullCompLine = components.length > 0 ? components.join(' \u00B7 ') : '';
+  if (fullCompLine) {
+    bdHtml += `<div style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;">${fullCompLine}</div>`;
   }
 
-  if (compLine) {
-    bdHtml += `<div style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;">${compLine}</div>`;
-  }
-
-  // Current AR rate + daily pts/hr stats
-  if (shift.assignmentType && shift.assignmentType !== 'vacation' && shift.assignmentType !== 'forced_off' && !shift.forcedOff) {
-    const dt = new Date(date + 'T12:00:00');
-    const dayOfWeek = dt.getDay();
-    const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
-    const isHol = shift.isHoliday || false;
-    const now = new Date();
-    const currentMin = now.getHours() * 60 + now.getMinutes();
-    const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
-    const monthKey = date.substring(0, 7);
-    const pv = getPointValueForMonth(monthKey);
-
-    let statsHtml = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:0.78rem;">';
-
-    // Current AR rate chip (includes pager if in pager window)
-    if (date === todayStr()) {
-      const isWkndOrHol = isWknd || isHol;
-      const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
-      let inPagerWindow = false;
-      if (pagerWin) {
-        const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
-        inPagerWindow = nowMin >= pagerWin.start && nowMin < pagerWin.end;
-      }
-      const pagerRate = inPagerWindow ? 3.5 : 0;
-      const totalRate = currentRate + pagerRate;
-      statsHtml += `<div style="padding:4px 10px;background:rgba(66,133,244,0.12);border-radius:12px;color:rgba(66,133,244,1);font-weight:600;">`;
-      if (inPagerWindow) {
-        statsHtml += `Rate: ${totalRate.toFixed(1)} pts/hr`;
-        statsHtml += ` <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">(AR ${currentRate.toFixed(0)} + Pager 3.5)</span>`;
-      } else {
-        statsHtml += `AR: ${currentRate.toFixed(0)} pts/hr`;
-      }
-      statsHtml += ` <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">($${round2(totalRate * pv).toFixed(0)}/hr)</span>`;
-      statsHtml += `</div>`;
-    }
-
-    // Daily pts/hr chip
-    if (shiftHrs > 0) {
-      const dailyPtsHr = result.total / shiftHrs;
-      const dailyDollarsHr = round2(dailyPtsHr * pv);
-      statsHtml += `<div style="padding:4px 10px;background:rgba(255,255,255,0.06);border-radius:12px;color:var(--text-dim);font-weight:600;">`;
-      statsHtml += `Day: ${dailyPtsHr.toFixed(1)} pts/hr`;
-      statsHtml += ` <span style="font-weight:400;font-size:0.72rem;">($${dailyDollarsHr.toFixed(0)}/hr)</span>`;
-      statsHtml += `</div>`;
-    }
-
-    statsHtml += '</div>';
-    bdHtml += statsHtml;
-  }
-
+  bdHtml += '<div id="todayRateChips"></div>';
   bdHtml += '</div>';
   document.getElementById('todayBreakdown').innerHTML = bdHtml;
+  updateTodayRateChips();
 
   document.getElementById('todayCaseCount').textContent = `(${shiftCases.length})`;
 
@@ -5754,6 +5686,72 @@ function renderToday() {
   });
   document.getElementById('todayCaseList').innerHTML = listHtml;
 }
+
+function updateTodayRateChips() {
+  const el = document.getElementById('todayRateChips');
+  if (!el) return;
+  const date = workingDate;
+  const shift = data.shifts[date];
+  if (!shift || shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off' || shift.forcedOff) {
+    el.innerHTML = '';
+    return;
+  }
+  const result = getShiftPointsForDate(date, true);
+  const shiftHrs = calcShiftHours(shift);
+  const dt = new Date(date + 'T12:00:00');
+  const dayOfWeek = dt.getDay();
+  const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
+  const isHol = shift.isHoliday || false;
+  const monthKey = date.substring(0, 7);
+  const pv = getPointValueForMonth(monthKey);
+  const now = new Date();
+  const currentMin = now.getHours() * 60 + now.getMinutes();
+
+  let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:0.78rem;">';
+
+  // Current rate chip (only for today)
+  if (date === todayStr()) {
+    const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
+    const isWkndOrHol = isWknd || isHol;
+    const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+    let inPagerWindow = false;
+    if (pagerWin) {
+      const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
+      inPagerWindow = nowMin >= pagerWin.start && nowMin < pagerWin.end;
+    }
+    const pagerRate = inPagerWindow ? 3.5 : 0;
+    const totalRate = currentRate + pagerRate;
+    html += `<div style="padding:4px 10px;background:rgba(66,133,244,0.12);border-radius:12px;color:rgba(66,133,244,1);font-weight:600;">`;
+    if (inPagerWindow) {
+      html += `Rate: ${totalRate.toFixed(1)} pts/hr`;
+      html += ` <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">(AR ${currentRate.toFixed(0)} + Pager 3.5)</span>`;
+    } else {
+      html += `AR: ${currentRate.toFixed(0)} pts/hr`;
+    }
+    html += ` <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">($${round2(totalRate * pv).toFixed(0)}/hr)</span>`;
+    html += `</div>`;
+  }
+
+  // Daily pts/hr chip
+  if (shiftHrs > 0) {
+    const dailyPtsHr = result.total / shiftHrs;
+    const dailyDollarsHr = round2(dailyPtsHr * pv);
+    html += `<div style="padding:4px 10px;background:rgba(255,255,255,0.06);border-radius:12px;color:var(--text-dim);font-weight:600;">`;
+    html += `Day: ${dailyPtsHr.toFixed(1)} pts/hr`;
+    html += ` <span style="font-weight:400;font-size:0.72rem;">($${dailyDollarsHr.toFixed(0)}/hr)</span>`;
+    html += `</div>`;
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// Auto-update rate chips every 60 seconds
+setInterval(() => {
+  if (document.getElementById('page-today') && document.getElementById('page-today').classList.contains('active')) {
+    updateTodayRateChips();
+  }
+}, 60000);
 
 function renderWeeklyChart() {
   const weekDates = getWeekDates(workingDate);
