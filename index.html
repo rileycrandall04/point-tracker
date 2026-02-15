@@ -5657,6 +5657,43 @@ function renderToday() {
   if (compLine) {
     bdHtml += `<div style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;">${compLine}</div>`;
   }
+
+  // Current AR rate + daily pts/hr stats
+  if (shift.assignmentType && shift.assignmentType !== 'vacation' && shift.assignmentType !== 'forced_off' && !shift.forcedOff) {
+    const dt = new Date(date + 'T12:00:00');
+    const dayOfWeek = dt.getDay();
+    const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
+    const isHol = shift.isHoliday || false;
+    const now = new Date();
+    const currentMin = now.getHours() * 60 + now.getMinutes();
+    const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
+    const monthKey = date.substring(0, 7);
+    const pv = getPointValueForMonth(monthKey);
+
+    let statsHtml = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:0.78rem;">';
+
+    // Current AR rate chip
+    if (date === todayStr()) {
+      statsHtml += `<div style="padding:4px 10px;background:rgba(66,133,244,0.12);border-radius:12px;color:rgba(66,133,244,1);font-weight:600;">`;
+      statsHtml += `AR: ${currentRate.toFixed(0)} pts/hr`;
+      statsHtml += ` <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">($${round2(currentRate * pv).toFixed(0)}/hr)</span>`;
+      statsHtml += `</div>`;
+    }
+
+    // Daily pts/hr chip
+    if (shiftHrs > 0) {
+      const dailyPtsHr = result.total / shiftHrs;
+      const dailyDollarsHr = round2(dailyPtsHr * pv);
+      statsHtml += `<div style="padding:4px 10px;background:rgba(255,255,255,0.06);border-radius:12px;color:var(--text-dim);font-weight:600;">`;
+      statsHtml += `Day: ${dailyPtsHr.toFixed(1)} pts/hr`;
+      statsHtml += ` <span style="font-weight:400;font-size:0.72rem;">($${dailyDollarsHr.toFixed(0)}/hr)</span>`;
+      statsHtml += `</div>`;
+    }
+
+    statsHtml += '</div>';
+    bdHtml += statsHtml;
+  }
+
   bdHtml += '</div>';
   document.getElementById('todayBreakdown').innerHTML = bdHtml;
 
