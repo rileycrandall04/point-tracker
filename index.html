@@ -5613,29 +5613,46 @@ function renderToday() {
 
   // Compact breakdown using getShiftPointsForDate
   const result = getShiftPointsForDate(date, true);
-  const estTag = result.isInProgress ? ' <span style="font-size:0.75rem;color:var(--text-dim);">(est.)</span>' : '';
-
-  // Build component sub-line (only non-zero values, excluding call which gets its own card)
-  const components = [];
-  if (result.ar > 0) components.push('Avail: ' + result.ar.toFixed(2));
-  if (result.prod > 0) components.push('Prod: ' + result.prod.toFixed(2));
-  if (result.subspec > 0) components.push('Subspec: ' + result.subspec.toFixed(2));
-  if (result.supervision > 0) components.push('Supv: ' + result.supervision.toFixed(2));
-  const compLine = components.length > 0 ? components.join(' \u00B7 ') : '';
-
+  const estTag = result.isInProgress ? ' <span style="font-size:0.7rem;color:var(--accent2);font-weight:500;">EST</span>' : '';
   const shiftHrs = calcShiftHours(shift);
-  const ptsPerHr = shiftHrs > 0 ? (result.total / shiftHrs).toFixed(2) : null;
+  const monthKey = date.substring(0, 7);
+  const pv = getPointValueForMonth(monthKey);
+  const dollarTotal = round2(result.total * pv);
+  const typeName = getAssignmentTypeName(shift.assignmentType);
 
   let bdHtml = '<div style="margin-top:6px;">';
-  bdHtml += `<div style="font-size:1.8rem;font-weight:700;line-height:1.1;">${result.total.toFixed(2)} <span style="font-size:0.9rem;font-weight:400;color:var(--text-dim);">pts</span>${estTag}`;
-  if (ptsPerHr) bdHtml += ` <span style="font-size:0.85rem;font-weight:500;color:var(--text-dim);">(${ptsPerHr} pts/hr)</span>`;
+
+  // Assignment type + dollar total row
+  bdHtml += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">`;
+  bdHtml += `<span style="font-size:0.7rem;font-weight:600;color:var(--primary);background:rgba(66,133,244,0.12);padding:2px 8px;border-radius:10px;letter-spacing:0.3px;">${escHtml(typeName)}</span>`;
+  if (shiftHrs > 0) {
+    bdHtml += `<span style="font-size:0.72rem;color:var(--text-dim);">${shiftHrs.toFixed(1)} hrs</span>`;
+  }
   bdHtml += `</div>`;
 
-  // Component sub-line (includes call/pager inline)
-  if (result.call > 0) components.push('Pager: ' + result.call.toFixed(2));
-  const fullCompLine = components.length > 0 ? components.join(' \u00B7 ') : '';
-  if (fullCompLine) {
-    bdHtml += `<div style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;">${fullCompLine}</div>`;
+  // Big point total + dollar equivalent
+  bdHtml += `<div style="display:flex;align-items:baseline;gap:8px;">`;
+  bdHtml += `<span style="font-size:1.9rem;font-weight:700;line-height:1;">${result.total.toFixed(2)}</span>`;
+  bdHtml += `<span style="font-size:0.85rem;color:var(--text-dim);">pts</span>`;
+  bdHtml += estTag;
+  bdHtml += `<span style="font-size:1.1rem;font-weight:600;color:var(--text-dim);margin-left:auto;">$${dollarTotal.toFixed(2)}</span>`;
+  bdHtml += `</div>`;
+
+  // Component breakdown chips
+  const comps = [];
+  if (result.ar > 0) comps.push({ label: 'AR', val: result.ar });
+  if (result.prod > 0) comps.push({ label: 'Prod', val: result.prod });
+  if (result.call > 0) comps.push({ label: 'Pager', val: result.call });
+  if (result.subspec > 0) comps.push({ label: 'Sub', val: result.subspec });
+  if (result.supervision > 0) comps.push({ label: 'Supv', val: result.supervision });
+  if (comps.length > 0) {
+    bdHtml += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">`;
+    comps.forEach(c => {
+      const chipColor = c.label === 'Pager' ? 'rgba(245,166,35,0.15)' : 'rgba(255,255,255,0.06)';
+      const textColor = c.label === 'Pager' ? 'rgba(245,166,35,0.9)' : 'var(--text-dim)';
+      bdHtml += `<span style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:${chipColor};color:${textColor};font-weight:500;">${c.label} ${c.val.toFixed(1)}</span>`;
+    });
+    bdHtml += `</div>`;
   }
 
   bdHtml += '<div id="todayRateChips"></div>';
