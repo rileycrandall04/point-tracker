@@ -5737,11 +5737,35 @@ function updateTodayRateChips() {
       inPagerWindow = nowMin >= pagerWin.start && nowMin < pagerWin.end;
     }
     const pagerRate = inPagerWindow ? 3.5 : 0;
-    const totalRate = currentRate + pagerRate;
+
+    // In-progress production rate (open labor epidurals)
+    let prodRate = 0;
+    const openCases = data.cases.filter(c => c.shiftDate === date && c.caseType === 'labor_epidural' && c.startTime && !c.endTime);
+    openCases.forEach(c => {
+      const cs = timeToMinutes(c.startTime);
+      let elapsed = currentMin - cs;
+      if (elapsed < 0) elapsed += 1440;
+      const elapsedHrs = elapsed / 60;
+      if (cs === 420) {
+        prodRate += 1.25 * 2; // flat rate, OB doubled
+      } else {
+        if (elapsedHrs < 1) prodRate += 7.5 * 2;
+        else if (elapsedHrs < 2) prodRate += 2.5 * 2;
+        else prodRate += 1.25 * 2;
+      }
+    });
+
+    const totalRate = currentRate + pagerRate + prodRate;
+    const parts = [];
+    parts.push('AR ' + currentRate.toFixed(0));
+    if (pagerRate > 0) parts.push('Pager 3.5');
+    if (prodRate > 0) parts.push('Prod ' + prodRate.toFixed(1));
+    const hasExtras = pagerRate > 0 || prodRate > 0;
+
     html += `<div style="padding:4px 10px;background:rgba(66,133,244,0.12);border-radius:12px;color:rgba(66,133,244,1);font-weight:600;">`;
-    if (inPagerWindow) {
+    if (hasExtras) {
       html += `Rate: ${totalRate.toFixed(1)} pts/hr`;
-      html += ` <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">(AR ${currentRate.toFixed(0)} + Pager 3.5)</span>`;
+      html += ` <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">(${parts.join(' + ')})</span>`;
     } else {
       html += `AR: ${currentRate.toFixed(0)} pts/hr`;
     }
