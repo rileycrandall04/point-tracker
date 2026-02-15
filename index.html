@@ -5738,20 +5738,30 @@ function updateTodayRateChips() {
     }
     const pagerRate = inPagerWindow ? 3.5 : 0;
 
-    // In-progress production rate (open labor epidurals)
+    // In-progress production rate (open cases without end time)
     let prodRate = 0;
-    const openCases = data.cases.filter(c => c.shiftDate === date && c.caseType === 'labor_epidural' && c.startTime && !c.endTime);
+    const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
+    const isOBShift = ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
     openCases.forEach(c => {
       const cs = timeToMinutes(c.startTime);
       let elapsed = currentMin - cs;
       if (elapsed < 0) elapsed += 1440;
       const elapsedHrs = elapsed / 60;
-      if (cs === 420) {
-        prodRate += 1.25 * 2; // flat rate, OB doubled
-      } else {
-        if (elapsedHrs < 1) prodRate += 7.5 * 2;
-        else if (elapsedHrs < 2) prodRate += 2.5 * 2;
-        else prodRate += 1.25 * 2;
+      if (c.caseType === 'labor_epidural') {
+        // Labor epidural tier rates (already OB doubled)
+        if (cs === 420) {
+          prodRate += 1.25 * 2;
+        } else {
+          if (elapsedHrs < 1) prodRate += 7.5 * 2;
+          else if (elapsedHrs < 2) prodRate += 2.5 * 2;
+          else prodRate += 1.25 * 2;
+        }
+      } else if (c.caseType === 'standard') {
+        // Standard/OR: 6 pts/hr * timeMultiplier, OB doubled if non-OR on OB shift
+        const timeMult = getTimeMultiplier(c.physicalStatus, isHol, isWknd, cs, c.isHighRiskPeds);
+        let rate = 6 * timeMult;
+        if (isOBShift && !c.isORCase) rate *= 2;
+        prodRate += rate;
       }
     });
 
