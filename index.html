@@ -4608,8 +4608,9 @@ function updateEndTimeWarning() {
 function updateORCaseVisibility() {
   const shift = data.shifts[workingDate];
   const isSF = shift && ['SF1','SF2'].includes(shift.assignmentType);
-  document.getElementById('orCaseRow').classList.toggle('hidden', !isSF);
-  if (!isSF) document.getElementById('caseORCase').checked = false;
+  const show = isSF && selectedCaseType === 'standard';
+  document.getElementById('orCaseRow').classList.toggle('hidden', !show);
+  if (!show) document.getElementById('caseORCase').checked = false;
 }
 
 function updateSupervisionOverlayVisibility() {
@@ -5276,6 +5277,7 @@ function applyCaseTypeVisibility(ct) {
   document.getElementById('laborEpiduralFields').classList.toggle('hidden', !isLabor);
   document.getElementById('apsRoundingFields').classList.toggle('hidden', !isAPS);
   document.getElementById('simpleFields').classList.toggle('hidden', isStd || isLabor || isAPS || isAcutePain);
+  updateORCaseVisibility();
 }
 
 document.getElementById('caseShared').addEventListener('change', function() {
@@ -5502,7 +5504,7 @@ function buildCaseFromForm() {
     isAcutePain: false,
     acutePainUnits: 0,
     isHighRiskPeds: document.getElementById('caseHighRiskPeds')?.checked || false,
-    isORCase: document.getElementById('caseORCase')?.checked || false,
+    isORCase: selectedCaseType === 'standard' && (document.getElementById('caseORCase')?.checked || false),
     isSharedCase: document.getElementById('caseShared')?.checked || false,
     sharedStartupPct: document.getElementById('caseSharedPct')?.value || 50,
     nerveBlock: document.getElementById('caseNerveBlock')?.value || 'none',
