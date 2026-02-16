@@ -9845,7 +9845,7 @@ document.getElementById('pipelineProjectToggle').addEventListener('change', () =
 function updateHeaderPoints() {
   const date = workingDate;
   const shift = data.shifts[date];
-  const dailyPts = shift ? calcShiftTotal(shift).total : 0;
+  const dailyPts = shift ? getShiftPointsForDate(date, true).total : 0;
   // Monthly total
   const prefix = date.substring(0, 7);
   let monthPts = 0;
