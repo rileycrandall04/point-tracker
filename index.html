@@ -9860,7 +9860,7 @@ function updateHeaderPoints() {
   const monthShifts = [];
   Object.values(data.shifts).forEach(s => {
     if (s.date && s.date.startsWith(prefix)) {
-      monthPts += calcShiftTotal(s).total;
+      monthPts += getShiftPointsForDate(s.date, true).total;
       monthShifts.push(s);
     }
   });
