@@ -8763,15 +8763,23 @@ function renderProcLookup() {
     const bySurgeon = {};
     cases.forEach(c => {
       const key = c.surgeon || 'Unknown';
-      if (!bySurgeon[key]) bySurgeon[key] = { total: 0, count: 0 };
-      bySurgeon[key].total += c.mins;
-      bySurgeon[key].count++;
+      if (!bySurgeon[key]) bySurgeon[key] = [];
+      bySurgeon[key].push(c.mins);
     });
     const surgeons = Object.entries(bySurgeon)
-      .map(([name, d]) => ({ name, avg: Math.round(d.total / d.count), count: d.count }))
+      .map(([name, durations]) => {
+        const avg = Math.round(durations.reduce((s, v) => s + v, 0) / durations.length);
+        let sd = 0;
+        if (durations.length >= 2) {
+          const mean = durations.reduce((s, v) => s + v, 0) / durations.length;
+          sd = Math.round(Math.sqrt(durations.reduce((s, v) => s + (v - mean) ** 2, 0) / durations.length));
+        }
+        return { name, avg, count: durations.length, sd };
+      })
       .sort((a, b) => a.avg - b.avg);
     surgeons.forEach(s => {
-      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.count})</span></span><span class="eff-value">${s.avg} min</span></div>`;
+      const sdTag = s.count >= 2 ? ` <span style="color:var(--text-dim);font-size:0.72rem;">\u00b1${s.sd}</span>` : '';
+      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.count})</span></span><span class="eff-value">${s.avg}${sdTag} min</span></div>`;
     });
     html += `</div>`;
   });
