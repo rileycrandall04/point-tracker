@@ -3435,6 +3435,16 @@ function todayStr() {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
+function effectiveWorkDate() {
+  const now = new Date();
+  if (now.getHours() < 7) {
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    return yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
+  }
+  return todayStr();
+}
+
 function timeToMinutes(timeStr) {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(':').map(Number);
@@ -4086,7 +4096,7 @@ function calcCasePoints(caseData, shift) {
     } else {
       // No end time: estimate with current time if case is today
       const caseDate = caseData.shiftDate || (shift && shift.date);
-      if (caseDate === todayStr()) {
+      if (caseDate === effectiveWorkDate()) {
         const now = new Date();
         ce = now.getHours() * 60 + now.getMinutes();
       } else {
@@ -4159,7 +4169,7 @@ function getCaseBreakdown(caseData, shift) {
       ce = timeToMinutes(caseData.endTime);
     } else {
       const caseDate = caseData.shiftDate || (shift && shift.date);
-      if (caseDate === todayStr()) {
+      if (caseDate === effectiveWorkDate()) {
         const now = new Date();
         ce = now.getHours() * 60 + now.getMinutes();
         isEst = true;
@@ -4346,7 +4356,7 @@ function getShiftPointsForDate(dateStr, estimate) {
   const entries = shift.timeEntries || [];
   const lastEntry = entries.length > 0 ? entries[entries.length - 1] : null;
   const hasNoEnd = lastEntry && lastEntry.start && !lastEntry.end;
-  const isInProgress = hasNoEnd && dateStr === todayStr();
+  const isInProgress = hasNoEnd && dateStr === effectiveWorkDate();
   if (estimate && isInProgress) {
     const clone = JSON.parse(JSON.stringify(shift));
     const cloneEntries = clone.timeEntries || [];
@@ -4377,7 +4387,7 @@ function getCaseTypeName(type) {
 // ================================================================
 // WORKING DATE
 // ================================================================
-let workingDate = todayStr();
+let workingDate = effectiveWorkDate();
 let deShiftEditing = false;
 let returnToShiftLogs = false;
 
@@ -4423,7 +4433,7 @@ document.getElementById('cancelDatePicker').addEventListener('click', () => {
 });
 
 document.getElementById('todayDatePicker').addEventListener('click', () => {
-  setWorkingDate(todayStr());
+  setWorkingDate(effectiveWorkDate());
   document.getElementById('datePickerModal').classList.add('hidden');
 });
 
@@ -5588,7 +5598,7 @@ function renderToday() {
   const date = workingDate;
   const shift = data.shifts[date];
   const shiftCases = data.cases.filter(c => c.shiftDate === date);
-  document.getElementById('todayTitle').textContent = date === todayStr() ? "Today" : formatDate(date);
+  document.getElementById('todayTitle').textContent = date === effectiveWorkDate() ? "Today" : formatDate(date);
 
   // Back bar and edit shift button
   const backBar = document.getElementById('todayBackBar');
@@ -5729,7 +5739,7 @@ function updateTodayRateChips() {
   let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:0.78rem;">';
 
   // Current rate chip (only for today)
-  if (date === todayStr()) {
+  if (date === effectiveWorkDate()) {
     const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
     const isWkndOrHol = isWknd || isHol;
     const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
@@ -5804,7 +5814,7 @@ setInterval(() => {
 
 function renderWeeklyChart() {
   const weekDates = getWeekDates(workingDate);
-  const today = todayStr();
+  const today = effectiveWorkDate();
   const labels = weekDates.map(d => {
     const dt = new Date(d + 'T12:00:00');
     return dt.toLocaleDateString('en-US', { weekday: 'short' });
@@ -7788,6 +7798,7 @@ function checkOpenLaborReminder() {
   const banner = document.getElementById('openLaborReminder');
   if (!banner) return;
   const now = new Date();
+  if (now.getHours() < 7) { banner.classList.add('hidden'); return; }
   const openCases = data.cases.filter(c => {
     if (c.caseType !== 'labor_epidural' || !c.startTime || c.endTime) return false;
     const caseDate = new Date(c.shiftDate + 'T' + c.startTime + ':00');
@@ -13178,7 +13189,7 @@ auth.onAuthStateChanged(async (user) => {
 // ================================================================
 function initApp() {
   initMilTimeInputs();
-  setWorkingDate(todayStr());
+  setWorkingDate(effectiveWorkDate());
   renderTemplates();
   updateHeaderPoints();
   updateReconMonthLabels();
