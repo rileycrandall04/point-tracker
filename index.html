@@ -1930,9 +1930,13 @@ input.mil-time.invalid {
       </div>
 
       <div class="form-group notes-autocomplete">
-        <label>Notes (optional)</label>
-        <textarea id="caseNotes" placeholder="Surgeon, location, or other notes" autocomplete="off"></textarea>
+        <label>Surgeon</label>
+        <textarea id="caseNotes" placeholder="Surgeon name" autocomplete="off" rows="1" style="min-height:auto;"></textarea>
         <div class="surgeon-suggestions hidden" id="surgeonSuggestions"></div>
+      </div>
+      <div class="form-group">
+        <label>Notes (optional)</label>
+        <textarea id="caseCaseNotes" placeholder="Additional notes" autocomplete="off" rows="1" style="min-height:auto;"></textarea>
       </div>
 
       <div id="casePointPreview" class="point-breakdown hidden">
@@ -2862,9 +2866,13 @@ input.mil-time.invalid {
       </div>
     </div>
     <div class="form-group notes-autocomplete">
-      <label>Notes (optional)</label>
-      <textarea id="editCaseNotes" placeholder="Surgeon, location, or other notes" autocomplete="off"></textarea>
+      <label>Surgeon</label>
+      <textarea id="editCaseNotes" placeholder="Surgeon name" autocomplete="off" rows="1" style="min-height:auto;"></textarea>
       <div class="surgeon-suggestions hidden" id="editSurgeonSuggestions"></div>
+    </div>
+    <div class="form-group">
+      <label>Notes (optional)</label>
+      <textarea id="editCaseCaseNotes" placeholder="Additional notes" autocomplete="off" rows="1" style="min-height:auto;"></textarea>
     </div>
     <div class="modal-actions" style="justify-content:space-between;">
       <button class="btn btn-danger btn-sm" id="deleteCaseEdit">Delete</button>
@@ -5561,7 +5569,8 @@ function buildCaseFromForm() {
     hasITMorphine: document.getElementById('caseITMorphine')?.checked || false,
     epiduralRounds: document.getElementById('apsEpiduralCount')?.value || 0,
     painRounds: document.getElementById('apsPainCount')?.value || 0,
-    notes: document.getElementById('caseNotes')?.value || ''
+    notes: document.getElementById('caseNotes')?.value || '',
+    caseNotes: document.getElementById('caseCaseNotes')?.value || ''
   };
 }
 
@@ -5618,6 +5627,7 @@ function resetCaseForm() {
   document.getElementById('apsEpiduralCount').value = '0';
   document.getElementById('apsPainCount').value = '0';
   document.getElementById('caseNotes').value = '';
+  document.getElementById('caseCaseNotes').value = '';
   document.getElementById('simpleNotes').value = '';
   document.getElementById('casePointPreview').classList.add('hidden');
   document.getElementById('modifiersSection').removeAttribute('open');
@@ -5741,6 +5751,7 @@ function renderToday() {
           <h4>${escHtml(name)}${orTag}${sharedTag}${openLaborTag}</h4>
           <p>${escHtml(details.join(' | '))}</p>
           ${c.notes ? `<p style="margin-top:2px;font-style:italic;">${escHtml(c.notes)}</p>` : ''}
+          ${c.caseNotes ? `<p style="margin-top:2px;font-size:0.75rem;color:var(--text-dim);">${escHtml(c.caseNotes)}</p>` : ''}
         </div>
         <div class="actions">
           <span class="point-badge">${pts.toFixed(1)} pts</span>
@@ -6278,6 +6289,7 @@ function showDayDetail(dateStr) {
       html += `<div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-dim);padding:2px 0;"><span>${escHtml(r.label)}</span><span>${r.pts.toFixed(2)}</span></div>`;
     });
     if (c.notes) html += `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;margin-top:2px;">${escHtml(c.notes)}</div>`;
+    if (c.caseNotes) html += `<div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px;">${escHtml(c.caseNotes)}</div>`;
     html += '</div>';
   });
   document.getElementById('dayModalContent').innerHTML = html;
@@ -9408,6 +9420,7 @@ function openCaseEdit(caseId) {
   document.getElementById('editCaseAcutePainUnits').value = c.acutePainUnits || 0;
   document.getElementById('editCaseHighRiskPeds').checked = c.isHighRiskPeds || false;
   document.getElementById('editCaseNotes').value = c.notes || '';
+  document.getElementById('editCaseCaseNotes').value = c.caseNotes || '';
   document.getElementById('editSimpleNotes').value = c.notes || '';
 
   // Add-ons
@@ -9484,6 +9497,8 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
   } else {
     c.notes = document.getElementById('editSimpleNotes').value || document.getElementById('editCaseNotes').value;
   }
+  // Case notes (all case types)
+  c.caseNotes = document.getElementById('editCaseCaseNotes').value;
   // Unbilled tracking (all case types)
   const wasUnbilled = c.unbilled;
   c.unbilled = document.getElementById('editCaseUnbilled').checked;
