@@ -514,6 +514,13 @@ textarea { resize: vertical; min-height: 60px; }
 .pts-reset { font-size:0.6rem; color:#888; cursor:pointer; display:block; line-height:1; }
 .pts-reset:hover { color:#e74c3c; }
 
+/* Procedure lookup drill-down */
+.proc-lookup-row:hover { background:rgba(255,255,255,0.04); border-radius:4px; }
+.proc-case-list { padding:0 0 8px 12px; }
+.proc-case-item { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 8px; font-size:0.78rem; color:var(--text-dim); border-left:2px solid var(--border); margin-bottom:2px; }
+.proc-rename-btn { background:none; border:none; cursor:pointer; color:var(--text-dim); font-size:0.8rem; padding:2px 4px; }
+.proc-rename-btn:hover { color:var(--primary); }
+
 /* ===== UPLOAD AREA ===== */
 .upload-area {
   border: 2px dashed var(--border);
@@ -8864,7 +8871,7 @@ function renderProcLookup() {
     if (e <= s) e += 1440;
     const mins = e - s;
     if (mins <= 0) return;
-    procNames[name].push({ surgeon, mins });
+    procNames[name].push({ surgeon, mins, id: c.id, date: c.shiftDate, startTime: c.startTime, endTime: c.endTime });
   });
 
   const procs = Object.keys(procNames);
@@ -8873,40 +8880,86 @@ function renderProcLookup() {
   let html = '';
   procs.sort().forEach(proc => {
     const cases = procNames[proc];
-    // Overall average
     const totalMins = cases.reduce((s, c) => s + c.mins, 0);
     const avgAll = Math.round(totalMins / cases.length);
+    const procKey = escHtml(proc).replace(/'/g, "\\'");
     html += `<div style="margin-bottom:12px;">`;
-    html += `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">`;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">`;
     html += `<span style="font-weight:600;font-size:0.85rem;">${escHtml(proc)}</span>`;
+    html += `<span style="display:flex;align-items:center;gap:6px;">`;
     html += `<span style="font-size:0.78rem;color:var(--text-dim);">${cases.length} case${cases.length !== 1 ? 's' : ''} &middot; avg ${avgAll} min</span>`;
-    html += `</div>`;
+    html += `<button class="proc-rename-btn" onclick="event.stopPropagation();renameProcedure('${procKey}')" title="Rename all cases with this procedure">&#9998;</button>`;
+    html += `</span></div>`;
 
     // Group by surgeon
     const bySurgeon = {};
     cases.forEach(c => {
       const key = c.surgeon || 'Unknown';
       if (!bySurgeon[key]) bySurgeon[key] = [];
-      bySurgeon[key].push(c.mins);
+      bySurgeon[key].push(c);
     });
     const surgeons = Object.entries(bySurgeon)
-      .map(([name, durations]) => {
+      .map(([name, items]) => {
+        const durations = items.map(c => c.mins);
         const avg = Math.round(durations.reduce((s, v) => s + v, 0) / durations.length);
         let sd = 0;
         if (durations.length >= 2) {
           const mean = durations.reduce((s, v) => s + v, 0) / durations.length;
           sd = Math.round(Math.sqrt(durations.reduce((s, v) => s + (v - mean) ** 2, 0) / durations.length));
         }
-        return { name, avg, count: durations.length, sd };
+        return { name, avg, count: durations.length, sd, items };
       })
       .sort((a, b) => a.avg - b.avg);
     surgeons.forEach(s => {
       const sdTag = s.count >= 2 ? ` <span style="color:var(--text-dim);font-size:0.72rem;">\u00b1${s.sd}</span>` : '';
-      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.count})</span></span><span class="eff-value">${s.avg}${sdTag} min</span></div>`;
+      const surgKey = escHtml(s.name).replace(/'/g, "\\'");
+      html += `<div class="efficiency-item proc-lookup-row" onclick="toggleProcCaseList(this)" style="cursor:pointer;"><span class="eff-label">${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.count})</span></span><span class="eff-value">${s.avg}${sdTag} min <span style="font-size:0.7rem;color:var(--text-dim);">&#9662;</span></span></div>`;
+      // Hidden case list
+      html += `<div class="proc-case-list" style="display:none;">`;
+      s.items.sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach(ci => {
+        html += `<div class="proc-case-item" data-caseid="${ci.id}">`;
+        html += `<span>${ci.date ? formatDateShort(ci.date) : '?'}</span>`;
+        html += `<span>${ci.startTime} - ${ci.endTime} (${ci.mins} min)</span>`;
+        html += `<button class="proc-rename-btn" onclick="event.stopPropagation();renameSingleCase('${ci.id}')" title="Rename this case's procedure">&#9998;</button>`;
+        html += `</div>`;
+      });
+      html += `</div>`;
     });
     html += `</div>`;
   });
   el.innerHTML = html;
+}
+
+function toggleProcCaseList(row) {
+  const list = row.nextElementSibling;
+  if (!list || !list.classList.contains('proc-case-list')) return;
+  const showing = list.style.display !== 'none';
+  list.style.display = showing ? 'none' : 'block';
+  const arrow = row.querySelector('.eff-value span:last-child');
+  if (arrow) arrow.innerHTML = showing ? '&#9662;' : '&#9652;';
+}
+
+function renameProcedure(oldName) {
+  const decoded = document.createElement('span'); decoded.innerHTML = oldName; const proc = decoded.textContent;
+  const matching = data.cases.filter(c => c.caseType === 'standard' && c.procedure === proc);
+  if (matching.length === 0) { showToast('No standard cases to rename'); return; }
+  const newName = prompt(`Rename "${proc}" (${matching.length} case${matching.length !== 1 ? 's' : ''}).\n\nNew procedure name:`, proc);
+  if (!newName || newName.trim() === '' || newName.trim() === proc) return;
+  matching.forEach(c => { c.procedure = newName.trim(); });
+  saveData();
+  renderProcLookup();
+  showToast(`Renamed ${matching.length} case${matching.length !== 1 ? 's' : ''} to "${newName.trim()}"`);
+}
+
+function renameSingleCase(caseId) {
+  const c = data.cases.find(x => x.id === caseId);
+  if (!c || c.caseType !== 'standard') { showToast('Can only rename standard cases'); return; }
+  const newName = prompt(`Rename procedure for this case.\n\nCurrent: "${c.procedure}"\nNew name:`, c.procedure);
+  if (!newName || newName.trim() === '' || newName.trim() === c.procedure) return;
+  c.procedure = newName.trim();
+  saveData();
+  renderProcLookup();
+  showToast('Case procedure renamed');
 }
 
 // ================================================================
