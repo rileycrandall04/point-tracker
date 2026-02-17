@@ -6458,7 +6458,13 @@ function renderCaseLogTable() {
   monthCases.forEach((c, i) => {
     // Day separator + daily total for previous day
     if (lastDate && c.shiftDate !== lastDate) {
-      html += `<tr class="cl-day-total"><td colspan="5" style="text-align:right;font-weight:700;font-size:0.8rem;padding:4px 8px;">${dayCaseCount} case${dayCaseCount !== 1 ? 's' : ''}</td><td style="font-weight:700;font-size:0.8rem;padding:4px 8px;">${round2(dayPts).toFixed(1)}</td><td colspan="3"></td></tr>`;
+      const dOvr = data.dailyPointOverrides && data.dailyPointOverrides[lastDate];
+      const dShow = dOvr != null ? dOvr : round2(dayPts);
+      const dManual = dOvr != null;
+      const dCls = dManual ? 'pts-cell pts-manual' : 'pts-cell';
+      const dReset = dManual ? `<span class="pts-reset" onclick="event.stopPropagation();resetDayPoints('${lastDate}')" title="Reset to calculated">reset</span>` : '';
+      totalPts += (dManual ? dOvr - dayPts : 0);
+      html += `<tr class="cl-day-total"><td colspan="5" style="text-align:right;font-weight:700;font-size:0.8rem;padding:4px 8px;">${dayCaseCount} case${dayCaseCount !== 1 ? 's' : ''}</td><td class="${dCls}" style="font-weight:700;font-size:0.8rem;padding:4px 8px;cursor:pointer;" onclick="editDayPoints('${lastDate}',${round2(dayPts)},this)"><strong>${Number(dShow).toFixed(1)}</strong>${dReset}</td><td colspan="3"></td></tr>`;
       html += `<tr class="cl-day-sep"><td colspan="9" style="padding:0;"><hr style="border:none;border-top:3px solid var(--accent);margin:0;opacity:0.5;"></td></tr>`;
       dayPts = 0;
       dayCaseCount = 0;
@@ -6491,7 +6497,13 @@ function renderCaseLogTable() {
   });
   // Final day total
   if (lastDate) {
-    html += `<tr class="cl-day-total"><td colspan="5" style="text-align:right;font-weight:700;font-size:0.8rem;padding:4px 8px;">${dayCaseCount} case${dayCaseCount !== 1 ? 's' : ''}</td><td style="font-weight:700;font-size:0.8rem;padding:4px 8px;">${round2(dayPts).toFixed(1)}</td><td colspan="3"></td></tr>`;
+    const dOvr = data.dailyPointOverrides && data.dailyPointOverrides[lastDate];
+    const dShow = dOvr != null ? dOvr : round2(dayPts);
+    const dManual = dOvr != null;
+    const dCls = dManual ? 'pts-cell pts-manual' : 'pts-cell';
+    const dReset = dManual ? `<span class="pts-reset" onclick="event.stopPropagation();resetDayPoints('${lastDate}')" title="Reset to calculated">reset</span>` : '';
+    totalPts += (dManual ? dOvr - dayPts : 0);
+    html += `<tr class="cl-day-total"><td colspan="5" style="text-align:right;font-weight:700;font-size:0.8rem;padding:4px 8px;">${dayCaseCount} case${dayCaseCount !== 1 ? 's' : ''}</td><td class="${dCls}" style="font-weight:700;font-size:0.8rem;padding:4px 8px;cursor:pointer;" onclick="editDayPoints('${lastDate}',${round2(dayPts)},this)"><strong>${Number(dShow).toFixed(1)}</strong>${dReset}</td><td colspan="3"></td></tr>`;
   }
   html += '</tbody><tfoot><tr style="border-top:2px solid var(--accent);">';
   html += `<td colspan="5" style="text-align:right;font-weight:600;">Monthly Total (${monthCases.length} cases)</td>`;
@@ -7290,6 +7302,35 @@ function saveCasePoints(caseId, input) {
 function resetCasePoints(caseId) {
   const c = data.cases.find(x => x.id === caseId);
   if (c) { delete c.manualPoints; saveData(data); renderCaseLogTable(); }
+}
+function editDayPoints(dateStr, calcPts, td) {
+  if (td.querySelector('.pts-edit-input')) return;
+  const cur = (data.dailyPointOverrides && data.dailyPointOverrides[dateStr] != null) ? data.dailyPointOverrides[dateStr] : calcPts;
+  td.innerHTML = `<input class="pts-edit-input" type="number" step="0.1" value="${Number(cur).toFixed(1)}" onkeydown="if(event.key==='Enter'){saveDayPoints('${dateStr}',${calcPts},this)}else if(event.key==='Escape'){renderCaseLogTable()}" onblur="saveDayPoints('${dateStr}',${calcPts},this)">`;
+  const input = td.querySelector('input');
+  input.focus();
+  input.select();
+}
+function saveDayPoints(dateStr, calcPts, input) {
+  const val = parseFloat(input.value);
+  if (isNaN(val)) { renderCaseLogTable(); return; }
+  if (!data.dailyPointOverrides) data.dailyPointOverrides = {};
+  if (Math.abs(val - calcPts) < 0.01) {
+    delete data.dailyPointOverrides[dateStr];
+  } else {
+    data.dailyPointOverrides[dateStr] = val;
+  }
+  if (Object.keys(data.dailyPointOverrides).length === 0) delete data.dailyPointOverrides;
+  saveData(data);
+  renderCaseLogTable();
+}
+function resetDayPoints(dateStr) {
+  if (data.dailyPointOverrides) {
+    delete data.dailyPointOverrides[dateStr];
+    if (Object.keys(data.dailyPointOverrides).length === 0) delete data.dailyPointOverrides;
+  }
+  saveData(data);
+  renderCaseLogTable();
 }
 function claimUnbilledCase(caseId, targetMonth) {
   const c = data.cases.find(x => x.id === caseId);
