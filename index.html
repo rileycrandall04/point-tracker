@@ -494,6 +494,18 @@ textarea { resize: vertical; min-height: 60px; }
 .flag-btn.flagged { color:#e74c3c; -webkit-text-stroke:0; }
 .flagged-row { border-left: 3px solid #e74c3c !important; }
 
+/* Unbilled case tracking */
+.unbilled-btn { background:none; border:none; cursor:pointer; font-size:0.9rem; padding:2px 4px; color:#888; font-weight:700; }
+.unbilled-btn.active { color:#f0b429; text-shadow:0 0 4px rgba(240,180,41,0.4); }
+.unbilled-row { border-left: 3px solid #f0b429 !important; }
+.watching-box { background:rgba(240,180,41,0.1); border:1px solid rgba(240,180,41,0.3); border-radius:8px; padding:12px; margin-bottom:16px; }
+.watching-box h4 { color:#f0b429; margin:0 0 8px; font-size:0.9rem; }
+.watching-box .watch-item { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:0.85rem; }
+.watching-box .watch-item:last-child { border-bottom:none; }
+.watching-box .bill-btn { background:#f0b429; color:#000; border:none; border-radius:4px; padding:4px 10px; font-size:0.75rem; font-weight:600; cursor:pointer; }
+.watching-box .bill-btn:hover { background:#d4a020; }
+.claimed-tag { color:#f0b429; font-size:0.7rem; margin-left:4px; }
+
 /* ===== UPLOAD AREA ===== */
 .upload-area {
   border: 2px dashed var(--border);
@@ -2761,6 +2773,11 @@ input.mil-time.invalid {
       <div class="form-group hidden" id="editSharedPctRow">
         <label>Startup Points Credit %</label>
         <input type="number" id="editCaseSharedPct" min="0" max="100" value="50" step="1">
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="editCaseUnbilled">
+        <label for="editCaseUnbilled">Mark as Unbilled (watch for next billing)</label>
       </div>
 
       <div class="divider"></div>
@@ -6382,18 +6399,41 @@ function getCaseAddOnSummary(c) {
 function renderCaseLogTable() {
   updateCLMonthLabel();
   const prefix = `${clYear}-${String(clMonth+1).padStart(2,'0')}`;
-  const monthCases = data.cases.filter(c => c.shiftDate && c.shiftDate.startsWith(prefix))
-    .sort((a, b) => (a.shiftDate + (a.startTime || '')).localeCompare(b.shiftDate + (b.startTime || '')));
+  const monthCases = data.cases.filter(c => {
+    if (!c.shiftDate) return false;
+    const effectiveMonth = c.billingMonth || c.shiftDate.substring(0, 7);
+    return effectiveMonth === prefix;
+  }).sort((a, b) => (a.shiftDate + (a.startTime || '')).localeCompare(b.shiftDate + (b.startTime || '')));
   const container = document.getElementById('caseLogTableContainer');
   // Hide delete-selected button on re-render
   document.getElementById('clDeleteSelectedBtn').classList.add('hidden');
+
+  // "Watching for Billing" box — unbilled cases from prior months
+  const watchCases = data.cases.filter(c =>
+    c.unbilled && c.shiftDate && c.shiftDate.substring(0, 7) < prefix && !c.billingMonth
+  );
+  let watchHtml = '';
+  if (watchCases.length > 0) {
+    const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const curMonthName = mn[clMonth] + ' ' + clYear;
+    watchHtml += '<div class="watching-box"><h4>&#x1f4b2; Watching for Billing (' + watchCases.length + ')</h4>';
+    watchCases.sort((a,b) => a.shiftDate.localeCompare(b.shiftDate)).forEach(c => {
+      const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
+      const shift = data.shifts[c.shiftDate];
+      const pts = calcCasePoints(c, shift);
+      watchHtml += '<div class="watch-item"><span>' + formatDateShort(c.shiftDate) + ' &mdash; ' + escHtml(name) + ' (' + pts.toFixed(1) + ' pts)</span>';
+      watchHtml += '<button class="bill-btn" onclick="claimUnbilledCase(\'' + c.id + '\',\'' + prefix + '\')">Bill to ' + curMonthName + '</button></div>';
+    });
+    watchHtml += '</div>';
+  }
+
   if (monthCases.length === 0) {
-    container.innerHTML = '<div class="empty-state"><p>No cases for this month.</p></div>';
+    container.innerHTML = watchHtml + '<div class="empty-state"><p>No cases for this month.</p></div>';
     return;
   }
-  let html = '<table class="case-log-table" id="caseLogTable"><thead><tr>';
+  let html = watchHtml + '<table class="case-log-table" id="caseLogTable"><thead><tr>';
   html += '<th><input type="checkbox" class="cl-cb" id="clSelectAll" onclick="clToggleSelectAll(this)"></th>';
-  html += '<th>Date</th><th>Case</th><th>Start</th><th>Stop</th><th>Pts</th><th></th><th></th>';
+  html += '<th>Date</th><th>Case</th><th>Start</th><th>Stop</th><th>Pts</th><th></th><th></th><th></th>';
   html += '</tr></thead><tbody>';
   let totalPts = 0;
   let lastDate = null;
@@ -6402,8 +6442,8 @@ function renderCaseLogTable() {
   monthCases.forEach((c, i) => {
     // Day separator + daily total for previous day
     if (lastDate && c.shiftDate !== lastDate) {
-      html += `<tr class="cl-day-total"><td colspan="5" style="text-align:right;font-weight:700;font-size:0.8rem;padding:4px 8px;">${dayCaseCount} case${dayCaseCount !== 1 ? 's' : ''}</td><td style="font-weight:700;font-size:0.8rem;padding:4px 8px;">${round2(dayPts).toFixed(1)}</td><td colspan="2"></td></tr>`;
-      html += `<tr class="cl-day-sep"><td colspan="8" style="padding:0;"><hr style="border:none;border-top:3px solid var(--accent);margin:0;opacity:0.5;"></td></tr>`;
+      html += `<tr class="cl-day-total"><td colspan="5" style="text-align:right;font-weight:700;font-size:0.8rem;padding:4px 8px;">${dayCaseCount} case${dayCaseCount !== 1 ? 's' : ''}</td><td style="font-weight:700;font-size:0.8rem;padding:4px 8px;">${round2(dayPts).toFixed(1)}</td><td colspan="3"></td></tr>`;
+      html += `<tr class="cl-day-sep"><td colspan="9" style="padding:0;"><hr style="border:none;border-top:3px solid var(--accent);margin:0;opacity:0.5;"></td></tr>`;
       dayPts = 0;
       dayCaseCount = 0;
     }
@@ -6415,25 +6455,28 @@ function renderCaseLogTable() {
     dayCaseCount++;
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
     const sharedMark = c.isSharedCase ? ' [S]' : '';
+    const claimedTag = (c.billingMonth && c.billingMonth !== c.shiftDate.substring(0,7)) ? ` <span class="claimed-tag">(from ${formatDateShort(c.shiftDate)})</span>` : '';
     const flaggedClass = c.flagged ? ' flagged-row' : '';
-    html += `<tr class="${flaggedClass}" data-caseid="${c.id}" onclick="openCaseEdit('${c.id}')">`;
+    const unbilledClass = c.unbilled ? ' unbilled-row' : '';
+    html += `<tr class="${flaggedClass}${unbilledClass}" data-caseid="${c.id}" onclick="openCaseEdit('${c.id}')">`;
     html += `<td><input type="checkbox" class="cl-cb cl-row-cb" data-caseid="${c.id}" onclick="event.stopPropagation();clUpdateDeleteBtn()"></td>`;
     html += `<td>${formatDateShort(c.shiftDate)}</td>`;
-    html += `<td>${escHtml(name)}${sharedMark}</td>`;
+    html += `<td>${escHtml(name)}${sharedMark}${claimedTag}</td>`;
     html += `<td>${c.startTime || '-'}</td>`;
     html += `<td>${c.endTime || '-'}</td>`;
     html += `<td><strong>${pts.toFixed(1)}</strong></td>`;
     html += `<td><span class="cl-del" onclick="event.stopPropagation();deleteCase('${c.id}')">&times;</span></td>`;
     html += `<td><button class="flag-btn ${c.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleCaseFlag('${c.id}')">&#9873;</button></td>`;
+    html += `<td><button class="unbilled-btn ${c.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleCaseUnbilled('${c.id}')">$</button></td>`;
     html += '</tr>';
   });
   // Final day total
   if (lastDate) {
-    html += `<tr class="cl-day-total"><td colspan="5" style="text-align:right;font-weight:700;font-size:0.8rem;padding:4px 8px;">${dayCaseCount} case${dayCaseCount !== 1 ? 's' : ''}</td><td style="font-weight:700;font-size:0.8rem;padding:4px 8px;">${round2(dayPts).toFixed(1)}</td><td colspan="2"></td></tr>`;
+    html += `<tr class="cl-day-total"><td colspan="5" style="text-align:right;font-weight:700;font-size:0.8rem;padding:4px 8px;">${dayCaseCount} case${dayCaseCount !== 1 ? 's' : ''}</td><td style="font-weight:700;font-size:0.8rem;padding:4px 8px;">${round2(dayPts).toFixed(1)}</td><td colspan="3"></td></tr>`;
   }
   html += '</tbody><tfoot><tr style="border-top:2px solid var(--accent);">';
   html += `<td colspan="5" style="text-align:right;font-weight:600;">Monthly Total (${monthCases.length} cases)</td>`;
-  html += `<td><strong>${round2(totalPts).toFixed(1)}</strong></td><td colspan="2"></td>`;
+  html += `<td><strong>${round2(totalPts).toFixed(1)}</strong></td><td colspan="3"></td>`;
   html += '</tr></tfoot></table>';
   container.innerHTML = html;
 }
@@ -7187,6 +7230,25 @@ function filterShiftLog() {
 function toggleCaseFlag(caseId) {
   const c = data.cases.find(x => x.id === caseId);
   if (c) { c.flagged = !c.flagged; saveData(); renderCaseLogTable(); }
+}
+function toggleCaseUnbilled(caseId) {
+  const c = data.cases.find(x => x.id === caseId);
+  if (c) {
+    c.unbilled = !c.unbilled;
+    if (!c.unbilled) delete c.billingMonth;
+    saveData();
+    renderCaseLogTable();
+  }
+}
+function claimUnbilledCase(caseId, targetMonth) {
+  const c = data.cases.find(x => x.id === caseId);
+  if (c) {
+    c.billingMonth = targetMonth;
+    c.unbilled = false;
+    saveData();
+    renderCaseLogTable();
+    showToast('Case billed to ' + targetMonth);
+  }
 }
 function toggleShiftFlag(dateStr) {
   const s = data.shifts[dateStr];
@@ -9246,6 +9308,9 @@ function openCaseEdit(caseId) {
   document.getElementById('editCaseSharedPct').value = c.sharedStartupPct || 50;
   document.getElementById('editSharedPctRow').classList.toggle('hidden', !c.isSharedCase);
 
+  // Unbilled checkbox
+  document.getElementById('editCaseUnbilled').checked = c.unbilled || false;
+
   // OR Case checkbox visibility
   const shift = data.shifts[c.shiftDate];
   const isSF = shift && ['SF1','SF2'].includes(shift.assignmentType);
@@ -9292,6 +9357,10 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
   } else {
     c.notes = document.getElementById('editSimpleNotes').value || document.getElementById('editCaseNotes').value;
   }
+  // Unbilled tracking (all case types)
+  const wasUnbilled = c.unbilled;
+  c.unbilled = document.getElementById('editCaseUnbilled').checked;
+  if (!c.unbilled && wasUnbilled) delete c.billingMonth;
   saveData(data);
   updateHeaderPoints();
   renderCaseLogTable();
