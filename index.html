@@ -4111,6 +4111,7 @@ function calcAddOnPoints(caseData) {
 }
 
 function calcCasePoints(caseData, shift) {
+  if (caseData.unbilled) return 0;
   if (caseData.manualPoints != null) return round2(Number(caseData.manualPoints));
   const ct = caseData.caseType;
   if (ct === 'epidural_blood_patch') return 5;
