@@ -7248,14 +7248,14 @@ function filterShiftLog() {
 
 function toggleCaseFlag(caseId) {
   const c = data.cases.find(x => x.id === caseId);
-  if (c) { c.flagged = !c.flagged; saveData(); renderCaseLogTable(); }
+  if (c) { c.flagged = !c.flagged; saveData(data); renderCaseLogTable(); }
 }
 function toggleCaseUnbilled(caseId) {
   const c = data.cases.find(x => x.id === caseId);
   if (c) {
     c.unbilled = !c.unbilled;
     if (!c.unbilled) delete c.billingMonth;
-    saveData();
+    saveData(data);
     renderCaseLogTable();
   }
 }
@@ -7284,26 +7284,26 @@ function saveCasePoints(caseId, input) {
   } else {
     c.manualPoints = val;
   }
-  if (c.manualPoints !== origManual) saveData();
+  if (c.manualPoints !== origManual) saveData(data);
   renderCaseLogTable();
 }
 function resetCasePoints(caseId) {
   const c = data.cases.find(x => x.id === caseId);
-  if (c) { delete c.manualPoints; saveData(); renderCaseLogTable(); }
+  if (c) { delete c.manualPoints; saveData(data); renderCaseLogTable(); }
 }
 function claimUnbilledCase(caseId, targetMonth) {
   const c = data.cases.find(x => x.id === caseId);
   if (c) {
     c.billingMonth = targetMonth;
     c.unbilled = false;
-    saveData();
+    saveData(data);
     renderCaseLogTable();
     showToast('Case billed to ' + targetMonth);
   }
 }
 function toggleShiftFlag(dateStr) {
   const s = data.shifts[dateStr];
-  if (s) { s.flagged = !s.flagged; saveData(); renderShiftLogTable(); }
+  if (s) { s.flagged = !s.flagged; saveData(data); renderShiftLogTable(); }
 }
 
 function renderFlaggedPage() {
@@ -8946,7 +8946,7 @@ function renameProcedure(oldName) {
   const newName = prompt(`Rename "${proc}" (${matching.length} case${matching.length !== 1 ? 's' : ''}).\n\nNew procedure name:`, proc);
   if (!newName || newName.trim() === '' || newName.trim() === proc) return;
   matching.forEach(c => { c.procedure = newName.trim(); });
-  saveData();
+  saveData(data);
   renderProcLookup();
   showToast(`Renamed ${matching.length} case${matching.length !== 1 ? 's' : ''} to "${newName.trim()}"`);
 }
@@ -8957,7 +8957,7 @@ function renameSingleCase(caseId) {
   const newName = prompt(`Rename procedure for this case.\n\nCurrent: "${c.procedure}"\nNew name:`, c.procedure);
   if (!newName || newName.trim() === '' || newName.trim() === c.procedure) return;
   c.procedure = newName.trim();
-  saveData();
+  saveData(data);
   renderProcLookup();
   showToast('Case procedure renamed');
 }
@@ -9585,7 +9585,7 @@ document.getElementById('copyFlaggedEmailBtn').addEventListener('click', () => {
 document.getElementById('clearAllFlagsBtn').addEventListener('click', () => {
   Object.values(data.shifts).forEach(s => s.flagged = false);
   data.cases.forEach(c => c.flagged = false);
-  saveData();
+  saveData(data);
   renderFlaggedPage();
   if (activeDashTab === 'caselogs') renderCaseLogTable();
   if (activeDashTab === 'shiftlogs') renderShiftLogTable();
