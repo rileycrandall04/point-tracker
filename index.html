@@ -506,6 +506,14 @@ textarea { resize: vertical; min-height: 60px; }
 .watching-box .bill-btn:hover { background:#d4a020; }
 .claimed-tag { color:#f0b429; font-size:0.7rem; margin-left:4px; }
 
+/* Manual points override */
+.pts-cell { cursor:pointer; position:relative; }
+.pts-cell:hover { background:rgba(255,255,255,0.05); border-radius:4px; }
+.pts-manual { color:#2ecc71; }
+.pts-edit-input { width:50px; background:var(--bg); color:var(--text); border:1px solid var(--primary); border-radius:4px; padding:2px 4px; font-size:0.85rem; text-align:center; font-weight:700; }
+.pts-reset { font-size:0.6rem; color:#888; cursor:pointer; display:block; line-height:1; }
+.pts-reset:hover { color:#e74c3c; }
+
 /* ===== UPLOAD AREA ===== */
 .upload-area {
   border: 2px dashed var(--border);
@@ -4087,6 +4095,7 @@ function calcAddOnPoints(caseData) {
 }
 
 function calcCasePoints(caseData, shift) {
+  if (caseData.manualPoints != null) return round2(Number(caseData.manualPoints));
   const ct = caseData.caseType;
   if (ct === 'epidural_blood_patch') return 5;
   if (ct === 'emergency_intubation') return 4;
@@ -6464,7 +6473,10 @@ function renderCaseLogTable() {
     html += `<td>${escHtml(name)}${sharedMark}${claimedTag}</td>`;
     html += `<td>${c.startTime || '-'}</td>`;
     html += `<td>${c.endTime || '-'}</td>`;
-    html += `<td><strong>${pts.toFixed(1)}</strong></td>`;
+    const isManual = c.manualPoints != null;
+    const ptsClass = isManual ? 'pts-cell pts-manual' : 'pts-cell';
+    const resetBtn = isManual ? `<span class="pts-reset" onclick="event.stopPropagation();resetCasePoints('${c.id}')" title="Reset to calculated">reset</span>` : '';
+    html += `<td class="${ptsClass}" onclick="event.stopPropagation();editCasePoints('${c.id}',this)"><strong>${pts.toFixed(1)}</strong>${resetBtn}</td>`;
     html += `<td><span class="cl-del" onclick="event.stopPropagation();deleteCase('${c.id}')">&times;</span></td>`;
     html += `<td><button class="flag-btn ${c.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleCaseFlag('${c.id}')">&#9873;</button></td>`;
     html += `<td><button class="unbilled-btn ${c.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleCaseUnbilled('${c.id}')">$</button></td>`;
@@ -7239,6 +7251,38 @@ function toggleCaseUnbilled(caseId) {
     saveData();
     renderCaseLogTable();
   }
+}
+function editCasePoints(caseId, td) {
+  if (td.querySelector('.pts-edit-input')) return;
+  const c = data.cases.find(x => x.id === caseId);
+  if (!c) return;
+  const shift = data.shifts[c.shiftDate];
+  const pts = calcCasePoints(c, shift);
+  td.innerHTML = `<input class="pts-edit-input" type="number" step="0.1" value="${pts.toFixed(1)}" onkeydown="if(event.key==='Enter'){saveCasePoints('${c.id}',this)}else if(event.key==='Escape'){renderCaseLogTable()}" onblur="saveCasePoints('${c.id}',this)">`;
+  const input = td.querySelector('input');
+  input.focus();
+  input.select();
+}
+function saveCasePoints(caseId, input) {
+  const c = data.cases.find(x => x.id === caseId);
+  if (!c) return;
+  const val = parseFloat(input.value);
+  if (isNaN(val)) { renderCaseLogTable(); return; }
+  const shift = data.shifts[c.shiftDate];
+  const origManual = c.manualPoints;
+  delete c.manualPoints;
+  const calcPts = calcCasePoints(c, shift);
+  if (Math.abs(val - calcPts) < 0.01) {
+    delete c.manualPoints;
+  } else {
+    c.manualPoints = val;
+  }
+  if (c.manualPoints !== origManual) saveData();
+  renderCaseLogTable();
+}
+function resetCasePoints(caseId) {
+  const c = data.cases.find(x => x.id === caseId);
+  if (c) { delete c.manualPoints; saveData(); renderCaseLogTable(); }
 }
 function claimUnbilledCase(caseId, targetMonth) {
   const c = data.cases.find(x => x.id === caseId);
