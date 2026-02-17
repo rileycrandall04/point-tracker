@@ -6383,7 +6383,7 @@ function renderCaseLogTable() {
   updateCLMonthLabel();
   const prefix = `${clYear}-${String(clMonth+1).padStart(2,'0')}`;
   const monthCases = data.cases.filter(c => c.shiftDate && c.shiftDate.startsWith(prefix))
-    .sort((a, b) => (b.shiftDate + (b.startTime || '')).localeCompare(a.shiftDate + (a.startTime || '')));
+    .sort((a, b) => (a.shiftDate + (a.startTime || '')).localeCompare(b.shiftDate + (b.startTime || '')));
   const container = document.getElementById('caseLogTableContainer');
   // Hide delete-selected button on re-render
   document.getElementById('clDeleteSelectedBtn').classList.add('hidden');
@@ -6396,10 +6396,23 @@ function renderCaseLogTable() {
   html += '<th>Date</th><th>Case</th><th>Start</th><th>Stop</th><th>Pts</th><th></th><th></th>';
   html += '</tr></thead><tbody>';
   let totalPts = 0;
-  monthCases.forEach(c => {
+  let lastDate = null;
+  let dayPts = 0;
+  let dayCaseCount = 0;
+  monthCases.forEach((c, i) => {
+    // Day separator + daily total for previous day
+    if (lastDate && c.shiftDate !== lastDate) {
+      html += `<tr class="cl-day-total"><td colspan="5" style="text-align:right;font-weight:700;font-size:0.8rem;padding:4px 8px;">${dayCaseCount} case${dayCaseCount !== 1 ? 's' : ''}</td><td style="font-weight:700;font-size:0.8rem;padding:4px 8px;">${round2(dayPts).toFixed(1)}</td><td colspan="2"></td></tr>`;
+      html += `<tr class="cl-day-sep"><td colspan="8" style="padding:0;"><hr style="border:none;border-top:3px solid var(--accent);margin:0;opacity:0.5;"></td></tr>`;
+      dayPts = 0;
+      dayCaseCount = 0;
+    }
+    lastDate = c.shiftDate;
     const shift = data.shifts[c.shiftDate];
     const pts = calcCasePoints(c, shift);
     totalPts += pts;
+    dayPts += pts;
+    dayCaseCount++;
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
     const sharedMark = c.isSharedCase ? ' [S]' : '';
     const flaggedClass = c.flagged ? ' flagged-row' : '';
@@ -6414,9 +6427,13 @@ function renderCaseLogTable() {
     html += `<td><button class="flag-btn ${c.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleCaseFlag('${c.id}')">&#9873;</button></td>`;
     html += '</tr>';
   });
+  // Final day total
+  if (lastDate) {
+    html += `<tr class="cl-day-total"><td colspan="5" style="text-align:right;font-weight:700;font-size:0.8rem;padding:4px 8px;">${dayCaseCount} case${dayCaseCount !== 1 ? 's' : ''}</td><td style="font-weight:700;font-size:0.8rem;padding:4px 8px;">${round2(dayPts).toFixed(1)}</td><td colspan="2"></td></tr>`;
+  }
   html += '</tbody><tfoot><tr style="border-top:2px solid var(--accent);">';
-  html += `<td colspan="7" style="text-align:right;font-weight:600;">Monthly Total (${monthCases.length} cases)</td>`;
-  html += `<td><strong>${round2(totalPts).toFixed(1)}</strong></td>`;
+  html += `<td colspan="5" style="text-align:right;font-weight:600;">Monthly Total (${monthCases.length} cases)</td>`;
+  html += `<td><strong>${round2(totalPts).toFixed(1)}</strong></td><td colspan="2"></td>`;
   html += '</tr></tfoot></table>';
   container.innerHTML = html;
 }
