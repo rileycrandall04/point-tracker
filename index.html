@@ -1790,6 +1790,7 @@ input.mil-time.invalid {
           <option value="01996">Epidural Rounding (01996)</option>
           <option value="99231">Pain Rounding (99231)</option>
           <option value="tee">TEE Exam</option>
+          <option value="supervision_block">Supervision Block (2.63 pts)</option>
           <option value="aps_rounding">APS Rounding</option>
         </select>
       </div>
@@ -4109,6 +4110,7 @@ function calcCasePoints(caseData, shift) {
   if (ct === '01996') return 3;
   if (ct === '99231') return 2;
   if (ct === 'tee') return 22;
+  if (ct === 'supervision_block') return 2.63;
 
   if (ct === 'acute_pain_procedure') {
     return round2(calcAddOnPoints(caseData));
@@ -4412,7 +4414,8 @@ function getCaseTypeName(type) {
     acute_pain_procedure: 'Acute Pain Procedure',
     aps_rounding: 'APS Rounding', epidural_blood_patch: 'Epidural Blood Patch',
     emergency_intubation: 'Emergency Intubation', '01996': 'Epidural Rounding (01996)',
-    '99231': 'Pain Rounding (99231)', tee: 'TEE Exam'
+    '99231': 'Pain Rounding (99231)', tee: 'TEE Exam',
+    supervision_block: 'Supervision Block'
   };
   return names[type] || type;
 }
