@@ -2431,7 +2431,20 @@ input.mil-time.invalid {
     <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
   </div>
 
-  <!-- 5. Monthly Stipends (collapsible) -->
+  <!-- 5. Historical Compensation -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('histComp')">
+      <h3>Historical Compensation</h3>
+      <span class="arrow" id="histCompArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="histCompBody">
+      <div style="padding-top:12px;">
+        <div id="histCompTable" style="overflow-x:auto;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Monthly Stipends (collapsible) -->
   <div class="card collapse-section">
     <div class="collapse-header" onclick="toggleCollapse('compStipends')">
       <h3>Monthly Stipends</h3>
@@ -5998,16 +6011,61 @@ function tickLiveUpdate() {
   const shift = data.shifts[date];
   if (!shift) { stopLiveTicker(); return; }
 
+  // Base result calculates to the current minute (HH:MM granularity)
   const result = getShiftPointsForDate(date, true);
   if (!result.isInProgress) { stopLiveTicker(); return; }
 
   const monthKey = date.substring(0, 7);
   const pv = getPointValueForMonth(monthKey);
-  const dollarTotal = round2(result.total * pv);
+
+  // Compute current earning rates for sub-minute interpolation
+  const now = new Date();
+  const currentMin = now.getHours() * 60 + now.getMinutes();
+  const currentSec = now.getSeconds();
+  const dt = new Date(date + 'T12:00:00');
+  const dayOfWeek = dt.getDay();
+  const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
+  const isHol = shift.isHoliday || false;
+  const isWkndOrHol = isWknd || isHol;
+
+  const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
+  const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+  let inPagerWindow = false;
+  if (pagerWin) {
+    const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
+    inPagerWindow = nowMin >= pagerWin.start && nowMin < pagerWin.end;
+  }
+  const pagerRate = inPagerWindow ? 3.5 : 0;
+
+  let prodRate = 0;
+  const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
+  openCases.forEach(c => {
+    const cs = timeToMinutes(c.startTime);
+    let elapsed = currentMin - cs;
+    if (elapsed < 0) elapsed += 1440;
+    const elapsedHrs = elapsed / 60;
+    if (c.caseType === 'labor_epidural') {
+      if (cs === 420) { prodRate += 1.25 * 2; }
+      else {
+        if (elapsedHrs < 1) prodRate += 7.5 * 2;
+        else if (elapsedHrs < 2) prodRate += 2.5 * 2;
+        else prodRate += 1.25 * 2;
+      }
+    } else if (c.caseType === 'standard') {
+      prodRate += 6;
+    }
+  });
+
+  const totalRate = currentRate + pagerRate + prodRate;
+
+  // Interpolate: add fractional seconds of accrual on top of minute-level base
+  const secFraction = currentSec / 3600; // fraction of an hour
+  const liveTotal = result.total + (totalRate * secFraction);
+  const dollarTotal = round2(liveTotal * pv);
 
   // Update point total
   const ptsEl = document.getElementById('todayLivePts');
-  if (ptsEl) ptsEl.textContent = result.total.toFixed(2);
+  if (ptsEl) ptsEl.textContent = liveTotal.toFixed(2);
 
   // Update dollar total
   const dolEl = document.getElementById('todayLiveDollars');
@@ -6016,10 +6074,13 @@ function tickLiveUpdate() {
   // Update component breakdown chips
   const compEl = document.getElementById('todayCompChips');
   if (compEl) {
+    const arLive = result.ar + (currentRate * secFraction);
+    const callLive = result.call + (pagerRate * secFraction);
+    const prodLive = result.prod + (prodRate * secFraction);
     const comps = [];
-    if (result.ar > 0) comps.push({ label: 'AR', val: result.ar });
-    if (result.prod > 0) comps.push({ label: 'Prod', val: result.prod });
-    if (result.call > 0) comps.push({ label: 'Pager', val: result.call });
+    if (arLive > 0) comps.push({ label: 'AR', val: arLive });
+    if (prodLive > 0) comps.push({ label: 'Prod', val: prodLive });
+    if (callLive > 0) comps.push({ label: 'Pager', val: callLive });
     if (result.subspec > 0) comps.push({ label: 'Sub', val: result.subspec });
     if (result.supervision > 0) comps.push({ label: 'Supv', val: result.supervision });
     let chipHtml = '';
@@ -6034,43 +6095,6 @@ function tickLiveUpdate() {
   // Update live earning rate breakdown
   const ratesEl = document.getElementById('todayLiveRates');
   if (ratesEl) {
-    const now = new Date();
-    const currentMin = now.getHours() * 60 + now.getMinutes();
-    const dt = new Date(date + 'T12:00:00');
-    const dayOfWeek = dt.getDay();
-    const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
-    const isHol = shift.isHoliday || false;
-    const isWkndOrHol = isWknd || isHol;
-
-    const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
-    const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
-    let inPagerWindow = false;
-    if (pagerWin) {
-      const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
-      inPagerWindow = nowMin >= pagerWin.start && nowMin < pagerWin.end;
-    }
-    const pagerRate = inPagerWindow ? 3.5 : 0;
-
-    let prodRate = 0;
-    const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
-    openCases.forEach(c => {
-      const cs = timeToMinutes(c.startTime);
-      let elapsed = currentMin - cs;
-      if (elapsed < 0) elapsed += 1440;
-      const elapsedHrs = elapsed / 60;
-      if (c.caseType === 'labor_epidural') {
-        if (cs === 420) { prodRate += 1.25 * 2; }
-        else {
-          if (elapsedHrs < 1) prodRate += 7.5 * 2;
-          else if (elapsedHrs < 2) prodRate += 2.5 * 2;
-          else prodRate += 1.25 * 2;
-        }
-      } else if (c.caseType === 'standard') {
-        prodRate += 6;
-      }
-    });
-
-    const totalRate = currentRate + pagerRate + prodRate;
     const parts = [];
     if (currentRate > 0) parts.push('AR ' + currentRate.toFixed(0));
     if (pagerRate > 0) parts.push('Pager 3.5');
@@ -8448,6 +8472,7 @@ function renderProjections() {
   renderPipelineChart();
   renderProjectedAnnual();
   renderMonthlyChart();
+  renderHistoricalComp();
   loadStipendUI();
   renderPVHistory();
   checkPVReminder();
@@ -8543,6 +8568,72 @@ function renderMonthlyChart() {
     summaryEl.innerHTML = summaryText;
   }
   document.getElementById('monthlyTrendToggle').textContent = monthlyShowDollars ? 'pts' : '$';
+}
+
+function renderHistoricalComp() {
+  const el = document.getElementById('histCompTable');
+  if (!el) return;
+  const totals = getMonthlyTotals();
+  const sortedKeys = Object.keys(totals).sort().reverse();
+  if (sortedKeys.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No data yet.</p>'; return; }
+
+  // Compute hours per month
+  const monthHours = {};
+  Object.values(data.shifts).forEach(shift => {
+    const mk = shift.date.substring(0, 7);
+    if (!monthHours[mk]) monthHours[mk] = 0;
+    monthHours[mk] += calcShiftHours(shift);
+  });
+
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">';
+  html += '<thead><tr style="border-bottom:2px solid var(--border);text-align:left;">';
+  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;">Month</th>';
+  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Points</th>';
+  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">$/pt</th>';
+  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Revenue</th>';
+  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Stip.</th>';
+  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Total</th>';
+  html += '</tr></thead><tbody>';
+
+  let grandPts = 0, grandRev = 0, grandStip = 0, grandTotal = 0;
+
+  sortedKeys.forEach((mk, i) => {
+    const [y, m] = mk.split('-');
+    const label = monthNames[parseInt(m) - 1] + ' ' + y;
+    const pts = totals[mk];
+    const pv = getPointValueForMonth(mk);
+    const revenue = round2(pts * pv);
+    const stipend = getMonthlyStipendTotal(mk);
+    const total = round2(revenue + stipend);
+    const hrs = monthHours[mk] || 0;
+    const ptsHr = hrs > 0 ? (pts / hrs).toFixed(1) : '-';
+    const bgColor = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
+
+    grandPts += pts; grandRev += revenue; grandStip += stipend; grandTotal += total;
+
+    html += `<tr style="border-bottom:1px solid var(--border);background:${bgColor};">`;
+    html += `<td style="padding:8px 4px;white-space:nowrap;">${label}<br><span style="font-size:0.65rem;color:var(--text-dim);">${hrs.toFixed(0)} hrs &middot; ${ptsHr} pts/hr</span></td>`;
+    html += `<td style="padding:8px 4px;text-align:right;font-weight:600;">${pts.toFixed(1)}</td>`;
+    html += `<td style="padding:8px 4px;text-align:right;color:var(--text-dim);">${pv > 0 ? '$' + pv.toFixed(2) : '-'}</td>`;
+    html += `<td style="padding:8px 4px;text-align:right;color:var(--primary);">${pv > 0 ? '$' + revenue.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
+    html += `<td style="padding:8px 4px;text-align:right;color:var(--accent2);">${stipend > 0 ? '$' + stipend.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
+    html += `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--text);">$${total.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
+    html += '</tr>';
+  });
+
+  // Totals row
+  html += `<tr style="border-top:2px solid var(--border);">`;
+  html += `<td style="padding:8px 4px;font-weight:700;">Total (${sortedKeys.length} mo)</td>`;
+  html += `<td style="padding:8px 4px;text-align:right;font-weight:700;">${grandPts.toFixed(1)}</td>`;
+  html += `<td style="padding:8px 4px;"></td>`;
+  html += `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--primary);">$${grandRev.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
+  html += `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--accent2);">${grandStip > 0 ? '$' + grandStip.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
+  html += `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--text);">$${grandTotal.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
+  html += '</tr>';
+
+  html += '</tbody></table>';
+  el.innerHTML = html;
 }
 
 function toggleStabBreakdown() {
