@@ -4236,15 +4236,11 @@ function calcCasePoints(caseData, shift, ignoreManual) {
     }
     if (ce <= cs) ce += 1440;
     const durationHrs = Math.min((ce - cs) / 60, 24);
-    let pts = 0;
-    if (cs === 420) { // 0700 start: flat hourly rate
-      pts = durationHrs * 1.25;
-    } else {
-      if (durationHrs > 0) pts += Math.min(durationHrs, 1) * 7.5;
-      if (durationHrs > 1) pts += Math.min(durationHrs - 1, 1) * 2.5;
-      if (durationHrs > 2) pts += (durationHrs - 2) * 1.25;
-    }
-    return round2(pts * 2); // always OB doubled
+    let pts = 2.5; // 5 base units × 0.5 keeping rule
+    if (durationHrs > 0) pts += Math.min(durationHrs, 1) * 5;
+    if (durationHrs > 1) pts += Math.min(durationHrs - 1, 1) * 2.5;
+    if (durationHrs > 2) pts += (durationHrs - 2) * 1.25;
+    return round2(pts);
   }
 
   const addOnPts = calcAddOnPoints(caseData);
