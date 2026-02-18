@@ -8578,11 +8578,33 @@ function renderMonthlyChart() {
 function renderHistoricalComp() {
   const el = document.getElementById('histCompTable');
   if (!el) return;
-  const totals = getMonthlyTotals();
-  const sortedKeys = Object.keys(totals).sort().reverse();
-  if (sortedKeys.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No data yet.</p>'; return; }
+  const mt = getMonthlyTotals();
+  const workMonths = Object.keys(mt).sort();
+  if (workMonths.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No data yet.</p>'; return; }
 
-  // Compute hours per month
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
+  const now = new Date();
+  const decAdv = settings.decemberAdvance !== false;
+  if (!data.overrides) data.overrides = {};
+
+  function mkKey(year, month) {
+    const d = new Date(year, month, 1);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  }
+
+  // Determine paycheck months to show: from earliest work month + 1 through current month
+  const earliestWork = workMonths[0];
+  const [ey, em] = earliestWork.split('-').map(Number);
+  const startDate = new Date(ey, em, 1); // +1 month from earliest work
+  const endDate = new Date(now.getFullYear(), now.getMonth(), 1); // current month (receiving)
+
+  const paycheckMonths = [];
+  for (let d = new Date(endDate); d >= startDate; d.setMonth(d.getMonth() - 1)) {
+    paycheckMonths.push(mkKey(d.getFullYear(), d.getMonth()));
+  }
+
+  // Compute hours per work month
   const monthHours = {};
   Object.values(data.shifts).forEach(shift => {
     const mk = shift.date.substring(0, 7);
@@ -8590,55 +8612,121 @@ function renderHistoricalComp() {
     monthHours[mk] += calcShiftHours(shift);
   });
 
-  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   let html = '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">';
   html += '<thead><tr style="border-bottom:2px solid var(--border);text-align:left;">';
-  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;">Month</th>';
-  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Points</th>';
-  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">$/pt</th>';
-  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Revenue</th>';
-  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Stip.</th>';
-  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Total</th>';
+  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;">Paycheck</th>';
+  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Earned</th>';
+  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Blended</th>';
+  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Calculated</th>';
+  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Actual</th>';
   html += '</tr></thead><tbody>';
 
-  let grandPts = 0, grandRev = 0, grandStip = 0, grandTotal = 0;
+  let grandCalc = 0, grandActual = 0, hasAnyActual = false;
 
-  sortedKeys.forEach((mk, i) => {
-    const [y, m] = mk.split('-');
-    const label = monthNames[parseInt(m) - 1] + ' ' + y;
-    const pts = totals[mk];
-    const pv = getPointValueForMonth(mk);
-    const revenue = round2(pts * pv);
-    const stipend = getMonthlyStipendTotal(mk);
-    const total = round2(revenue + stipend);
-    const hrs = monthHours[mk] || 0;
-    const ptsHr = hrs > 0 ? (pts / hrs).toFixed(1) : '-';
+  paycheckMonths.forEach((payMk, i) => {
+    const [py, pm] = payMk.split('-').map(Number);
+    const payDate = new Date(py, pm - 1, 1);
+    const payLabel = monthNames[payDate.getMonth()] + ' ' + py;
+
+    // Blend: paycheck for month M uses work from M-1 through M-5
+    const blendVals = [0,1,2,3,4].map(w => {
+      const srcKey = mkKey(py, pm - 2 - w); // M-1-w where M is 1-indexed
+      return mt[srcKey] || 0;
+    });
+    const blended = round2(weights.reduce((sum, w, j) => sum + w * blendVals[j], 0));
+
+    // Primary work month = M-1 (the 40% weight)
+    const workKey = mkKey(py, pm - 2);
+    const rawPts = mt[workKey] || 0;
+    const hrs = monthHours[workKey] || 0;
+    const ptsHr = hrs > 0 ? (rawPts / hrs).toFixed(1) : '-';
+
+    // PV from month M-1
+    const pvKey = mkKey(py, pm - 2);
+    const pv = getPointValueForMonth(pvKey);
+
+    // Stipend from month M-1
+    const stipKey = mkKey(py, pm - 2);
+    const stipend = getMonthlyStipendTotal(stipKey);
+
+    // Calculated paycheck
+    let calcPaycheck = pv > 0 ? round2(blended * pv + stipend) : 0;
+
+    // December advance handling
+    if (decAdv && payDate.getMonth() === 0) {
+      calcPaycheck = 0; // January: received in December advance
+    }
+
+    // Override
+    const ov = data.overrides[payMk];
+    const hasOverride = ov && ov.compTotal != null;
+    const actualAmt = hasOverride ? ov.compTotal : null;
+
+    const displayAmt = hasOverride ? actualAmt : calcPaycheck;
+    grandCalc += calcPaycheck;
+    if (hasOverride) { grandActual += actualAmt; hasAnyActual = true; }
+    else { grandActual += calcPaycheck; }
+
     const bgColor = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
-
-    grandPts += pts; grandRev += revenue; grandStip += stipend; grandTotal += total;
+    const isReceiving = payMk === mkKey(now.getFullYear(), now.getMonth());
+    const isJanZero = decAdv && payDate.getMonth() === 0;
+    let tag = '';
+    if (isReceiving) tag = ' <span style="font-size:0.6rem;color:var(--accent2);">recv</span>';
 
     html += `<tr style="border-bottom:1px solid var(--border);background:${bgColor};">`;
-    html += `<td style="padding:8px 4px;white-space:nowrap;">${label}<br><span style="font-size:0.65rem;color:var(--text-dim);">${hrs.toFixed(0)} hrs &middot; ${ptsHr} pts/hr</span></td>`;
-    html += `<td style="padding:8px 4px;text-align:right;font-weight:600;">${pts.toFixed(1)}</td>`;
-    html += `<td style="padding:8px 4px;text-align:right;color:var(--text-dim);">${pv > 0 ? '$' + pv.toFixed(2) : '-'}</td>`;
-    html += `<td style="padding:8px 4px;text-align:right;color:var(--primary);">${pv > 0 ? '$' + revenue.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
-    html += `<td style="padding:8px 4px;text-align:right;color:var(--accent2);">${stipend > 0 ? '$' + stipend.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
-    html += `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--text);">$${total.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
+    const workDate = new Date(py, pm - 2, 1);
+    const workLabel = monthNames[workDate.getMonth()] + ' ' + workDate.getFullYear().toString().slice(2);
+    html += `<td style="padding:8px 4px;white-space:nowrap;">${payLabel}${tag}<br><span style="font-size:0.65rem;color:var(--text-dim);">${workLabel}: ${hrs.toFixed(0)} hrs &middot; ${ptsHr} pts/hr</span></td>`;
+    html += `<td style="padding:8px 4px;text-align:right;font-weight:500;color:var(--text-dim);">${rawPts.toFixed(1)}</td>`;
+    html += `<td style="padding:8px 4px;text-align:right;color:var(--text-dim);">${blended.toFixed(1)}</td>`;
+
+    if (isJanZero) {
+      html += `<td style="padding:8px 4px;text-align:right;color:var(--text-dim);font-size:0.7rem;">Dec adv.</td>`;
+    } else {
+      html += `<td style="padding:8px 4px;text-align:right;color:var(--primary);">${pv > 0 ? '$' + calcPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
+    }
+
+    // Actual column — tappable to edit
+    const actualDisplay = hasOverride
+      ? '$' + actualAmt.toLocaleString('en-US', {maximumFractionDigits: 0})
+      : '<span style="color:var(--text-dim);font-size:0.7rem;">tap to set</span>';
+    const actualColor = hasOverride ? 'color:var(--accent2);font-weight:600;' : '';
+    html += `<td style="padding:8px 4px;text-align:right;${actualColor}cursor:pointer;" onclick="editHistCompActual('${payMk}')">${actualDisplay}</td>`;
     html += '</tr>';
   });
 
   // Totals row
   html += `<tr style="border-top:2px solid var(--border);">`;
-  html += `<td style="padding:8px 4px;font-weight:700;">Total (${sortedKeys.length} mo)</td>`;
-  html += `<td style="padding:8px 4px;text-align:right;font-weight:700;">${grandPts.toFixed(1)}</td>`;
-  html += `<td style="padding:8px 4px;"></td>`;
-  html += `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--primary);">$${grandRev.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
-  html += `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--accent2);">${grandStip > 0 ? '$' + grandStip.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
-  html += `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--text);">$${grandTotal.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
+  html += `<td style="padding:8px 4px;font-weight:700;" colspan="3">Total (${paycheckMonths.length} mo)</td>`;
+  html += `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--primary);">$${grandCalc.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
+  html += `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--accent2);">$${grandActual.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
   html += '</tr>';
 
   html += '</tbody></table>';
   el.innerHTML = html;
+}
+
+function editHistCompActual(payMk) {
+  const ov = (data.overrides || {})[payMk];
+  const current = ov && ov.compTotal != null ? ov.compTotal : '';
+  const input = prompt('Enter actual compensation received (or leave blank to clear):', current);
+  if (input === null) return; // cancelled
+  if (!data.overrides) data.overrides = {};
+  if (input.trim() === '') {
+    // Clear override
+    if (data.overrides[payMk]) {
+      delete data.overrides[payMk].compTotal;
+      if (Object.keys(data.overrides[payMk]).length === 0) delete data.overrides[payMk];
+    }
+  } else {
+    const val = parseFloat(input.replace(/[$,]/g, ''));
+    if (isNaN(val)) { showToast('Invalid amount'); return; }
+    if (!data.overrides[payMk]) data.overrides[payMk] = {};
+    data.overrides[payMk].compTotal = val;
+  }
+  saveData(data);
+  renderProjections(); // re-renders all comp cards including this table
+  showToast('Compensation updated');
 }
 
 function toggleStabBreakdown() {
