@@ -3277,7 +3277,7 @@ function parseCalendarEventTitle(title) {
   const t = title.trim();
 
   // Pure number → OR worker
-  if (/^\d+$/.test(t)) return { type: 'OR', label: 'W: ' + t };
+  if (/^\d+$/.test(t)) return { type: 'OR', label: 'WB: ' + t };
 
   // SF variants
   if (/^SF\s*1$/i.test(t)) return { type: 'SF1', label: 'SF 1' };
@@ -9405,8 +9405,8 @@ function openAssignPicker(dateStr) {
   // Reset WB input
   const wbInput = document.getElementById('assignWbInput');
   const cal = data.calendarAssignments[dateStr];
-  if (cal && cal.label && cal.label.startsWith('W: ')) {
-    wbInput.value = cal.label.replace('W: ', '');
+  if (cal && cal.label && cal.label.startsWith('WB: ')) {
+    wbInput.value = cal.label.replace('WB: ', '');
   } else {
     wbInput.value = '';
   }
@@ -9472,7 +9472,7 @@ function applyWbAssignment() {
   if (!assignPickerDate) return;
   const wb = document.getElementById('assignWbInput').value.trim();
   if (!wb) { showToast('Enter a worker number'); return; }
-  data.calendarAssignments[assignPickerDate] = { type: 'OR', label: 'W: ' + wb };
+  data.calendarAssignments[assignPickerDate] = { type: 'OR', label: 'WB: ' + wb };
   syncPagerShift(assignPickerDate, 'OR');
   saveData(data);
   closeAssignPicker();
