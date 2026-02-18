@@ -4198,7 +4198,6 @@ function calcAddOnPoints(caseData) {
 }
 
 function calcCasePoints(caseData, shift, ignoreManual) {
-  if (caseData.unbilled) return 0;
   if (!ignoreManual && caseData.manualPoints != null) return round2(Number(caseData.manualPoints));
   const ct = caseData.caseType;
   if (ct === 'epidural_blood_patch') return 5;
@@ -4471,7 +4470,7 @@ function calcShiftTotal(shift) {
   const arPts = breakdown.ar;
   const callPts = breakdown.call;
   let prodPts = 0;
-  shiftCases.forEach(c => { prodPts += calcCasePoints(c, shift); });
+  shiftCases.forEach(c => { if (!c.unbilled) prodPts += calcCasePoints(c, shift); });
   const subspecPts = (shift.assignmentType === 'cardiac_liver') ? calcSubspecPoints(shift) : 0;
   const supervisionPts = calcSupervisionPoints(shift);
   const calcTotal = round2(arPts + prodPts + callPts + subspecPts + supervisionPts);
