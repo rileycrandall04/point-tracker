@@ -3404,18 +3404,36 @@ async function syncCalendarEvents(silent) {
     // Clear stale entries within sync window, preserve outside
     const startStr = start.toISOString().substring(0, 10);
     const endStr = end.toISOString().substring(0, 10);
+    // Track which dates had assignments before clearing (to clean up orphaned pager shifts)
+    const prevAssignedDates = new Set(Object.keys(data.calendarAssignments).filter(k => k >= startStr && k <= endStr));
     Object.keys(data.calendarAssignments).forEach(k => {
       if (k >= startStr && k <= endStr) delete data.calendarAssignments[k];
     });
 
     let count = 0;
+    const newAssignedDates = new Set();
     events.forEach(ev => {
       const dateStr = ev.start && (ev.start.date || (ev.start.dateTime && ev.start.dateTime.substring(0, 10)));
       if (!dateStr) return;
       const parsed = parseCalendarEventTitle(ev.summary);
       if (!parsed) return;
       data.calendarAssignments[dateStr] = parsed;
+      newAssignedDates.add(dateStr);
       count++;
+    });
+
+    // Sync pager-only shifts: create for new assignments, update changed ones
+    newAssignedDates.forEach(dateStr => {
+      if (typeof syncPagerShift === 'function') syncPagerShift(dateStr, data.calendarAssignments[dateStr].type);
+    });
+    // Clean up orphaned pager-only shifts (dates that lost their assignment)
+    prevAssignedDates.forEach(dateStr => {
+      if (!newAssignedDates.has(dateStr)) {
+        const shift = data.shifts[dateStr];
+        if (shift && !(shift.timeEntries && shift.timeEntries.some(e => e.start))) {
+          delete data.shifts[dateStr];
+        }
+      }
     });
 
     data.calendarLastSync = new Date().toISOString();
@@ -9362,9 +9380,40 @@ function closeAssignPicker() {
   assignPickerDate = '';
 }
 
+// Sync pager-only shift records with assignment changes.
+// If type is pager-eligible and no shift (or empty shift) exists, create one.
+// If type is NOT pager-eligible and an empty shift exists, delete it.
+// Never touches shifts that have real time entries.
+function syncPagerShift(dateStr, type) {
+  const shift = data.shifts[dateStr];
+  const hasRealEntries = shift && shift.timeEntries && shift.timeEntries.some(e => e.start);
+  const isPagerEligible = getPagerPayWindow(type, isWeekend(dateStr)) !== null;
+
+  if (hasRealEntries) return; // never touch shifts with real clock data
+
+  if (isPagerEligible) {
+    // Create or update pager-only shift
+    data.shifts[dateStr] = {
+      date: dateStr, assignmentType: type,
+      startTime: '', endTime: '',
+      timeEntries: [],
+      isHoliday: shift ? shift.isHoliday : false,
+      forcedOff: false,
+      subspecCoverage: false, teeCount: 0,
+      supervisionStart: '', supervisionEnd: '',
+      preCallStart: '', preCallEnd: '',
+      tempCoverage: []
+    };
+  } else if (shift && !hasRealEntries) {
+    // Non-pager type — remove the empty auto-created shift
+    delete data.shifts[dateStr];
+  }
+}
+
 function applyAssignment(type, label) {
   if (!assignPickerDate) return;
   data.calendarAssignments[assignPickerDate] = { type: type, label: label };
+  syncPagerShift(assignPickerDate, type);
   saveData(data);
   closeAssignPicker();
   renderAssignmentEditor();
@@ -9375,6 +9424,7 @@ function applyWbAssignment() {
   const wb = document.getElementById('assignWbInput').value.trim();
   if (!wb) { showToast('Enter a workbench number'); return; }
   data.calendarAssignments[assignPickerDate] = { type: 'OR', label: 'WB: ' + wb };
+  syncPagerShift(assignPickerDate, 'OR');
   saveData(data);
   closeAssignPicker();
   renderAssignmentEditor();
@@ -9382,6 +9432,11 @@ function applyWbAssignment() {
 
 function clearAssignment() {
   if (!assignPickerDate) return;
+  // Remove empty auto-created shift if present
+  const shift = data.shifts[assignPickerDate];
+  if (shift && !(shift.timeEntries && shift.timeEntries.some(e => e.start))) {
+    delete data.shifts[assignPickerDate];
+  }
   delete data.calendarAssignments[assignPickerDate];
   saveData(data);
   closeAssignPicker();
