@@ -2994,7 +2994,7 @@ input.mil-time.invalid {
       <button class="assign-picker-close" onclick="closeAssignPicker()">&times;</button>
     </div>
     <div class="assign-picker-wb">
-      <label>Workbench #</label>
+      <label>Worker #</label>
       <input type="number" id="assignWbInput" min="1" max="99" placeholder="#">
       <button class="btn-wb-apply" onclick="applyWbAssignment()">Set WB</button>
     </div>
@@ -3276,8 +3276,8 @@ function parseCalendarEventTitle(title) {
   if (!title || !title.trim()) return null;
   const t = title.trim();
 
-  // Pure number → OR workbench
-  if (/^\d+$/.test(t)) return { type: 'OR', label: 'WB: ' + t };
+  // Pure number → OR worker
+  if (/^\d+$/.test(t)) return { type: 'OR', label: 'W: ' + t };
 
   // SF variants
   if (/^SF\s*1$/i.test(t)) return { type: 'SF1', label: 'SF 1' };
@@ -9405,8 +9405,8 @@ function openAssignPicker(dateStr) {
   // Reset WB input
   const wbInput = document.getElementById('assignWbInput');
   const cal = data.calendarAssignments[dateStr];
-  if (cal && cal.label && cal.label.startsWith('WB: ')) {
-    wbInput.value = cal.label.replace('WB: ', '');
+  if (cal && cal.label && cal.label.startsWith('W: ')) {
+    wbInput.value = cal.label.replace('W: ', '');
   } else {
     wbInput.value = '';
   }
@@ -9471,8 +9471,8 @@ function applyAssignment(type, label) {
 function applyWbAssignment() {
   if (!assignPickerDate) return;
   const wb = document.getElementById('assignWbInput').value.trim();
-  if (!wb) { showToast('Enter a workbench number'); return; }
-  data.calendarAssignments[assignPickerDate] = { type: 'OR', label: 'WB: ' + wb };
+  if (!wb) { showToast('Enter a worker number'); return; }
+  data.calendarAssignments[assignPickerDate] = { type: 'OR', label: 'W: ' + wb };
   syncPagerShift(assignPickerDate, 'OR');
   saveData(data);
   closeAssignPicker();
