@@ -1239,6 +1239,7 @@ input.mil-time.invalid {
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .scan-case-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -4594,6 +4595,7 @@ document.querySelectorAll('.bottom-nav button[data-page]').forEach(btn => {
   btn.addEventListener('click', () => {
     closeDrawer();
     exitHistoryTutorialMode();
+    if (typeof stopLiveTicker === 'function') stopLiveTicker();
     document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
@@ -4641,6 +4643,7 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     const page = item.dataset.page;
     closeDrawer();
     exitHistoryTutorialMode();
+    if (typeof stopLiveTicker === 'function') stopLiveTicker();
     document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
@@ -5759,6 +5762,7 @@ function renderToday() {
   }
 
   if (!shift) {
+    if (typeof stopLiveTicker === 'function') stopLiveTicker();
     document.getElementById('todayBreakdown').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No shift saved for this date.</p>';
     document.getElementById('todayCaseList').innerHTML = '<div class="empty-state"><p>No cases logged yet.</p></div>';
     document.getElementById('todayCaseCount').textContent = '';
@@ -5784,12 +5788,20 @@ function renderToday() {
   }
   bdHtml += `</div>`;
 
+  // LIVE indicator (visible only when clocked in)
+  if (result.isInProgress) {
+    bdHtml += `<div id="todayLiveIndicator" style="display:flex;align-items:center;gap:5px;margin-bottom:2px;">`;
+    bdHtml += `<span style="color:#4caf50;font-size:0.7rem;animation:livePulse 1.5s ease-in-out infinite;">&#9679;</span>`;
+    bdHtml += `<span style="font-size:0.7rem;font-weight:600;color:#4caf50;letter-spacing:0.5px;">LIVE</span>`;
+    bdHtml += `</div>`;
+  }
+
   // Big point total + dollar equivalent
   bdHtml += `<div style="display:flex;align-items:baseline;gap:8px;">`;
-  bdHtml += `<span style="font-size:1.9rem;font-weight:700;line-height:1;">${result.total.toFixed(2)}</span>`;
+  bdHtml += `<span id="todayLivePts" style="font-size:1.9rem;font-weight:700;line-height:1;">${result.total.toFixed(2)}</span>`;
   bdHtml += `<span style="font-size:0.85rem;color:var(--text-dim);">pts</span>`;
   bdHtml += estTag;
-  bdHtml += `<span style="font-size:1.1rem;font-weight:600;color:var(--text-dim);margin-left:auto;">$${dollarTotal.toFixed(2)}</span>`;
+  bdHtml += `<span id="todayLiveDollars" style="font-size:1.1rem;font-weight:600;color:var(--text-dim);margin-left:auto;">$${dollarTotal.toFixed(2)}</span>`;
   bdHtml += `</div>`;
 
   // Component breakdown chips
@@ -5800,7 +5812,7 @@ function renderToday() {
   if (result.subspec > 0) comps.push({ label: 'Sub', val: result.subspec });
   if (result.supervision > 0) comps.push({ label: 'Supv', val: result.supervision });
   if (comps.length > 0) {
-    bdHtml += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">`;
+    bdHtml += `<div id="todayCompChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">`;
     comps.forEach(c => {
       const chipColor = c.label === 'Pager' ? 'rgba(245,166,35,0.15)' : 'rgba(255,255,255,0.06)';
       const textColor = c.label === 'Pager' ? 'rgba(245,166,35,0.9)' : 'var(--text-dim)';
@@ -5810,9 +5822,17 @@ function renderToday() {
   }
 
   bdHtml += '<div id="todayRateChips"></div>';
+  bdHtml += '<div id="todayLiveRates"></div>';
   bdHtml += '</div>';
   document.getElementById('todayBreakdown').innerHTML = bdHtml;
   updateTodayRateChips();
+
+  // Start or stop live ticker based on shift state
+  if (result.isInProgress) {
+    startLiveTicker();
+  } else {
+    stopLiveTicker();
+  }
 
   document.getElementById('todayCaseCount').textContent = `(${shiftCases.length})`;
 
@@ -5881,8 +5901,8 @@ function updateTodayRateChips() {
 
   let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:0.78rem;">';
 
-  // Current rate chip (only for today)
-  if (date === effectiveWorkDate()) {
+  // Current rate chip (only when clocked in — shift in progress)
+  if (date === effectiveWorkDate() && result.isInProgress) {
     const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
     const isWkndOrHol = isWknd || isHol;
     const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
@@ -5948,12 +5968,124 @@ function updateTodayRateChips() {
   el.innerHTML = html;
 }
 
-// Auto-update rate chips every 60 seconds
+// ================================================================
+// LIVE EARNING TICKER
+// ================================================================
+let liveTicker = null;
+
+// Auto-update rate chips every 60 seconds (skipped when live ticker is running)
 setInterval(() => {
+  if (liveTicker) return;
   if (document.getElementById('page-today') && document.getElementById('page-today').classList.contains('active')) {
     updateTodayRateChips();
   }
 }, 60000);
+
+function startLiveTicker() {
+  if (liveTicker) return;
+  liveTicker = setInterval(tickLiveUpdate, 1000);
+}
+
+function stopLiveTicker() {
+  if (liveTicker) { clearInterval(liveTicker); liveTicker = null; }
+}
+
+function tickLiveUpdate() {
+  const todayPage = document.getElementById('page-today');
+  if (!todayPage || !todayPage.classList.contains('active')) { stopLiveTicker(); return; }
+
+  const date = workingDate;
+  const shift = data.shifts[date];
+  if (!shift) { stopLiveTicker(); return; }
+
+  const result = getShiftPointsForDate(date, true);
+  if (!result.isInProgress) { stopLiveTicker(); return; }
+
+  const monthKey = date.substring(0, 7);
+  const pv = getPointValueForMonth(monthKey);
+  const dollarTotal = round2(result.total * pv);
+
+  // Update point total
+  const ptsEl = document.getElementById('todayLivePts');
+  if (ptsEl) ptsEl.textContent = result.total.toFixed(2);
+
+  // Update dollar total
+  const dolEl = document.getElementById('todayLiveDollars');
+  if (dolEl) dolEl.textContent = '$' + dollarTotal.toFixed(2);
+
+  // Update component breakdown chips
+  const compEl = document.getElementById('todayCompChips');
+  if (compEl) {
+    const comps = [];
+    if (result.ar > 0) comps.push({ label: 'AR', val: result.ar });
+    if (result.prod > 0) comps.push({ label: 'Prod', val: result.prod });
+    if (result.call > 0) comps.push({ label: 'Pager', val: result.call });
+    if (result.subspec > 0) comps.push({ label: 'Sub', val: result.subspec });
+    if (result.supervision > 0) comps.push({ label: 'Supv', val: result.supervision });
+    let chipHtml = '';
+    comps.forEach(c => {
+      const chipColor = c.label === 'Pager' ? 'rgba(245,166,35,0.15)' : 'rgba(255,255,255,0.06)';
+      const textColor = c.label === 'Pager' ? 'rgba(245,166,35,0.9)' : 'var(--text-dim)';
+      chipHtml += `<span style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:${chipColor};color:${textColor};font-weight:500;">${c.label} ${c.val.toFixed(1)}</span>`;
+    });
+    compEl.innerHTML = chipHtml;
+  }
+
+  // Update live earning rate breakdown
+  const ratesEl = document.getElementById('todayLiveRates');
+  if (ratesEl) {
+    const now = new Date();
+    const currentMin = now.getHours() * 60 + now.getMinutes();
+    const dt = new Date(date + 'T12:00:00');
+    const dayOfWeek = dt.getDay();
+    const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
+    const isHol = shift.isHoliday || false;
+    const isWkndOrHol = isWknd || isHol;
+
+    const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
+    const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+    let inPagerWindow = false;
+    if (pagerWin) {
+      const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
+      inPagerWindow = nowMin >= pagerWin.start && nowMin < pagerWin.end;
+    }
+    const pagerRate = inPagerWindow ? 3.5 : 0;
+
+    let prodRate = 0;
+    const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
+    openCases.forEach(c => {
+      const cs = timeToMinutes(c.startTime);
+      let elapsed = currentMin - cs;
+      if (elapsed < 0) elapsed += 1440;
+      const elapsedHrs = elapsed / 60;
+      if (c.caseType === 'labor_epidural') {
+        if (cs === 420) { prodRate += 1.25 * 2; }
+        else {
+          if (elapsedHrs < 1) prodRate += 7.5 * 2;
+          else if (elapsedHrs < 2) prodRate += 2.5 * 2;
+          else prodRate += 1.25 * 2;
+        }
+      } else if (c.caseType === 'standard') {
+        prodRate += 6;
+      }
+    });
+
+    const totalRate = currentRate + pagerRate + prodRate;
+    const parts = [];
+    if (currentRate > 0) parts.push('AR ' + currentRate.toFixed(0));
+    if (pagerRate > 0) parts.push('Pager 3.5');
+    if (prodRate > 0) parts.push('Prod ' + prodRate.toFixed(1));
+
+    let rateHtml = '<div style="margin-top:8px;font-size:0.72rem;color:var(--text-dim);">';
+    rateHtml += `Earning: <span style="color:var(--primary);font-weight:600;">${parts.join(' + ')} = ${totalRate.toFixed(1)} pts/hr</span>`;
+    rateHtml += ` <span style="font-weight:400;">($${round2(totalRate * pv).toFixed(0)}/hr)</span>`;
+    rateHtml += '</div>';
+    ratesEl.innerHTML = rateHtml;
+  }
+
+  // Also update the rate chips
+  updateTodayRateChips();
+}
 
 function renderWeeklyChart() {
   const weekDates = getWeekDates(workingDate);
