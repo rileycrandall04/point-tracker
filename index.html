@@ -4197,9 +4197,9 @@ function calcAddOnPoints(caseData) {
   return pts;
 }
 
-function calcCasePoints(caseData, shift) {
+function calcCasePoints(caseData, shift, ignoreManual) {
   if (caseData.unbilled) return 0;
-  if (caseData.manualPoints != null) return round2(Number(caseData.manualPoints));
+  if (!ignoreManual && caseData.manualPoints != null) return round2(Number(caseData.manualPoints));
   const ct = caseData.caseType;
   if (ct === 'epidural_blood_patch') return 5;
   if (ct === 'emergency_intubation') return 4;
@@ -10137,7 +10137,7 @@ function renderTopProcedures() {
     if (hrs <= 0) return;
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
     const shift = data.shifts[c.shiftDate];
-    const pts = calcCasePoints(c, shift);
+    const pts = calcCasePoints(c, shift, true);
     if (!procData[name]) procData[name] = { totalPts: 0, totalHrs: 0, count: 0 };
     procData[name].totalPts += pts;
     procData[name].totalHrs += hrs;
@@ -10200,7 +10200,7 @@ function renderSurgeonEfficiency() {
     const surgeon = (c.notes || '').trim();
     if (!surgeon || !c.startTime || !c.endTime) return;
     const shift = data.shifts[c.shiftDate];
-    const pts = calcCasePoints(c, shift || {});
+    const pts = calcCasePoints(c, shift || {}, true);
     const dateKey = c.shiftDate || 'unknown';
     if (!surgeonData[surgeon]) surgeonData[surgeon] = { totalPts: 0, dates: {}, caseCount: 0, caseIds: [] };
     surgeonData[surgeon].totalPts += pts;
@@ -10250,7 +10250,7 @@ function renderSurgeonTabContent() {
         s.caseIds.forEach(id => {
           const cs = data.cases.find(x => x.id === id);
           if (!cs) return;
-          const pts = calcCasePoints(cs, data.shifts[cs.shiftDate] || {});
+          const pts = calcCasePoints(cs, data.shifts[cs.shiftDate] || {}, true);
           html += `<div class="proc-case-item" onclick="openCaseEdit('${id}')" style="cursor:pointer;">${cs.shiftDate} &mdash; ${escHtml(cs.procedure || cs.caseType || 'Case')} &mdash; ${pts.toFixed(1)} pts</div>`;
         });
         html += `</div>`;
@@ -10270,7 +10270,7 @@ function surgeonRow(rank, s, color) {
   s.caseIds.forEach(id => {
     const cs = data.cases.find(x => x.id === id);
     if (!cs) return;
-    const pts = calcCasePoints(cs, data.shifts[cs.shiftDate] || {});
+    const pts = calcCasePoints(cs, data.shifts[cs.shiftDate] || {}, true);
     html += `<div class="proc-case-item" onclick="openCaseEdit('${id}')" style="cursor:pointer;">
       ${cs.shiftDate} &mdash; ${escHtml(cs.procedure || cs.caseType || 'Case')} &mdash; ${pts.toFixed(1)} pts
     </div>`;
