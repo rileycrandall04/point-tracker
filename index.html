@@ -2317,7 +2317,7 @@ input.mil-time.invalid {
 <div class="page" id="page-compensation">
   <!-- PV Reminder Banner -->
   <div class="card hidden" id="pvReminderBanner" style="background:var(--accent2); color:#000; padding:10px 16px; display:flex; align-items:center; justify-content:space-between;">
-    <span style="font-size:0.85rem; font-weight:600;"><span id="pvReminderText">Last month's $/point hasn't been confirmed yet.</span> <a href="#" onclick="togglePVHistory(); return false;" style="color:#000; text-decoration:underline; font-weight:400;">Update now</a></span>
+    <span style="font-size:0.85rem; font-weight:600;"><span id="pvReminderText">Last month's $/point hasn't been confirmed yet.</span> <a href="#" onclick="scrollToHistComp(); return false;" style="color:#000; text-decoration:underline; font-weight:400;">Update now</a></span>
     <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
 
@@ -2340,17 +2340,6 @@ input.mil-time.invalid {
       <div style="display:flex;align-items:center;gap:8px;">
         <label style="font-size:0.75rem;color:var(--text-dim);white-space:nowrap;">$/pt</label>
         <input type="number" id="dashPointValue" min="0" step="0.01" placeholder="55.00" style="max-width:90px;padding:4px 8px;font-size:0.8rem;">
-        <button class="btn btn-outline btn-sm" id="pvHistoryToggle" onclick="togglePVHistory()" style="padding:3px 8px;font-size:0.7rem;white-space:nowrap;">History &#9660;</button>
-      </div>
-    </div>
-    <div id="pvHistoryPanel" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;">
-      <div style="padding-bottom:12px;border-bottom:1px solid var(--surface2);margin-bottom:12px;">
-        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-          Enter confirmed $/point values for past months. Revenue calculations will use confirmed values instead of the global estimate.
-        </p>
-        <div id="pvHistoryRows"></div>
-        <button class="btn btn-primary btn-sm" id="savePVHistoryBtn" style="margin-top:8px;">Save Point Values</button>
-        <div id="pvHistoryStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
       </div>
     </div>
     <p style="font-size:0.8rem; color:var(--text-dim); margin-bottom:12px;">
@@ -2399,12 +2388,9 @@ input.mil-time.invalid {
     <div id="pipelineUnreceived" style="margin-top:8px; text-align:center;"></div>
   </div>
 
-  <!-- 4. Monthly Trend (with annual income stats above chart) -->
+  <!-- 4. Historical Trends (with annual income stats above chart) -->
   <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;">
-      <h2 style="margin:0;">Monthly Trend</h2>
-      <button class="btn btn-sm btn-outline" id="monthlyTrendToggle" style="padding:2px 8px;font-size:0.7rem;min-width:32px;">$</button>
-    </div>
+    <h2>Historical Trends</h2>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:12px 0;padding:10px 12px;background:var(--surface2);border-radius:8px;">
       <div style="text-align:center;">
         <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">3-Mo Avg</div>
@@ -2431,14 +2417,18 @@ input.mil-time.invalid {
   </div>
 
   <!-- 5. Historical Compensation -->
-  <div class="card collapse-section">
+  <div class="card collapse-section" id="histCompCard">
     <div class="collapse-header" onclick="toggleCollapse('histComp')">
       <h3>Historical Compensation</h3>
       <span class="arrow" id="histCompArrow">&#9660;</span>
     </div>
     <div class="collapse-body" id="histCompBody">
       <div style="padding-top:12px;">
-        <div id="histCompTable" style="overflow-x:auto;"></div>
+        <div id="histCompTable"></div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:12px;">
+          <button class="btn btn-primary btn-sm" id="savePVHistoryBtn">Save Point Values</button>
+          <span id="pvHistoryStatus" style="font-size:0.75rem;color:var(--text-dim);"></span>
+        </div>
       </div>
     </div>
   </div>
@@ -6576,7 +6566,6 @@ document.getElementById('dayModal').addEventListener('click', (e) => {
 let weeklyBarChart = null;
 let weeklyShowDollars = false;
 let monthlyChart = null;
-let monthlyShowDollars = false;
 let breakdownChart = null; // unused, kept for compat
 let pipelineChart = null;
 let productionTrendChart = null;
@@ -8318,6 +8307,17 @@ function exitHistoryTutorialMode() {
 // ================================================================
 // POINT VALUE HISTORY
 // ================================================================
+function scrollToHistComp() {
+  const body = document.getElementById('histCompBody');
+  const arrow = document.getElementById('histCompArrow');
+  if (body && (!body.style.maxHeight || body.style.maxHeight === '0px')) {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    if (arrow) arrow.classList.add('open');
+  }
+  const card = document.getElementById('histCompCard');
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function goToPVHistory() {
   // Navigate to compensation page
   document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
@@ -8326,49 +8326,7 @@ function goToPVHistory() {
   if (compBtn) compBtn.classList.add('active');
   document.getElementById('page-compensation').classList.add('active');
   renderProjections();
-  // Open the history panel
-  const panel = document.getElementById('pvHistoryPanel');
-  const btn = document.getElementById('pvHistoryToggle');
-  if (panel && panel.style.maxHeight === '0px' || panel && !panel.style.maxHeight) {
-    panel.style.maxHeight = panel.scrollHeight + 'px';
-    btn.innerHTML = 'History &#9650;';
-  }
-}
-
-function togglePVHistory() {
-  const panel = document.getElementById('pvHistoryPanel');
-  const btn = document.getElementById('pvHistoryToggle');
-  if (panel.style.maxHeight && panel.style.maxHeight !== '0px') {
-    panel.style.maxHeight = '0';
-    btn.innerHTML = 'History &#9660;';
-  } else {
-    panel.style.maxHeight = panel.scrollHeight + 'px';
-    btn.innerHTML = 'History &#9650;';
-  }
-}
-
-function renderPVHistory() {
-  const container = document.getElementById('pvHistoryRows');
-  if (!container) return;
-  const now = new Date();
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  if (!settings.pointValues) settings.pointValues = {};
-  let html = '';
-  for (let i = 1; i <= 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const mk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-    const label = monthNames[d.getMonth()] + ' ' + d.getFullYear();
-    const val = settings.pointValues[mk];
-    const isConfirmed = val != null;
-    const displayVal = isConfirmed ? val : '';
-    const statusText = isConfirmed ? '<span style="color:var(--accent);font-weight:600;">Confirmed</span>' : '<span style="color:var(--text-dim);">Estimate: $' + (settings.pointValue || 0).toFixed(2) + '</span>';
-    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">';
-    html += '<span style="font-size:0.82rem;min-width:100px;">' + label + '</span>';
-    html += '<input type="number" data-pvmonth="' + mk + '" min="0" step="0.01" placeholder="$/pt" value="' + displayVal + '" style="max-width:100px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">';
-    html += '<span style="font-size:0.72rem;">' + statusText + '</span>';
-    html += '</div>';
-  }
-  container.innerHTML = html;
+  setTimeout(() => scrollToHistComp(), 100);
 }
 
 document.addEventListener('click', function(e) {
@@ -8386,12 +8344,17 @@ document.addEventListener('click', function(e) {
     });
     prunePointValues();
     saveSettings(settings);
-    renderPVHistory();
-    // Re-render revenue charts with updated values
-    renderMonthlyChart();
+    // Re-render comp cards with updated values
+    renderHistoricalComp();
+    renderHistoricalTrends();
     renderStabilization();
     renderProjectedAnnual();
     renderPipelineChart();
+    // Fix collapsible height after re-render
+    const histBody = document.getElementById('histCompBody');
+    if (histBody && histBody.style.maxHeight && histBody.style.maxHeight !== '0px') {
+      histBody.style.maxHeight = histBody.scrollHeight + 'px';
+    }
     const status = document.getElementById('pvHistoryStatus');
     if (status) { status.innerHTML = '<span style="color:var(--accent);">Point values saved</span>'; setTimeout(() => { status.textContent = ''; }, 3000); }
   }
@@ -8471,10 +8434,9 @@ function renderProjections() {
   renderStabilization();
   renderPipelineChart();
   renderProjectedAnnual();
-  renderMonthlyChart();
+  renderHistoricalTrends();
   renderHistoricalComp();
   loadStipendUI();
-  renderPVHistory();
   checkPVReminder();
 }
 
@@ -8511,63 +8473,144 @@ function getMonthlyTotals() {
   return months;
 }
 
-function renderMonthlyChart() {
-  const totals = getMonthlyTotals();
-  const sortedKeys = Object.keys(totals).sort();
-  const last6 = sortedKeys.slice(-6);
+function renderHistoricalTrends() {
+  const mt = getMonthlyTotals();
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const labels = last6.map(k => { const [y,m] = k.split('-'); return monthNames[parseInt(m)-1] + ' ' + y; });
-  const rawValues = last6.map(k => round2(totals[k]));
-  const values = monthlyShowDollars
-    ? last6.map((k, i) => { const pv = getPointValueForMonth(k); return round2(rawValues[i] * (pv || 0)); })
-    : rawValues;
-  const avg = values.length > 0 ? round2(values.reduce((a, b) => a + b, 0) / values.length) : 0;
-  const prefix = monthlyShowDollars ? '$' : '';
-  const suffix = monthlyShowDollars ? '' : ' pts';
+  const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
+  const now = new Date();
+  const decAdv = settings.decemberAdvance !== false;
+  if (!data.overrides) data.overrides = {};
+
+  function mkKey(year, month) {
+    const d = new Date(year, month, 1);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  }
+
+  // Build 6 past paycheck months (current month back to M-5)
+  const paycheckMonths = [];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    paycheckMonths.push(mkKey(d.getFullYear(), d.getMonth()));
+  }
+  paycheckMonths.reverse(); // oldest first for chart
+
+  const labels = [];
+  const barValues = [];
+  const barColors = [];
+  const barBorders = [];
+  const tooltipData = [];
+
+  paycheckMonths.forEach(payMk => {
+    const [py, pm] = payMk.split('-').map(Number);
+    const payDate = new Date(py, pm - 1, 1);
+    labels.push(monthNames[payDate.getMonth()] + ' ' + py);
+
+    // Blend: paycheck for month M uses work from M-1 through M-5
+    const blendVals = [0,1,2,3,4].map(w => {
+      const srcKey = mkKey(py, pm - 2 - w);
+      return mt[srcKey] || 0;
+    });
+    const blended = round2(weights.reduce((sum, w, j) => sum + w * blendVals[j], 0));
+
+    // PV and stipend from primary work month (M-1)
+    const workKey = mkKey(py, pm - 2);
+    const pv = getPointValueForMonth(workKey);
+    const stipend = getMonthlyStipendTotal(workKey);
+
+    // Calculated paycheck
+    let calcPaycheck = pv > 0 ? round2(blended * pv + stipend) : 0;
+    if (decAdv && payDate.getMonth() === 0) calcPaycheck = 0;
+
+    // Check for actual override
+    const ov = data.overrides[payMk];
+    const hasOverride = ov && ov.compTotal != null;
+    const actualAmt = hasOverride ? ov.compTotal : null;
+
+    const barVal = hasOverride ? actualAmt : calcPaycheck;
+    barValues.push(barVal);
+    barColors.push(hasOverride ? 'rgba(34,197,94,0.7)' : 'rgba(59,130,246,0.7)');
+    barBorders.push(hasOverride ? '#22c55e' : '#3b82f6');
+    tooltipData.push({
+      source: hasOverride ? 'Actual' : 'Calculated',
+      blended: blended,
+      pv: pv,
+      stipend: stipend,
+      total: barVal
+    });
+  });
+
+  const nonZero = barValues.filter(v => v > 0);
+  const avg = nonZero.length > 0 ? round2(nonZero.reduce((a, b) => a + b, 0) / nonZero.length) : 0;
+
   const ctx = document.getElementById('monthlyChart').getContext('2d');
   if (monthlyChart) monthlyChart.destroy();
-  const datasets = [
-    { label: monthlyShowDollars ? 'Revenue' : 'Total Points', data: values, backgroundColor: 'rgba(59,130,246,0.7)', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 4 }
-  ];
-  if (values.length > 1) {
+
+  const datasets = [{
+    label: 'Compensation',
+    data: barValues,
+    backgroundColor: barColors,
+    borderColor: barBorders,
+    borderWidth: 1,
+    borderRadius: 4
+  }];
+
+  if (nonZero.length >= 2) {
     datasets.push({
-      label: 'Average', data: values.map(() => avg), type: 'line',
-      borderColor: '#f59e0b', borderWidth: 2, borderDash: [6, 3],
-      pointRadius: 0, fill: false
+      label: 'Average',
+      data: barValues.map(() => avg),
+      type: 'line',
+      borderColor: '#f59e0b',
+      borderWidth: 2,
+      borderDash: [6, 3],
+      pointRadius: 0,
+      fill: false
     });
   }
+
   monthlyChart = new Chart(ctx, {
     type: 'bar',
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: values.length > 1, labels: { color: '#94a3b8' } } },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const idx = context.dataIndex;
+              const td = tooltipData[idx];
+              if (!td) return '';
+              const lines = [
+                td.source + ': $' + td.total.toLocaleString('en-US', {maximumFractionDigits: 0}),
+                'Blended: ' + td.blended.toFixed(1) + ' pts',
+                '$/pt: $' + (td.pv || 0).toFixed(2)
+              ];
+              if (td.stipend > 0) lines.push('Stipend: $' + td.stipend.toLocaleString('en-US', {maximumFractionDigits: 0}));
+              return lines;
+            }
+          }
+        }
+      },
       scales: {
-        y: { beginAtZero: true, ticks: { color: '#94a3b8', callback: function(v) { return monthlyShowDollars ? '$' + v.toLocaleString() : v; } }, grid: { color: 'rgba(71,85,105,0.3)' } },
+        y: { beginAtZero: true, ticks: { color: '#94a3b8', callback: function(v) { return '$' + v.toLocaleString(); } }, grid: { color: 'rgba(71,85,105,0.3)' } },
         x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
       }
     }
   });
+
+  // Custom legend below chart
   const summaryEl = document.getElementById('monthlyChartSummary');
-  if (monthlyShowDollars) {
-    summaryEl.innerHTML = values.length > 0 ? `6-Month Avg: $${avg.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '';
-  } else {
-    let summaryText = values.length > 0 ? `6-Month Avg: ${avg.toFixed(1)} pts` : '';
-    if (last6.length > 0) {
-      let totalRevenue = 0;
-      let hasAnyPv = false;
-      last6.forEach((k, i) => {
-        const mpv = getPointValueForMonth(k);
-        if (mpv > 0) { totalRevenue += rawValues[i] * mpv; hasAnyPv = true; }
-      });
-      if (hasAnyPv && totalRevenue > 0) {
-        const avgRevenue = totalRevenue / last6.length;
-        summaryText += ` &nbsp;|&nbsp; Avg Monthly Revenue: $${avgRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      }
-    }
-    summaryEl.innerHTML = summaryText;
+  let legendHtml = '<div style="display:flex;justify-content:center;gap:16px;margin-bottom:6px;font-size:0.72rem;">';
+  legendHtml += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(34,197,94,0.7);margin-right:4px;vertical-align:middle;"></span>Actual</span>';
+  legendHtml += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(59,130,246,0.7);margin-right:4px;vertical-align:middle;"></span>Calculated</span>';
+  if (nonZero.length >= 2) {
+    legendHtml += '<span><span style="display:inline-block;width:16px;height:2px;background:#f59e0b;margin-right:4px;vertical-align:middle;border-top:2px dashed #f59e0b;"></span>Average</span>';
   }
-  document.getElementById('monthlyTrendToggle').textContent = monthlyShowDollars ? 'pts' : '$';
+  legendHtml += '</div>';
+  legendHtml += avg > 0 ? 'Avg Monthly Compensation: $' + avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) : '';
+  summaryEl.innerHTML = legendHtml;
 }
 
 function renderHistoricalComp() {
@@ -8582,6 +8625,7 @@ function renderHistoricalComp() {
   const now = new Date();
   const decAdv = settings.decemberAdvance !== false;
   if (!data.overrides) data.overrides = {};
+  if (!settings.pointValues) settings.pointValues = {};
 
   function mkKey(year, month) {
     const d = new Date(year, month, 1);
@@ -8591,29 +8635,22 @@ function renderHistoricalComp() {
   // Determine paycheck months to show: from earliest work month + 1 through current month
   const earliestWork = workMonths[0];
   const [ey, em] = earliestWork.split('-').map(Number);
-  const startDate = new Date(ey, em, 1); // +1 month from earliest work
-  const endDate = new Date(now.getFullYear(), now.getMonth(), 1); // current month (receiving)
+  const startDate = new Date(ey, em, 1);
+  const endDate = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const paycheckMonths = [];
   for (let d = new Date(endDate); d >= startDate; d.setMonth(d.getMonth() - 1)) {
     paycheckMonths.push(mkKey(d.getFullYear(), d.getMonth()));
   }
 
-  // Compute hours per work month
-  const monthHours = {};
-  Object.values(data.shifts).forEach(shift => {
-    const mk = shift.date.substring(0, 7);
-    if (!monthHours[mk]) monthHours[mk] = 0;
-    monthHours[mk] += calcShiftHours(shift);
-  });
-
-  let html = '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">';
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:0.73rem;table-layout:fixed;">';
+  html += '<colgroup><col style="width:19%"><col style="width:17%"><col style="width:22%"><col style="width:21%"><col style="width:21%"></colgroup>';
   html += '<thead><tr style="border-bottom:2px solid var(--border);text-align:left;">';
-  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;">Paycheck</th>';
-  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Earned</th>';
-  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Blended</th>';
-  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Calculated</th>';
-  html += '<th style="padding:6px 4px;color:var(--text-dim);font-weight:600;text-align:right;">Actual</th>';
+  html += '<th style="padding:5px 3px;color:var(--text-dim);font-weight:600;font-size:0.7rem;">Month</th>';
+  html += '<th style="padding:5px 3px;color:var(--text-dim);font-weight:600;font-size:0.7rem;text-align:right;">Blend</th>';
+  html += '<th style="padding:5px 3px;color:var(--text-dim);font-weight:600;font-size:0.7rem;text-align:right;">$/pt</th>';
+  html += '<th style="padding:5px 3px;color:var(--text-dim);font-weight:600;font-size:0.7rem;text-align:right;">Calc</th>';
+  html += '<th style="padding:5px 3px;color:var(--text-dim);font-weight:600;font-size:0.7rem;text-align:right;">Actual</th>';
   html += '</tr></thead><tbody>';
 
   let grandCalc = 0, grandActual = 0, hasAnyActual = false;
@@ -8621,80 +8658,71 @@ function renderHistoricalComp() {
   paycheckMonths.forEach((payMk, i) => {
     const [py, pm] = payMk.split('-').map(Number);
     const payDate = new Date(py, pm - 1, 1);
-    const payLabel = monthNames[payDate.getMonth()] + ' ' + py;
+    const payLabel = monthNames[payDate.getMonth()] + ' ' + String(py).slice(2);
 
     // Blend: paycheck for month M uses work from M-1 through M-5
     const blendVals = [0,1,2,3,4].map(w => {
-      const srcKey = mkKey(py, pm - 2 - w); // M-1-w where M is 1-indexed
+      const srcKey = mkKey(py, pm - 2 - w);
       return mt[srcKey] || 0;
     });
     const blended = round2(weights.reduce((sum, w, j) => sum + w * blendVals[j], 0));
 
     // Primary work month = M-1 (the 40% weight)
     const workKey = mkKey(py, pm - 2);
-    const rawPts = mt[workKey] || 0;
-    const hrs = monthHours[workKey] || 0;
-    const ptsHr = hrs > 0 ? (rawPts / hrs).toFixed(1) : '-';
-
-    // PV from month M-1
-    const pvKey = mkKey(py, pm - 2);
-    const pv = getPointValueForMonth(pvKey);
-
-    // Stipend from month M-1
-    const stipKey = mkKey(py, pm - 2);
-    const stipend = getMonthlyStipendTotal(stipKey);
+    const pv = getPointValueForMonth(workKey);
+    const isConfirmedPV = settings.pointValues[workKey] != null;
+    const stipend = getMonthlyStipendTotal(workKey);
 
     // Calculated paycheck
     let calcPaycheck = pv > 0 ? round2(blended * pv + stipend) : 0;
-
-    // December advance handling
-    if (decAdv && payDate.getMonth() === 0) {
-      calcPaycheck = 0; // January: received in December advance
-    }
+    const isJanZero = decAdv && payDate.getMonth() === 0;
+    if (isJanZero) calcPaycheck = 0;
 
     // Override
     const ov = data.overrides[payMk];
     const hasOverride = ov && ov.compTotal != null;
     const actualAmt = hasOverride ? ov.compTotal : null;
 
-    const displayAmt = hasOverride ? actualAmt : calcPaycheck;
     grandCalc += calcPaycheck;
     if (hasOverride) { grandActual += actualAmt; hasAnyActual = true; }
     else { grandActual += calcPaycheck; }
 
     const bgColor = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
     const isReceiving = payMk === mkKey(now.getFullYear(), now.getMonth());
-    const isJanZero = decAdv && payDate.getMonth() === 0;
     let tag = '';
-    if (isReceiving) tag = ' <span style="font-size:0.6rem;color:var(--accent2);">recv</span>';
+    if (isReceiving) tag = '<span style="display:block;font-size:0.58rem;color:var(--accent2);line-height:1;">recv</span>';
+
+    // $/pt input value
+    const pvDisplay = isConfirmedPV ? settings.pointValues[workKey] : '';
+    const pvBorder = isConfirmedPV ? 'border:1px solid var(--accent);' : 'border:1px solid var(--border);';
 
     html += `<tr style="border-bottom:1px solid var(--border);background:${bgColor};">`;
-    const workDate = new Date(py, pm - 2, 1);
-    const workLabel = monthNames[workDate.getMonth()] + ' ' + workDate.getFullYear().toString().slice(2);
-    html += `<td style="padding:8px 4px;white-space:nowrap;">${payLabel}${tag}<br><span style="font-size:0.65rem;color:var(--text-dim);">${workLabel}: ${hrs.toFixed(0)} hrs &middot; ${ptsHr} pts/hr</span></td>`;
-    html += `<td style="padding:8px 4px;text-align:right;font-weight:500;color:var(--text-dim);">${rawPts.toFixed(1)}</td>`;
-    html += `<td style="padding:8px 4px;text-align:right;color:var(--text-dim);">${blended.toFixed(1)}</td>`;
-
+    // Month column
+    html += `<td style="padding:5px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${payLabel}${tag}</td>`;
+    // Blend column
+    html += `<td style="padding:5px 3px;text-align:right;color:var(--text-dim);">${blended.toFixed(1)}</td>`;
+    // $/pt column — inline input
+    html += `<td style="padding:5px 2px;text-align:right;"><input type="number" data-pvmonth="${workKey}" min="0" step="0.01" placeholder="${(settings.pointValue || 0).toFixed(0)}" value="${pvDisplay}" inputmode="decimal" style="max-width:58px;width:100%;padding:3px 4px;font-size:0.73rem;border-radius:4px;${pvBorder}background:var(--surface);color:var(--text);text-align:right;box-sizing:border-box;"></td>`;
+    // Calc column
     if (isJanZero) {
-      html += `<td style="padding:8px 4px;text-align:right;color:var(--text-dim);font-size:0.7rem;">Dec adv.</td>`;
+      html += `<td style="padding:5px 3px;text-align:right;color:var(--text-dim);font-size:0.65rem;">Dec adv</td>`;
     } else {
-      html += `<td style="padding:8px 4px;text-align:right;color:var(--primary);">${pv > 0 ? '$' + calcPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
+      html += `<td style="padding:5px 3px;text-align:right;color:var(--primary);">${pv > 0 ? '$' + calcPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
     }
-
-    // Actual column — tappable to edit
+    // Actual column — tappable
     const actualDisplay = hasOverride
       ? '$' + actualAmt.toLocaleString('en-US', {maximumFractionDigits: 0})
-      : '<span style="color:var(--text-dim);font-size:0.7rem;">tap to set</span>';
+      : '<span style="color:var(--text-dim);font-size:0.65rem;">tap</span>';
     const actualColor = hasOverride ? 'color:var(--accent2);font-weight:600;' : '';
-    html += `<td style="padding:8px 4px;text-align:right;${actualColor}cursor:pointer;" onclick="editHistCompActual('${payMk}')">${actualDisplay}</td>`;
+    html += `<td style="padding:5px 3px;text-align:right;${actualColor}cursor:pointer;" onclick="editHistCompActual('${payMk}')">${actualDisplay}</td>`;
     html += '</tr>';
   });
 
   // Totals row
   html += `<tr style="border-top:2px solid var(--border);">`;
-  html += `<td style="padding:8px 4px;font-weight:700;" colspan="3">Total (${paycheckMonths.length} mo)</td>`;
-  html += `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--primary);">$${grandCalc.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
-  html += `<td style="padding:8px 4px;text-align:right;font-weight:700;color:var(--accent2);">$${grandActual.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
+  html += `<td style="padding:5px 3px;font-weight:700;" colspan="3">Total (${paycheckMonths.length} mo)</td>`;
+  html += `<td style="padding:5px 3px;text-align:right;font-weight:700;color:var(--primary);">$${grandCalc.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
+  html += `<td style="padding:5px 3px;text-align:right;font-weight:700;color:var(--accent2);">$${grandActual.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
   html += '</tr>';
 
   html += '</tbody></table>';
@@ -10916,7 +10944,7 @@ function syncPointValue(source) {
   renderProjectedAnnual();
   renderMonthlyPace();
   renderPipelineChart();
-  renderMonthlyChart();
+  renderHistoricalTrends();
 }
 
 pointValueInput.addEventListener('change', () => {
@@ -10927,11 +10955,6 @@ pointValueInput.addEventListener('change', () => {
 dashPointValueInput.addEventListener('change', () => {
   syncPointValue(dashPointValueInput);
   showToast('Point value saved');
-});
-
-document.getElementById('monthlyTrendToggle').addEventListener('click', () => {
-  monthlyShowDollars = !monthlyShowDollars;
-  renderMonthlyChart();
 });
 
 // December advance paycheck toggle
