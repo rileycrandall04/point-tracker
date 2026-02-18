@@ -4468,8 +4468,21 @@ function calcShiftTotal(shift) {
   const subspecPts = (shift.assignmentType === 'cardiac_liver') ? calcSubspecPoints(shift) : 0;
   const supervisionPts = calcSupervisionPoints(shift);
   const calcTotal = round2(arPts + prodPts + callPts + subspecPts + supervisionPts);
-  const total = (shift.manualTotal != null) ? shift.manualTotal : calcTotal;
-  return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, supervision: supervisionPts, total: total, calcTotal: calcTotal, isManual: shift.manualTotal != null };
+  // Per-row overrides: adjust total by difference between overridden and calculated row amounts
+  const hasRowOverrides = shift.manualAmounts && Object.keys(shift.manualAmounts).length > 0;
+  let total = calcTotal;
+  let isManual = false;
+  if (hasRowOverrides) {
+    const bdRows = getShiftPayBreakdown(shift);
+    const timeCalc = bdRows.reduce((s, r) => s + r.amount, 0);
+    const timeOverridden = bdRows.reduce((s, r, i) => s + (shift.manualAmounts[i] != null ? shift.manualAmounts[i] : r.amount), 0);
+    total = round2(calcTotal + (timeOverridden - timeCalc));
+    isManual = true;
+  } else if (shift.manualTotal != null) {
+    total = shift.manualTotal;
+    isManual = true;
+  }
+  return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, supervision: supervisionPts, total: total, calcTotal: calcTotal, isManual: isManual };
 }
 
 function getShiftPointsForDate(dateStr, estimate) {
@@ -7096,13 +7109,14 @@ function renderShiftLogTable() {
     allBreakdowns.push({ shift, rows });
   });
 
-  // Summary card: aggregate by payCode
+  // Summary card: aggregate by payCode (with per-row overrides)
   const payCodeTotals = {};
-  allBreakdowns.forEach(({ rows }) => {
-    rows.forEach(r => {
+  allBreakdowns.forEach(({ shift, rows }) => {
+    const sma = shift.manualAmounts || {};
+    rows.forEach((r, ri) => {
       if (!payCodeTotals[r.payCode]) payCodeTotals[r.payCode] = { hours: 0, amount: 0 };
       payCodeTotals[r.payCode].hours += r.durationMin / 60;
-      payCodeTotals[r.payCode].amount += r.amount;
+      payCodeTotals[r.payCode].amount += (sma[ri] != null ? sma[ri] : r.amount);
     });
   });
 
@@ -7144,8 +7158,9 @@ function renderShiftLogTable() {
     const timeStr = entries.length > 0 && entries[0].start
       ? entries[0].start + (entries[entries.length - 1].end ? ' - ' + entries[entries.length - 1].end : '')
       : '-';
+    const ma = shift.manualAmounts || {};
     const shiftCalcTotal = rows.reduce((s, r) => s + r.amount, 0);
-    const shiftTotal = (shift.manualTotal != null) ? shift.manualTotal : shiftCalcTotal;
+    const shiftTotal = rows.reduce((s, r, ri) => s + (ma[ri] != null ? ma[ri] : r.amount), 0);
     grandTotal += shiftTotal;
     const checkboxCell = `<td class="sl-check"><input type="checkbox" class="sl-shift-cb" data-date="${shift.date}" onclick="event.stopPropagation();slUpdateDeleteBar()"></td>`;
     const deleteCell = `<td class="sl-del-cell"><button class="sl-del-btn" title="Delete shift" onclick="event.stopPropagation();deleteShiftFromLog('${shift.date}')">&times;</button></td>`;
@@ -7188,8 +7203,8 @@ function renderShiftLogTable() {
 
     // Pre-call shifts: render as two separate visual groups
     if (hasPreCall) {
-      const preCallRows = rows.filter(r => r.payCode && r.payCode.startsWith('Pre-Call'));
-      const eveningRows = rows.filter(r => !r.payCode || !r.payCode.startsWith('Pre-Call'));
+      const preCallRows = rows.map((r, ri) => ({ ...r, _ri: ri })).filter(r => r.payCode && r.payCode.startsWith('Pre-Call'));
+      const eveningRows = rows.map((r, ri) => ({ ...r, _ri: ri })).filter(r => !r.payCode || !r.payCode.startsWith('Pre-Call'));
       const pcTimeStr = shift.preCallStart + ' - ' + shift.preCallEnd;
       // Compute pre-call clocked hours
       let pcMinutes = 0;
@@ -7228,7 +7243,8 @@ function renderShiftLogTable() {
           }
           html += `<td>${r.clockIn || ''}</td><td>${r.clockOut || ''}</td>`;
           html += `<td>${r.payCode}</td><td>${(r.durationMin / 60).toFixed(1)}</td>`;
-          html += `<td>${r.payRate.toFixed(1)}/hr</td><td><strong>${r.amount.toFixed(1)}</strong></td>`;
+          html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
+          html += buildAmountCell(shift, r._ri, r.amount);
           html += i === 0 ? `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>` : '<td></td>';
           html += i === 0 ? `<td><button class="unbilled-btn ${shift.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleShiftUnbilled('${shift.date}')">$</button></td>` : '<td></td>';
           html += i === 0 ? deleteCell : '<td></td>';
@@ -7265,7 +7281,8 @@ function renderShiftLogTable() {
           }
           html += `<td>${r.clockIn || ''}</td><td>${r.clockOut || ''}</td>`;
           html += `<td>${r.payCode}</td><td>${(r.durationMin / 60).toFixed(1)}</td>`;
-          html += `<td>${r.payRate.toFixed(1)}/hr</td><td><strong>${r.amount.toFixed(1)}</strong></td>`;
+          html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
+          html += buildAmountCell(shift, r._ri, r.amount);
           html += '<td></td>';
           html += '<td></td>';
           html += '<td></td>';
@@ -7309,7 +7326,7 @@ function renderShiftLogTable() {
       html += `<td>${r.payCode}</td>`;
       html += `<td>${(r.durationMin / 60).toFixed(1)}</td>`;
       html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
-      html += `<td><strong>${r.amount.toFixed(1)}</strong></td>`;
+      html += buildAmountCell(shift, i, r.amount);
       html += i === 0 ? `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>` : '<td></td>';
       html += i === 0 ? `<td><button class="unbilled-btn ${shift.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleShiftUnbilled('${shift.date}')">$</button></td>` : '<td></td>';
       html += i === 0 ? deleteCell : '<td></td>';
@@ -7325,8 +7342,18 @@ function renderShiftLogTable() {
   container.innerHTML = html;
 }
 
+function buildAmountCell(shift, rowIdx, calcAmount) {
+  const ma = shift.manualAmounts || {};
+  const val = ma[rowIdx] != null ? ma[rowIdx] : calcAmount;
+  const isOverride = ma[rowIdx] != null;
+  const cls = isOverride ? ' pts-manual' : '';
+  const resetHtml = isOverride ? `<span class="pts-reset" onclick="event.stopPropagation();resetShiftRowAmount('${shift.date}',${rowIdx})">reset</span>` : '';
+  return `<td class="pts-cell${cls}" onclick="event.stopPropagation();editShiftRowAmount('${shift.date}',${rowIdx},this)"><strong>${round2(val).toFixed(1)}</strong>${resetHtml}</td>`;
+}
+
 function buildShiftTotalRow(shift, shiftTotal, altClass) {
-  const isManual = shift.manualTotal != null;
+  const hasRowOverrides = shift.manualAmounts && Object.keys(shift.manualAmounts).length > 0;
+  const isManual = hasRowOverrides || shift.manualTotal != null;
   const manualClass = isManual ? ' pts-manual' : '';
   const resetHtml = isManual ? `<span class="pts-reset" onclick="event.stopPropagation();resetShiftPoints('${shift.date}')">reset</span>` : '';
   return `<tr class="sl-sub-row${altClass}" data-shiftdate="${shift.date}"><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td colspan="3" style="text-align:right;font-size:0.72rem;color:var(--text-dim);font-weight:600;">Shift Total</td><td class="pts-cell${manualClass}" onclick="event.stopPropagation();editShiftPoints('${shift.date}',this)"><strong>${round2(shiftTotal).toFixed(1)}</strong>${resetHtml}</td><td></td><td></td><td></td></tr>`;
@@ -7363,7 +7390,50 @@ function saveShiftPoints(dateStr, input) {
 
 function resetShiftPoints(dateStr) {
   const shift = data.shifts[dateStr];
-  if (shift) { delete shift.manualTotal; saveData(data); renderShiftLogTable(); }
+  if (shift) { delete shift.manualTotal; delete shift.manualAmounts; saveData(data); renderShiftLogTable(); }
+}
+
+function editShiftRowAmount(dateStr, rowIdx, td) {
+  if (td.querySelector('.pts-edit-input')) return;
+  const shift = data.shifts[dateStr];
+  if (!shift) return;
+  const bdRows = getShiftPayBreakdown(shift);
+  const calcVal = bdRows[rowIdx] ? bdRows[rowIdx].amount : 0;
+  const ma = shift.manualAmounts || {};
+  const curVal = ma[rowIdx] != null ? ma[rowIdx] : calcVal;
+  td.innerHTML = `<input class="pts-edit-input" type="number" step="0.1" value="${round2(curVal).toFixed(1)}" onkeydown="if(event.key==='Enter'){saveShiftRowAmount('${dateStr}',${rowIdx},this)}else if(event.key==='Escape'){renderShiftLogTable()}" onblur="saveShiftRowAmount('${dateStr}',${rowIdx},this)">`;
+  const input = td.querySelector('input');
+  input.focus();
+  input.select();
+}
+
+function saveShiftRowAmount(dateStr, rowIdx, input) {
+  const shift = data.shifts[dateStr];
+  if (!shift) return;
+  const val = parseFloat(input.value);
+  if (isNaN(val)) { renderShiftLogTable(); return; }
+  const bdRows = getShiftPayBreakdown(shift);
+  const calcVal = bdRows[rowIdx] ? bdRows[rowIdx].amount : 0;
+  if (!shift.manualAmounts) shift.manualAmounts = {};
+  if (Math.abs(val - calcVal) < 0.01) {
+    delete shift.manualAmounts[rowIdx];
+    if (Object.keys(shift.manualAmounts).length === 0) delete shift.manualAmounts;
+  } else {
+    shift.manualAmounts[rowIdx] = round2(val);
+  }
+  // Clear old manualTotal since we now have per-row overrides
+  delete shift.manualTotal;
+  saveData(data);
+  renderShiftLogTable();
+}
+
+function resetShiftRowAmount(dateStr, rowIdx) {
+  const shift = data.shifts[dateStr];
+  if (!shift || !shift.manualAmounts) return;
+  delete shift.manualAmounts[rowIdx];
+  if (Object.keys(shift.manualAmounts).length === 0) delete shift.manualAmounts;
+  saveData(data);
+  renderShiftLogTable();
 }
 
 function slToggleAll(masterCb) {
