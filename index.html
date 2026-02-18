@@ -4467,7 +4467,9 @@ function calcShiftTotal(shift) {
   shiftCases.forEach(c => { prodPts += calcCasePoints(c, shift); });
   const subspecPts = (shift.assignmentType === 'cardiac_liver') ? calcSubspecPoints(shift) : 0;
   const supervisionPts = calcSupervisionPoints(shift);
-  return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, supervision: supervisionPts, total: round2(arPts + prodPts + callPts + subspecPts + supervisionPts) };
+  const calcTotal = round2(arPts + prodPts + callPts + subspecPts + supervisionPts);
+  const total = (shift.manualTotal != null) ? shift.manualTotal : calcTotal;
+  return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, supervision: supervisionPts, total: total, calcTotal: calcTotal, isManual: shift.manualTotal != null };
 }
 
 function getShiftPointsForDate(dateStr, estimate) {
@@ -7142,7 +7144,8 @@ function renderShiftLogTable() {
     const timeStr = entries.length > 0 && entries[0].start
       ? entries[0].start + (entries[entries.length - 1].end ? ' - ' + entries[entries.length - 1].end : '')
       : '-';
-    const shiftTotal = rows.reduce((s, r) => s + r.amount, 0);
+    const shiftCalcTotal = rows.reduce((s, r) => s + r.amount, 0);
+    const shiftTotal = (shift.manualTotal != null) ? shift.manualTotal : shiftCalcTotal;
     grandTotal += shiftTotal;
     const checkboxCell = `<td class="sl-check"><input type="checkbox" class="sl-shift-cb" data-date="${shift.date}" onclick="event.stopPropagation();slUpdateDeleteBar()"></td>`;
     const deleteCell = `<td class="sl-del-cell"><button class="sl-del-btn" title="Delete shift" onclick="event.stopPropagation();deleteShiftFromLog('${shift.date}')">&times;</button></td>`;
@@ -7179,6 +7182,7 @@ function renderShiftLogTable() {
       html += `<td><button class="unbilled-btn ${shift.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleShiftUnbilled('${shift.date}')">$</button></td>`;
       html += deleteCell;
       html += '</tr>';
+      html += buildShiftTotalRow(shift, shiftTotal, altClass);
       return;
     }
 
@@ -7279,6 +7283,7 @@ function renderShiftLogTable() {
         html += '<td></td>';
         html += '</tr>';
       }
+      html += buildShiftTotalRow(shift, shiftTotal, evAlt);
       return;
     }
 
@@ -7310,11 +7315,55 @@ function renderShiftLogTable() {
       html += i === 0 ? deleteCell : '<td></td>';
       html += '</tr>';
     });
+
+    // Shift total row with editable total
+    html += buildShiftTotalRow(shift, shiftTotal, altClass);
   });
 
   html += `<tr style="border-top:2px solid var(--border);"><td colspan="13" style="text-align:right;font-weight:700;">Monthly Total</td><td><strong>${grandTotal.toFixed(1)}</strong></td></tr>`;
   html += '</tbody></table>';
   container.innerHTML = html;
+}
+
+function buildShiftTotalRow(shift, shiftTotal, altClass) {
+  const isManual = shift.manualTotal != null;
+  const manualClass = isManual ? ' pts-manual' : '';
+  const resetHtml = isManual ? `<span class="pts-reset" onclick="event.stopPropagation();resetShiftPoints('${shift.date}')">reset</span>` : '';
+  return `<tr class="sl-sub-row${altClass}" data-shiftdate="${shift.date}"><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td colspan="3" style="text-align:right;font-size:0.72rem;color:var(--text-dim);font-weight:600;">Shift Total</td><td class="pts-cell${manualClass}" onclick="event.stopPropagation();editShiftPoints('${shift.date}',this)"><strong>${round2(shiftTotal).toFixed(1)}</strong>${resetHtml}</td><td></td><td></td><td></td></tr>`;
+}
+
+function editShiftPoints(dateStr, td) {
+  if (td.querySelector('.pts-edit-input')) return;
+  const shift = data.shifts[dateStr];
+  if (!shift) return;
+  const totals = calcShiftTotal(shift);
+  const displayVal = (shift.manualTotal != null) ? shift.manualTotal : totals.calcTotal;
+  td.innerHTML = `<input class="pts-edit-input" type="number" step="0.1" value="${round2(displayVal).toFixed(1)}" onkeydown="if(event.key==='Enter'){saveShiftPoints('${dateStr}',this)}else if(event.key==='Escape'){renderShiftLogTable()}" onblur="saveShiftPoints('${dateStr}',this)">`;
+  const input = td.querySelector('input');
+  input.focus();
+  input.select();
+}
+
+function saveShiftPoints(dateStr, input) {
+  const shift = data.shifts[dateStr];
+  if (!shift) return;
+  const val = parseFloat(input.value);
+  if (isNaN(val)) { renderShiftLogTable(); return; }
+  const origManual = shift.manualTotal;
+  delete shift.manualTotal;
+  const totals = calcShiftTotal(shift);
+  if (Math.abs(val - totals.calcTotal) < 0.01) {
+    delete shift.manualTotal;
+  } else {
+    shift.manualTotal = round2(val);
+  }
+  if (shift.manualTotal !== origManual) saveData(data);
+  renderShiftLogTable();
+}
+
+function resetShiftPoints(dateStr) {
+  const shift = data.shifts[dateStr];
+  if (shift) { delete shift.manualTotal; saveData(data); renderShiftLogTable(); }
 }
 
 function slToggleAll(masterCb) {
