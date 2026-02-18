@@ -5811,7 +5811,8 @@ function renderToday() {
 
   // Big point total + dollar equivalent
   bdHtml += `<div style="display:flex;align-items:baseline;gap:8px;">`;
-  bdHtml += `<span id="todayLivePts" style="font-size:1.9rem;font-weight:700;line-height:1;">${result.total.toFixed(2)}</span>`;
+  const ptsPrecision = result.isInProgress ? 3 : 2;
+  bdHtml += `<span id="todayLivePts" style="font-size:1.9rem;font-weight:700;line-height:1;">${result.total.toFixed(ptsPrecision)}</span>`;
   bdHtml += `<span style="font-size:0.85rem;color:var(--text-dim);">pts</span>`;
   bdHtml += estTag;
   bdHtml += `<span id="todayLiveDollars" style="font-size:1.1rem;font-weight:600;color:var(--text-dim);margin-left:auto;">$${dollarTotal.toFixed(2)}</span>`;
@@ -6004,6 +6005,7 @@ function stopLiveTicker() {
 }
 
 function tickLiveUpdate() {
+  try {
   const todayPage = document.getElementById('page-today');
   if (!todayPage || !todayPage.classList.contains('active')) { stopLiveTicker(); return; }
 
@@ -6063,9 +6065,9 @@ function tickLiveUpdate() {
   const liveTotal = result.total + (totalRate * secFraction);
   const dollarTotal = round2(liveTotal * pv);
 
-  // Update point total
+  // Update point total (3 decimals so every second is visible)
   const ptsEl = document.getElementById('todayLivePts');
-  if (ptsEl) ptsEl.textContent = liveTotal.toFixed(2);
+  if (ptsEl) ptsEl.textContent = liveTotal.toFixed(3);
 
   // Update dollar total
   const dolEl = document.getElementById('todayLiveDollars');
@@ -6109,6 +6111,7 @@ function tickLiveUpdate() {
 
   // Also update the rate chips
   updateTodayRateChips();
+  } catch(e) { /* ticker resilience — don't stop interval on transient errors */ }
 }
 
 function renderWeeklyChart() {
