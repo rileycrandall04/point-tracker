@@ -863,6 +863,44 @@ input.mil-time.invalid {
 .daily-cal-pts.zero { color: var(--text-dim); font-weight: 400; }
 .daily-cal-type { font-size: 0.5rem; color: var(--accent); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* ===== STALE SYNC BANNER ===== */
+.cal-sync-banner { display: flex; align-items: center; gap: 8px; background: rgba(245,158,11,0.15); border: 1px solid var(--accent2); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.78rem; color: var(--accent2); }
+.cal-sync-banner .banner-msg { flex: 1; }
+.cal-sync-banner .btn-banner-sync { background: var(--accent2); color: #1e293b; border: none; border-radius: 6px; padding: 4px 10px; font-size: 0.72rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.cal-sync-banner .btn-banner-dismiss { background: none; border: none; color: var(--accent2); font-size: 1.1rem; cursor: pointer; padding: 0 4px; line-height: 1; }
+
+/* ===== ASSIGNMENT EDITOR ===== */
+.edit-assignments-btn { display: block; margin: 12px auto 0; background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); border-radius: 8px; padding: 8px 18px; font-size: 0.8rem; cursor: pointer; transition: background 0.15s; }
+.edit-assignments-btn:hover { background: var(--hover); }
+.edit-assignments-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+.assign-editor-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; width: 100%; box-sizing: border-box; margin-top: 12px; }
+.assign-editor-cal .daily-cal-header { font-size: 0.6rem; color: var(--text-dim); text-align: center; padding: 2px 0; font-weight: 600; }
+.assign-editor-cell { background: var(--surface); border-radius: 5px; padding: 4px 2px; text-align: center; min-height: 44px; position: relative; cursor: pointer; transition: background 0.15s; overflow: hidden; }
+.assign-editor-cell:active { background: rgba(59,130,246,0.15); }
+.assign-editor-cell.empty { background: transparent; cursor: default; }
+.assign-editor-cell.today { border: 2px solid var(--primary); }
+.assign-editor-cell .ae-day { font-size: 0.6rem; color: var(--text-dim); margin-bottom: 1px; }
+.assign-editor-cell .ae-label { font-size: 0.5rem; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.assign-editor-cell.has-assign { background: rgba(16,185,129,0.08); }
+
+/* ===== ASSIGNMENT PICKER (bottom sheet) ===== */
+.assign-picker-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9000; display: flex; align-items: flex-end; justify-content: center; }
+.assign-picker-overlay.hidden { display: none; }
+.assign-picker { background: var(--bg); border-radius: 16px 16px 0 0; width: 100%; max-width: 480px; max-height: 70vh; display: flex; flex-direction: column; animation: slideUp 0.2s ease-out; }
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.assign-picker-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; border-bottom: 1px solid var(--border); }
+.assign-picker-header h3 { margin: 0; font-size: 1rem; color: var(--text); }
+.assign-picker-close { background: none; border: none; color: var(--text-dim); font-size: 1.3rem; cursor: pointer; }
+.assign-picker-wb { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.assign-picker-wb label { font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; }
+.assign-picker-wb input { width: 60px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; color: var(--text); font-size: 0.85rem; text-align: center; }
+.assign-picker-wb .btn-wb-apply { background: var(--primary); color: white; border: none; border-radius: 6px; padding: 6px 12px; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+.assign-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+.assign-item { display: flex; align-items: center; padding: 10px 16px; cursor: pointer; transition: background 0.12s; font-size: 0.85rem; color: var(--text); }
+.assign-item:active { background: rgba(59,130,246,0.12); }
+.assign-item.current { background: rgba(16,185,129,0.12); color: var(--accent); font-weight: 600; }
+.assign-item.clear-item { color: var(--danger); }
+
 /* ===== CASE LOG TABLE ===== */
 .case-log-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -12px; padding: 0 12px; }
 .case-log-table {
@@ -2216,6 +2254,8 @@ input.mil-time.invalid {
     </div>
     <div id="dailyCalendarContainer" style="margin-top:12px;"></div>
     <div id="dailyMonthSummary" style="margin-top:12px;font-size:0.85rem;color:var(--text-dim);text-align:center;"></div>
+    <button class="edit-assignments-btn" id="editAssignmentsBtn" onclick="toggleAssignmentEditor()">&#9998; Edit Assignments</button>
+    <div id="assignEditorContainer" class="hidden"></div>
   </div>
 
   <!-- Reconcile Tab -->
@@ -2946,6 +2986,22 @@ input.mil-time.invalid {
   </div>
 </div>
 
+<!-- Assignment Picker Bottom Sheet -->
+<div class="assign-picker-overlay hidden" id="assignPickerOverlay" onclick="if(event.target===this)closeAssignPicker()">
+  <div class="assign-picker">
+    <div class="assign-picker-header">
+      <h3 id="assignPickerTitle">Set Assignment</h3>
+      <button class="assign-picker-close" onclick="closeAssignPicker()">&times;</button>
+    </div>
+    <div class="assign-picker-wb">
+      <label>Workbench #</label>
+      <input type="number" id="assignWbInput" min="1" max="99" placeholder="#">
+      <button class="btn-wb-apply" onclick="applyWbAssignment()">Set WB</button>
+    </div>
+    <div class="assign-list" id="assignList"></div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -3374,6 +3430,7 @@ async function syncCalendarEvents(silent) {
     // Refresh views if on relevant pages
     if (typeof renderWeeklyChart === 'function') renderWeeklyChart();
     if (typeof loadShiftForDate === 'function') loadShiftForDate();
+    if (dailyEditMode) renderAssignmentEditor();
   } catch (err) {
     if (silent) {
       console.log('Auto calendar sync skipped:', err.message);
@@ -6322,6 +6379,18 @@ document.querySelectorAll('.dash-tab-btn').forEach(btn => {
 
 function switchDashboardTab(tabName) {
   if (tabName === 'projections') tabName = 'daily';
+  // Reset assignment editor when switching tabs
+  if (dailyEditMode) {
+    dailyEditMode = false;
+    const btn = document.getElementById('editAssignmentsBtn');
+    if (btn) { btn.classList.remove('active'); btn.innerHTML = '&#9998; Edit Assignments'; }
+    const ec = document.getElementById('assignEditorContainer');
+    if (ec) ec.classList.add('hidden');
+    const cc = document.getElementById('dailyCalendarContainer');
+    if (cc) cc.classList.remove('hidden');
+    const sc = document.getElementById('dailyMonthSummary');
+    if (sc) sc.classList.remove('hidden');
+  }
   activeDashTab = tabName;
   document.querySelectorAll('.dash-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.dtab === tabName));
   document.getElementById('dtab-caselogs').classList.toggle('hidden', tabName !== 'caselogs');
@@ -9065,6 +9134,37 @@ function renameSingleCase(caseId) {
 // ================================================================
 let dailyMonth = new Date().getMonth();
 let dailyYear = new Date().getFullYear();
+let calSyncBannerDismissed = false;
+let dailyEditMode = false;
+let assignPickerDate = '';
+
+const ASSIGNMENT_OPTIONS = [
+  { type: 'OR', label: 'OR' },
+  { type: 'mole', label: 'Mole' },
+  { type: 'endo', label: 'Endo' },
+  { type: 'OB_restricted', label: 'OB' },
+  { type: 'SF1', label: 'SF1' },
+  { type: 'SF2', label: 'SF2' },
+  { type: 'ACS', label: 'ACS' },
+  { type: 'NORA', label: 'NORA' },
+  { type: 'cardiac_liver', label: 'Cardiac' },
+  { type: 'cardiac_liver', label: 'Liver' },
+  { type: 'CRNA_supervision', label: 'CRNA Supervision' },
+  { type: '1st_call', label: '1st Call' },
+  { type: '2nd_call', label: '2nd Call' },
+  { type: '3rd_call', label: '3rd Call' },
+  { type: '4th_call', label: '4th Call' },
+  { type: 'pre_call', label: 'Pre-Call' },
+  { type: 'OR', label: 'Pre-Mole' },
+  { type: 'OB_restricted', label: 'Pre-OB' },
+  { type: 'OR', label: 'Post Mole' },
+  { type: 'OB_restricted', label: 'Post OB' },
+  { type: 'OR', label: 'Post Call' },
+  { type: 'SF1', label: 'Post SF1' },
+  { type: 'SF2', label: 'Post SF2' },
+  { type: 'vacation', label: 'Vacation' },
+  { type: 'forced_off', label: 'Forced Off' },
+];
 
 function updateDailyMonthLabel() {
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -9073,11 +9173,11 @@ function updateDailyMonthLabel() {
 
 document.getElementById('dailyPrevMonth').addEventListener('click', () => {
   dailyMonth--; if (dailyMonth < 0) { dailyMonth = 11; dailyYear--; }
-  renderDailyTab();
+  if (dailyEditMode) { updateDailyMonthLabel(); renderAssignmentEditor(); } else { renderDailyTab(); }
 });
 document.getElementById('dailyNextMonth').addEventListener('click', () => {
   dailyMonth++; if (dailyMonth > 11) { dailyMonth = 0; dailyYear++; }
-  renderDailyTab();
+  if (dailyEditMode) { updateDailyMonthLabel(); renderAssignmentEditor(); } else { renderDailyTab(); }
 });
 
 function renderDailyTab() {
@@ -9099,8 +9199,19 @@ function renderDailyTab() {
     dailyTypes[day] = s.assignmentType;
   });
 
+  // Stale sync banner
+  let bannerHtml = '';
+  if (!calSyncBannerDismissed) {
+    const lastSync = data.calendarLastSync ? new Date(data.calendarLastSync).getTime() : 0;
+    const hoursSince = lastSync ? (Date.now() - lastSync) / 3600000 : Infinity;
+    if (hoursSince > 48) {
+      const msg = lastSync ? 'Last synced ' + Math.floor(hoursSince / 24) + ' day' + (Math.floor(hoursSince / 24) !== 1 ? 's' : '') + ' ago' : 'Calendar never synced';
+      bannerHtml = `<div class="cal-sync-banner"><span class="banner-msg">${msg}</span><button class="btn-banner-sync" onclick="syncCalendarFromBanner()">Sync Now</button><button class="btn-banner-dismiss" onclick="dismissCalSyncBanner()">&times;</button></div>`;
+    }
+  }
+
   // Build calendar grid
-  let html = '<div class="daily-cal">';
+  let html = bannerHtml + '<div class="daily-cal">';
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   dayNames.forEach(d => { html += `<div class="daily-cal-header">${d}</div>`; });
 
@@ -9143,6 +9254,138 @@ function renderDailyTab() {
   const avgPerShift = shiftCount > 0 ? (monthTotal / shiftCount).toFixed(1) : '—';
   document.getElementById('dailyMonthSummary').innerHTML =
     `<span style="font-size:1.3rem;font-weight:700;color:var(--accent);">${round2(monthTotal).toFixed(1)}</span> <span style="color:var(--text-dim);">total pts</span> &bull; <strong>${shiftCount}</strong> shifts &bull; <strong>${avgPerShift}</strong> avg pts/shift`;
+}
+
+// ================================================================
+// STALE SYNC BANNER ACTIONS
+// ================================================================
+function dismissCalSyncBanner() {
+  calSyncBannerDismissed = true;
+  const b = document.querySelector('.cal-sync-banner');
+  if (b) b.remove();
+}
+
+async function syncCalendarFromBanner() {
+  const btn = document.querySelector('.btn-banner-sync');
+  if (btn) { btn.textContent = 'Syncing...'; btn.disabled = true; }
+  await syncCalendarEvents(false);
+  calSyncBannerDismissed = true;
+  renderDailyTab();
+}
+
+// ================================================================
+// ASSIGNMENT EDITOR
+// ================================================================
+function toggleAssignmentEditor() {
+  dailyEditMode = !dailyEditMode;
+  const btn = document.getElementById('editAssignmentsBtn');
+  const container = document.getElementById('assignEditorContainer');
+  const calContainer = document.getElementById('dailyCalendarContainer');
+  const summaryContainer = document.getElementById('dailyMonthSummary');
+  btn.classList.toggle('active', dailyEditMode);
+  btn.innerHTML = dailyEditMode ? '&#10003; Done Editing' : '&#9998; Edit Assignments';
+  if (dailyEditMode) {
+    calContainer.classList.add('hidden');
+    summaryContainer.classList.add('hidden');
+    container.classList.remove('hidden');
+    renderAssignmentEditor();
+  } else {
+    calContainer.classList.remove('hidden');
+    summaryContainer.classList.remove('hidden');
+    container.classList.add('hidden');
+    renderDailyTab();
+  }
+}
+
+function renderAssignmentEditor() {
+  const prefix = dailyYear + '-' + String(dailyMonth + 1).padStart(2, '0');
+  const daysInMonth = new Date(dailyYear, dailyMonth + 1, 0).getDate();
+  const firstDow = new Date(dailyYear, dailyMonth, 1).getDay();
+  const today = new Date();
+  const todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+
+  let html = '<div class="assign-editor-cal">';
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  dayNames.forEach(d => { html += `<div class="daily-cal-header">${d}</div>`; });
+
+  for (let i = 0; i < firstDow; i++) {
+    html += '<div class="assign-editor-cell empty"></div>';
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = prefix + '-' + String(d).padStart(2, '0');
+    const cal = data.calendarAssignments[dateStr];
+    const isToday = dateStr === todayStr;
+    let classes = 'assign-editor-cell';
+    if (isToday) classes += ' today';
+    if (cal) classes += ' has-assign';
+
+    html += `<div class="${classes}" onclick="openAssignPicker('${dateStr}')">`;
+    html += `<div class="ae-day">${d}</div>`;
+    html += `<div class="ae-label">${cal ? escHtml(cal.label) : '—'}</div>`;
+    html += '</div>';
+  }
+  html += '</div>';
+  document.getElementById('assignEditorContainer').innerHTML = html;
+}
+
+function openAssignPicker(dateStr) {
+  assignPickerDate = dateStr;
+  const d = new Date(dateStr + 'T12:00:00');
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('assignPickerTitle').textContent = monthNames[d.getMonth()] + ' ' + d.getDate();
+
+  // Reset WB input
+  const wbInput = document.getElementById('assignWbInput');
+  const cal = data.calendarAssignments[dateStr];
+  if (cal && cal.label && cal.label.startsWith('WB: ')) {
+    wbInput.value = cal.label.replace('WB: ', '');
+  } else {
+    wbInput.value = '';
+  }
+
+  // Build assignment list
+  const currentLabel = cal ? cal.label : '';
+  let listHtml = '';
+  ASSIGNMENT_OPTIONS.forEach(opt => {
+    const isCurrent = currentLabel === opt.label;
+    listHtml += `<div class="assign-item${isCurrent ? ' current' : ''}" onclick="applyAssignment('${opt.type}','${opt.label}')">${escHtml(opt.label)}${isCurrent ? ' &#10003;' : ''}</div>`;
+  });
+  listHtml += `<div class="assign-item clear-item" onclick="clearAssignment()">Off / Clear</div>`;
+  document.getElementById('assignList').innerHTML = listHtml;
+
+  document.getElementById('assignPickerOverlay').classList.remove('hidden');
+}
+
+function closeAssignPicker() {
+  document.getElementById('assignPickerOverlay').classList.add('hidden');
+  assignPickerDate = '';
+}
+
+function applyAssignment(type, label) {
+  if (!assignPickerDate) return;
+  data.calendarAssignments[assignPickerDate] = { type: type, label: label };
+  saveData(data);
+  closeAssignPicker();
+  renderAssignmentEditor();
+}
+
+function applyWbAssignment() {
+  if (!assignPickerDate) return;
+  const wb = document.getElementById('assignWbInput').value.trim();
+  if (!wb) { showToast('Enter a workbench number'); return; }
+  data.calendarAssignments[assignPickerDate] = { type: 'OR', label: 'WB: ' + wb };
+  saveData(data);
+  closeAssignPicker();
+  renderAssignmentEditor();
+}
+
+function clearAssignment() {
+  if (!assignPickerDate) return;
+  delete data.calendarAssignments[assignPickerDate];
+  saveData(data);
+  closeAssignPicker();
+  renderAssignmentEditor();
 }
 
 // ================================================================
