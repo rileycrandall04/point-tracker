@@ -2357,9 +2357,9 @@ input.mil-time.invalid {
       Your paycheck is based on a weighted blend of the last 5 months, not just this month alone.
     </p>
     <div id="stabPaycheckRow" style="text-align:center; margin-bottom:12px;">
+      <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:2px;" id="stabBuildingLabel">Building: &mdash;</div>
       <div style="font-size:1.6rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
-      <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px;" id="stabPaycheckLabel">Projected next month's paycheck</div>
-      <div style="font-size:0.78rem; color:var(--text-dim); margin-top:6px;" id="stabCurrentPaycheck"></div>
+      <div style="font-size:0.85rem; color:var(--text-dim); margin-top:8px;" id="stabCurrentPaycheck"></div>
     </div>
     <div class="summary-grid">
       <div class="summary-item">
@@ -8430,46 +8430,52 @@ function renderStabilization() {
   const currentMonthKey = mk(0);
   const pv = getPointValueForMonth(currentMonthKey);
   const decAdv = settings.decemberAdvance !== false;
-  const paycheckLabel = document.getElementById('stabPaycheckLabel');
+  const buildingLabel = document.getElementById('stabBuildingLabel');
+  const curEl = document.getElementById('stabCurrentPaycheck');
+
+  // Compute "building" paycheck label — the paycheck current work feeds into
+  const nextPayDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const buildingMonthName = monthNames[nextPayDate.getMonth()];
 
   if (decAdv && now.getMonth() === 0) {
     // January: paycheck was already received in December
+    buildingLabel.textContent = 'Building: Feb 20';
     document.getElementById('stabPaycheck').textContent = '$0.00';
-    paycheckLabel.textContent = 'January paycheck received in December';
   } else if (pv && pv > 0) {
     const currentStipend = getMonthlyStipendTotal(mk(0));
     let paycheck = weighted * pv + currentStipend;
 
     if (decAdv && now.getMonth() === 11) {
       // December: add January's advance paycheck
-      function mkFwd(month) { const d = new Date(now.getFullYear() + 1, month, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+      const mkFwd = function(month) { const d = new Date(now.getFullYear() + 1, month, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); };
       const janWeighted = round2(0.10 * (mt[mkFwd(0)]||0) + 0.40 * raw + 0.25 * (mt[mk(1)]||0) + 0.15 * (mt[mk(2)]||0) + 0.10 * (mt[mk(3)]||0));
-      const decStipend = getMonthlyStipendTotal(mk(0)); // Dec stipend -> Jan paycheck
+      const decStipend = getMonthlyStipendTotal(mk(0));
       const janPv = getPointValueForMonth(mkFwd(0));
       paycheck += janWeighted * janPv + decStipend;
-      paycheckLabel.textContent = "Projected Dec paycheck + Jan advance";
+      buildingLabel.textContent = 'Building: Dec 20 (+ Jan)';
     } else {
-      paycheckLabel.textContent = "Projected next month\u2019s paycheck";
+      buildingLabel.textContent = 'Building: ' + buildingMonthName + ' 20';
     }
 
     document.getElementById('stabPaycheck').textContent = '$' + paycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   } else {
     document.getElementById('stabPaycheck').innerHTML = '&mdash;';
-    paycheckLabel.textContent = "Projected next month\u2019s paycheck";
+    buildingLabel.textContent = 'Building: ' + buildingMonthName + ' 20';
   }
 
-  // Current month's paycheck (blend shifted back 1 month)
-  const curEl = document.getElementById('stabCurrentPaycheck');
+  // "Receiving" paycheck — the paycheck arriving this month (blend shifted back 1 month)
+  const receivingMonthName = monthNames[now.getMonth()];
+  const receivingPrefix = now.getDate() >= 20 ? 'Received' : 'Receiving';
   const lastMonthKey = mk(1);
   const lastPv = getPointValueForMonth(lastMonthKey);
   if (decAdv && now.getMonth() === 0) {
-    curEl.textContent = 'This month: received in Dec advance';
+    curEl.textContent = 'Received in Dec advance';
   } else if (lastPv && lastPv > 0) {
     const curVals = [1,2,3,4,5].map(i => mt[mk(i)] || 0);
     const curWeighted = round2(weights.reduce((sum, w, i) => sum + w * curVals[i], 0));
     const curStipend = getMonthlyStipendTotal(mk(1));
     const curPaycheck = curWeighted * lastPv + curStipend;
-    curEl.textContent = 'This month: $' + curPaycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    curEl.textContent = receivingPrefix + ': ' + receivingMonthName + ' 20 \u2014 $' + curPaycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   } else {
     curEl.textContent = '';
   }
@@ -8676,8 +8682,10 @@ function renderPipelineChart() {
 
   for (let target = 0; target < 5; target++) {
     const targetDate = new Date(now.getFullYear(), now.getMonth() + target, 1);
-    const label = monthNames[targetDate.getMonth()] + ' ' + targetDate.getFullYear();
-    labels.push(target === 0 ? label + ' (current)' : label);
+    const payLabel = monthNames[targetDate.getMonth()] + ' 20';
+    if (target === 0) labels.push(payLabel + ' (receiving)');
+    else if (target === 1) labels.push(payLabel + ' (building)');
+    else labels.push(payLabel);
 
     // For this target month's paycheck, we need months: target, target-1, target-2, target-3, target-4
     let realPts = 0;
@@ -8837,28 +8845,34 @@ function renderPipelineChart() {
     }
   });
 
-  // Summary — next paycheck date and amount
-  const currentPts = mt[mkKey(now.getFullYear(), now.getMonth())] || 0;
-  // Paid on the 20th: if before the 20th, next payday is this month's 20th;
-  // if on/after the 20th, next payday is next month's 20th
-  const nextPayDate = now.getDate() < 20
-    ? new Date(now.getFullYear(), now.getMonth(), 20)
-    : new Date(now.getFullYear(), now.getMonth() + 1, 20);
-  const nextPayDateStr = monthNames[nextPayDate.getMonth()] + ' 20, ' + nextPayDate.getFullYear();
-  let summary = `Current month: ${currentPts.toFixed(0)} pts`;
+  // Summary — show both building and receiving paycheck amounts
+  const summaryEl = document.getElementById('pipelineSummary');
+  const receivingMonth = monthNames[now.getMonth()];
+  const buildingDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const buildingMonth = monthNames[buildingDate.getMonth()];
+  const fmtDollar = v => '$' + v.toLocaleString('en-US', {maximumFractionDigits: 0});
+
   if (useDollars) {
-    const nextPaycheck = round2((realValues[0] + projectedValues[0]) * targetPvs[0] + stipendValues[0]);
+    const receivingAmt = round2((realValues[0] + projectedValues[0]) * targetPvs[0] + stipendValues[0]);
+    const buildingAmt = round2((realValues[1] + projectedValues[1]) * targetPvs[1] + stipendValues[1]);
     const isCurrentJan = decAdv && now.getMonth() === 0;
+    const recvPrefix = now.getDate() >= 20 ? 'Received' : 'Receiving';
+
+    let line1 = 'Building: ' + buildingMonth + ' 20';
+    if (decAdv && now.getMonth() === 11) line1 = 'Building: Dec 20 (+ Jan)';
+    line1 += ' \u2014 ' + fmtDollar(buildingAmt);
+
+    let line2;
     if (isCurrentJan) {
-      summary += ' \u2022 Next paycheck: $0 (advanced in Dec)';
+      line2 = 'Received in Dec advance';
     } else {
-      summary += ` \u2022 Next paycheck (${nextPayDateStr}): $${nextPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
-      if (decAdv && now.getMonth() === 11) summary += ' (incl. Jan)';
+      line2 = recvPrefix + ': ' + receivingMonth + ' 20 \u2014 ' + fmtDollar(receivingAmt);
     }
+
+    summaryEl.innerHTML = line1 + '<br>' + line2;
   } else {
-    summary += ` \u2022 Next paycheck: ${nextPayDateStr}`;
+    summaryEl.textContent = 'Building: ' + buildingMonth + ' 20 \u2022 Receiving: ' + receivingMonth + ' 20';
   }
-  document.getElementById('pipelineSummary').textContent = summary;
 
   // Earnings not yet received
   const unreceivedEl = document.getElementById('pipelineUnreceived');
