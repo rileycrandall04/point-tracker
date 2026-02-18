@@ -2090,7 +2090,6 @@ input.mil-time.invalid {
       <button class="dash-tab-btn active" data-dtab="daily">Daily</button>
       <button class="dash-tab-btn" data-dtab="caselogs">Case Logs</button>
       <button class="dash-tab-btn" data-dtab="shiftlogs">Shift Logs</button>
-      <button class="dash-tab-btn" data-dtab="time">Time</button>
       <button class="dash-tab-btn" data-dtab="analytics">Analytics</button>
       <button class="dash-tab-btn" data-dtab="reconcile">Reconcile</button>
     </div>
@@ -2129,86 +2128,6 @@ input.mil-time.invalid {
     <div class="case-log-wrap">
       <div id="shiftLogTableContainer">
         <div class="empty-state"><p>No shifts for this month.</p></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Time Tab -->
-  <div id="dtab-time" class="hidden">
-    <!-- Time Summary (compact) -->
-    <div class="card" style="padding:10px 14px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-        <span style="font-size:0.78rem;font-weight:600;">Time Summary</span>
-        <span style="font-size:0.68rem;color:var(--text-dim);">Past 3 Months</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;text-align:center;">
-        <div>
-          <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Hrs/Mo</div>
-          <div style="font-size:0.9rem;font-weight:600;color:var(--primary);" id="timeAvgMonth">0</div>
-        </div>
-        <div>
-          <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Hrs/Wk</div>
-          <div style="font-size:0.9rem;font-weight:600;color:var(--accent);" id="timeAvgWeek">0</div>
-        </div>
-        <div>
-          <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Avg Start</div>
-          <div style="font-size:0.9rem;font-weight:600;color:#facc15;" id="timeAvgStart">--:--</div>
-        </div>
-        <div>
-          <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Avg End</div>
-          <div style="font-size:0.9rem;font-weight:600;color:#a78bfa;" id="timeAvgEnd">--:--</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Hours Trend -->
-    <div class="card">
-      <h2>Monthly Hours Trend</h2>
-      <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">Average workday length per month (clock-in to clock-out)</p>
-      <div class="chart-container">
-        <canvas id="productionTrendChart"></canvas>
-      </div>
-    </div>
-
-    <!-- Assignment Data (combined) -->
-    <div class="card">
-      <h2>Assignment Data</h2>
-      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
-        <button class="tab-btn active" id="adTabTotals" onclick="switchAssignDataTab('totals')">Average Shift Totals</button>
-        <button class="tab-btn" id="adTabDOW" onclick="switchAssignDataTab('dow')">Day of Week</button>
-        <button class="tab-btn" id="adTabEfficiency" onclick="switchAssignDataTab('efficiency')">Shift Efficiency</button>
-        <button class="tab-btn" id="adTabWorkerBee" onclick="switchAssignDataTab('workerBee')">Worker Bee Averages</button>
-      </div>
-      <div id="assignDataContent"></div>
-    </div>
-
-    <!-- Procedure Time Lookup -->
-    <div class="card">
-      <h2>Procedure Time Lookup</h2>
-      <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;">Search a procedure to see average case duration by surgeon</p>
-      <input type="text" id="procLookupSearch" placeholder="Type procedure name..." oninput="renderProcLookup()" autocomplete="off" style="width:100%;margin-bottom:8px;">
-      <div id="procLookupResults"></div>
-    </div>
-
-    <!-- Collapsible: Weekend vs Weekday -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('timeWknd')">
-        <h3>Weekend vs Weekday</h3>
-        <span class="arrow" id="timeWkndArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="timeWkndBody">
-        <div id="wkndContent" style="padding-top:12px;"></div>
-      </div>
-    </div>
-
-    <!-- Collapsible: Night & Call Frequency -->
-    <div class="card collapse-section">
-      <div class="collapse-header" onclick="toggleCollapse('timeNight')">
-        <h3>Call Shift Tally (3 mo)</h3>
-        <span class="arrow" id="timeNightArrow">&#9660;</span>
-      </div>
-      <div class="collapse-body" id="timeNightBody">
-        <div id="nightContent" style="padding-top:12px;"></div>
       </div>
     </div>
   </div>
@@ -2310,6 +2229,86 @@ input.mil-time.invalid {
       </div>
 
       <div id="prodResults"></div>
+    </div>
+  </div>
+</div>
+
+<!-- TIME PAGE -->
+<div class="page" id="page-time">
+  <!-- Time Summary (compact) -->
+  <div class="card" style="padding:10px 14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <span style="font-size:0.78rem;font-weight:600;">Time Summary</span>
+      <span style="font-size:0.68rem;color:var(--text-dim);">Past 3 Months</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;text-align:center;">
+      <div>
+        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Hrs/Mo</div>
+        <div style="font-size:0.9rem;font-weight:600;color:var(--primary);" id="timeAvgMonth">0</div>
+      </div>
+      <div>
+        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Hrs/Wk</div>
+        <div style="font-size:0.9rem;font-weight:600;color:var(--accent);" id="timeAvgWeek">0</div>
+      </div>
+      <div>
+        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Avg Start</div>
+        <div style="font-size:0.9rem;font-weight:600;color:#facc15;" id="timeAvgStart">--:--</div>
+      </div>
+      <div>
+        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Avg End</div>
+        <div style="font-size:0.9rem;font-weight:600;color:#a78bfa;" id="timeAvgEnd">--:--</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hours Trend -->
+  <div class="card">
+    <h2>Monthly Hours Trend</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">Average workday length per month (clock-in to clock-out)</p>
+    <div class="chart-container">
+      <canvas id="productionTrendChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Assignment Data (combined) -->
+  <div class="card">
+    <h2>Assignment Data</h2>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+      <button class="tab-btn active" id="adTabTotals" onclick="switchAssignDataTab('totals')">Average Shift Totals</button>
+      <button class="tab-btn" id="adTabDOW" onclick="switchAssignDataTab('dow')">Day of Week</button>
+      <button class="tab-btn" id="adTabEfficiency" onclick="switchAssignDataTab('efficiency')">Shift Efficiency</button>
+      <button class="tab-btn" id="adTabWorkerBee" onclick="switchAssignDataTab('workerBee')">Worker Bee Averages</button>
+    </div>
+    <div id="assignDataContent"></div>
+  </div>
+
+  <!-- Procedure Time Lookup -->
+  <div class="card">
+    <h2>Procedure Time Lookup</h2>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;">Search a procedure to see average case duration by surgeon</p>
+    <input type="text" id="procLookupSearch" placeholder="Type procedure name..." oninput="renderProcLookup()" autocomplete="off" style="width:100%;margin-bottom:8px;">
+    <div id="procLookupResults"></div>
+  </div>
+
+  <!-- Collapsible: Weekend vs Weekday -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('timeWknd')">
+      <h3>Weekend vs Weekday</h3>
+      <span class="arrow" id="timeWkndArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="timeWkndBody">
+      <div id="wkndContent" style="padding-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- Collapsible: Night & Call Frequency -->
+  <div class="card collapse-section">
+    <div class="collapse-header" onclick="toggleCollapse('timeNight')">
+      <h3>Call Shift Tally (3 mo)</h3>
+      <span class="arrow" id="timeNightArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="timeNightBody">
+      <div id="nightContent" style="padding-top:12px;"></div>
     </div>
   </div>
 </div>
@@ -3025,9 +3024,9 @@ input.mil-time.invalid {
 
 <!-- BOTTOM NAV -->
 <div class="bottom-nav">
-  <button data-page="dataentry">
-    <span class="nav-icon">&#128137;</span>
-    <span>Work</span>
+  <button data-page="time">
+    <span class="nav-icon">&#9201;</span>
+    <span>Time</span>
   </button>
   <button data-page="compensation">
     <span class="nav-icon">&#129689;</span>
@@ -3051,6 +3050,10 @@ input.mil-time.invalid {
 <div class="drawer-backdrop" id="drawerBackdrop"></div>
 <div class="drawer-panel" id="drawerPanel">
   <div class="drawer-handle"></div>
+  <div class="drawer-item" data-page="dataentry">
+    <span class="drawer-icon">&#128137;</span>
+    <span>Work</span>
+  </div>
   <div class="drawer-item" data-page="history">
     <span class="drawer-icon">&#128197;</span>
     <span>History</span>
@@ -4614,7 +4617,7 @@ document.querySelectorAll('.bottom-nav button[data-page]').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('page-' + btn.dataset.page).classList.add('active');
     returnToShiftLogs = false;
-    if (btn.dataset.page === 'dataentry') loadDataEntryPage();
+    if (btn.dataset.page === 'time') renderTimeTab();
     if (btn.dataset.page === 'today') { returnToDailyTab = false; renderToday(); }
     if (btn.dataset.page === 'dashboard') { switchDashboardTab(activeDashTab); }
     if (btn.dataset.page === 'compensation') renderProjections();
@@ -4661,6 +4664,7 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
     returnToShiftLogs = false;
+    if (page === 'dataentry') loadDataEntryPage();
     if (page === 'settings') { /* no special init needed */ }
     if (page === 'history') { renderHistory(); loadOverrideUI(); }
     if (page === 'import') { /* no special init needed */ }
@@ -6436,9 +6440,19 @@ document.getElementById('weeklyToggleBtn').addEventListener('click', () => {
   renderWeeklyChart();
 });
 
+// Navigate to Data Entry page helper
+function navigateToDataEntry() {
+  closeDrawer();
+  if (typeof stopLiveTicker === 'function') stopLiveTicker();
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-dataentry').classList.add('active');
+  loadDataEntryPage();
+}
+
 // Add Cases button: navigate to Data Entry page
 document.getElementById('todayAddCasesBtn').addEventListener('click', () => {
-  document.querySelector('.bottom-nav button[data-page="dataentry"]').click();
+  navigateToDataEntry();
 });
 
 // Back button: return to Dashboard Daily tab
@@ -6574,7 +6588,7 @@ document.querySelectorAll('.dash-tab-btn').forEach(btn => {
 });
 
 function switchDashboardTab(tabName) {
-  if (tabName === 'projections') tabName = 'daily';
+  if (tabName === 'projections' || tabName === 'time') tabName = 'daily';
   // Reset assignment editor when switching tabs
   if (dailyEditMode) {
     dailyEditMode = false;
@@ -6591,14 +6605,12 @@ function switchDashboardTab(tabName) {
   document.querySelectorAll('.dash-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.dtab === tabName));
   document.getElementById('dtab-caselogs').classList.toggle('hidden', tabName !== 'caselogs');
   document.getElementById('dtab-shiftlogs').classList.toggle('hidden', tabName !== 'shiftlogs');
-  document.getElementById('dtab-time').classList.toggle('hidden', tabName !== 'time');
   document.getElementById('dtab-analytics').classList.toggle('hidden', tabName !== 'analytics');
   document.getElementById('dtab-daily').classList.toggle('hidden', tabName !== 'daily');
   document.getElementById('dtab-reconcile').classList.toggle('hidden', tabName !== 'reconcile');
   updateDashStickyHeaderSpacer();
   if (tabName === 'caselogs') renderCaseLogTable();
   if (tabName === 'shiftlogs') renderShiftLogTable();
-  if (tabName === 'time') renderTimeTab();
   if (tabName === 'analytics') renderAnalyticsTab();
   if (tabName === 'daily') renderDailyTab();
   if (tabName === 'reconcile') renderReconTabs();
@@ -7848,12 +7860,7 @@ function openShiftEdit(dateStr) {
   setWorkingDate(dateStr);
   deShiftEditing = true;
   returnToShiftLogs = true;
-  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  const deBtn = document.querySelector('.bottom-nav button[data-page="dataentry"]');
-  deBtn.classList.add('active');
-  document.getElementById('page-dataentry').classList.add('active');
-  loadDataEntryPage();
+  navigateToDataEntry();
 }
 
 function navigateToShiftLogs() {
@@ -8160,13 +8167,7 @@ document.getElementById('clearStipendBtn').addEventListener('click', () => {
 // NAVIGATE TO WORK SCAN
 // ================================================================
 function navigateToWorkScan() {
-  closeDrawer();
-  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  const workBtn = document.querySelector('.bottom-nav button[data-page="dataentry"]');
-  if (workBtn) workBtn.classList.add('active');
-  document.getElementById('page-dataentry').classList.add('active');
-  loadDataEntryPage();
+  navigateToDataEntry();
   // Open scan collapsible
   setTimeout(() => {
     const body = document.getElementById('deScanBody');
@@ -8246,13 +8247,7 @@ function tutorialHistoryChoice(choice) {
 
 function finishTutorial() {
   closeTutorial();
-  // Navigate to Work tab
-  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  const workBtn = document.querySelector('.bottom-nav button[data-page="dataentry"]');
-  if (workBtn) workBtn.classList.add('active');
-  document.getElementById('page-dataentry').classList.add('active');
-  loadDataEntryPage();
+  navigateToDataEntry();
 }
 
 function navigateToImportPage() {
@@ -10179,9 +10174,10 @@ function renderSurgeonEfficiency() {
     const shift = data.shifts[c.shiftDate];
     const pts = calcCasePoints(c, shift || {});
     const dateKey = c.shiftDate || 'unknown';
-    if (!surgeonData[surgeon]) surgeonData[surgeon] = { totalPts: 0, dates: {}, caseCount: 0 };
+    if (!surgeonData[surgeon]) surgeonData[surgeon] = { totalPts: 0, dates: {}, caseCount: 0, caseIds: [] };
     surgeonData[surgeon].totalPts += pts;
     surgeonData[surgeon].caseCount++;
+    surgeonData[surgeon].caseIds.push(c.id);
     if (!surgeonData[surgeon].dates[dateKey]) surgeonData[surgeon].dates[dateKey] = { earliest: null, latest: null };
     const startMin = timeToMinutes(c.startTime);
     let endMin = timeToMinutes(c.endTime);
@@ -10193,7 +10189,7 @@ function renderSurgeonEfficiency() {
   const all = Object.entries(surgeonData).map(([name, d]) => {
     let totalHrs = 0;
     Object.values(d.dates).forEach(dt => { totalHrs += (dt.latest - dt.earliest) / 60; });
-    return { name, pph: totalHrs > 0 ? round2(d.totalPts / totalHrs) : 0, cases: d.caseCount, totalHrs };
+    return { name, pph: totalHrs > 0 ? round2(d.totalPts / totalHrs) : 0, cases: d.caseCount, totalHrs, caseIds: d.caseIds };
   }).filter(r => r.totalHrs > 0);
   surgeonEffData.ranked = all.filter(s => s.cases >= 4).sort((a, b) => b.pph - a.pph);
   surgeonEffData.unranked = all.filter(s => s.cases < 4).sort((a, b) => a.name.localeCompare(b.name));
@@ -10221,7 +10217,15 @@ function renderSurgeonTabContent() {
     if (unranked.length > 0) {
       if (ranked.length > 0) html += '<div style="border-top:1px solid var(--border);margin:10px 0;"></div>';
       unranked.forEach(s => {
-        html += `<div class="efficiency-item"><span class="eff-label">${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} case${s.cases !== 1 ? 's' : ''})</span></span><span class="eff-value" style="color:var(--text-dim);font-size:0.75rem;">Need more data</span></div>`;
+        html += `<div class="efficiency-item proc-lookup-row" onclick="toggleProcCaseList(this)" style="cursor:pointer;"><span class="eff-label">${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} case${s.cases !== 1 ? 's' : ''})</span></span><span class="eff-value" style="color:var(--text-dim);font-size:0.75rem;">Need more data <span style="font-size:0.7rem;">&#9662;</span></span></div>`;
+        html += `<div class="proc-case-list" style="display:none;">`;
+        s.caseIds.forEach(id => {
+          const cs = data.cases.find(x => x.id === id);
+          if (!cs) return;
+          const pts = calcCasePoints(cs, data.shifts[cs.shiftDate] || {});
+          html += `<div class="proc-case-item" onclick="openCaseEdit('${id}')" style="cursor:pointer;">${cs.shiftDate} &mdash; ${escHtml(cs.procedure || cs.caseType || 'Case')} &mdash; ${pts.toFixed(1)} pts</div>`;
+        });
+        html += `</div>`;
       });
     }
   }
@@ -10230,7 +10234,21 @@ function renderSurgeonTabContent() {
 
 function surgeonRow(rank, s, color) {
   const c = color ? ` style="color:${color}"` : '';
-  return `<div class="efficiency-item"><span class="eff-label">${rank}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span><span class="eff-value"${c}>${s.pph.toFixed(1)} pts/hr</span></div>`;
+  let html = `<div class="efficiency-item proc-lookup-row" onclick="toggleProcCaseList(this)" style="cursor:pointer;">
+    <span class="eff-label">${rank}. ${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.cases} cases)</span></span>
+    <span class="eff-value"${c}>${s.pph.toFixed(1)} pts/hr <span style="font-size:0.7rem;color:var(--text-dim);">&#9662;</span></span>
+  </div>`;
+  html += `<div class="proc-case-list" style="display:none;">`;
+  s.caseIds.forEach(id => {
+    const cs = data.cases.find(x => x.id === id);
+    if (!cs) return;
+    const pts = calcCasePoints(cs, data.shifts[cs.shiftDate] || {});
+    html += `<div class="proc-case-item" onclick="openCaseEdit('${id}')" style="cursor:pointer;">
+      ${cs.shiftDate} &mdash; ${escHtml(cs.procedure || cs.caseType || 'Case')} &mdash; ${pts.toFixed(1)} pts
+    </div>`;
+  });
+  html += `</div>`;
+  return html;
 }
 
 let editingCaseId = null;
