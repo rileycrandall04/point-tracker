@@ -3859,7 +3859,10 @@ function calcARPoints(shift) {
 
   // Full span: first entry start → last entry end
   const spanStart = clockedRanges[0].start;
-  const spanEnd = clockedRanges[clockedRanges.length - 1].end;
+  let spanEnd = clockedRanges[clockedRanges.length - 1].end;
+  // Cap at next shift's start to prevent overlap double-counting
+  const nextShiftMin = getNextShiftStartMin(shift.date);
+  if (nextShiftMin != null && spanEnd > nextShiftMin) spanEnd = nextShiftMin;
   if (spanEnd <= spanStart) {
     if (pagerWindow) {
       const pagerMinutes = pagerWindow.end - pagerWindow.start;
@@ -3972,6 +3975,23 @@ function calcARPoints(shift) {
   return round2(arPoints + callPoints);
 }
 
+// Get earliest clock-in minute of next calendar day's shift (+1440 offset from current day)
+function getNextShiftStartMin(shiftDate) {
+  const [y, m, d] = shiftDate.split('-').map(Number);
+  const nextDate = new Date(y, m - 1, d + 1);
+  const nextKey = nextDate.getFullYear() + '-' + String(nextDate.getMonth() + 1).padStart(2, '0') + '-' + String(nextDate.getDate()).padStart(2, '0');
+  const nextShift = data.shifts[nextKey];
+  if (!nextShift) return null;
+  const entries = nextShift.timeEntries || [];
+  let earliest = null;
+  entries.forEach(e => {
+    if (!e.start) return;
+    const s = timeToMinutes(e.start);
+    if (earliest === null || s < earliest) earliest = s;
+  });
+  return earliest != null ? earliest + 1440 : null;
+}
+
 // Separate getter for breakdown display purposes
 function calcARBreakdown(shift) {
   if (shift.assignmentType === 'vacation') return { ar: 0, call: 0 };
@@ -4060,7 +4080,10 @@ function calcARBreakdown(shift) {
   }
 
   const spanStart = clockedRanges[0].start;
-  const spanEnd = clockedRanges[clockedRanges.length - 1].end;
+  let spanEnd = clockedRanges[clockedRanges.length - 1].end;
+  // Cap at next shift's start to prevent overlap double-counting
+  const nextShiftMin2 = getNextShiftStartMin(shift.date);
+  if (nextShiftMin2 != null && spanEnd > nextShiftMin2) spanEnd = nextShiftMin2;
   if (spanEnd <= spanStart) {
     if (pagerWindow) {
       const pagerMinutes = pagerWindow.end - pagerWindow.start;
@@ -6638,6 +6661,7 @@ function toggleCollapse(sectionId) {
 // Shared helper: shift clocked-in hours (sum of time entries, not gaps)
 function calcShiftHours(shift) {
   if (!shift || shift.assignmentType === 'vacation') return 0;
+  const nextShiftCap = shift.date ? getNextShiftStartMin(shift.date) : null;
   const entries = shift.timeEntries || [];
   if (entries.length > 0) {
     let totalMin = 0;
@@ -6646,7 +6670,8 @@ function calcShiftHours(shift) {
       let s = timeToMinutes(e.start);
       let en = timeToMinutes(e.end);
       if (en <= s) en += 1440;
-      totalMin += (en - s);
+      if (nextShiftCap != null && en > nextShiftCap) en = nextShiftCap;
+      totalMin += Math.max(0, en - s);
     });
     if (totalMin > 0) return totalMin / 60;
   }
@@ -6959,7 +6984,10 @@ function getShiftPayBreakdown(shift) {
   }
   if (clockedRanges.length === 0) return pagerOnlyRows();
   const spanStart = clockedRanges[0].start;
-  const spanEnd = clockedRanges[clockedRanges.length - 1].end;
+  let spanEnd = clockedRanges[clockedRanges.length - 1].end;
+  // Cap at next shift's start to prevent overlap double-counting
+  const nextShiftMin3 = getNextShiftStartMin(shift.date);
+  if (nextShiftMin3 != null && spanEnd > nextShiftMin3) spanEnd = nextShiftMin3;
   if (spanEnd <= spanStart) return pagerOnlyRows();
 
   const rows = [];
