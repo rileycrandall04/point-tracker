@@ -2417,7 +2417,7 @@ input.mil-time.invalid {
       </div>
       <div style="text-align:center;">
         <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Annual Proj</div>
-        <div style="font-size:0.95rem;font-weight:600;color:var(--accent2);" id="projAnnualIncome">&mdash;</div>
+        <div style="font-size:0.95rem;font-weight:600;color:var(--accent2);"><span id="projAnnualIncome">&mdash;</span> <span class="info-icon" id="projAnnualTip" data-tip="" style="vertical-align:middle;">i</span></div>
       </div>
       <div style="text-align:center;">
         <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">YTD Received</div>
@@ -3563,7 +3563,15 @@ document.addEventListener('pointerenter', function(e) {
   if (!icon) return;
   const tip = icon.getAttribute('data-tip');
   if (!tip) return;
-  _tipEl.textContent = tip;
+  if (tip.indexOf('\n') >= 0) {
+    _tipEl.innerHTML = tip.replace(/\n/g, '<br>');
+    _tipEl.style.whiteSpace = 'normal';
+    _tipEl.style.maxWidth = '260px';
+  } else {
+    _tipEl.textContent = tip;
+    _tipEl.style.whiteSpace = 'nowrap';
+    _tipEl.style.maxWidth = '';
+  }
   _tipEl.style.display = 'block';
   const r = icon.getBoundingClientRect();
   let left = r.right + 8;
@@ -9163,6 +9171,56 @@ function renderProjectedAnnual() {
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projYTDRevenue').textContent = '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projRemaining').textContent = '$' + projRemaining.toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+    // Build month-by-month breakdown for Annual Proj tooltip
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const projPerMonth = round2(avg * pv);
+    let breakdownLines = [];
+    // Walk all 12 pay months of the year (each corresponds to a work month)
+    for (let pm = 0; pm < 12; pm++) {
+      const payMonthLabel = monthNames[pm];
+      // Work month for this pay month: pm - 1 (paycheck received in pm is for work in pm-1)
+      const workDate = new Date(thisYear, pm - 1, 1);
+      const wYear = workDate.getFullYear();
+      const wMonth = workDate.getMonth();
+      const workKey = wYear + '-' + String(wMonth + 1).padStart(2, '0');
+      // When was this paycheck received?
+      let recvDate;
+      if (decAdv && wMonth === 11) {
+        recvDate = new Date(wYear, 11, 20);
+      } else {
+        recvDate = new Date(wYear, wMonth + 1, 20);
+      }
+      const received = recvDate.getFullYear() === thisYear && recvDate <= now;
+      // January pay month is $0 with Dec advance
+      if (decAdv && pm === 0) {
+        breakdownLines.push(payMonthLabel + ': $0 (Dec advance)');
+        continue;
+      }
+      if (received && mt[workKey]) {
+        const ov = data.overrides && data.overrides[workKey];
+        let amt;
+        if (ov && ov.compTotal != null) {
+          amt = ov.compTotal;
+          breakdownLines.push(payMonthLabel + ': $' + amt.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (actual)');
+        } else {
+          amt = mt[workKey] * getPointValueForMonth(workKey) + getMonthlyStipendTotal(workKey);
+          breakdownLines.push(payMonthLabel + ': $' + amt.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (calc)');
+        }
+      } else {
+        breakdownLines.push(payMonthLabel + ': $' + projPerMonth.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj)');
+      }
+    }
+    // December advance: Dec pay month includes Jan advance
+    if (decAdv) {
+      const decIdx = breakdownLines.findIndex(l => l.startsWith('Dec:'));
+      if (decIdx >= 0 && breakdownLines[decIdx].indexOf('proj') >= 0) {
+        breakdownLines[decIdx] = 'Dec: $' + (projPerMonth * 2).toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj, +Jan)';
+      }
+    }
+    breakdownLines.push('Total: $' + annual.toLocaleString('en-US', {maximumFractionDigits:0}));
+    document.getElementById('projAnnualTip').setAttribute('data-tip', breakdownLines.join('\n'));
+
     let detail = `${ytdMonths} paycheck${ytdMonths !== 1 ? 's' : ''} received YTD \u2022 ${paychecksRemaining} paycheck${paychecksRemaining !== 1 ? 's' : ''} remaining`;
     if (ytdStipends > 0) detail += ` \u2022 $${ytdStipends.toLocaleString('en-US', {maximumFractionDigits:0})} stipends YTD`;
     document.getElementById('projYTDDetail').textContent = detail;
@@ -9170,6 +9228,7 @@ function renderProjectedAnnual() {
     document.getElementById('projAnnualIncome').innerHTML = '&mdash;';
     document.getElementById('projYTDRevenue').innerHTML = '&mdash;';
     document.getElementById('projRemaining').innerHTML = '&mdash;';
+    document.getElementById('projAnnualTip').setAttribute('data-tip', '');
     document.getElementById('projYTDDetail').textContent = pv ? '' : 'Set $/point above to see revenue projections';
   }
 }
