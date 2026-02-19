@@ -9154,21 +9154,11 @@ function renderProjectedAnnual() {
   }
   ytdRevenue += ytdStipends;
 
-  // Average monthly stipend for projection
-  const stipMonths = [];
-  for (let i = 0; i < 3; i++) {
-    const key = mk(i);
-    const s = getMonthlyStipendTotal(key);
-    if (s > 0) stipMonths.push(s);
-  }
-  const avgStipend = stipMonths.length > 0 ? stipMonths.reduce((a,b)=>a+b,0) / stipMonths.length : 0;
-
   const pv = globalPv; // use global estimate for projections of future months
   if (pv && pv > 0 && avg > 0) {
-    // Remaining months includes current month (not yet received) + future months
-    // Current month's paycheck arrives next month, so count it as remaining
+    // Remaining paychecks projected from points only — stipends are unpredictable
     const paychecksRemaining = 12 - ytdMonths;
-    const projRemaining = avg * paychecksRemaining * pv + avgStipend * paychecksRemaining;
+    const projRemaining = avg * paychecksRemaining * pv;
     const annual = ytdRevenue + projRemaining;
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projYTDRevenue').textContent = '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 });
