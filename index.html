@@ -8009,17 +8009,10 @@ function loadOverrideUI() {
   timeInput.value = ov && ov.timePoints != null ? ov.timePoints : '';
   prodInput.value = ov && ov.prodPoints != null ? ov.prodPoints : '';
 
-  // Compute calculated compensation for placeholder
-  const now = new Date();
-  const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
+  // Compute calculated compensation for placeholder — reuse computePaycheckData for consistency with historical table
   const allMt = getMonthlyTotals();
-  function mkOv(offset) { const d = new Date(ovYear, ovMonth - offset, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
-  const blendVals = [0,1,2,3,4].map(i => allMt[mkOv(i)] || 0);
-  const blendWeighted = round2(weights.reduce((sum, w, i) => sum + w * blendVals[i], 0));
-  const ovPv = getPointValueForMonth(mk);
-  const prevStipKey = (function() { const d = new Date(ovYear, ovMonth - 1, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); })();
-  const ovStipend = getMonthlyStipendTotal(prevStipKey);
-  const calcComp = ovPv > 0 ? round2(blendWeighted * ovPv + ovStipend) : 0;
+  const pd = computePaycheckData(mk, allMt);
+  const calcComp = pd.calcPaycheck;
   compInput.placeholder = calcComp > 0 ? `Calculated: $${calcComp.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : 'Calculated: —';
   compInput.value = ov && ov.compTotal != null ? ov.compTotal : '';
 
