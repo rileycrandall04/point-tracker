@@ -2391,6 +2391,7 @@ input.mil-time.invalid {
   <!-- 4. Historical Trends (with annual income stats above chart) -->
   <div class="card">
     <h2>Historical Trends</h2>
+    <div id="histTrendsNav" class="month-nav" style="margin-top:8px;margin-bottom:4px;"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:12px 0;padding:10px 12px;background:var(--surface2);border-radius:8px;">
       <div style="text-align:center;">
         <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">3-Mo Avg</div>
@@ -8561,6 +8562,22 @@ function renderHistoricalTrends() {
     if (pd.accuracy != null) { accuracyValues.push(pd.accuracy); hasAnyAccuracy = true; }
     else { accuracyValues.push(null); }
   });
+
+  // Render nav arrows for chart
+  const trendsNavEl = document.getElementById('histTrendsNav');
+  if (allPaycheckMonths.length > HIST_PAGE_SIZE) {
+    const maxPage = Math.max(0, Math.ceil((allPaycheckMonths.length - HIST_PAGE_SIZE) / HIST_PAGE_STEP));
+    const firstVis = windowMonths[0]; // oldest visible
+    const lastVis = windowMonths[windowMonths.length - 1]; // newest visible
+    const fPd = computePaycheckData(firstVis, mt);
+    const lPd = computePaycheckData(lastVis, mt);
+    const rangeLabel = monthNames[fPd.workDate.getMonth()] + ' ' + String(fPd.workDate.getFullYear()).slice(2) + ' \u2013 ' + monthNames[lPd.workDate.getMonth()] + ' ' + String(lPd.workDate.getFullYear()).slice(2);
+    const canGoBack = histCompPage < maxPage;
+    const canGoFwd = histCompPage > 0;
+    trendsNavEl.innerHTML = '<button onclick="histCompPageNav(-1)" style="opacity:' + (canGoBack ? '1' : '0.3') + ';pointer-events:' + (canGoBack ? 'auto' : 'none') + '">&larr;</button><span style="font-size:0.82rem;min-width:120px;">' + rangeLabel + '</span><button onclick="histCompPageNav(1)" style="opacity:' + (canGoFwd ? '1' : '0.3') + ';pointer-events:' + (canGoFwd ? 'auto' : 'none') + '">&rarr;</button>';
+  } else {
+    trendsNavEl.innerHTML = '';
+  }
 
   const nonZero = barValues.filter(v => v > 0);
   const avg = nonZero.length > 0 ? round2(nonZero.reduce((a, b) => a + b, 0) / nonZero.length) : 0;
