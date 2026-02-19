@@ -9153,7 +9153,6 @@ function renderProjectedAnnual() {
     ytdMonths++;
   }
   ytdRevenue += ytdStipends;
-  const remainingMonths = 12 - now.getMonth() - 1; // full months left after current
 
   // Average monthly stipend for projection
   const stipMonths = [];
@@ -9166,14 +9165,15 @@ function renderProjectedAnnual() {
 
   const pv = globalPv; // use global estimate for projections of future months
   if (pv && pv > 0 && avg > 0) {
-    const annualPts = avg * 12 * pv;
-    const annualStipend = avgStipend * 12;
-    const annual = annualPts + annualStipend;
-    const projRemaining = avg * remainingMonths * pv + avgStipend * remainingMonths;
+    // Remaining months includes current month (not yet received) + future months
+    // Current month's paycheck arrives next month, so count it as remaining
+    const paychecksRemaining = 12 - ytdMonths;
+    const projRemaining = avg * paychecksRemaining * pv + avgStipend * paychecksRemaining;
+    const annual = ytdRevenue + projRemaining;
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projYTDRevenue').textContent = '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projRemaining').textContent = '$' + projRemaining.toLocaleString('en-US', { maximumFractionDigits: 0 });
-    let detail = `${ytdMonths} paycheck${ytdMonths !== 1 ? 's' : ''} received YTD \u2022 ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''} remaining`;
+    let detail = `${ytdMonths} paycheck${ytdMonths !== 1 ? 's' : ''} received YTD \u2022 ${paychecksRemaining} paycheck${paychecksRemaining !== 1 ? 's' : ''} remaining`;
     if (ytdStipends > 0) detail += ` \u2022 $${ytdStipends.toLocaleString('en-US', {maximumFractionDigits:0})} stipends YTD`;
     document.getElementById('projYTDDetail').textContent = detail;
   } else {
@@ -9196,13 +9196,25 @@ function renderMonthlyPace() {
   monthShifts.forEach(s => { currentPts += calcShiftTotal(s).total; });
   currentPts = round2(currentPts);
 
-  // Count vacation days this month
+  // Count weekdays and vacation days this month
   const vacationDays = monthShifts.filter(s => s.assignmentType === 'vacation');
   const totalVacDays = vacationDays.length;
-  const vacDaysPassed = vacationDays.filter(s => parseInt(s.date.split('-')[2]) <= dayOfMonth).length;
-  const workingDaysInMonth = daysInMonth - totalVacDays;
-  const workingDaysElapsed = dayOfMonth - vacDaysPassed;
-  const vacationRatio = workingDaysInMonth / daysInMonth; // fraction of month that's working
+
+  // Count weekdays (Mon-Fri) in the month, excluding vacation days
+  let weekdaysInMonth = 0;
+  let weekdaysElapsed = 0;
+  const vacDates = new Set(vacationDays.map(s => s.date));
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = new Date(now.getFullYear(), now.getMonth(), d);
+    const dow = dt.getDay(); // 0=Sun, 6=Sat
+    if (dow === 0 || dow === 6) continue; // skip weekends
+    const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    if (vacDates.has(dateStr)) continue; // skip vacation days
+    weekdaysInMonth++;
+    if (d <= dayOfMonth) weekdaysElapsed++;
+  }
+  const workingDaysInMonth = weekdaysInMonth;
+  const workingDaysElapsed = weekdaysElapsed;
 
   // Build cumulative-by-day curves for prior months
   const priorMonthCurves = [];
