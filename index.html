@@ -2327,13 +2327,13 @@ input.mil-time.invalid {
   <!-- 1. Monthly Pace (hero, compact) -->
   <div class="card" style="padding:12px 16px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <span style="font-size:0.82rem;font-weight:600;">Monthly Pace</span>
-      <span style="font-size:0.82rem;"><span id="paceCurrentPts" style="color:var(--primary);font-weight:600;">0</span> <span style="color:var(--text-dim);font-size:0.75rem;">/ <span id="paceProjected">0</span> projected</span></span>
+      <span style="font-size:0.82rem;font-weight:600;">Monthly Pace <span class="info-icon" id="paceInfoIcon" data-tip="">i</span></span>
+      <span id="paceRightLabel" style="font-size:0.78rem;color:var(--text-dim);"></span>
     </div>
     <div style="background:var(--surface2); border-radius:6px; height:8px; overflow:hidden;">
       <div id="paceBar" style="height:100%; background:var(--primary); border-radius:6px; transition:width 0.3s; width:0%;"></div>
     </div>
-    <div id="paceLabel" style="font-size:0.72rem; color:var(--text-dim); margin-top:4px; text-align:center;"></div>
+    <div id="paceDiff" style="font-size:0.78rem; font-weight:600; margin-top:4px; text-align:center;"></div>
   </div>
 
   <!-- 2. Paycheck Projection (with $/point inline) -->
@@ -2428,7 +2428,7 @@ input.mil-time.invalid {
     <div class="chart-container">
       <canvas id="monthlyChart"></canvas>
     </div>
-    <div id="monthlyChartInfoIcons" style="display:flex;justify-content:center;gap:0;margin-top:2px;font-size:0.65rem;"></div>
+    <div id="monthlyChartInfoIcons" style="display:flex;gap:0;margin-top:-2px;font-size:0.65rem;box-sizing:border-box;"></div>
     <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
   </div>
 
@@ -8779,26 +8779,40 @@ function renderHistoricalTrends() {
     }
   });
 
-  // Info icons row below chart — same payment timing tooltips as historical comp table
+  // Info icons aligned with chart x-axis labels — hide if > 6 months
   const infoIconsEl = document.getElementById('monthlyChartInfoIcons');
-  const decAdvChart = settings.decemberAdvance !== false;
-  const nowChart = new Date();
-  function mkKeyChart(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
-  let wrappedIcons = '';
-  windowMonths.forEach((workMk, idx) => {
-    const pd = computePaycheckData(workMk, mt);
-    const paidLabel = monthNames[pd.payDate.getMonth()] + ' ' + String(pd.payDate.getFullYear()).slice(2);
-    const payMkForRecv = pd.payDate.getFullYear() + '-' + String(pd.payDate.getMonth() + 1).padStart(2, '0');
-    const isReceiving = payMkForRecv === mkKeyChart(nowChart.getFullYear(), nowChart.getMonth());
-    const isDecWork = decAdvChart && pd.workDate.getMonth() === 11;
-    let tipText;
-    if (isDecWork) tipText = 'Paid in Dec (advance)';
-    else if (isReceiving) tipText = 'Paid in ' + paidLabel + ' (receiving)';
-    else tipText = 'Paid in ' + paidLabel;
-    const iconStyle = isReceiving ? 'background:var(--accent2);color:#fff;' : '';
-    wrappedIcons += '<div style="flex:1;text-align:center;"><span class="info-icon" data-tip="' + tipText + '" style="' + iconStyle + '">i</span></div>';
-  });
-  infoIconsEl.innerHTML = wrappedIcons;
+  if (windowMonths.length <= 6) {
+    const decAdvChart = settings.decemberAdvance !== false;
+    const nowChart = new Date();
+    function mkKeyChart(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+    let wrappedIcons = '';
+    windowMonths.forEach((workMk) => {
+      const pd = computePaycheckData(workMk, mt);
+      const paidLabel = monthNames[pd.payDate.getMonth()] + ' ' + String(pd.payDate.getFullYear()).slice(2);
+      const payMkForRecv = pd.payDate.getFullYear() + '-' + String(pd.payDate.getMonth() + 1).padStart(2, '0');
+      const isReceiving = payMkForRecv === mkKeyChart(nowChart.getFullYear(), nowChart.getMonth());
+      const isDecWork = decAdvChart && pd.workDate.getMonth() === 11;
+      let tipText;
+      if (isDecWork) tipText = 'Paid in Dec (advance)';
+      else if (isReceiving) tipText = 'Paid in ' + paidLabel + ' (receiving)';
+      else tipText = 'Paid in ' + paidLabel;
+      const iconStyle = isReceiving ? 'background:var(--accent2);color:#fff;' : '';
+      wrappedIcons += '<div style="flex:1;text-align:center;"><span class="info-icon" data-tip="' + tipText + '" style="' + iconStyle + 'width:11px;height:11px;font-size:0.5rem;">i</span></div>';
+    });
+    infoIconsEl.style.display = 'flex';
+    infoIconsEl.innerHTML = wrappedIcons;
+    // Align icons with chart plot area
+    if (monthlyChart && monthlyChart.chartArea) {
+      const ca = monthlyChart.chartArea;
+      const canvas = document.getElementById('monthlyChart');
+      const totalWidth = canvas.clientWidth;
+      infoIconsEl.style.paddingLeft = ca.left + 'px';
+      infoIconsEl.style.paddingRight = (totalWidth - ca.right) + 'px';
+    }
+  } else {
+    infoIconsEl.style.display = 'none';
+    infoIconsEl.innerHTML = '';
+  }
 
   // Collapsible legend below chart
   const summaryEl = document.getElementById('monthlyChartSummary');
@@ -8811,8 +8825,8 @@ function renderHistoricalTrends() {
   if (hasAnyAccuracy) {
     legendItems += '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#a78bfa;margin-right:4px;vertical-align:middle;"></span>Prediction Accuracy</span>';
   }
-  let legendHtml = '<a href="#" onclick="var p=this.nextElementSibling;if(p.style.maxHeight){p.style.maxHeight=\'\';this.innerHTML=\'Legend &#9660;\';}else{p.style.maxHeight=p.scrollHeight+\'px\';this.innerHTML=\'Legend &#9650;\';}return false;" style="font-size:0.72rem;color:var(--primary);">Legend &#9660;</a>';
-  legendHtml += '<div style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;">';
+  let legendHtml = '<a href="#" onclick="var p=this.nextElementSibling;var open=p.getAttribute(\'data-open\')===\'1\';if(open){p.style.maxHeight=\'0\';p.setAttribute(\'data-open\',\'0\');this.innerHTML=\'Legend &#9660;\';}else{p.style.maxHeight=p.scrollHeight+\'px\';p.setAttribute(\'data-open\',\'1\');this.innerHTML=\'Legend &#9650;\';}return false;" style="font-size:0.72rem;color:var(--primary);">Legend &#9660;</a>';
+  legendHtml += '<div data-open="0" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;">';
   legendHtml += '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin:6px 0;font-size:0.72rem;">' + legendItems + '</div>';
   legendHtml += '</div>';
   legendHtml += avg > 0 ? '<div style="margin-top:4px;">Avg Monthly Compensation: $' + avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + '</div>' : '';
@@ -9188,21 +9202,39 @@ function renderMonthlyPace() {
     projected = fractionElapsed > 0 ? round2(currentPts / fractionElapsed) : 0;
   }
 
-  document.getElementById('paceCurrentPts').textContent = currentPts.toFixed(1) + ' pts';
-  document.getElementById('paceProjected').textContent = projected.toFixed(0) + ' pts';
-
   // Progress bar
   let pct = 0;
-  let label = '';
+  const workingDaysRemaining = workingDaysInMonth - workingDaysElapsed;
+  const diff = round2(currentPts - expectedByNow);
+  const ptsRemaining = Math.max(0, round2(avgMonthEnd - currentPts));
+  const ptsPerDayNeeded = workingDaysRemaining > 0 ? round2(ptsRemaining / workingDaysRemaining) : 0;
+
   if (expectedByNow > 0) {
     pct = Math.min(100, round2(currentPts / avgMonthEnd * 100));
-    const diff = round2(currentPts - expectedByNow);
     const nMonths = priorMonthCurves.length;
-    let vacNote = totalVacDays > 0 ? ` \u2022 ${totalVacDays}d vacation` : '';
-    label = `${pct.toFixed(0)}% of avg (${avgMonthEnd.toFixed(0)} pts) \u2022 ${diff >= 0 ? '+' : ''}${diff.toFixed(0)} pts vs pace (${nMonths}-mo)${vacNote}`;
+
+    // Right label: pts/day needed + remaining working days
+    document.getElementById('paceRightLabel').innerHTML = '<span style="color:var(--primary);font-weight:600;">' + ptsPerDayNeeded.toFixed(1) + '</span> pts/day needed <span style="color:var(--text-dim);font-size:0.7rem;">(' + workingDaysRemaining + 'd left)</span>';
+
+    // Center diff label: ahead/behind
+    const diffEl = document.getElementById('paceDiff');
+    if (diff >= 0) {
+      diffEl.innerHTML = '<span style="color:var(--accent);">+' + diff.toFixed(1) + ' pts ahead of pace</span>';
+    } else {
+      diffEl.innerHTML = '<span style="color:var(--danger);">' + diff.toFixed(1) + ' pts behind pace</span>';
+    }
+
+    // Info icon tooltip with detailed breakdown
+    let tip = pct.toFixed(0) + '% of ' + nMonths + '-mo avg (' + avgMonthEnd.toFixed(0) + ' pts)';
+    tip += ' | ' + currentPts.toFixed(1) + ' earned, ' + ptsRemaining.toFixed(0) + ' to go';
+    if (totalVacDays > 0) tip += ' | ' + totalVacDays + 'd vacation this month';
+    tip += ' | Projected: ' + projected.toFixed(0) + ' pts';
+    document.getElementById('paceInfoIcon').setAttribute('data-tip', tip);
   } else {
     pct = Math.min(100, (dayOfMonth / daysInMonth) * 100);
-    label = `Day ${dayOfMonth} of ${daysInMonth} \u2022 No prior data for comparison`;
+    document.getElementById('paceRightLabel').textContent = 'Day ' + dayOfMonth + ' of ' + daysInMonth;
+    document.getElementById('paceDiff').textContent = '';
+    document.getElementById('paceInfoIcon').setAttribute('data-tip', 'No prior month data for pace comparison');
   }
   document.getElementById('paceBar').style.width = pct + '%';
   let paceColor = 'var(--primary)';
@@ -9212,7 +9244,6 @@ function renderMonthlyPace() {
     else paceColor = 'var(--danger)';
   }
   document.getElementById('paceBar').style.background = paceColor;
-  document.getElementById('paceLabel').textContent = label;
 }
 
 function renderPipelineChart() {
