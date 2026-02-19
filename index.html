@@ -6072,7 +6072,7 @@ function tickLiveUpdate() {
   const minApplies = !isHol && !isWknd && shift.assignmentType !== 'mole';
   const minPoints = isOBRate ? 52 : 80;
   const hasOpenCases = openCases.length > 0;
-  const shouldTickAR = !minApplies || result.ar > minPoints || hasOpenCases;
+  const shouldTickAR = !minApplies || result.ar > minPoints;
   const effectiveARRate = shouldTickAR ? currentRate : 0;
 
   const totalRate = effectiveARRate + pagerRate + prodRate;
