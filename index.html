@@ -280,10 +280,7 @@ textarea { resize: vertical; min-height: 60px; }
 .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
 .hist-range-btn { padding: 4px 10px; font-size: 0.72rem; border-radius: 14px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; transition: all 0.15s; }
 .hist-range-btn:hover, .hist-range-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-.info-icon { display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:var(--border);color:var(--text-dim);font-size:0.55rem;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:3px;position:relative;flex-shrink:0; }
-.info-icon .info-tip { display:none;position:absolute;top:50%;left:calc(100% + 8px);transform:translateY(-50%);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.7rem;font-weight:400;white-space:nowrap;z-index:100;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.3); }
-.info-icon .info-tip::after { content:'';position:absolute;top:50%;right:100%;transform:translateY(-50%);border:5px solid transparent;border-right-color:var(--border); }
-.info-icon:hover .info-tip, .info-icon:focus .info-tip { display:block; }
+.info-icon { display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:var(--border);color:var(--text-dim);font-size:0.55rem;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:3px;flex-shrink:0; }
 
 /* ===== BADGES ===== */
 .point-badge {
@@ -2342,7 +2339,7 @@ input.mil-time.invalid {
   <!-- 2. Paycheck Projection (with $/point inline) -->
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <h2 style="margin:0;">Paycheck Projection <span class="info-icon" tabindex="0">i<span class="info-tip">Based on a weighted blend of the last 5 months, not just this month alone.</span></span></h2>
+      <h2 style="margin:0;">Paycheck Projection <span class="info-icon" data-tip="Based on a weighted blend of the last 5 months, not just this month alone.">i</span></h2>
       <div style="display:flex;align-items:center;gap:8px;">
         <label style="font-size:0.75rem;color:var(--text-dim);white-space:nowrap;">$/pt</label>
         <input type="number" id="dashPointValue" min="0" step="0.01" placeholder="55.00" style="max-width:90px;padding:4px 8px;font-size:0.8rem;">
@@ -3547,6 +3544,34 @@ function getAssignmentTypeName(type) {
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 }
+
+// Floating tooltip for info icons — uses fixed positioning to avoid overflow clipping
+const _tipEl = document.createElement('div');
+_tipEl.id = 'infoTipFloat';
+_tipEl.style.cssText = 'display:none;position:fixed;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.7rem;white-space:nowrap;z-index:9999;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+document.body.appendChild(_tipEl);
+
+document.addEventListener('pointerenter', function(e) {
+  const icon = e.target.closest('.info-icon');
+  if (!icon) return;
+  const tip = icon.getAttribute('data-tip');
+  if (!tip) return;
+  _tipEl.textContent = tip;
+  _tipEl.style.display = 'block';
+  const r = icon.getBoundingClientRect();
+  let left = r.right + 8;
+  let top = r.top + r.height / 2 - _tipEl.offsetHeight / 2;
+  // If it would go off-screen right, flip to left side
+  if (left + _tipEl.offsetWidth > window.innerWidth - 8) left = r.left - _tipEl.offsetWidth - 8;
+  if (top < 4) top = 4;
+  if (top + _tipEl.offsetHeight > window.innerHeight - 4) top = window.innerHeight - 4 - _tipEl.offsetHeight;
+  _tipEl.style.left = left + 'px';
+  _tipEl.style.top = top + 'px';
+}, true);
+
+document.addEventListener('pointerleave', function(e) {
+  if (e.target.closest('.info-icon')) _tipEl.style.display = 'none';
+}, true);
 
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -8819,7 +8844,7 @@ function renderHistoricalComp() {
     } else {
       tipText = 'Paid in ' + paidLabel;
     }
-    const infoIcon = '<span class="info-icon" tabindex="0" style="' + (isReceiving ? 'background:var(--accent2);color:#fff;' : '') + '">i<span class="info-tip" style="color:' + tipColor + ';">' + tipText + '</span></span>';
+    const infoIcon = '<span class="info-icon" data-tip="' + tipText + '" style="' + (isReceiving ? 'background:var(--accent2);color:#fff;' : '') + '">i</span>';
 
     const pvDisplay = d.isConfirmedPV ? settings.pointValues[d.workKey] : '';
     const pvBorder = d.isConfirmedPV ? 'border:1px solid var(--accent);' : 'border:1px solid var(--border);';
