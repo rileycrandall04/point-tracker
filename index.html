@@ -2375,6 +2375,25 @@ input.mil-time.invalid {
   <!-- 3. Income Pipeline -->
   <div class="card">
     <h2>Income Pipeline</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:0 0 12px;padding:10px 12px;background:var(--surface2);border-radius:8px;">
+      <div style="text-align:center;">
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Avg/Mo</div>
+        <div style="font-size:0.95rem;font-weight:600;color:var(--primary);" id="projRollingAvg">&mdash;</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Annual Proj</div>
+        <div style="font-size:0.95rem;font-weight:600;color:var(--accent2);"><span id="projAnnualIncome">&mdash;</span> <span class="info-icon" id="projAnnualTip" data-tip="" style="vertical-align:middle;">i</span></div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">YTD Received</div>
+        <div style="font-size:0.95rem;font-weight:600;color:#facc15;" id="projYTDRevenue">&mdash;</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Remaining</div>
+        <div style="font-size:0.95rem;font-weight:600;color:#a78bfa;" id="projRemaining">&mdash;</div>
+      </div>
+    </div>
+    <div id="projYTDDetail" style="font-size:0.72rem; color:var(--text-dim); text-align:center; margin-bottom:8px;"></div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
       <p style="font-size:0.78rem; color:var(--text-dim); margin:0;">
         Estimated paychecks from recorded data
@@ -2410,25 +2429,6 @@ input.mil-time.invalid {
       <label style="color:var(--text-dim);">To</label>
       <input type="month" id="histRangeTo" style="padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.78rem;">
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:12px 0;padding:10px 12px;background:var(--surface2);border-radius:8px;">
-      <div style="text-align:center;">
-        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Avg/Mo</div>
-        <div style="font-size:0.95rem;font-weight:600;color:var(--primary);" id="projRollingAvg">&mdash;</div>
-      </div>
-      <div style="text-align:center;">
-        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Annual Proj</div>
-        <div style="font-size:0.95rem;font-weight:600;color:var(--accent2);"><span id="projAnnualIncome">&mdash;</span> <span class="info-icon" id="projAnnualTip" data-tip="" style="vertical-align:middle;">i</span></div>
-      </div>
-      <div style="text-align:center;">
-        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">YTD Received</div>
-        <div style="font-size:0.95rem;font-weight:600;color:#facc15;" id="projYTDRevenue">&mdash;</div>
-      </div>
-      <div style="text-align:center;">
-        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Remaining</div>
-        <div style="font-size:0.95rem;font-weight:600;color:#a78bfa;" id="projRemaining">&mdash;</div>
-      </div>
-    </div>
-    <div id="projYTDDetail" style="font-size:0.72rem; color:var(--text-dim); text-align:center; margin-bottom:8px;"></div>
     <div class="chart-container">
       <canvas id="monthlyChart"></canvas>
     </div>
