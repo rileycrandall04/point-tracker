@@ -6059,18 +6059,23 @@ function tickLiveUpdate() {
     if (elapsed < 0) elapsed += 1440;
     const elapsedHrs = elapsed / 60;
     if (c.caseType === 'labor_epidural') {
-      if (cs === 420) { prodRate += 1.25 * 2; }
-      else {
-        if (elapsedHrs < 1) prodRate += 7.5 * 2;
-        else if (elapsedHrs < 2) prodRate += 2.5 * 2;
-        else prodRate += 1.25 * 2;
-      }
+      if (elapsedHrs < 1) prodRate += 5;
+      else if (elapsedHrs < 2) prodRate += 2.5;
+      else prodRate += 1.25;
     } else if (c.caseType === 'standard') {
       prodRate += 6;
     }
   });
 
-  const totalRate = currentRate + pagerRate + prodRate;
+  // Only tick AR if above the guaranteed minimum or actively in a case
+  const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
+  const minApplies = !isHol && !isWknd && shift.assignmentType !== 'mole';
+  const minPoints = isOBRate ? 52 : 80;
+  const hasOpenCases = openCases.length > 0;
+  const shouldTickAR = !minApplies || result.ar > minPoints || hasOpenCases;
+  const effectiveARRate = shouldTickAR ? currentRate : 0;
+
+  const totalRate = effectiveARRate + pagerRate + prodRate;
 
   // Interpolate: add fractional seconds of accrual on top of minute-level base
   const secFraction = currentSec / 3600; // fraction of an hour
@@ -6088,7 +6093,7 @@ function tickLiveUpdate() {
   // Update component breakdown chips
   const compEl = document.getElementById('todayCompChips');
   if (compEl) {
-    const arLive = result.ar + (currentRate * secFraction);
+    const arLive = result.ar + (effectiveARRate * secFraction);
     const callLive = result.call + (pagerRate * secFraction);
     const prodLive = result.prod + (prodRate * secFraction);
     const comps = [];
@@ -6110,7 +6115,7 @@ function tickLiveUpdate() {
   const ratesEl = document.getElementById('todayLiveRates');
   if (ratesEl) {
     const parts = [];
-    if (currentRate > 0) parts.push('AR ' + currentRate.toFixed(0));
+    if (effectiveARRate > 0) parts.push('AR ' + effectiveARRate.toFixed(0));
     if (pagerRate > 0) parts.push('Pager 3.5');
     if (prodRate > 0) parts.push('Prod ' + prodRate.toFixed(1));
 
