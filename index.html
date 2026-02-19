@@ -2412,8 +2412,8 @@ input.mil-time.invalid {
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:12px 0;padding:10px 12px;background:var(--surface2);border-radius:8px;">
       <div style="text-align:center;">
-        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">3-Mo Avg</div>
-        <div style="font-size:0.95rem;font-weight:600;color:var(--primary);" id="projRollingAvg">0</div>
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Avg/Mo</div>
+        <div style="font-size:0.95rem;font-weight:600;color:var(--primary);" id="projRollingAvg">&mdash;</div>
       </div>
       <div style="text-align:center;">
         <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Annual Proj</div>
@@ -9120,104 +9120,95 @@ function renderProjectedAnnual() {
   const mt = getMonthlyTotals();
   const now = new Date();
   const thisYear = now.getFullYear();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function mk(offset) { const d = new Date(now.getFullYear(), now.getMonth() - offset, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
-  const last3 = [mt[mk(0)]||0, mt[mk(1)]||0, mt[mk(2)]||0].filter(v => v > 0);
-  const avg = last3.length > 0 ? last3.reduce((a,b)=>a+b,0) / last3.length : 0;
-  document.getElementById('projRollingAvg').textContent = avg.toFixed(1);
-  const globalPv = settings.pointValue;
+
+  // Helper: get compensation $ for a work month (override or calculated)
+  function getMonthComp(workKey) {
+    const ov = data.overrides && data.overrides[workKey];
+    if (ov && ov.compTotal != null) return { amt: ov.compTotal, source: 'actual' };
+    if (!mt[workKey]) return null;
+    const amt = mt[workKey] * getPointValueForMonth(workKey) + getMonthlyStipendTotal(workKey);
+    return { amt, source: 'calc' };
+  }
+
+  const decAdv = settings.decemberAdvance !== false;
+
+  // 3-month rolling average of actual monthly COMPENSATION (not points)
+  // Use last 3 complete work months that have data
+  const recentComp = [];
+  for (let offset = 1; offset <= 6 && recentComp.length < 3; offset++) {
+    const key = mk(offset);
+    const comp = getMonthComp(key);
+    if (comp) recentComp.push(comp.amt);
+  }
+  const avgComp = recentComp.length > 0 ? round2(recentComp.reduce((a,b)=>a+b,0) / recentComp.length) : 0;
+  document.getElementById('projRollingAvg').textContent = avgComp > 0 ? '$' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) : '0';
 
   // YTD revenue received: only count paychecks already received (received on 20th of pay month)
-  // Paycheck for work month W is received on the 20th of month W+1
-  // With Dec advance: work month Dec is received Dec 20 (same month) instead of Jan 20
   let ytdRevenue = 0;
-  let ytdPts = 0;
   let ytdMonths = 0;
   let ytdStipends = 0;
-  const decAdv = settings.decemberAdvance !== false;
-  // Check work months from Dec of prev year (its paycheck may land in Jan) through current year
+  const receivedMonths = []; // track received month data for tooltip
   for (let i = -1; i <= 11; i++) {
     const workDate = new Date(thisYear, i, 1);
     const wYear = workDate.getFullYear();
     const wMonth = workDate.getMonth();
     const workKey = wYear + '-' + String(wMonth + 1).padStart(2, '0');
-    // Determine when this paycheck was received
     let recvDate;
     if (decAdv && wMonth === 11) {
-      recvDate = new Date(wYear, 11, 20); // Dec advance: paid in Dec
+      recvDate = new Date(wYear, 11, 20);
     } else {
-      recvDate = new Date(wYear, wMonth + 1, 20); // normal: paid next month 20th
+      recvDate = new Date(wYear, wMonth + 1, 20);
     }
-    // Only count if received this year and already past
     if (recvDate.getFullYear() !== thisYear || recvDate > now) continue;
     if (!mt[workKey]) continue;
-    ytdPts += mt[workKey];
     const ov = data.overrides && data.overrides[workKey];
+    let amt, source;
     if (ov && ov.compTotal != null) {
-      ytdRevenue += ov.compTotal;
+      amt = ov.compTotal; source = 'actual';
     } else {
-      ytdRevenue += mt[workKey] * getPointValueForMonth(workKey);
-      ytdStipends += getMonthlyStipendTotal(workKey);
+      const stip = getMonthlyStipendTotal(workKey);
+      amt = mt[workKey] * getPointValueForMonth(workKey) + stip;
+      ytdStipends += stip;
+      source = 'calc';
     }
+    ytdRevenue += amt;
     ytdMonths++;
+    receivedMonths.push({ payMonth: recvDate.getMonth(), amt, source });
   }
-  ytdRevenue += ytdStipends;
 
-  const pv = globalPv; // use global estimate for projections of future months
-  if (pv && pv > 0 && avg > 0) {
-    // Remaining paychecks projected from points only — stipends are unpredictable
+  if (avgComp > 0) {
     const paychecksRemaining = 12 - ytdMonths;
-    const projRemaining = avg * paychecksRemaining * pv;
-    const annual = ytdRevenue + projRemaining;
+    const projRemaining = round2(avgComp * paychecksRemaining);
+    const annual = round2(ytdRevenue + projRemaining);
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projYTDRevenue').textContent = '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projRemaining').textContent = '$' + projRemaining.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
-    // Build month-by-month breakdown for Annual Proj tooltip
-    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const projPerMonth = round2(avg * pv);
+    // Build month-by-month breakdown tooltip
+    const receivedMap = {};
+    receivedMonths.forEach(r => { receivedMap[r.payMonth] = r; });
     let breakdownLines = [];
-    // Walk all 12 pay months of the year (each corresponds to a work month)
     for (let pm = 0; pm < 12; pm++) {
-      const payMonthLabel = monthNames[pm];
-      // Work month for this pay month: pm - 1 (paycheck received in pm is for work in pm-1)
-      const workDate = new Date(thisYear, pm - 1, 1);
-      const wYear = workDate.getFullYear();
-      const wMonth = workDate.getMonth();
-      const workKey = wYear + '-' + String(wMonth + 1).padStart(2, '0');
-      // When was this paycheck received?
-      let recvDate;
-      if (decAdv && wMonth === 11) {
-        recvDate = new Date(wYear, 11, 20);
-      } else {
-        recvDate = new Date(wYear, wMonth + 1, 20);
-      }
-      const received = recvDate.getFullYear() === thisYear && recvDate <= now;
-      // January pay month is $0 with Dec advance
+      const label = monthNames[pm];
       if (decAdv && pm === 0) {
-        breakdownLines.push(payMonthLabel + ': $0 (Dec advance)');
-        continue;
-      }
-      if (received && mt[workKey]) {
-        const ov = data.overrides && data.overrides[workKey];
-        let amt;
-        if (ov && ov.compTotal != null) {
-          amt = ov.compTotal;
-          breakdownLines.push(payMonthLabel + ': $' + amt.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (actual)');
-        } else {
-          amt = mt[workKey] * getPointValueForMonth(workKey) + getMonthlyStipendTotal(workKey);
-          breakdownLines.push(payMonthLabel + ': $' + amt.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (calc)');
-        }
+        breakdownLines.push(label + ': $0 (Dec advance)');
+      } else if (receivedMap[pm]) {
+        const r = receivedMap[pm];
+        breakdownLines.push(label + ': $' + r.amt.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (' + r.source + ')');
       } else {
-        breakdownLines.push(payMonthLabel + ': $' + projPerMonth.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj)');
+        breakdownLines.push(label + ': $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj)');
       }
     }
-    // December advance: Dec pay month includes Jan advance
     if (decAdv) {
-      const decIdx = breakdownLines.findIndex(l => l.startsWith('Dec:'));
-      if (decIdx >= 0 && breakdownLines[decIdx].indexOf('proj') >= 0) {
-        breakdownLines[decIdx] = 'Dec: $' + (projPerMonth * 2).toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj, +Jan)';
+      const decIdx = 11;
+      if (!receivedMap[decIdx]) {
+        breakdownLines[decIdx] = 'Dec: $' + (avgComp * 2).toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj, +Jan)';
       }
     }
+    breakdownLines.push('');
+    breakdownLines.push('Avg: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo (' + recentComp.length + '-mo avg)');
     breakdownLines.push('Total: $' + annual.toLocaleString('en-US', {maximumFractionDigits:0}));
     document.getElementById('projAnnualTip').setAttribute('data-tip', breakdownLines.join('\n'));
 
@@ -9229,7 +9220,7 @@ function renderProjectedAnnual() {
     document.getElementById('projYTDRevenue').innerHTML = '&mdash;';
     document.getElementById('projRemaining').innerHTML = '&mdash;';
     document.getElementById('projAnnualTip').setAttribute('data-tip', '');
-    document.getElementById('projYTDDetail').textContent = pv ? '' : 'Set $/point above to see revenue projections';
+    document.getElementById('projYTDDetail').textContent = 'Need data from prior months for projections';
   }
 }
 
