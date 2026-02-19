@@ -2391,7 +2391,12 @@ input.mil-time.invalid {
   <!-- 4. Historical Trends (with annual income stats above chart) -->
   <div class="card">
     <h2>Historical Trends</h2>
-    <div id="histTrendsNav" class="month-nav" style="margin-top:8px;margin-bottom:4px;"></div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0 4px;font-size:0.78rem;">
+      <label style="color:var(--text-dim);">From</label>
+      <input type="month" id="histRangeFrom" style="padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.78rem;">
+      <label style="color:var(--text-dim);">To</label>
+      <input type="month" id="histRangeTo" style="padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.78rem;">
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:12px 0;padding:10px 12px;background:var(--surface2);border-radius:8px;">
       <div style="text-align:center;">
         <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">3-Mo Avg</div>
@@ -2425,7 +2430,6 @@ input.mil-time.invalid {
     </div>
     <div class="collapse-body" id="histCompBody">
       <div style="padding-top:12px;">
-        <div id="histCompNav" class="month-nav" style="margin-top:0;margin-bottom:8px;"></div>
         <div id="histCompTable"></div>
         <div style="margin-top:10px;display:flex;align-items:center;gap:12px;">
           <button class="btn btn-primary btn-sm" id="savePVHistoryBtn">Save Point Values</button>
@@ -6583,9 +6587,8 @@ let weeklyBarChart = null;
 let weeklyShowDollars = false;
 let monthlyChart = null;
 let breakdownChart = null; // unused, kept for compat
-let histCompPage = 0;
-const HIST_PAGE_SIZE = 6;
-const HIST_PAGE_STEP = 3;
+let histRangeFrom = '';
+let histRangeTo = '';
 let pipelineChart = null;
 let productionTrendChart = null;
 let activeDashTab = 'daily';
@@ -8525,16 +8528,57 @@ function computePaycheckData(workMk, mt) {
   return { workDate, payDate, blended, workKey: workMk, pv, isConfirmedPV, stipend, calcPaycheck, isJanZero, hasOverride, actualAmt, accuracy };
 }
 
+function getHistRangeMonths() {
+  const all = getAllPaycheckMonths(); // newest first
+  if (all.length === 0) return [];
+  const from = histRangeFrom || all[all.length - 1];
+  const to = histRangeTo || all[0];
+  return all.filter(mk => mk >= from && mk <= to);
+}
+
+function initHistRangeInputs() {
+  const all = getAllPaycheckMonths();
+  if (all.length === 0) return;
+  const fromEl = document.getElementById('histRangeFrom');
+  const toEl = document.getElementById('histRangeTo');
+  const earliest = all[all.length - 1];
+  const latest = all[0];
+  if (!histRangeFrom) histRangeFrom = earliest;
+  if (!histRangeTo) histRangeTo = latest;
+  fromEl.min = earliest;
+  fromEl.max = latest;
+  fromEl.value = histRangeFrom;
+  toEl.min = earliest;
+  toEl.max = latest;
+  toEl.value = histRangeTo;
+}
+
+function onHistRangeChange() {
+  renderHistoricalTrends();
+  renderHistoricalComp();
+  const hb = document.getElementById('histCompBody');
+  if (hb && hb.style.maxHeight && hb.style.maxHeight !== '0px') hb.style.maxHeight = hb.scrollHeight + 'px';
+}
+document.getElementById('histRangeFrom').addEventListener('change', function() {
+  histRangeFrom = this.value;
+  if (histRangeTo && histRangeFrom > histRangeTo) { histRangeTo = histRangeFrom; document.getElementById('histRangeTo').value = histRangeTo; }
+  onHistRangeChange();
+});
+document.getElementById('histRangeTo').addEventListener('change', function() {
+  histRangeTo = this.value;
+  if (histRangeFrom && histRangeTo < histRangeFrom) { histRangeFrom = histRangeTo; document.getElementById('histRangeFrom').value = histRangeFrom; }
+  onHistRangeChange();
+});
+
 function renderHistoricalTrends() {
   const mt = getMonthlyTotals();
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const allPaycheckMonths = getAllPaycheckMonths(); // newest first
   if (allPaycheckMonths.length === 0) return;
 
-  // Use same pagination window as table, reversed for chart (oldest first)
-  const startIdx = histCompPage * HIST_PAGE_STEP;
-  const endIdx = Math.min(startIdx + HIST_PAGE_SIZE, allPaycheckMonths.length);
-  const windowMonths = allPaycheckMonths.slice(startIdx, endIdx).reverse(); // oldest first for chart
+  initHistRangeInputs();
+  const windowMonths = getHistRangeMonths().reverse(); // oldest first for chart
+  if (windowMonths.length === 0) return;
 
   const labels = [];
   const barValues = [];
@@ -8562,22 +8606,6 @@ function renderHistoricalTrends() {
     if (pd.accuracy != null) { accuracyValues.push(pd.accuracy); hasAnyAccuracy = true; }
     else { accuracyValues.push(null); }
   });
-
-  // Render nav arrows for chart
-  const trendsNavEl = document.getElementById('histTrendsNav');
-  if (allPaycheckMonths.length > HIST_PAGE_SIZE) {
-    const maxPage = Math.max(0, Math.ceil((allPaycheckMonths.length - HIST_PAGE_SIZE) / HIST_PAGE_STEP));
-    const firstVis = windowMonths[0]; // oldest visible
-    const lastVis = windowMonths[windowMonths.length - 1]; // newest visible
-    const fPd = computePaycheckData(firstVis, mt);
-    const lPd = computePaycheckData(lastVis, mt);
-    const rangeLabel = monthNames[fPd.workDate.getMonth()] + ' ' + String(fPd.workDate.getFullYear()).slice(2) + ' \u2013 ' + monthNames[lPd.workDate.getMonth()] + ' ' + String(lPd.workDate.getFullYear()).slice(2);
-    const canGoBack = histCompPage < maxPage;
-    const canGoFwd = histCompPage > 0;
-    trendsNavEl.innerHTML = '<button onclick="histCompPageNav(-1)" style="opacity:' + (canGoBack ? '1' : '0.3') + ';pointer-events:' + (canGoBack ? 'auto' : 'none') + '">&larr;</button><span style="font-size:0.82rem;min-width:120px;">' + rangeLabel + '</span><button onclick="histCompPageNav(1)" style="opacity:' + (canGoFwd ? '1' : '0.3') + ';pointer-events:' + (canGoFwd ? 'auto' : 'none') + '">&rarr;</button>';
-  } else {
-    trendsNavEl.innerHTML = '';
-  }
 
   const nonZero = barValues.filter(v => v > 0);
   const avg = nonZero.length > 0 ? round2(nonZero.reduce((a, b) => a + b, 0) / nonZero.length) : 0;
@@ -8691,17 +8719,17 @@ function renderHistoricalComp() {
   const el = document.getElementById('histCompTable');
   if (!el) return;
   const mt = getMonthlyTotals();
-  const paycheckMonths = getAllPaycheckMonths(); // newest first
-  if (paycheckMonths.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No data yet.</p>'; document.getElementById('histCompNav').innerHTML = ''; return; }
+  const rangeMonths = getHistRangeMonths(); // newest first, filtered by date range
+  if (rangeMonths.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No data yet.</p>'; return; }
 
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const now = new Date();
   function mkKey(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
 
-  // First pass: compute ALL months for grand totals + accuracy aggregate
+  // Compute all months in range for totals + accuracy aggregate
   let grandCalc = 0, grandActual = 0, hasAnyActual = false;
   let accSum = 0, accCount = 0;
-  const allData = paycheckMonths.map(workMk => {
+  const visibleData = rangeMonths.map(workMk => {
     const pd = computePaycheckData(workMk, mt);
     grandCalc += pd.calcPaycheck;
     if (pd.hasOverride) { grandActual += pd.actualAmt; hasAnyActual = true; }
@@ -8709,29 +8737,6 @@ function renderHistoricalComp() {
     if (pd.accuracy != null) { accSum += pd.accuracy; accCount++; }
     return { workMk, ...pd };
   });
-
-  // Clamp page
-  const maxPage = Math.max(0, Math.ceil((paycheckMonths.length - HIST_PAGE_SIZE) / HIST_PAGE_STEP));
-  if (histCompPage > maxPage) histCompPage = maxPage;
-  if (histCompPage < 0) histCompPage = 0;
-
-  // Visible window
-  const startIdx = histCompPage * HIST_PAGE_STEP;
-  const endIdx = Math.min(startIdx + HIST_PAGE_SIZE, paycheckMonths.length);
-  const visibleData = allData.slice(startIdx, endIdx);
-
-  // Render nav arrows
-  const navEl = document.getElementById('histCompNav');
-  if (paycheckMonths.length > HIST_PAGE_SIZE) {
-    const firstVis = visibleData[visibleData.length - 1]; // oldest visible
-    const lastVis = visibleData[0]; // newest visible
-    const rangeLabel = monthNames[firstVis.workDate.getMonth()] + ' ' + String(firstVis.workDate.getFullYear()).slice(2) + ' \u2013 ' + monthNames[lastVis.workDate.getMonth()] + ' ' + String(lastVis.workDate.getFullYear()).slice(2);
-    const canGoBack = histCompPage < maxPage;
-    const canGoFwd = histCompPage > 0;
-    navEl.innerHTML = '<button onclick="histCompPageNav(-1)" style="opacity:' + (canGoBack ? '1' : '0.3') + ';pointer-events:' + (canGoBack ? 'auto' : 'none') + '">&larr;</button><span style="font-size:0.82rem;min-width:120px;">' + rangeLabel + '</span><button onclick="histCompPageNav(1)" style="opacity:' + (canGoFwd ? '1' : '0.3') + ';pointer-events:' + (canGoFwd ? 'auto' : 'none') + '">&rarr;</button>';
-  } else {
-    navEl.innerHTML = '';
-  }
 
   // Table header with 6 columns
   let html = '<table style="width:100%;border-collapse:collapse;font-size:0.73rem;table-layout:fixed;">';
@@ -8782,7 +8787,7 @@ function renderHistoricalComp() {
 
   // Totals row — reflects ALL months
   html += `<tr style="border-top:2px solid var(--border);">`;
-  html += `<td style="padding:5px 3px;font-weight:700;" colspan="3">Total (${paycheckMonths.length} mo)</td>`;
+  html += `<td style="padding:5px 3px;font-weight:700;" colspan="3">Total (${rangeMonths.length} mo)</td>`;
   html += `<td style="padding:5px 3px;text-align:right;font-weight:700;color:var(--primary);">$${grandCalc.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
   html += `<td style="padding:5px 3px;text-align:right;font-weight:700;color:var(--accent2);">$${grandActual.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
   html += `<td></td>`;
@@ -8823,15 +8828,6 @@ function editHistCompActual(payMk) {
   showToast('Compensation updated');
 }
 
-function histCompPageNav(direction) {
-  // direction: 1 = more recent (decrease page), -1 = further back (increase page)
-  histCompPage -= direction;
-  if (histCompPage < 0) histCompPage = 0;
-  renderHistoricalComp();
-  renderHistoricalTrends();
-  const hb = document.getElementById('histCompBody');
-  if (hb && hb.style.maxHeight && hb.style.maxHeight !== '0px') hb.style.maxHeight = hb.scrollHeight + 'px';
-}
 
 function toggleStabBreakdown() {
   const panel = document.getElementById('stabBreakdown');
