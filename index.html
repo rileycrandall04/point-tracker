@@ -2346,8 +2346,10 @@ input.mil-time.invalid {
       </div>
     </div>
     <div id="stabPaycheckRow" style="text-align:center; margin-bottom:12px;">
-      <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:2px;" id="stabBuildingLabel">Building: &mdash;</div>
-      <div style="font-size:1.6rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
+        <span class="info-icon" id="stabEarningIcon" data-tip="Earning for: —" style="flex-shrink:0;">i</span>
+        <div style="font-size:1.6rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
+      </div>
       <div style="font-size:0.85rem; color:var(--text-dim); margin-top:8px;" id="stabCurrentPaycheck"></div>
     </div>
     <div class="summary-grid">
@@ -2426,6 +2428,7 @@ input.mil-time.invalid {
     <div class="chart-container">
       <canvas id="monthlyChart"></canvas>
     </div>
+    <div id="monthlyChartInfoIcons" style="display:flex;justify-content:center;gap:0;margin-top:2px;font-size:0.65rem;"></div>
     <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
   </div>
 
@@ -8776,19 +8779,43 @@ function renderHistoricalTrends() {
     }
   });
 
-  // Custom legend below chart
+  // Info icons row below chart — same payment timing tooltips as historical comp table
+  const infoIconsEl = document.getElementById('monthlyChartInfoIcons');
+  const decAdvChart = settings.decemberAdvance !== false;
+  const nowChart = new Date();
+  function mkKeyChart(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+  let wrappedIcons = '';
+  windowMonths.forEach((workMk, idx) => {
+    const pd = computePaycheckData(workMk, mt);
+    const paidLabel = monthNames[pd.payDate.getMonth()] + ' ' + String(pd.payDate.getFullYear()).slice(2);
+    const payMkForRecv = pd.payDate.getFullYear() + '-' + String(pd.payDate.getMonth() + 1).padStart(2, '0');
+    const isReceiving = payMkForRecv === mkKeyChart(nowChart.getFullYear(), nowChart.getMonth());
+    const isDecWork = decAdvChart && pd.workDate.getMonth() === 11;
+    let tipText;
+    if (isDecWork) tipText = 'Paid in Dec (advance)';
+    else if (isReceiving) tipText = 'Paid in ' + paidLabel + ' (receiving)';
+    else tipText = 'Paid in ' + paidLabel;
+    const iconStyle = isReceiving ? 'background:var(--accent2);color:#fff;' : '';
+    wrappedIcons += '<div style="flex:1;text-align:center;"><span class="info-icon" data-tip="' + tipText + '" style="' + iconStyle + '">i</span></div>';
+  });
+  infoIconsEl.innerHTML = wrappedIcons;
+
+  // Collapsible legend below chart
   const summaryEl = document.getElementById('monthlyChartSummary');
-  let legendHtml = '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-bottom:6px;font-size:0.72rem;">';
-  legendHtml += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(34,197,94,0.7);margin-right:4px;vertical-align:middle;"></span>Actual</span>';
-  legendHtml += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(59,130,246,0.7);margin-right:4px;vertical-align:middle;"></span>Calculated</span>';
+  let legendItems = '';
+  legendItems += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(34,197,94,0.7);margin-right:4px;vertical-align:middle;"></span>Actual</span>';
+  legendItems += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(59,130,246,0.7);margin-right:4px;vertical-align:middle;"></span>Calculated</span>';
   if (nonZero.length >= 2) {
-    legendHtml += '<span><span style="display:inline-block;width:16px;height:2px;background:#f59e0b;margin-right:4px;vertical-align:middle;border-top:2px dashed #f59e0b;"></span>Average</span>';
+    legendItems += '<span><span style="display:inline-block;width:16px;height:2px;background:#f59e0b;margin-right:4px;vertical-align:middle;border-top:2px dashed #f59e0b;"></span>Average</span>';
   }
   if (hasAnyAccuracy) {
-    legendHtml += '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#a78bfa;margin-right:4px;vertical-align:middle;"></span>Prediction Accuracy</span>';
+    legendItems += '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#a78bfa;margin-right:4px;vertical-align:middle;"></span>Prediction Accuracy</span>';
   }
+  let legendHtml = '<a href="#" onclick="var p=this.nextElementSibling;if(p.style.maxHeight){p.style.maxHeight=\'\';this.innerHTML=\'Legend &#9660;\';}else{p.style.maxHeight=p.scrollHeight+\'px\';this.innerHTML=\'Legend &#9650;\';}return false;" style="font-size:0.72rem;color:var(--primary);">Legend &#9660;</a>';
+  legendHtml += '<div style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;">';
+  legendHtml += '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin:6px 0;font-size:0.72rem;">' + legendItems + '</div>';
   legendHtml += '</div>';
-  legendHtml += avg > 0 ? 'Avg Monthly Compensation: $' + avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) : '';
+  legendHtml += avg > 0 ? '<div style="margin-top:4px;">Avg Monthly Compensation: $' + avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + '</div>' : '';
   summaryEl.innerHTML = legendHtml;
 }
 
@@ -8954,10 +8981,10 @@ function renderStabilization() {
   const currentMonthKey = mk(0);
   const pv = getPointValueForMonth(currentMonthKey);
   const decAdv = settings.decemberAdvance !== false;
-  const buildingLabel = document.getElementById('stabBuildingLabel');
+  const earningIcon = document.getElementById('stabEarningIcon');
   const curEl = document.getElementById('stabCurrentPaycheck');
 
-  // Compute "building" paycheck label — the paycheck current work feeds into
+  // Compute "earning for" paycheck label — the paycheck current work feeds into
   const nextPayDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const buildingMonthName = monthNames[nextPayDate.getMonth()];
 
@@ -8970,14 +8997,14 @@ function renderStabilization() {
 
   if (decAdv && now.getMonth() === 0) {
     // January: paycheck was already received in December
-    buildingLabel.textContent = 'Building: Feb 20';
+    earningIcon.setAttribute('data-tip', 'Earning for: Feb 20');
     document.getElementById('stabPaycheck').textContent = '$0.00';
   } else if (buildingCompOv != null) {
     // Comp total override for building paycheck
     if (decAdv && now.getMonth() === 11) {
-      buildingLabel.textContent = 'Building: Dec 20 (+ Jan) (override)';
+      earningIcon.setAttribute('data-tip', 'Earning for: Dec 20 (+ Jan) (override)');
     } else {
-      buildingLabel.textContent = 'Building: ' + buildingMonthName + ' 20 (override)';
+      earningIcon.setAttribute('data-tip', 'Earning for: ' + buildingMonthName + ' 20 (override)');
     }
     document.getElementById('stabPaycheck').textContent = '$' + buildingCompOv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   } else if (pv && pv > 0) {
@@ -8991,15 +9018,15 @@ function renderStabilization() {
       const decStipend = getMonthlyStipendTotal(mk(0));
       const janPv = getPointValueForMonth(mkFwd(0));
       paycheck += janWeighted * janPv + decStipend;
-      buildingLabel.textContent = 'Building: Dec 20 (+ Jan)';
+      earningIcon.setAttribute('data-tip', 'Earning for: Dec 20 (+ Jan)');
     } else {
-      buildingLabel.textContent = 'Building: ' + buildingMonthName + ' 20';
+      earningIcon.setAttribute('data-tip', 'Earning for: ' + buildingMonthName + ' 20');
     }
 
     document.getElementById('stabPaycheck').textContent = '$' + paycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   } else {
     document.getElementById('stabPaycheck').innerHTML = '&mdash;';
-    buildingLabel.textContent = 'Building: ' + buildingMonthName + ' 20';
+    earningIcon.setAttribute('data-tip', 'Earning for: ' + buildingMonthName + ' 20');
   }
 
   // "Receiving" paycheck — the paycheck arriving this month (blend shifted back 1 month)
@@ -9147,9 +9174,9 @@ function renderMonthlyPace() {
       sumAtDay += interpolated;
       sumTotal += curve.total;
     });
-    // Scale prior month averages by vacation ratio (fewer working days = lower expected total)
-    avgMonthEnd = round2((sumTotal / priorMonthCurves.length) * vacationRatio);
-    expectedByNow = round2((sumAtDay / priorMonthCurves.length) * vacationRatio);
+    // Use full prior month average as target — with vacation, user needs to earn more per working day
+    avgMonthEnd = round2(sumTotal / priorMonthCurves.length);
+    expectedByNow = round2(sumAtDay / priorMonthCurves.length);
   }
 
   // Project end-of-month
@@ -9172,7 +9199,7 @@ function renderMonthlyPace() {
     const diff = round2(currentPts - expectedByNow);
     const nMonths = priorMonthCurves.length;
     let vacNote = totalVacDays > 0 ? ` \u2022 ${totalVacDays}d vacation` : '';
-    label = `${pct.toFixed(0)}% of adj avg (${avgMonthEnd.toFixed(0)} pts) \u2022 ${diff >= 0 ? '+' : ''}${diff.toFixed(0)} pts vs pace (${nMonths}-mo)${vacNote}`;
+    label = `${pct.toFixed(0)}% of avg (${avgMonthEnd.toFixed(0)} pts) \u2022 ${diff >= 0 ? '+' : ''}${diff.toFixed(0)} pts vs pace (${nMonths}-mo)${vacNote}`;
   } else {
     pct = Math.min(100, (dayOfMonth / daysInMonth) * 100);
     label = `Day ${dayOfMonth} of ${daysInMonth} \u2022 No prior data for comparison`;
@@ -9225,7 +9252,7 @@ function renderPipelineChart() {
     const targetDate = new Date(now.getFullYear(), now.getMonth() + target, 1);
     const payLabel = monthNames[targetDate.getMonth()] + ' 20';
     if (target === 0) labels.push(payLabel + ' (receiving)');
-    else if (target === 1) labels.push(payLabel + ' (building)');
+    else if (target === 1) labels.push(payLabel + ' (earning for)');
     else labels.push(payLabel);
 
     // For this target month's paycheck, we need months: target-1, target-2, ..., target-5
@@ -9417,23 +9444,25 @@ function renderPipelineChart() {
     const isCurrentJan = decAdv && now.getMonth() === 0;
     const recvPrefix = now.getDate() >= 20 ? 'Received' : 'Receiving';
 
-    let line1 = 'Building: ' + buildingMonth + ' 20';
-    if (decAdv && now.getMonth() === 11) line1 = 'Building: Dec 20 (+ Jan)';
-    if (compOverrideFlags[1]) line1 += ' (override)';
-    line1 += ' \u2014 ' + fmtDollar(buildingAmt);
+    let earningTip = 'Earning for: ' + buildingMonth + ' 20 \u2014 points earned this month go toward this paycheck';
+    if (decAdv && now.getMonth() === 11) earningTip = 'Earning for: Dec 20 (+ Jan advance)';
+    let line1 = '<span class="info-icon" data-tip="' + earningTip + '">i</span> ';
+    line1 += fmtDollar(buildingAmt);
+    if (compOverrideFlags[1]) line1 += ' <span style="font-size:0.65rem;color:var(--text-dim);">(override)</span>';
 
     let line2;
     if (isCurrentJan) {
-      line2 = 'Received in Dec advance';
+      line2 = '<span class="info-icon" data-tip="Received in Dec advance">i</span> $0';
     } else {
-      line2 = recvPrefix + ': ' + receivingMonth + ' 20';
-      if (compOverrideFlags[0]) line2 += ' (override)';
-      line2 += ' \u2014 ' + fmtDollar(receivingAmt);
+      let recvTip = recvPrefix + ': ' + receivingMonth + ' 20 \u2014 paycheck arriving this month';
+      line2 = '<span class="info-icon" data-tip="' + recvTip + '">i</span> ';
+      line2 += fmtDollar(receivingAmt);
+      if (compOverrideFlags[0]) line2 += ' <span style="font-size:0.65rem;color:var(--text-dim);">(override)</span>';
     }
 
     summaryEl.innerHTML = line1 + '<br>' + line2;
   } else {
-    summaryEl.textContent = 'Building: ' + buildingMonth + ' 20 \u2022 Receiving: ' + receivingMonth + ' 20';
+    summaryEl.innerHTML = '<span class="info-icon" data-tip="Earning for: ' + buildingMonth + ' 20">i</span> ' + buildingMonth + ' 20 &bull; <span class="info-icon" data-tip="Receiving: ' + receivingMonth + ' 20">i</span> ' + receivingMonth + ' 20';
   }
 
   // Earnings not yet received
