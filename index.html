@@ -8611,7 +8611,7 @@ function renderHistoricalTrends() {
 
   if (hasAnyAccuracy) {
     datasets.push({
-      label: 'Accuracy',
+      label: 'Prediction Accuracy',
       data: accuracyValues,
       type: 'line',
       borderColor: '#a78bfa',
@@ -8650,7 +8650,7 @@ function renderHistoricalTrends() {
           callbacks: {
             label: function(context) {
               const idx = context.dataIndex;
-              if (context.dataset.label === 'Accuracy') {
+              if (context.dataset.label === 'Prediction Accuracy') {
                 const val = context.raw;
                 return val != null ? 'Accuracy: ' + val.toFixed(1) + '%' : '';
               }
@@ -8680,7 +8680,7 @@ function renderHistoricalTrends() {
     legendHtml += '<span><span style="display:inline-block;width:16px;height:2px;background:#f59e0b;margin-right:4px;vertical-align:middle;border-top:2px dashed #f59e0b;"></span>Average</span>';
   }
   if (hasAnyAccuracy) {
-    legendHtml += '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#a78bfa;margin-right:4px;vertical-align:middle;"></span>Accuracy</span>';
+    legendHtml += '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#a78bfa;margin-right:4px;vertical-align:middle;"></span>Prediction Accuracy</span>';
   }
   legendHtml += '</div>';
   legendHtml += avg > 0 ? 'Avg Monthly Compensation: $' + avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) : '';
