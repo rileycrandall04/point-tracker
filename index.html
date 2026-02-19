@@ -2429,6 +2429,36 @@ input.mil-time.invalid {
           <button class="btn btn-primary btn-sm" id="savePVHistoryBtn">Save Point Values</button>
           <span id="pvHistoryStatus" style="font-size:0.75rem;color:var(--text-dim);"></span>
         </div>
+        <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px;">
+          <h4 style="margin:0 0 8px;font-size:0.82rem;color:var(--text);">Monthly Point Override</h4>
+          <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">
+            Override calculated points to match QGenda or billing records.
+          </p>
+          <div class="month-nav">
+            <button id="ovPrevMonth">&larr;</button>
+            <span id="ovMonthLabel">January 2026</span>
+            <button id="ovNextMonth">&rarr;</button>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:10px;">
+            <div style="flex:1;">
+              <label style="display:block;font-size:0.7rem;color:var(--text-dim);margin-bottom:3px;">Time Points</label>
+              <input type="number" id="overrideTimePoints" min="0" step="0.01" placeholder="Calc: —" inputmode="decimal" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.8rem;box-sizing:border-box;">
+            </div>
+            <div style="flex:1;">
+              <label style="display:block;font-size:0.7rem;color:var(--text-dim);margin-bottom:3px;">Prod Points</label>
+              <input type="number" id="overrideProdPoints" min="0" step="0.01" placeholder="Calc: —" inputmode="decimal" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.8rem;box-sizing:border-box;">
+            </div>
+          </div>
+          <div style="margin-top:8px;">
+            <label style="display:block;font-size:0.7rem;color:var(--text-dim);margin-bottom:3px;">Compensation Total ($)</label>
+            <input type="number" id="overrideCompTotal" min="0" step="0.01" placeholder="Calc: —" inputmode="decimal" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.8rem;box-sizing:border-box;">
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px;">
+            <button class="btn btn-primary btn-sm" id="saveOverrideBtn">Save Override</button>
+            <button class="btn btn-outline btn-sm" id="clearOverrideBtn">Clear</button>
+          </div>
+          <div id="overrideStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:6px;"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -2573,45 +2603,6 @@ input.mil-time.invalid {
 
 <!-- HISTORY PAGE -->
 <div class="page" id="page-history">
-  <!-- Monthly Point Override (collapsible) -->
-  <div class="card collapse-section">
-    <div class="collapse-header" onclick="toggleCollapse('histOverride')">
-      <h3>Monthly Point Override</h3>
-      <span class="arrow" id="histOverrideArrow">&#9660;</span>
-    </div>
-    <div class="collapse-body" id="histOverrideBody">
-      <div style="padding-top:12px;">
-        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-          Override calculated points for a month to match QGenda or billing records.
-        </p>
-        <div class="month-nav">
-          <button id="ovPrevMonth">&larr;</button>
-          <span id="ovMonthLabel">January 2026</span>
-          <button id="ovNextMonth">&rarr;</button>
-        </div>
-        <div style="display:flex;gap:12px;margin-top:12px;">
-          <div style="flex:1;">
-            <label style="display:block;font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Time Points</label>
-            <input type="number" id="overrideTimePoints" min="0" step="0.01" placeholder="Calculated: —" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
-          </div>
-          <div style="flex:1;">
-            <label style="display:block;font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Production Points</label>
-            <input type="number" id="overrideProdPoints" min="0" step="0.01" placeholder="Calculated: —" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
-          </div>
-        </div>
-        <div style="margin-top:10px;">
-          <label style="display:block;font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Compensation Total ($)</label>
-          <input type="number" id="overrideCompTotal" min="0" step="0.01" placeholder="Calculated: —" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
-        </div>
-        <div style="margin-top:10px;display:flex;gap:8px;">
-          <button class="btn btn-primary btn-sm" id="saveOverrideBtn">Save Override</button>
-          <button class="btn btn-outline btn-sm" id="clearOverrideBtn">Clear</button>
-        </div>
-        <div id="overrideStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
-      </div>
-    </div>
-  </div>
-
   <!-- Monthly History -->
   <div class="card">
     <h2>Monthly History</h2>
@@ -4674,7 +4665,7 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     returnToShiftLogs = false;
     if (page === 'dataentry') loadDataEntryPage();
     if (page === 'settings') { /* no special init needed */ }
-    if (page === 'history') { renderHistory(); loadOverrideUI(); }
+    if (page === 'history') { renderHistory(); }
     if (page === 'import') { /* no special init needed */ }
     if (page === 'flagged') { renderFlaggedPage(); }
   });
@@ -6640,14 +6631,14 @@ function toggleCollapse(sectionId) {
   const bodyMap = {
     deScan: 'deScanBody',
     timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
-    histOverride: 'histOverrideBody', compStipends: 'compStipendsBody',
+    compStipends: 'compStipendsBody',
     histComp: 'histCompBody',
     importScan: 'importScanBody'
   };
   const arrowMap = {
     deScan: 'deScanArrow',
     timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
-    histOverride: 'histOverrideArrow', compStipends: 'compStipendsArrow',
+    compStipends: 'compStipendsArrow',
     histComp: 'histCompArrow',
     importScan: 'importScanArrow'
   };
@@ -8065,6 +8056,10 @@ document.getElementById('saveOverrideBtn').addEventListener('click', () => {
   }
   saveData(data);
   loadOverrideUI();
+  renderHistoricalComp();
+  renderHistoricalTrends();
+  const hb = document.getElementById('histCompBody');
+  if (hb && hb.style.maxHeight && hb.style.maxHeight !== '0px') hb.style.maxHeight = hb.scrollHeight + 'px';
   showToast('Override saved');
 });
 
@@ -8074,6 +8069,10 @@ document.getElementById('clearOverrideBtn').addEventListener('click', () => {
   delete data.overrides[mk];
   saveData(data);
   loadOverrideUI();
+  renderHistoricalComp();
+  renderHistoricalTrends();
+  const hb = document.getElementById('histCompBody');
+  if (hb && hb.style.maxHeight && hb.style.maxHeight !== '0px') hb.style.maxHeight = hb.scrollHeight + 'px';
   showToast('Override cleared');
 });
 
@@ -8278,56 +8277,18 @@ function navigateToHistoryOverrides() {
   closeDrawer();
   document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-history').classList.add('active');
-  loadOverrideUI();
-
-  // Hide everything except the override card
-  const histPage = document.getElementById('page-history');
-  const cards = histPage.querySelectorAll(':scope > .card');
-  cards.forEach((card, i) => {
-    if (i > 0) card.style.display = 'none';
-  });
-
-  // Force override open, hide collapse header
-  const body = document.getElementById('histOverrideBody');
-  const arrow = document.getElementById('histOverrideArrow');
-  const collapseHeader = body.parentElement.querySelector('.collapse-header');
-  if (collapseHeader) collapseHeader.style.display = 'none';
-  if (body) body.style.maxHeight = 'none';
-  if (arrow) arrow.classList.add('open');
-
-  // Add instruction tip
-  let tip = document.getElementById('overrideTutorialTip');
-  if (!tip) {
-    tip = document.createElement('p');
-    tip.id = 'overrideTutorialTip';
-    tip.style.cssText = 'font-size:0.8rem;color:var(--primary);margin-bottom:12px;font-weight:600;';
-    tip.textContent = 'Use the arrows to switch months and enter your point totals for each.';
-    body.querySelector('div').prepend(tip);
-  }
-
-  histPage.dataset.tutorialMode = 'true';
+  const compBtn = document.querySelector('.bottom-nav button[data-page="compensation"]');
+  if (compBtn) compBtn.classList.add('active');
+  document.getElementById('page-compensation').classList.add('active');
+  renderProjections();
+  setTimeout(() => scrollToHistComp(), 100);
 }
 
 function exitHistoryTutorialMode() {
   const histPage = document.getElementById('page-history');
   if (!histPage || histPage.dataset.tutorialMode !== 'true') return;
   delete histPage.dataset.tutorialMode;
-
-  // Restore hidden cards
-  histPage.querySelectorAll(':scope > .card').forEach(card => {
-    card.style.display = '';
-  });
-
-  // Restore collapse header and re-collapse
-  const body = document.getElementById('histOverrideBody');
-  const arrow = document.getElementById('histOverrideArrow');
-  const collapseHeader = body.parentElement.querySelector('.collapse-header');
-  if (collapseHeader) collapseHeader.style.display = '';
-  if (body) body.style.maxHeight = '0';
-  if (arrow) arrow.classList.remove('open');
-
-  // Remove tip
+  histPage.querySelectorAll(':scope > .card').forEach(card => { card.style.display = ''; });
   const tip = document.getElementById('overrideTutorialTip');
   if (tip) tip.remove();
 }
@@ -8464,6 +8425,7 @@ function renderProjections() {
   renderProjectedAnnual();
   renderHistoricalTrends();
   renderHistoricalComp();
+  loadOverrideUI();
   loadStipendUI();
   checkPVReminder();
 }
