@@ -8503,7 +8503,7 @@ function getAllPaycheckMonths() {
   const now = new Date();
   const earliest = workMonths[0];
   const [ey, em] = earliest.split('-').map(Number);
-  const startDate = new Date(ey, em, 1);
+  const startDate = new Date(ey, em - 1, 1);
   const endDate = new Date(now.getFullYear(), now.getMonth(), 1);
   function mkKey(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
   const months = [];
@@ -8552,7 +8552,14 @@ function initHistRangeInputs() {
   const toEl = document.getElementById('histRangeTo');
   const earliest = all[all.length - 1];
   const latest = all[0];
-  if (!histRangeFrom) histRangeFrom = earliest;
+  if (!histRangeFrom) {
+    // Default to 6 months
+    const now = new Date();
+    function mkDef(y, m) { const d = new Date(y, m, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+    const sixAgo = mkDef(now.getFullYear(), now.getMonth() - 5);
+    histRangeFrom = sixAgo < earliest ? earliest : sixAgo;
+    activeHistPreset = '6m';
+  }
   if (!histRangeTo) histRangeTo = latest;
   fromEl.min = earliest;
   fromEl.max = latest;
@@ -8560,9 +8567,11 @@ function initHistRangeInputs() {
   toEl.min = earliest;
   toEl.max = latest;
   toEl.value = histRangeTo;
+  const presetMap = { '3m': '3 Mo', '6m': '6 Mo', '12m': '12 Mo', 'ytd': 'YTD', 'all': 'All' };
+  document.querySelectorAll('.hist-range-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (presetMap[activeHistPreset] || '')));
 }
 
-let activeHistPreset = 'all';
+let activeHistPreset = '6m';
 
 function setHistRange(preset) {
   const now = new Date();
