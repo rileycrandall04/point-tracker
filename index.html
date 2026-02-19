@@ -8500,28 +8500,28 @@ function getAllPaycheckMonths() {
   return months; // newest first
 }
 
-function computePaycheckData(payMk, mt) {
+function computePaycheckData(workMk, mt) {
   const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
   const decAdv = settings.decemberAdvance !== false;
   if (!data.overrides) data.overrides = {};
   if (!settings.pointValues) settings.pointValues = {};
   function mkKey(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
-  const [py, pm] = payMk.split('-').map(Number);
-  const payDate = new Date(py, pm - 1, 1);
-  const blendVals = [0,1,2,3,4].map(w => { const srcKey = mkKey(py, pm - 2 - w); return mt[srcKey] || 0; });
+  const [wy, wm] = workMk.split('-').map(Number);
+  const workDate = new Date(wy, wm - 1, 1);
+  const payDate = new Date(wy, wm, 1); // paid out the month after earning
+  const blendVals = [0,1,2,3,4].map(w => { const srcKey = mkKey(wy, wm - 1 - w); return mt[srcKey] || 0; });
   const blended = round2(weights.reduce((sum, w, j) => sum + w * blendVals[j], 0));
-  const workKey = mkKey(py, pm - 2);
-  const pv = getPointValueForMonth(workKey);
-  const isConfirmedPV = settings.pointValues[workKey] != null;
-  const stipend = getMonthlyStipendTotal(workKey);
+  const pv = getPointValueForMonth(workMk);
+  const isConfirmedPV = settings.pointValues[workMk] != null;
+  const stipend = getMonthlyStipendTotal(workMk);
   let calcPaycheck = pv > 0 ? round2(blended * pv + stipend) : 0;
   const isJanZero = decAdv && payDate.getMonth() === 0;
   if (isJanZero) calcPaycheck = 0;
-  const ov = data.overrides[payMk];
+  const ov = data.overrides[workMk];
   const hasOverride = ov && ov.compTotal != null;
   const actualAmt = hasOverride ? ov.compTotal : null;
   const accuracy = hasOverride && calcPaycheck > 0 ? calcAccuracy(calcPaycheck, actualAmt) : null;
-  return { payDate, blended, workKey, pv, isConfirmedPV, stipend, calcPaycheck, isJanZero, hasOverride, actualAmt, accuracy };
+  return { workDate, payDate, blended, workKey: workMk, pv, isConfirmedPV, stipend, calcPaycheck, isJanZero, hasOverride, actualAmt, accuracy };
 }
 
 function renderHistoricalTrends() {
@@ -8543,9 +8543,9 @@ function renderHistoricalTrends() {
   const accuracyValues = [];
   let hasAnyAccuracy = false;
 
-  windowMonths.forEach(payMk => {
-    const pd = computePaycheckData(payMk, mt);
-    labels.push(monthNames[pd.payDate.getMonth()] + ' ' + pd.payDate.getFullYear());
+  windowMonths.forEach(workMk => {
+    const pd = computePaycheckData(workMk, mt);
+    labels.push(monthNames[pd.workDate.getMonth()] + ' ' + pd.workDate.getFullYear());
     const barVal = pd.hasOverride ? pd.actualAmt : pd.calcPaycheck;
     barValues.push(barVal);
     barColors.push(pd.hasOverride ? 'rgba(34,197,94,0.7)' : 'rgba(59,130,246,0.7)');
@@ -8684,13 +8684,13 @@ function renderHistoricalComp() {
   // First pass: compute ALL months for grand totals + accuracy aggregate
   let grandCalc = 0, grandActual = 0, hasAnyActual = false;
   let accSum = 0, accCount = 0;
-  const allData = paycheckMonths.map(payMk => {
-    const pd = computePaycheckData(payMk, mt);
+  const allData = paycheckMonths.map(workMk => {
+    const pd = computePaycheckData(workMk, mt);
     grandCalc += pd.calcPaycheck;
     if (pd.hasOverride) { grandActual += pd.actualAmt; hasAnyActual = true; }
     else { grandActual += pd.calcPaycheck; }
     if (pd.accuracy != null) { accSum += pd.accuracy; accCount++; }
-    return { payMk, ...pd };
+    return { workMk, ...pd };
   });
 
   // Clamp page
@@ -8708,7 +8708,7 @@ function renderHistoricalComp() {
   if (paycheckMonths.length > HIST_PAGE_SIZE) {
     const firstVis = visibleData[visibleData.length - 1]; // oldest visible
     const lastVis = visibleData[0]; // newest visible
-    const rangeLabel = monthNames[firstVis.payDate.getMonth()] + ' ' + String(firstVis.payDate.getFullYear()).slice(2) + ' \u2013 ' + monthNames[lastVis.payDate.getMonth()] + ' ' + String(lastVis.payDate.getFullYear()).slice(2);
+    const rangeLabel = monthNames[firstVis.workDate.getMonth()] + ' ' + String(firstVis.workDate.getFullYear()).slice(2) + ' \u2013 ' + monthNames[lastVis.workDate.getMonth()] + ' ' + String(lastVis.workDate.getFullYear()).slice(2);
     const canGoBack = histCompPage < maxPage;
     const canGoFwd = histCompPage > 0;
     navEl.innerHTML = '<button onclick="histCompPageNav(-1)" style="opacity:' + (canGoBack ? '1' : '0.3') + ';pointer-events:' + (canGoBack ? 'auto' : 'none') + '">&larr;</button><span style="font-size:0.82rem;min-width:120px;">' + rangeLabel + '</span><button onclick="histCompPageNav(1)" style="opacity:' + (canGoFwd ? '1' : '0.3') + ';pointer-events:' + (canGoFwd ? 'auto' : 'none') + '">&rarr;</button>';
@@ -8729,9 +8729,10 @@ function renderHistoricalComp() {
   html += '</tr></thead><tbody>';
 
   visibleData.forEach((d, i) => {
-    const payLabel = monthNames[d.payDate.getMonth()] + ' ' + String(d.payDate.getFullYear()).slice(2);
+    const workLabel = monthNames[d.workDate.getMonth()] + ' ' + String(d.workDate.getFullYear()).slice(2);
     const bgColor = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
-    const isReceiving = d.payMk === mkKey(now.getFullYear(), now.getMonth());
+    const payMkForRecv = d.payDate.getFullYear() + '-' + String(d.payDate.getMonth() + 1).padStart(2, '0');
+    const isReceiving = payMkForRecv === mkKey(now.getFullYear(), now.getMonth());
     let tag = '';
     if (isReceiving) tag = '<span style="display:block;font-size:0.58rem;color:var(--accent2);line-height:1;">recv</span>';
 
@@ -8739,7 +8740,7 @@ function renderHistoricalComp() {
     const pvBorder = d.isConfirmedPV ? 'border:1px solid var(--accent);' : 'border:1px solid var(--border);';
 
     html += `<tr style="border-bottom:1px solid var(--border);background:${bgColor};">`;
-    html += `<td style="padding:5px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${payLabel}${tag}</td>`;
+    html += `<td style="padding:5px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${workLabel}${tag}</td>`;
     html += `<td style="padding:5px 3px;text-align:right;color:var(--text-dim);">${d.blended.toFixed(1)}</td>`;
     html += `<td style="padding:5px 2px;text-align:right;"><input type="number" data-pvmonth="${d.workKey}" min="0" step="0.01" placeholder="${(settings.pointValue || 0).toFixed(0)}" value="${pvDisplay}" inputmode="decimal" style="max-width:54px;width:100%;padding:3px 4px;font-size:0.73rem;border-radius:4px;${pvBorder}background:var(--surface);color:var(--text);text-align:right;box-sizing:border-box;"></td>`;
     if (d.isJanZero) {
@@ -8751,7 +8752,7 @@ function renderHistoricalComp() {
       ? '$' + d.actualAmt.toLocaleString('en-US', {maximumFractionDigits: 0})
       : '<span style="color:var(--text-dim);font-size:0.65rem;">tap</span>';
     const actualColor = d.hasOverride ? 'color:var(--accent2);font-weight:600;' : '';
-    html += `<td style="padding:5px 3px;text-align:right;${actualColor}cursor:pointer;" onclick="editHistCompActual('${d.payMk}')">${actualDisplay}</td>`;
+    html += `<td style="padding:5px 3px;text-align:right;${actualColor}cursor:pointer;" onclick="editHistCompActual('${d.workMk}')">${actualDisplay}</td>`;
     // Accuracy column
     if (d.accuracy != null) {
       const accColor = d.accuracy >= 95 ? 'var(--accent)' : d.accuracy >= 85 ? 'var(--accent2)' : 'var(--danger)';
