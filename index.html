@@ -281,7 +281,7 @@ textarea { resize: vertical; min-height: 60px; }
 .hist-range-btn { padding: 4px 10px; font-size: 0.72rem; border-radius: 14px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; transition: all 0.15s; }
 .hist-range-btn:hover, .hist-range-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 .info-icon { display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:var(--border);color:var(--text-dim);font-size:0.55rem;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:3px;position:relative;flex-shrink:0; }
-.info-icon .info-tip { display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:0.65rem;font-weight:400;white-space:nowrap;z-index:100;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.3); }
+.info-icon .info-tip { display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:0.65rem;font-weight:400;white-space:normal;max-width:220px;text-align:center;z-index:100;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.3); }
 .info-icon .info-tip::after { content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--border); }
 .info-icon:hover .info-tip, .info-icon:focus .info-tip { display:block; }
 
@@ -2342,15 +2342,12 @@ input.mil-time.invalid {
   <!-- 2. Paycheck Projection (with $/point inline) -->
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <h2 style="margin:0;">Paycheck Projection</h2>
+      <h2 style="margin:0;">Paycheck Projection <span class="info-icon" tabindex="0">i<span class="info-tip">Based on a weighted blend of the last 5 months, not just this month alone.</span></span></h2>
       <div style="display:flex;align-items:center;gap:8px;">
         <label style="font-size:0.75rem;color:var(--text-dim);white-space:nowrap;">$/pt</label>
         <input type="number" id="dashPointValue" min="0" step="0.01" placeholder="55.00" style="max-width:90px;padding:4px 8px;font-size:0.8rem;">
       </div>
     </div>
-    <p style="font-size:0.8rem; color:var(--text-dim); margin-bottom:12px;">
-      Your paycheck is based on a weighted blend of the last 5 months, not just this month alone.
-    </p>
     <div id="stabPaycheckRow" style="text-align:center; margin-bottom:12px;">
       <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:2px;" id="stabBuildingLabel">Building: &mdash;</div>
       <div style="font-size:1.6rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
