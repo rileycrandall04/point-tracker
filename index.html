@@ -2424,6 +2424,7 @@ input.mil-time.invalid {
     </div>
     <div class="collapse-body" id="histCompBody">
       <div style="padding-top:12px;">
+        <div id="histCompNav" class="month-nav" style="margin-top:0;margin-bottom:8px;"></div>
         <div id="histCompTable"></div>
         <div style="margin-top:10px;display:flex;align-items:center;gap:12px;">
           <button class="btn btn-primary btn-sm" id="savePVHistoryBtn">Save Point Values</button>
@@ -6581,6 +6582,9 @@ let weeklyBarChart = null;
 let weeklyShowDollars = false;
 let monthlyChart = null;
 let breakdownChart = null; // unused, kept for compat
+let histCompPage = 0;
+const HIST_PAGE_SIZE = 6;
+const HIST_PAGE_STEP = 3;
 let pipelineChart = null;
 let productionTrendChart = null;
 let activeDashTab = 'daily';
@@ -8024,7 +8028,25 @@ function loadOverrideUI() {
     const parts = [];
     if (ov.timePoints != null || ov.prodPoints != null) parts.push('points');
     if (ov.compTotal != null) parts.push('compensation');
-    status.innerHTML = '<span style="color:var(--accent2);font-weight:600;">Override active: ' + parts.join(' + ') + '</span>';
+    let statusHtml = '<span style="color:var(--accent2);font-weight:600;">Override active: ' + parts.join(' + ') + '</span>';
+    // Per-field accuracy
+    const accParts = [];
+    if (ov.timePoints != null && calcTime > 0) {
+      const timeAcc = calcAccuracy(calcTime, ov.timePoints);
+      if (timeAcc != null) accParts.push('Time: ' + timeAcc.toFixed(1) + '%');
+    }
+    if (ov.prodPoints != null && calcProd > 0) {
+      const prodAcc = calcAccuracy(calcProd, ov.prodPoints);
+      if (prodAcc != null) accParts.push('Prod: ' + prodAcc.toFixed(1) + '%');
+    }
+    if (ov.compTotal != null && calcComp > 0) {
+      const compAcc = calcAccuracy(calcComp, ov.compTotal);
+      if (compAcc != null) accParts.push('Comp: ' + compAcc.toFixed(1) + '%');
+    }
+    if (accParts.length > 0) {
+      statusHtml += '<br><span style="font-size:0.72rem;color:var(--text-dim);">Prediction: ' + accParts.join(' | ') + ' accurate</span>';
+    }
+    status.innerHTML = statusHtml;
   } else {
     status.textContent = '';
   }
@@ -8463,70 +8485,88 @@ function getMonthlyTotals() {
   return months;
 }
 
+function calcAccuracy(calc, actual) {
+  if (!calc || !actual || calc <= 0 || actual <= 0) return null;
+  return Math.min(calc, actual) / Math.max(calc, actual) * 100;
+}
+
+function getAllPaycheckMonths() {
+  const mt = getMonthlyTotals();
+  const workMonths = Object.keys(mt).sort();
+  if (workMonths.length === 0) return [];
+  const now = new Date();
+  const earliest = workMonths[0];
+  const [ey, em] = earliest.split('-').map(Number);
+  const startDate = new Date(ey, em, 1);
+  const endDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  function mkKey(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+  const months = [];
+  for (let d = new Date(endDate); d >= startDate; d.setMonth(d.getMonth() - 1)) {
+    months.push(mkKey(d.getFullYear(), d.getMonth()));
+  }
+  return months; // newest first
+}
+
+function computePaycheckData(payMk, mt) {
+  const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
+  const decAdv = settings.decemberAdvance !== false;
+  if (!data.overrides) data.overrides = {};
+  if (!settings.pointValues) settings.pointValues = {};
+  function mkKey(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+  const [py, pm] = payMk.split('-').map(Number);
+  const payDate = new Date(py, pm - 1, 1);
+  const blendVals = [0,1,2,3,4].map(w => { const srcKey = mkKey(py, pm - 2 - w); return mt[srcKey] || 0; });
+  const blended = round2(weights.reduce((sum, w, j) => sum + w * blendVals[j], 0));
+  const workKey = mkKey(py, pm - 2);
+  const pv = getPointValueForMonth(workKey);
+  const isConfirmedPV = settings.pointValues[workKey] != null;
+  const stipend = getMonthlyStipendTotal(workKey);
+  let calcPaycheck = pv > 0 ? round2(blended * pv + stipend) : 0;
+  const isJanZero = decAdv && payDate.getMonth() === 0;
+  if (isJanZero) calcPaycheck = 0;
+  const ov = data.overrides[payMk];
+  const hasOverride = ov && ov.compTotal != null;
+  const actualAmt = hasOverride ? ov.compTotal : null;
+  const accuracy = hasOverride && calcPaycheck > 0 ? calcAccuracy(calcPaycheck, actualAmt) : null;
+  return { payDate, blended, workKey, pv, isConfirmedPV, stipend, calcPaycheck, isJanZero, hasOverride, actualAmt, accuracy };
+}
+
 function renderHistoricalTrends() {
   const mt = getMonthlyTotals();
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
-  const now = new Date();
-  const decAdv = settings.decemberAdvance !== false;
-  if (!data.overrides) data.overrides = {};
+  const allPaycheckMonths = getAllPaycheckMonths(); // newest first
+  if (allPaycheckMonths.length === 0) return;
 
-  function mkKey(year, month) {
-    const d = new Date(year, month, 1);
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-  }
-
-  // Build 6 past paycheck months (current month back to M-5)
-  const paycheckMonths = [];
-  for (let i = 0; i < 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    paycheckMonths.push(mkKey(d.getFullYear(), d.getMonth()));
-  }
-  paycheckMonths.reverse(); // oldest first for chart
+  // Use same pagination window as table, reversed for chart (oldest first)
+  const startIdx = histCompPage * HIST_PAGE_STEP;
+  const endIdx = Math.min(startIdx + HIST_PAGE_SIZE, allPaycheckMonths.length);
+  const windowMonths = allPaycheckMonths.slice(startIdx, endIdx).reverse(); // oldest first for chart
 
   const labels = [];
   const barValues = [];
   const barColors = [];
   const barBorders = [];
   const tooltipData = [];
+  const accuracyValues = [];
+  let hasAnyAccuracy = false;
 
-  paycheckMonths.forEach(payMk => {
-    const [py, pm] = payMk.split('-').map(Number);
-    const payDate = new Date(py, pm - 1, 1);
-    labels.push(monthNames[payDate.getMonth()] + ' ' + py);
-
-    // Blend: paycheck for month M uses work from M-1 through M-5
-    const blendVals = [0,1,2,3,4].map(w => {
-      const srcKey = mkKey(py, pm - 2 - w);
-      return mt[srcKey] || 0;
-    });
-    const blended = round2(weights.reduce((sum, w, j) => sum + w * blendVals[j], 0));
-
-    // PV and stipend from primary work month (M-1)
-    const workKey = mkKey(py, pm - 2);
-    const pv = getPointValueForMonth(workKey);
-    const stipend = getMonthlyStipendTotal(workKey);
-
-    // Calculated paycheck
-    let calcPaycheck = pv > 0 ? round2(blended * pv + stipend) : 0;
-    if (decAdv && payDate.getMonth() === 0) calcPaycheck = 0;
-
-    // Check for actual override
-    const ov = data.overrides[payMk];
-    const hasOverride = ov && ov.compTotal != null;
-    const actualAmt = hasOverride ? ov.compTotal : null;
-
-    const barVal = hasOverride ? actualAmt : calcPaycheck;
+  windowMonths.forEach(payMk => {
+    const pd = computePaycheckData(payMk, mt);
+    labels.push(monthNames[pd.payDate.getMonth()] + ' ' + pd.payDate.getFullYear());
+    const barVal = pd.hasOverride ? pd.actualAmt : pd.calcPaycheck;
     barValues.push(barVal);
-    barColors.push(hasOverride ? 'rgba(34,197,94,0.7)' : 'rgba(59,130,246,0.7)');
-    barBorders.push(hasOverride ? '#22c55e' : '#3b82f6');
+    barColors.push(pd.hasOverride ? 'rgba(34,197,94,0.7)' : 'rgba(59,130,246,0.7)');
+    barBorders.push(pd.hasOverride ? '#22c55e' : '#3b82f6');
     tooltipData.push({
-      source: hasOverride ? 'Actual' : 'Calculated',
-      blended: blended,
-      pv: pv,
-      stipend: stipend,
-      total: barVal
+      source: pd.hasOverride ? 'Actual' : 'Calculated',
+      blended: pd.blended,
+      pv: pd.pv,
+      stipend: pd.stipend,
+      total: barVal,
+      accuracy: pd.accuracy
     });
+    if (pd.accuracy != null) { accuracyValues.push(pd.accuracy); hasAnyAccuracy = true; }
+    else { accuracyValues.push(null); }
   });
 
   const nonZero = barValues.filter(v => v > 0);
@@ -8541,7 +8581,8 @@ function renderHistoricalTrends() {
     backgroundColor: barColors,
     borderColor: barBorders,
     borderWidth: 1,
-    borderRadius: 4
+    borderRadius: 4,
+    yAxisID: 'y'
   }];
 
   if (nonZero.length >= 2) {
@@ -8553,8 +8594,39 @@ function renderHistoricalTrends() {
       borderWidth: 2,
       borderDash: [6, 3],
       pointRadius: 0,
-      fill: false
+      fill: false,
+      yAxisID: 'y'
     });
+  }
+
+  if (hasAnyAccuracy) {
+    datasets.push({
+      label: 'Accuracy',
+      data: accuracyValues,
+      type: 'line',
+      borderColor: '#a78bfa',
+      backgroundColor: '#a78bfa',
+      borderWidth: 2,
+      pointRadius: 4,
+      pointBackgroundColor: '#a78bfa',
+      fill: false,
+      spanGaps: false,
+      yAxisID: 'y1'
+    });
+  }
+
+  const scales = {
+    y: { beginAtZero: true, ticks: { color: '#94a3b8', callback: function(v) { return '$' + v.toLocaleString(); } }, grid: { color: 'rgba(71,85,105,0.3)' } },
+    x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+  };
+
+  if (hasAnyAccuracy) {
+    scales.y1 = {
+      position: 'right',
+      min: 0, max: 100,
+      ticks: { color: '#a78bfa', stepSize: 25, callback: function(v) { return v + '%'; } },
+      grid: { display: false }
+    };
   }
 
   monthlyChart = new Chart(ctx, {
@@ -8563,13 +8635,15 @@ function renderHistoricalTrends() {
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: {
-          display: false
-        },
+        legend: { display: false },
         tooltip: {
           callbacks: {
             label: function(context) {
               const idx = context.dataIndex;
+              if (context.dataset.label === 'Accuracy') {
+                const val = context.raw;
+                return val != null ? 'Accuracy: ' + val.toFixed(1) + '%' : '';
+              }
               const td = tooltipData[idx];
               if (!td) return '';
               const lines = [
@@ -8583,20 +8657,20 @@ function renderHistoricalTrends() {
           }
         }
       },
-      scales: {
-        y: { beginAtZero: true, ticks: { color: '#94a3b8', callback: function(v) { return '$' + v.toLocaleString(); } }, grid: { color: 'rgba(71,85,105,0.3)' } },
-        x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
-      }
+      scales: scales
     }
   });
 
   // Custom legend below chart
   const summaryEl = document.getElementById('monthlyChartSummary');
-  let legendHtml = '<div style="display:flex;justify-content:center;gap:16px;margin-bottom:6px;font-size:0.72rem;">';
+  let legendHtml = '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-bottom:6px;font-size:0.72rem;">';
   legendHtml += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(34,197,94,0.7);margin-right:4px;vertical-align:middle;"></span>Actual</span>';
   legendHtml += '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgba(59,130,246,0.7);margin-right:4px;vertical-align:middle;"></span>Calculated</span>';
   if (nonZero.length >= 2) {
     legendHtml += '<span><span style="display:inline-block;width:16px;height:2px;background:#f59e0b;margin-right:4px;vertical-align:middle;border-top:2px dashed #f59e0b;"></span>Average</span>';
+  }
+  if (hasAnyAccuracy) {
+    legendHtml += '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#a78bfa;margin-right:4px;vertical-align:middle;"></span>Accuracy</span>';
   }
   legendHtml += '</div>';
   legendHtml += avg > 0 ? 'Avg Monthly Compensation: $' + avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) : '';
@@ -8607,115 +8681,111 @@ function renderHistoricalComp() {
   const el = document.getElementById('histCompTable');
   if (!el) return;
   const mt = getMonthlyTotals();
-  const workMonths = Object.keys(mt).sort();
-  if (workMonths.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No data yet.</p>'; return; }
+  const paycheckMonths = getAllPaycheckMonths(); // newest first
+  if (paycheckMonths.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No data yet.</p>'; document.getElementById('histCompNav').innerHTML = ''; return; }
 
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
   const now = new Date();
-  const decAdv = settings.decemberAdvance !== false;
-  if (!data.overrides) data.overrides = {};
-  if (!settings.pointValues) settings.pointValues = {};
+  function mkKey(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
 
-  function mkKey(year, month) {
-    const d = new Date(year, month, 1);
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  // First pass: compute ALL months for grand totals + accuracy aggregate
+  let grandCalc = 0, grandActual = 0, hasAnyActual = false;
+  let accSum = 0, accCount = 0;
+  const allData = paycheckMonths.map(payMk => {
+    const pd = computePaycheckData(payMk, mt);
+    grandCalc += pd.calcPaycheck;
+    if (pd.hasOverride) { grandActual += pd.actualAmt; hasAnyActual = true; }
+    else { grandActual += pd.calcPaycheck; }
+    if (pd.accuracy != null) { accSum += pd.accuracy; accCount++; }
+    return { payMk, ...pd };
+  });
+
+  // Clamp page
+  const maxPage = Math.max(0, Math.ceil((paycheckMonths.length - HIST_PAGE_SIZE) / HIST_PAGE_STEP));
+  if (histCompPage > maxPage) histCompPage = maxPage;
+  if (histCompPage < 0) histCompPage = 0;
+
+  // Visible window
+  const startIdx = histCompPage * HIST_PAGE_STEP;
+  const endIdx = Math.min(startIdx + HIST_PAGE_SIZE, paycheckMonths.length);
+  const visibleData = allData.slice(startIdx, endIdx);
+
+  // Render nav arrows
+  const navEl = document.getElementById('histCompNav');
+  if (paycheckMonths.length > HIST_PAGE_SIZE) {
+    const firstVis = visibleData[visibleData.length - 1]; // oldest visible
+    const lastVis = visibleData[0]; // newest visible
+    const rangeLabel = monthNames[firstVis.payDate.getMonth()] + ' ' + String(firstVis.payDate.getFullYear()).slice(2) + ' \u2013 ' + monthNames[lastVis.payDate.getMonth()] + ' ' + String(lastVis.payDate.getFullYear()).slice(2);
+    const canGoBack = histCompPage < maxPage;
+    const canGoFwd = histCompPage > 0;
+    navEl.innerHTML = '<button onclick="histCompPageNav(-1)" style="opacity:' + (canGoBack ? '1' : '0.3') + ';pointer-events:' + (canGoBack ? 'auto' : 'none') + '">&larr;</button><span style="font-size:0.82rem;min-width:120px;">' + rangeLabel + '</span><button onclick="histCompPageNav(1)" style="opacity:' + (canGoFwd ? '1' : '0.3') + ';pointer-events:' + (canGoFwd ? 'auto' : 'none') + '">&rarr;</button>';
+  } else {
+    navEl.innerHTML = '';
   }
 
-  // Determine paycheck months to show: from earliest work month + 1 through current month
-  const earliestWork = workMonths[0];
-  const [ey, em] = earliestWork.split('-').map(Number);
-  const startDate = new Date(ey, em, 1);
-  const endDate = new Date(now.getFullYear(), now.getMonth(), 1);
-
-  const paycheckMonths = [];
-  for (let d = new Date(endDate); d >= startDate; d.setMonth(d.getMonth() - 1)) {
-    paycheckMonths.push(mkKey(d.getFullYear(), d.getMonth()));
-  }
-
+  // Table header with 6 columns
   let html = '<table style="width:100%;border-collapse:collapse;font-size:0.73rem;table-layout:fixed;">';
-  html += '<colgroup><col style="width:19%"><col style="width:17%"><col style="width:22%"><col style="width:21%"><col style="width:21%"></colgroup>';
+  html += '<colgroup><col style="width:17%"><col style="width:14%"><col style="width:18%"><col style="width:19%"><col style="width:19%"><col style="width:13%"></colgroup>';
   html += '<thead><tr style="border-bottom:2px solid var(--border);text-align:left;">';
   html += '<th style="padding:5px 3px;color:var(--text-dim);font-weight:600;font-size:0.7rem;">Month</th>';
   html += '<th style="padding:5px 3px;color:var(--text-dim);font-weight:600;font-size:0.7rem;text-align:right;">Blend</th>';
   html += '<th style="padding:5px 3px;color:var(--text-dim);font-weight:600;font-size:0.7rem;text-align:right;">$/pt</th>';
   html += '<th style="padding:5px 3px;color:var(--text-dim);font-weight:600;font-size:0.7rem;text-align:right;">Calc</th>';
   html += '<th style="padding:5px 3px;color:var(--text-dim);font-weight:600;font-size:0.7rem;text-align:right;">Actual</th>';
+  html += '<th style="padding:5px 3px;color:var(--text-dim);font-weight:600;font-size:0.7rem;text-align:right;">Acc</th>';
   html += '</tr></thead><tbody>';
 
-  let grandCalc = 0, grandActual = 0, hasAnyActual = false;
-
-  paycheckMonths.forEach((payMk, i) => {
-    const [py, pm] = payMk.split('-').map(Number);
-    const payDate = new Date(py, pm - 1, 1);
-    const payLabel = monthNames[payDate.getMonth()] + ' ' + String(py).slice(2);
-
-    // Blend: paycheck for month M uses work from M-1 through M-5
-    const blendVals = [0,1,2,3,4].map(w => {
-      const srcKey = mkKey(py, pm - 2 - w);
-      return mt[srcKey] || 0;
-    });
-    const blended = round2(weights.reduce((sum, w, j) => sum + w * blendVals[j], 0));
-
-    // Primary work month = M-1 (the 40% weight)
-    const workKey = mkKey(py, pm - 2);
-    const pv = getPointValueForMonth(workKey);
-    const isConfirmedPV = settings.pointValues[workKey] != null;
-    const stipend = getMonthlyStipendTotal(workKey);
-
-    // Calculated paycheck
-    let calcPaycheck = pv > 0 ? round2(blended * pv + stipend) : 0;
-    const isJanZero = decAdv && payDate.getMonth() === 0;
-    if (isJanZero) calcPaycheck = 0;
-
-    // Override
-    const ov = data.overrides[payMk];
-    const hasOverride = ov && ov.compTotal != null;
-    const actualAmt = hasOverride ? ov.compTotal : null;
-
-    grandCalc += calcPaycheck;
-    if (hasOverride) { grandActual += actualAmt; hasAnyActual = true; }
-    else { grandActual += calcPaycheck; }
-
+  visibleData.forEach((d, i) => {
+    const payLabel = monthNames[d.payDate.getMonth()] + ' ' + String(d.payDate.getFullYear()).slice(2);
     const bgColor = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
-    const isReceiving = payMk === mkKey(now.getFullYear(), now.getMonth());
+    const isReceiving = d.payMk === mkKey(now.getFullYear(), now.getMonth());
     let tag = '';
     if (isReceiving) tag = '<span style="display:block;font-size:0.58rem;color:var(--accent2);line-height:1;">recv</span>';
 
-    // $/pt input value
-    const pvDisplay = isConfirmedPV ? settings.pointValues[workKey] : '';
-    const pvBorder = isConfirmedPV ? 'border:1px solid var(--accent);' : 'border:1px solid var(--border);';
+    const pvDisplay = d.isConfirmedPV ? settings.pointValues[d.workKey] : '';
+    const pvBorder = d.isConfirmedPV ? 'border:1px solid var(--accent);' : 'border:1px solid var(--border);';
 
     html += `<tr style="border-bottom:1px solid var(--border);background:${bgColor};">`;
-    // Month column
     html += `<td style="padding:5px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${payLabel}${tag}</td>`;
-    // Blend column
-    html += `<td style="padding:5px 3px;text-align:right;color:var(--text-dim);">${blended.toFixed(1)}</td>`;
-    // $/pt column — inline input
-    html += `<td style="padding:5px 2px;text-align:right;"><input type="number" data-pvmonth="${workKey}" min="0" step="0.01" placeholder="${(settings.pointValue || 0).toFixed(0)}" value="${pvDisplay}" inputmode="decimal" style="max-width:58px;width:100%;padding:3px 4px;font-size:0.73rem;border-radius:4px;${pvBorder}background:var(--surface);color:var(--text);text-align:right;box-sizing:border-box;"></td>`;
-    // Calc column
-    if (isJanZero) {
+    html += `<td style="padding:5px 3px;text-align:right;color:var(--text-dim);">${d.blended.toFixed(1)}</td>`;
+    html += `<td style="padding:5px 2px;text-align:right;"><input type="number" data-pvmonth="${d.workKey}" min="0" step="0.01" placeholder="${(settings.pointValue || 0).toFixed(0)}" value="${pvDisplay}" inputmode="decimal" style="max-width:54px;width:100%;padding:3px 4px;font-size:0.73rem;border-radius:4px;${pvBorder}background:var(--surface);color:var(--text);text-align:right;box-sizing:border-box;"></td>`;
+    if (d.isJanZero) {
       html += `<td style="padding:5px 3px;text-align:right;color:var(--text-dim);font-size:0.65rem;">Dec adv</td>`;
     } else {
-      html += `<td style="padding:5px 3px;text-align:right;color:var(--primary);">${pv > 0 ? '$' + calcPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
+      html += `<td style="padding:5px 3px;text-align:right;color:var(--primary);">${d.pv > 0 ? '$' + d.calcPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
     }
-    // Actual column — tappable
-    const actualDisplay = hasOverride
-      ? '$' + actualAmt.toLocaleString('en-US', {maximumFractionDigits: 0})
+    const actualDisplay = d.hasOverride
+      ? '$' + d.actualAmt.toLocaleString('en-US', {maximumFractionDigits: 0})
       : '<span style="color:var(--text-dim);font-size:0.65rem;">tap</span>';
-    const actualColor = hasOverride ? 'color:var(--accent2);font-weight:600;' : '';
-    html += `<td style="padding:5px 3px;text-align:right;${actualColor}cursor:pointer;" onclick="editHistCompActual('${payMk}')">${actualDisplay}</td>`;
+    const actualColor = d.hasOverride ? 'color:var(--accent2);font-weight:600;' : '';
+    html += `<td style="padding:5px 3px;text-align:right;${actualColor}cursor:pointer;" onclick="editHistCompActual('${d.payMk}')">${actualDisplay}</td>`;
+    // Accuracy column
+    if (d.accuracy != null) {
+      const accColor = d.accuracy >= 95 ? 'var(--accent)' : d.accuracy >= 85 ? 'var(--accent2)' : 'var(--danger)';
+      html += `<td style="padding:5px 3px;text-align:right;color:${accColor};font-weight:600;font-size:0.68rem;">${d.accuracy.toFixed(1)}%</td>`;
+    } else {
+      html += `<td style="padding:5px 3px;text-align:right;color:var(--text-dim);font-size:0.65rem;">--</td>`;
+    }
     html += '</tr>';
   });
 
-  // Totals row
+  // Totals row — reflects ALL months
   html += `<tr style="border-top:2px solid var(--border);">`;
   html += `<td style="padding:5px 3px;font-weight:700;" colspan="3">Total (${paycheckMonths.length} mo)</td>`;
   html += `<td style="padding:5px 3px;text-align:right;font-weight:700;color:var(--primary);">$${grandCalc.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
   html += `<td style="padding:5px 3px;text-align:right;font-weight:700;color:var(--accent2);">$${grandActual.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
+  html += `<td></td>`;
   html += '</tr>';
 
   html += '</tbody></table>';
+
+  // Accuracy summary banner
+  if (accCount > 0) {
+    const avgAcc = accSum / accCount;
+    const accColor = avgAcc >= 95 ? 'var(--accent)' : avgAcc >= 85 ? 'var(--accent2)' : 'var(--danger)';
+    html += `<div style="text-align:center;margin-top:8px;padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.03);font-size:0.75rem;">Prediction Accuracy: <span style="color:${accColor};font-weight:700;">${avgAcc.toFixed(1)}%</span> <span style="color:var(--text-dim);">(${accCount} month${accCount > 1 ? 's' : ''} with actuals)</span></div>`;
+  }
+
   el.innerHTML = html;
 }
 
@@ -8740,6 +8810,16 @@ function editHistCompActual(payMk) {
   saveData(data);
   renderProjections(); // re-renders all comp cards including this table
   showToast('Compensation updated');
+}
+
+function histCompPageNav(direction) {
+  // direction: 1 = more recent (decrease page), -1 = further back (increase page)
+  histCompPage -= direction;
+  if (histCompPage < 0) histCompPage = 0;
+  renderHistoricalComp();
+  renderHistoricalTrends();
+  const hb = document.getElementById('histCompBody');
+  if (hb && hb.style.maxHeight && hb.style.maxHeight !== '0px') hb.style.maxHeight = hb.scrollHeight + 'px';
 }
 
 function toggleStabBreakdown() {
