@@ -278,6 +278,8 @@ textarea { resize: vertical; min-height: 60px; }
 .btn-sm { padding: 8px 14px; font-size: 0.85rem; }
 .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
 .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+.hist-range-btn { padding: 4px 10px; font-size: 0.72rem; border-radius: 14px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; transition: all 0.15s; }
+.hist-range-btn:hover, .hist-range-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
 /* ===== BADGES ===== */
 .point-badge {
@@ -2391,7 +2393,14 @@ input.mil-time.invalid {
   <!-- 4. Historical Trends (with annual income stats above chart) -->
   <div class="card">
     <h2>Historical Trends</h2>
-    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0 4px;font-size:0.78rem;">
+    <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin:8px 0 2px;font-size:0.72rem;flex-wrap:wrap;">
+      <button class="hist-range-btn" onclick="setHistRange('3m')">3 Mo</button>
+      <button class="hist-range-btn" onclick="setHistRange('6m')">6 Mo</button>
+      <button class="hist-range-btn" onclick="setHistRange('ytd')">YTD</button>
+      <button class="hist-range-btn" onclick="setHistRange('12m')">12 Mo</button>
+      <button class="hist-range-btn" onclick="setHistRange('all')">All</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin:4px 0;font-size:0.78rem;">
       <label style="color:var(--text-dim);">From</label>
       <input type="month" id="histRangeFrom" style="padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.78rem;">
       <label style="color:var(--text-dim);">To</label>
@@ -8553,6 +8562,39 @@ function initHistRangeInputs() {
   toEl.value = histRangeTo;
 }
 
+let activeHistPreset = 'all';
+
+function setHistRange(preset) {
+  const now = new Date();
+  const all = getAllPaycheckMonths();
+  if (all.length === 0) return;
+  const latest = all[0];
+  const earliest = all[all.length - 1];
+  function mkKey(y, m) { const d = new Date(y, m, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+
+  histRangeTo = latest;
+  if (preset === '3m') {
+    histRangeFrom = mkKey(now.getFullYear(), now.getMonth() - 2);
+  } else if (preset === '6m') {
+    histRangeFrom = mkKey(now.getFullYear(), now.getMonth() - 5);
+  } else if (preset === '12m') {
+    histRangeFrom = mkKey(now.getFullYear(), now.getMonth() - 11);
+  } else if (preset === 'ytd') {
+    histRangeFrom = mkKey(now.getFullYear(), 0);
+  } else {
+    histRangeFrom = earliest;
+  }
+  if (histRangeFrom < earliest) histRangeFrom = earliest;
+
+  activeHistPreset = preset;
+  document.querySelectorAll('.hist-range-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === {
+    '3m': '3 Mo', '6m': '6 Mo', '12m': '12 Mo', 'ytd': 'YTD', 'all': 'All'
+  }[preset]));
+  document.getElementById('histRangeFrom').value = histRangeFrom;
+  document.getElementById('histRangeTo').value = histRangeTo;
+  onHistRangeChange();
+}
+
 function onHistRangeChange() {
   renderHistoricalTrends();
   renderHistoricalComp();
@@ -8562,10 +8604,12 @@ function onHistRangeChange() {
 document.getElementById('histRangeFrom').addEventListener('change', function() {
   histRangeFrom = this.value;
   if (histRangeTo && histRangeFrom > histRangeTo) { histRangeTo = histRangeFrom; document.getElementById('histRangeTo').value = histRangeTo; }
+  activeHistPreset = ''; document.querySelectorAll('.hist-range-btn').forEach(b => b.classList.remove('active'));
   onHistRangeChange();
 });
 document.getElementById('histRangeTo').addEventListener('change', function() {
   histRangeTo = this.value;
+  activeHistPreset = ''; document.querySelectorAll('.hist-range-btn').forEach(b => b.classList.remove('active'));
   if (histRangeFrom && histRangeTo < histRangeFrom) { histRangeFrom = histRangeTo; document.getElementById('histRangeFrom').value = histRangeFrom; }
   onHistRangeChange();
 });
