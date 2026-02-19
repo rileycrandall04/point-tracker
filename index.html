@@ -1546,7 +1546,7 @@ input.mil-time.invalid {
       <div class="tut-instructions">
         <strong>1.</strong> Go to the <strong>Comp</strong> tab<br>
         <strong>2.</strong> Enter your estimated <strong>$/point</strong> value<br>
-        <strong>3.</strong> This unlocks revenue projections on the Dashboard
+        <strong>3.</strong> This unlocks revenue projections on the Data tab
       </div>
     </div>
 
@@ -2047,6 +2047,10 @@ input.mil-time.invalid {
     <span style="font-size:0.85rem; font-weight:600;"><span id="todayPVReminderText"></span> <a href="#" onclick="goToPVHistory(); return false;" style="color:#000; text-decoration:underline; font-weight:400;">Update now</a></span>
     <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
+  <div class="card hidden" id="paycheckEntryReminder" style="background:var(--primary); color:#fff; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+    <span style="font-size:0.85rem; font-weight:600;"><span id="paycheckEntryReminderText"></span> <a href="#" onclick="goToPaycheckEntry(); return false;" style="color:#fff; text-decoration:underline; font-weight:400;">Enter now</a></span>
+    <button onclick="dismissPaycheckReminder()" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
+  </div>
   <div class="card hidden" id="openLaborReminder" style="background:var(--danger); color:#fff; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
     <span style="font-size:0.85rem; font-weight:600;" id="openLaborReminderText"></span>
     <button onclick="document.getElementById('openLaborReminder').classList.add('hidden')" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
@@ -2416,7 +2420,7 @@ input.mil-time.invalid {
         <div style="font-size:0.95rem;font-weight:600;color:var(--accent2);" id="projAnnualIncome">&mdash;</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">YTD Revenue</div>
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">YTD Received</div>
         <div style="font-size:0.95rem;font-weight:600;color:#facc15;" id="projYTDRevenue">&mdash;</div>
       </div>
       <div style="text-align:center;">
@@ -2448,7 +2452,7 @@ input.mil-time.invalid {
         <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px;">
           <h4 style="margin:0 0 8px;font-size:0.82rem;color:var(--text);">Monthly Point Override</h4>
           <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">
-            Override calculated points to match QGenda or billing records.
+            On the 20th of each month, enter your actual paycheck amount and point totals from your pay stub to track prediction accuracy.
           </p>
           <div class="month-nav">
             <button id="ovPrevMonth">&larr;</button>
@@ -3035,7 +3039,7 @@ input.mil-time.invalid {
   </button>
   <button data-page="dashboard">
     <span class="nav-icon">&#128202;</span>
-    <span>Dashboard</span>
+    <span>Data</span>
   </button>
   <button id="moreNavBtn">
     <span class="nav-icon">&middot;&middot;&middot;</span>
@@ -5798,6 +5802,7 @@ function resetCaseForm() {
 // ================================================================
 function renderToday() {
   checkPVReminder();
+  checkPaycheckReminder();
   checkOpenLaborReminder();
   renderWeeklyChart();
   const date = workingDate;
@@ -8414,6 +8419,43 @@ function dismissPVReminder() {
   if (comp) comp.classList.add('hidden');
 }
 
+function dismissPaycheckReminder() {
+  window._paycheckReminderDismissed = true;
+  const el = document.getElementById('paycheckEntryReminder');
+  if (el) el.classList.add('hidden');
+}
+
+function goToPaycheckEntry() {
+  // Navigate to compensation page and scroll to historical comp
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const compBtn = document.querySelector('.bottom-nav button[data-page="compensation"]');
+  if (compBtn) compBtn.classList.add('active');
+  document.getElementById('page-compensation').classList.add('active');
+  renderProjections();
+  setTimeout(() => scrollToHistComp(), 100);
+}
+
+function checkPaycheckReminder() {
+  const banner = document.getElementById('paycheckEntryReminder');
+  if (!banner || window._paycheckReminderDismissed) { if (banner) banner.classList.add('hidden'); return; }
+  const now = new Date();
+  if (now.getDate() < 20) { banner.classList.add('hidden'); return; }
+  // Check if last month's actual paycheck has been entered
+  // Last month's work feeds into this month's paycheck (received on 20th)
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevKey = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth() + 1).padStart(2, '0');
+  const ov = data.overrides && data.overrides[prevKey];
+  if (!ov || ov.compTotal == null) {
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    document.getElementById('paycheckEntryReminderText').textContent = 'Enter your ' + monthNames[now.getMonth()] + ' paycheck amount.';
+    banner.classList.remove('hidden');
+    banner.style.display = 'flex';
+  } else {
+    banner.classList.add('hidden');
+  }
+}
+
 function checkOpenLaborReminder() {
   const banner = document.getElementById('openLaborReminder');
   if (!banner) return;
@@ -9076,19 +9118,39 @@ function renderProjectedAnnual() {
   document.getElementById('projRollingAvg').textContent = avg.toFixed(1);
   const globalPv = settings.pointValue;
 
-  // YTD revenue: sum each month's pts * that month's confirmed point value
+  // YTD revenue received: only count paychecks already received (received on 20th of pay month)
+  // Paycheck for work month W is received on the 20th of month W+1
+  // With Dec advance: work month Dec is received Dec 20 (same month) instead of Jan 20
   let ytdRevenue = 0;
   let ytdPts = 0;
   let ytdMonths = 0;
   let ytdStipends = 0;
-  for (let m = 0; m <= now.getMonth(); m++) {
-    const key = thisYear + '-' + String(m + 1).padStart(2, '0');
-    if (mt[key]) {
-      ytdPts += mt[key];
-      ytdRevenue += mt[key] * getPointValueForMonth(key);
-      ytdMonths++;
+  const decAdv = settings.decemberAdvance !== false;
+  // Check work months from Dec of prev year (its paycheck may land in Jan) through current year
+  for (let i = -1; i <= 11; i++) {
+    const workDate = new Date(thisYear, i, 1);
+    const wYear = workDate.getFullYear();
+    const wMonth = workDate.getMonth();
+    const workKey = wYear + '-' + String(wMonth + 1).padStart(2, '0');
+    // Determine when this paycheck was received
+    let recvDate;
+    if (decAdv && wMonth === 11) {
+      recvDate = new Date(wYear, 11, 20); // Dec advance: paid in Dec
+    } else {
+      recvDate = new Date(wYear, wMonth + 1, 20); // normal: paid next month 20th
     }
-    ytdStipends += getMonthlyStipendTotal(key);
+    // Only count if received this year and already past
+    if (recvDate.getFullYear() !== thisYear || recvDate > now) continue;
+    if (!mt[workKey]) continue;
+    ytdPts += mt[workKey];
+    const ov = data.overrides && data.overrides[workKey];
+    if (ov && ov.compTotal != null) {
+      ytdRevenue += ov.compTotal;
+    } else {
+      ytdRevenue += mt[workKey] * getPointValueForMonth(workKey);
+      ytdStipends += getMonthlyStipendTotal(workKey);
+    }
+    ytdMonths++;
   }
   ytdRevenue += ytdStipends;
   const remainingMonths = 12 - now.getMonth() - 1; // full months left after current
@@ -9111,7 +9173,7 @@ function renderProjectedAnnual() {
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projYTDRevenue').textContent = '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projRemaining').textContent = '$' + projRemaining.toLocaleString('en-US', { maximumFractionDigits: 0 });
-    let detail = `${ytdPts.toFixed(0)} pts earned YTD across ${ytdMonths} month${ytdMonths !== 1 ? 's' : ''} \u2022 ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''} remaining`;
+    let detail = `${ytdMonths} paycheck${ytdMonths !== 1 ? 's' : ''} received YTD \u2022 ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''} remaining`;
     if (ytdStipends > 0) detail += ` \u2022 $${ytdStipends.toLocaleString('en-US', {maximumFractionDigits:0})} stipends YTD`;
     document.getElementById('projYTDDetail').textContent = detail;
   } else {
