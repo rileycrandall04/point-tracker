@@ -11290,10 +11290,18 @@ function updateHeaderPoints() {
     const dayOfMonth = now.getDate();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const vacDays = monthShifts.filter(s => s.assignmentType === 'vacation');
-    const vacDaysPassed = vacDays.filter(s => parseInt(s.date.split('-')[2]) <= dayOfMonth).length;
-    const workingDaysInMonth = daysInMonth - vacDays.length;
-    const workingDaysElapsed = dayOfMonth - vacDaysPassed;
-    const vacRatio = workingDaysInMonth / daysInMonth;
+    const hdrVacDates = new Set(vacDays.map(s => s.date));
+    // Count weekdays (Mon-Fri) excluding vacation — same logic as renderMonthlyPace
+    let hdrWeekdaysInMonth = 0, hdrWeekdaysElapsed = 0;
+    for (let dd = 1; dd <= daysInMonth; dd++) {
+      const dt = new Date(now.getFullYear(), now.getMonth(), dd);
+      const dow = dt.getDay();
+      if (dow === 0 || dow === 6) continue;
+      const ds = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
+      if (hdrVacDates.has(ds)) continue;
+      hdrWeekdaysInMonth++;
+      if (dd <= dayOfMonth) hdrWeekdaysElapsed++;
+    }
 
     const mt = getMonthlyTotals();
     let sumAtDay = 0;
@@ -11309,7 +11317,7 @@ function updateHeaderPoints() {
       shifts.forEach(s => { dailyP[parseInt(s.date.split('-')[2])] += calcShiftTotal(s).total; });
       const cum = new Array(mDays + 1).fill(0);
       for (let i = 1; i <= mDays; i++) cum[i] = cum[i - 1] + dailyP[i];
-      const frac = workingDaysInMonth > 0 ? workingDaysElapsed / workingDaysInMonth : 0;
+      const frac = hdrWeekdaysInMonth > 0 ? hdrWeekdaysElapsed / hdrWeekdaysInMonth : 0;
       const mapped = frac * mDays;
       const lo = Math.floor(mapped);
       const hi = Math.min(Math.ceil(mapped), mDays);
@@ -11318,7 +11326,7 @@ function updateHeaderPoints() {
       curveCount++;
     }
     if (curveCount > 0) {
-      const expected = round2((sumAtDay / curveCount) * vacRatio);
+      const expected = round2(sumAtDay / curveCount);
       const delta = round2(monthPts - expected);
       const cls = delta >= 0 ? 'ahead' : 'behind';
       const sign = delta >= 0 ? '+' : '';
