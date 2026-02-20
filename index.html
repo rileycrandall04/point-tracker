@@ -8947,30 +8947,14 @@ function renderHistoricalComp() {
   html += '<th style="padding:5px 3px;color:var(--text-dim);font-weight:600;font-size:0.7rem;text-align:right;">Acc</th>';
   html += '</tr></thead><tbody>';
 
-  const decAdv = settings.decemberAdvance !== false;
   visibleData.forEach((d, i) => {
     const workLabel = monthNames[d.workDate.getMonth()] + ' ' + String(d.workDate.getFullYear()).slice(2);
-    const paidLabel = monthNames[d.payDate.getMonth()] + ' ' + String(d.payDate.getFullYear()).slice(2);
     const bgColor = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
-    const payMkForRecv = d.payDate.getFullYear() + '-' + String(d.payDate.getMonth() + 1).padStart(2, '0');
-    const isReceiving = payMkForRecv === mkKey(now.getFullYear(), now.getMonth());
-    const isDecWork = decAdv && d.workDate.getMonth() === 11;
-    let tipText, tipColor = 'var(--text-dim)';
-    if (isDecWork) {
-      tipText = 'Paid in Dec (advance)';
-    } else if (isReceiving) {
-      tipText = 'Paid in ' + paidLabel + ' (receiving)';
-      tipColor = 'var(--accent2)';
-    } else {
-      tipText = 'Paid in ' + paidLabel;
-    }
-    const infoIcon = '<span class="info-icon" data-tip="' + tipText + '" style="' + (isReceiving ? 'background:var(--accent2);color:#fff;' : '') + '">i</span>';
-
     const pvDisplay = d.isConfirmedPV ? settings.pointValues[d.workKey] : '';
     const pvBorder = d.isConfirmedPV ? 'border:1px solid var(--accent);' : 'border:1px solid var(--border);';
 
     html += `<tr style="border-bottom:1px solid var(--border);background:${bgColor};">`;
-    html += `<td style="padding:5px 3px;white-space:nowrap;overflow:hidden;">${workLabel}${infoIcon}</td>`;
+    html += `<td style="padding:5px 3px;white-space:nowrap;overflow:hidden;">${workLabel}</td>`;
     html += `<td style="padding:5px 3px;text-align:right;color:var(--text-dim);">${d.blended.toFixed(1)}</td>`;
     html += `<td style="padding:5px 2px;text-align:right;"><input type="number" data-pvmonth="${d.workKey}" min="0" step="0.01" placeholder="${(settings.pointValue || 0).toFixed(0)}" value="${pvDisplay}" inputmode="decimal" style="max-width:54px;width:100%;padding:3px 4px;font-size:0.73rem;border-radius:4px;${pvBorder}background:var(--surface);color:var(--text);text-align:right;box-sizing:border-box;"></td>`;
     html += `<td style="padding:5px 3px;text-align:right;color:var(--primary);">${d.pv > 0 ? '$' + d.calcPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
