@@ -11227,13 +11227,21 @@ function deleteCaseFromList(id) {
 document.getElementById('exportCSVBtn').addEventListener('click', () => {
   const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
   const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix)).sort((a,b) => a.date.localeCompare(b.date));
-  let csv = 'Date,Assignment,Time Entries,Entries Count,AR Points,Productivity Points,Call Points,Subspec Points,Supervision Points,Total Points,Cases\n';
+  const csvEsc = v => `"${String(v).replace(/"/g, '""')}"`;
+  let csv = 'Date,Assignment,Procedure,ASA Code,Base Units,Physical Status,Start,End,Case Points,Shift Total Points\n';
   monthShifts.forEach(shift => {
     const totals = calcShiftTotal(shift);
-    const cc = data.cases.filter(c => c.shiftDate === shift.date).length;
-    const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
-    const timeStr = entries.map(e => `${e.start}-${e.end || '?'}`).join('; ');
-    csv += `${shift.date},${getAssignmentTypeName(shift.assignmentType)},"${timeStr}",${entries.length},${totals.ar.toFixed(2)},${totals.prod.toFixed(2)},${totals.call.toFixed(2)},${totals.subspec.toFixed(2)},${totals.supervision.toFixed(2)},${totals.total.toFixed(2)},${cc}\n`;
+    const shiftCases = data.cases.filter(c => c.shiftDate === shift.date).sort((a,b) => (a.startTime||'').localeCompare(b.startTime||''));
+    const assign = getAssignmentTypeName(shift.assignmentType);
+    if (shiftCases.length === 0) {
+      csv += `${shift.date},${csvEsc(assign)},,,,,,,,${totals.total.toFixed(2)}\n`;
+    } else {
+      shiftCases.forEach((c, i) => {
+        const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
+        const pts = calcCasePoints(c, shift);
+        csv += `${shift.date},${csvEsc(assign)},${csvEsc(name)},${c.asaCode || ''},${c.baseUnits || ''},${c.physicalStatus || ''},${c.startTime || ''},${c.endTime || ''},${pts.toFixed(2)},${i === 0 ? totals.total.toFixed(2) : ''}\n`;
+      });
+    }
   });
   const namePrefix = settings.name ? settings.name.replace(/\s+/g, '_') + '_' : '';
   downloadFile(csv, `${namePrefix}mwa-points-${prefix}.csv`, 'text/csv');
