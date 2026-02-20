@@ -15153,7 +15153,7 @@ function updateAccountUI(user) {
 // ================================================================
 auth.onAuthStateChanged(async (user) => {
   // Force re-sign-in once after v2 shared data update
-  const REAUTH_VERSION = 'v2-shared';
+  const REAUTH_VERSION = 'v3-sync';
   if (user && localStorage.getItem('pt_reauth') !== REAUTH_VERSION) {
     localStorage.setItem('pt_reauth', REAUTH_VERSION);
     await auth.signOut();
