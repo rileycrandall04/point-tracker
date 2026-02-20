@@ -10710,17 +10710,18 @@ function syncPagerShift(dateStr, type) {
   const shift = data.shifts[dateStr];
   const hasRealEntries = shift && shift.timeEntries && shift.timeEntries.some(e => e.start);
   const isPagerEligible = getPagerPayWindow(type, isWeekend(dateStr)) !== null;
+  const isVacOrOff = type === 'vacation' || type === 'forced_off';
 
   if (hasRealEntries) return; // never touch shifts with real clock data
 
-  if (isPagerEligible) {
-    // Create or update pager-only shift
+  if (isPagerEligible || isVacOrOff) {
+    // Create or update shift (pager-eligible, vacation, or forced off)
     data.shifts[dateStr] = {
       date: dateStr, assignmentType: type,
       startTime: '', endTime: '',
-      timeEntries: [],
+      timeEntries: isVacOrOff ? [{ start: '', end: '' }] : [],
       isHoliday: shift ? shift.isHoliday : false,
-      forcedOff: false,
+      forcedOff: type === 'forced_off',
       subspecCoverage: false, teeCount: 0,
       supervisionStart: '', supervisionEnd: '',
       preCallStart: '', preCallEnd: '',
