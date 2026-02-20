@@ -2174,6 +2174,14 @@ input.mil-time.invalid {
       </div>
       <div id="surgeonEffContent"></div>
     </div>
+
+    <!-- Collective Cases -->
+    <div class="card">
+      <h2>Collective Cases</h2>
+      <div id="collectiveCasesContent">
+        <p style="color:var(--text-dim);font-size:0.85rem;">Loading shared data...</p>
+      </div>
+    </div>
   </div>
 
   <!-- Daily Totals Tab -->
@@ -2632,20 +2640,6 @@ input.mil-time.invalid {
     </p>
   </div>
 
-  <!-- Upload Prior Cases to Shared Pool -->
-  <div class="card" style="margin-top:12px;">
-    <h2>Upload Prior Cases to Shared Pool</h2>
-    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;">Upload an Excel file (.xlsx) of past cases directly to the shared pool. These are NOT added to your local data — they only contribute to group-wide analytics.</p>
-    <div class="upload-area" id="sharedUploadArea">
-      <label style="cursor:pointer;display:block;text-align:center;padding:16px;">
-        <span style="font-size:1.5rem;">&#128203;</span>
-        <p>Tap to select .xlsx file</p>
-        <input type="file" id="sharedUploadFile" accept=".xlsx,.xls" style="display:none;">
-      </label>
-    </div>
-    <div id="sharedUploadStatus" style="font-size:0.78rem;color:var(--text-dim);margin-top:6px;"></div>
-  </div>
-
   <!-- Export / Import -->
   <div class="card">
     <h2>Data Management</h2>
@@ -2803,7 +2797,8 @@ input.mil-time.invalid {
       <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Feb 20, 2026</h3>
       <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
         <li><strong>Shared data pool integration</strong> &mdash; Procedure Time Lookup, Procedure Efficiency, and Surgeon Efficiency now combine your local cases with shared cases from your group. Shared entries are labeled and non-editable. Surgeon autocomplete also suggests names from the shared pool.</li>
-        <li><strong>Upload Prior Cases</strong> &mdash; New card in Settings lets you upload an Excel file of past cases directly to the shared pool (without adding them to your local data). Deterministic IDs prevent duplicates on re-upload.</li>
+        <li><strong>Collective Cases</strong> &mdash; New card on the Analytics tab shows the total cases in the shared pool with a collapsible breakdown by contributor.</li>
+        <li><strong>Auto-upload prior cases</strong> &mdash; All your existing cases are automatically uploaded to the shared pool on first sign-in. No manual upload needed.</li>
         <li><strong>Shared schema v2</strong> &mdash; Shared case data now stores surgeon name and nerve block status instead of raw line/emergency fields. Existing shared data is re-synced automatically.</li>
       </ul>
     </div>
@@ -3440,56 +3435,6 @@ function approxSharedCasePoints(sc) {
   const nerveBlockPts = sc.hasNerveBlock ? 3 : 0;
   return round2(basePoints + timePoints + nerveBlockPts);
 }
-
-// Upload prior cases to shared pool (not local data)
-document.getElementById('sharedUploadFile').addEventListener('change', async function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const statusEl = document.getElementById('sharedUploadStatus');
-  if (!currentUser) { statusEl.textContent = 'Sign in first.'; return; }
-  statusEl.textContent = 'Parsing file...';
-  try {
-    const { cases } = await parseCaseExcel(file);
-    if (cases.length === 0) { statusEl.textContent = 'No valid cases found in file.'; return; }
-    statusEl.textContent = `Uploading ${cases.length} cases to shared pool...`;
-    const batchSize = 500;
-    let written = 0;
-    for (let i = 0; i < cases.length; i += batchSize) {
-      const batch = db.batch();
-      const chunk = cases.slice(i, i + batchSize);
-      chunk.forEach(c => {
-        const safeProc = (c.procedure || 'unknown').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30);
-        const docId = currentUser.uid + '_upload_' + (c.shiftDate || 'nodate') + '_' + (c.startTime || 'notime') + '_' + safeProc;
-        const shared = {
-          uid: currentUser.uid,
-          caseType: c.caseType || 'standard',
-          shiftDate: c.shiftDate || '',
-          timestamp: c.timestamp || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          procedure: c.procedure || '',
-          asaCode: c.asaCode || '',
-          baseUnits: parseFloat(c.baseUnits) || 0,
-          physicalStatus: c.physicalStatus || '',
-          startTime: c.startTime || '',
-          endTime: c.endTime || '',
-          hasNerveBlock: false,
-          surgeon: (c.notes || '').trim()
-        };
-        batch.set(db.collection('sharedCases').doc(docId), shared);
-      });
-      await batch.commit();
-      written += chunk.length;
-    }
-    statusEl.textContent = `Uploaded ${written} cases to shared pool.`;
-    // Refresh cache
-    await loadSharedCases();
-    showToast(`${written} prior cases uploaded to shared pool`);
-  } catch (err) {
-    console.error('Shared upload error:', err);
-    statusEl.textContent = 'Upload failed: ' + err.message;
-  }
-  this.value = '';
-});
 
 function updateSyncStatus(status) {
   const el = document.getElementById('syncStatus');
@@ -11203,6 +11148,45 @@ function renderAnalyticsTab() {
   renderCaseMix();
   renderTopProcedures();
   renderSurgeonEfficiency();
+  renderCollectiveCases();
+}
+
+function renderCollectiveCases() {
+  const el = document.getElementById('collectiveCasesContent');
+  if (!el) return;
+  if (!sharedCasesLoaded) {
+    el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">Loading shared data...</p>';
+    return;
+  }
+  const total = sharedCasesCache.length;
+  if (total === 0) {
+    el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No shared cases yet. Cases are uploaded automatically when you sign in with sharing enabled.</p>';
+    return;
+  }
+  const myUid = currentUser ? currentUser.uid : '';
+  // Count by uid
+  const byUid = {};
+  sharedCasesCache.forEach(sc => {
+    const uid = sc.uid || 'unknown';
+    if (!byUid[uid]) byUid[uid] = 0;
+    byUid[uid]++;
+  });
+  const contributors = Object.entries(byUid).sort((a, b) => b[1] - a[1]);
+
+  let html = '';
+  html += `<div class="efficiency-item" style="font-weight:600;"><span class="eff-label">Total Cases in Pool</span><span class="eff-value">${total}</span></div>`;
+  html += `<div class="efficiency-item"><span class="eff-label">Contributors</span><span class="eff-value">${contributors.length}</span></div>`;
+  html += `<div class="efficiency-item proc-lookup-row" onclick="toggleProcCaseList(this)" style="cursor:pointer;margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">`;
+  html += `<span class="eff-label" style="font-weight:600;">Breakdown by Contributor</span>`;
+  html += `<span class="eff-value" style="font-size:0.7rem;color:var(--text-dim);">&#9662;</span></div>`;
+  html += `<div class="proc-case-list" style="display:none;">`;
+  let otherIdx = 1;
+  contributors.forEach(([uid, count]) => {
+    const label = uid === myUid ? 'You' : 'Contributor ' + otherIdx++;
+    html += `<div class="proc-case-item"><span>${escHtml(label)}</span><span>${count} case${count !== 1 ? 's' : ''}</span></div>`;
+  });
+  html += `</div>`;
+  el.innerHTML = html;
 }
 
 function renderCaseMix() {
@@ -15191,6 +15175,7 @@ auth.onAuthStateChanged(async (user) => {
 
     // Load shared cases from community pool (non-blocking)
     loadSharedCases().then(() => {
+      renderCollectiveCases();
       // Re-render analytics if currently visible
       const analyticsPage = document.getElementById('page-analytics');
       if (analyticsPage && !analyticsPage.classList.contains('hidden')) {
