@@ -2700,20 +2700,26 @@ input.mil-time.invalid {
       Duplicate cases (same date + start time) will be skipped.
     </p>
     <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
-      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">Required CSV format</summary>
+      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">Recommended Excel column format</summary>
       <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;line-height:1.6;">
-        <strong>Columns (in order, comma-separated):</strong><br>
-        Date, Surgeon, Startup (base units), Start, End, Time (min),
-        Modifiers, Block, Shared?, Points Earned<br><br>
-        <strong>Example row:</strong><br>
-        <code style="font-size:0.7rem;">1/5,A Hill,6,8:02:00 AM,11:08:00 AM,186.00,,,,21.6</code><br><br>
-        <strong>Date:</strong> M/D or M/D/YYYY (year inferred from current date if omitted)<br>
-        <strong>Start/End:</strong> H:MM AM/PM or H:MM:SS AM/PM or 24-hour HH:MM<br>
-        <strong>Modifiers:</strong> "E" for emergency, or numeric modifier point value<br>
-        <strong>Block:</strong> Nerve block point value (2.6 = other, 3.0 = brachial plexus)<br>
-        <strong>Shared?:</strong> "Y" if shared/split case<br>
-        Header row is optional and will be auto-skipped.
+        <strong>Excel (.xlsx) &mdash; use a header row with these column names:</strong><br>
+        <code style="font-size:0.7rem;">Date | Procedure | ASA Code | Base Units | Start | End | Surgeon | Modifier | Shared</code><br><br>
+        <strong>Column details:</strong><br>
+        <strong>Date:</strong> M/D, M/D/YYYY, or Excel date (required)<br>
+        <strong>Procedure:</strong> e.g., Lap Chole, Total Knee<br>
+        <strong>ASA Code:</strong> e.g., 00740, 01402<br>
+        <strong>Base Units:</strong> ASA base unit value (numeric)<br>
+        <strong>Start / End:</strong> H:MM AM/PM or 24-hour HH:MM<br>
+        <strong>Surgeon:</strong> Attending name<br>
+        <strong>Modifier:</strong> "E" for emergency, "4" or "5" for ASA physical status<br>
+        <strong>Shared:</strong> "Y" if shared/split case<br><br>
+        Headers are matched flexibly (e.g., "proc", "description", "case" all match Procedure).
+        Only Date is required &mdash; all other columns are optional.
         Shifts are auto-created for dates without an existing shift.
+        Duplicates (same date + start time) are skipped.<br><br>
+        <strong>CSV fallback (no header row):</strong><br>
+        <code style="font-size:0.7rem;">Date, Surgeon, Base Units, Start, End, Time, Modifiers, Block, Shared?, Points</code><br>
+        <code style="font-size:0.7rem;">1/5,A Hill,6,8:02:00 AM,11:08:00 AM,186.00,,,,21.6</code>
       </div>
     </details>
     <div class="upload-area" id="csvUploadArea">
@@ -13414,6 +13420,7 @@ async function parseCaseExcel(file) {
   const modCol = findCol('modifier', 'mod');
   const sharedCol = findCol('shared', 'split');
   const procCol = findCol('procedure', 'proc', 'description', 'case');
+  const asaCol = findCol('asa code', 'asa', 'cpt');
 
   if (!dateCol) throw new Error('No date column found. Expected: Date, DOS, or similar.');
 
@@ -13433,6 +13440,7 @@ async function parseCaseExcel(file) {
     const modifiers = modCol ? String(row[modCol]) : '';
     const shared = sharedCol ? String(row[sharedCol]) : '';
     const procedure = procCol ? String(row[procCol]) : '';
+    const asaCode = asaCol ? String(row[asaCol]).trim() : '';
 
     const isEmergency = /\bE\b/i.test(modifiers);
     let physicalStatus = 'P3';
@@ -13443,6 +13451,7 @@ async function parseCaseExcel(file) {
       id: genId(),
       caseType: 'standard',
       procedure: procedure,
+      asaCode: asaCode,
       baseUnits: baseUnits,
       physicalStatus: physicalStatus,
       startTime: startTime,
