@@ -2751,6 +2751,61 @@ input.mil-time.invalid {
   </div>
 </div>
 
+<div class="page" id="page-updates">
+  <div class="card">
+    <h2>Recent Updates</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:16px;">What's new in the Point Tracker.</p>
+
+    <div style="margin-bottom:20px;">
+      <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Feb 19, 2025</h3>
+      <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
+        <li><strong>Calendar picker</strong> &mdash; Calendar sync now shows a picker instead of searching for a hardcoded name. Partners can select their own Qgenda calendar.</li>
+        <li><strong>Change Calendar button</strong> &mdash; Settings shows which calendar is connected with an option to switch.</li>
+      </ul>
+    </div>
+
+    <div style="margin-bottom:20px;">
+      <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Feb 18, 2025</h3>
+      <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
+        <li><strong>Monthly Hours Trend</strong> &mdash; Data point values now shown on chart; months with no data are hidden.</li>
+        <li><strong>Historical Compensation</strong> &mdash; Removed info icons from table rows; paid-in info moved into bar tooltips.</li>
+        <li><strong>Today ticker fix</strong> &mdash; AR locked during 4-hr minimum; open case time estimated correctly.</li>
+        <li><strong>Pending points</strong> &mdash; Total pending points shown in Watching for Billing header.</li>
+      </ul>
+    </div>
+
+    <div style="margin-bottom:20px;">
+      <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Feb 17, 2025</h3>
+      <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
+        <li><strong>Mobile tooltips</strong> &mdash; Tooltips no longer cut off on mobile; tap-to-show on info icons.</li>
+        <li><strong>Security hardening</strong> &mdash; localStorage cleared on sign-out; XSS gaps fixed.</li>
+        <li><strong>Annual projection</strong> &mdash; Rewritten using 3-month rolling average of actual compensation; month-by-month breakdown tooltip added.</li>
+        <li><strong>Income Pipeline</strong> &mdash; Annual projection stats panel moved into Income Pipeline card.</li>
+      </ul>
+    </div>
+
+    <div style="margin-bottom:20px;">
+      <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Feb 16, 2025</h3>
+      <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
+        <li><strong>Pace bar fixes</strong> &mdash; Weekends excluded from pace calculation; pace bar and header pace now consistent.</li>
+        <li><strong>Stipends excluded</strong> &mdash; Stipends no longer included in future projections (unpredictable amounts).</li>
+        <li><strong>YTD revenue</strong> &mdash; YTD received revenue displayed; paycheck entry reminder added.</li>
+        <li><strong>Dashboard renamed</strong> &mdash; "Dashboard" tab renamed to "Data" for clarity.</li>
+        <li><strong>UI polish</strong> &mdash; Info icons, collapsible legend, improved pace bar display.</li>
+      </ul>
+    </div>
+
+    <div style="margin-bottom:20px;">
+      <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Feb 15, 2025</h3>
+      <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
+        <li><strong>Google Calendar sync</strong> &mdash; Auto-fill shift types and weekly chart labels from your Google Calendar assignments.</li>
+        <li><strong>Stale sync banner</strong> &mdash; Dashboard shows a banner when calendar hasn't been synced in 48+ hours.</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
 <!-- Day detail modal -->
 <div class="modal-overlay hidden" id="dayModal">
   <div class="modal">
@@ -3084,6 +3139,10 @@ input.mil-time.invalid {
   <div class="drawer-item" data-page="settings">
     <span class="drawer-icon">&#9881;</span>
     <span>Settings</span>
+  </div>
+  <div class="drawer-item" data-page="updates">
+    <span class="drawer-icon">&#128227;</span>
+    <span>Updates</span>
   </div>
 </div>
 
@@ -4860,6 +4919,7 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     if (page === 'history') { renderHistory(); }
     if (page === 'import') { /* no special init needed */ }
     if (page === 'flagged') { renderFlaggedPage(); }
+    if (page === 'updates') { /* no special init needed */ }
   });
 });
 
