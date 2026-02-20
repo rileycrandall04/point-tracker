@@ -4520,8 +4520,17 @@ function calcARBreakdown(shift) {
   if (isSF) {
     const shiftCases = data.cases.filter(c => c.shiftDate === shift.date && c.isORCase);
     shiftCases.forEach(c => {
+      if (!c.startTime) return;
       let cs = timeToMinutes(c.startTime);
-      let ce = timeToMinutes(c.endTime);
+      let ce;
+      if (c.endTime) {
+        ce = timeToMinutes(c.endTime);
+      } else if (shift.date === effectiveWorkDate()) {
+        const now = new Date();
+        ce = now.getHours() * 60 + now.getMinutes();
+      } else {
+        return; // past date with no end time — skip
+      }
       if (ce <= cs) ce += 1440;
       orRanges.push({ start: cs, end: ce });
     });
@@ -5745,14 +5754,9 @@ function renderDECaseList() {
 }
 
 function updateDETally() {
-  const shift = data.shifts[workingDate];
   const tallyEl = document.getElementById('deTallyValue');
-  if (!shift) {
-    tallyEl.textContent = '0';
-    return;
-  }
-  const totals = calcShiftTotal(shift);
-  tallyEl.textContent = totals.total.toFixed(1);
+  const result = getShiftPointsForDate(workingDate, true);
+  tallyEl.textContent = result.total.toFixed(1);
 }
 
 function deleteCaseDE(id) {
@@ -9653,10 +9657,11 @@ function renderMonthlyPace() {
   const dayOfMonth = now.getDate();
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 
-  // Current month's shifts
+  // Current month's shifts — use getShiftPointsForDate with estimate=true
+  // so today's shift/cases with no end time use current time as surrogate
   const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(thisPrefix));
   let currentPts = 0;
-  monthShifts.forEach(s => { currentPts += calcShiftTotal(s).total; });
+  monthShifts.forEach(s => { currentPts += getShiftPointsForDate(s.date, true).total; });
   currentPts = round2(currentPts);
 
   // Count weekdays and vacation days this month
@@ -10525,7 +10530,7 @@ function renderDailyTab() {
   Object.values(data.shifts).forEach(s => {
     if (!s.date || !s.date.startsWith(prefix)) return;
     const day = parseInt(s.date.split('-')[2]);
-    const t = calcShiftTotal(s);
+    const t = getShiftPointsForDate(s.date, true);
     dailyPts[day] = (dailyPts[day] || 0) + t.total;
     dailyTypes[day] = s.assignmentType;
   });
@@ -10789,7 +10794,7 @@ function renderDayDetailContent() {
     return;
   }
 
-  const totals = calcShiftTotal(shift);
+  const totals = getShiftPointsForDate(dateStr, true);
   const isVacation = shift.assignmentType === 'vacation';
   const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
   let timesText = '';
