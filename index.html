@@ -5716,7 +5716,7 @@ function renderDECaseList() {
     const estTag = isOpenLabor ? ' <span style="font-size:0.65rem;color:var(--accent2);">(est.)</span>' : '';
     html += `<div class="de-case-list-item" onclick="openCaseEdit('${c.id}')" style="cursor:pointer;">
       <div class="de-info">
-        <div class="de-name">${escHtml(name)}${estTag}</div>
+        <div class="de-name">${escHtml(name)}${c.asaCode ? ' <span style="color:var(--text-dim);font-size:0.75rem;">(' + escHtml(c.asaCode) + ')</span>' : ''}${estTag}</div>
         ${timeStr ? `<div class="de-detail">${escHtml(timeStr)}</div>` : ''}
       </div>
       <div class="de-actions">
@@ -7280,7 +7280,8 @@ function renderCaseLogTable() {
     html += `<tr class="${flaggedClass}${unbilledClass}" data-caseid="${c.id}" onclick="openCaseEdit('${c.id}')">`;
     html += `<td><input type="checkbox" class="cl-cb cl-row-cb" data-caseid="${c.id}" onclick="event.stopPropagation();clUpdateDeleteBtn()"></td>`;
     html += `<td>${formatDateShort(c.shiftDate)}</td>`;
-    html += `<td>${escHtml(name)}${sharedMark}${claimedTag}</td>`;
+    const asaTag = c.asaCode ? ` <span style="color:var(--text-dim);font-size:0.75rem;">(${escHtml(c.asaCode)})</span>` : '';
+    html += `<td>${escHtml(name)}${asaTag}${sharedMark}${claimedTag}</td>`;
     html += `<td>${c.startTime || '-'}</td>`;
     html += `<td>${c.endTime || '-'}</td>`;
     const isManual = c.manualPoints != null;
@@ -10818,7 +10819,7 @@ function renderDDCaseList(cases, shift) {
     const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : (c.startTime ? c.startTime : '');
     html += `<div class="dd-case-item">
       <div class="dd-case-info">
-        <div class="dd-case-name">${escHtml(name)}</div>
+        <div class="dd-case-name">${escHtml(name)}${c.asaCode ? ' <span style="color:var(--text-dim);font-size:0.72rem;">(' + escHtml(c.asaCode) + ')</span>' : ''}</div>
         ${timeStr ? `<div class="dd-case-detail">${escHtml(timeStr)}</div>` : ''}
       </div>
       <div class="dd-case-actions">
