@@ -1652,7 +1652,7 @@ input.mil-time.invalid {
         <label id="timeEntriesLabel">Time Entries</label>
         <div id="timeEntriesContainer">
           <div class="time-entry-row">
-            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="07:00">
+            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="07:10">
             <span class="te-label">to</span>
             <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-end" value="17:00">
             <button type="button" class="remove-entry-btn" disabled>&times;</button>
@@ -4240,7 +4240,7 @@ function collectTimeEntries() {
 function populateTimeEntries(entries) {
   const container = document.getElementById('timeEntriesContainer');
   container.innerHTML = '';
-  if (!entries || entries.length === 0) entries = [{ start: '07:00', end: '' }];
+  if (!entries || entries.length === 0) entries = [{ start: '07:10', end: '' }];
   entries.forEach(e => {
     container.appendChild(createTimeEntryRow(e.start, e.end));
   });
@@ -5633,7 +5633,7 @@ function loadShiftForDate() {
       banner.classList.add('hidden');
       document.getElementById('shiftAssignmentType').value = 'OR';
     }
-    populateTimeEntries([{ start: '07:00', end: '' }]);
+    populateTimeEntries([{ start: '07:10', end: '' }]);
     document.getElementById('shiftHoliday').checked = false;
     document.getElementById('cardiacLiverOptions').classList.add('hidden');
     document.getElementById('vacationRangeSection').classList.add('hidden');
