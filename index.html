@@ -4743,10 +4743,12 @@ function calcCasePoints(caseData, shift, ignoreManual) {
     }
     if (ce <= cs) ce += 1440;
     const durationHrs = Math.min((ce - cs) / 60, 24);
-    let pts = 2.5; // 5 base units × 0.5 keeping rule
-    if (durationHrs > 0) pts += Math.min(durationHrs, 1) * 5;
-    if (durationHrs > 1) pts += Math.min(durationHrs - 1, 1) * 2.5;
-    if (durationHrs > 2) pts += (durationHrs - 2) * 1.25;
+    let pts = 2.5; // 5 startup units × 50%
+    if (durationHrs > 0) pts += Math.min(durationHrs, 1) * 6;
+    if (durationHrs > 1) pts += Math.min(durationHrs - 1, 1) * 3;
+    if (durationHrs > 2) pts += (durationHrs - 2) * 1.5;
+    // Double for UVH OB only (not SF1/SF2)
+    if (shift && shift.assignmentType === 'OB_restricted') pts *= 2;
     return round2(pts);
   }
 
@@ -4823,30 +4825,27 @@ function getCaseBreakdown(caseData, shift) {
     if (ce <= cs) ce += 1440;
     const durationHrs = Math.min((ce - cs) / 60, 24);
     const estLabel = isEst ? ' (est.)' : '';
-    let subtotal = 0;
-    if (cs === 420) { // 0700 start: flat hourly rate
-      const p = round2(durationHrs * 1.25);
-      bd.push({label: `Hourly (${round2(durationHrs)}h x 1.25, 0700 start)${estLabel}`, pts: p});
+    bd.push({label: 'Startup (5 units x 50%)', pts: 2.5});
+    let subtotal = 2.5;
+    if (durationHrs > 0) {
+      const p = round2(Math.min(durationHrs, 1) * 6);
+      bd.push({label: `1st Hour (${round2(Math.min(durationHrs, 1))}h x 6)`, pts: p});
       subtotal += p;
-    } else {
-      if (durationHrs > 0) {
-        const p = round2(Math.min(durationHrs, 1) * 7.5);
-        bd.push({label: `1st Hour (${round2(Math.min(durationHrs, 1))}h x 7.5)`, pts: p});
-        subtotal += p;
-      }
-      if (durationHrs > 1) {
-        const p = round2(Math.min(durationHrs - 1, 1) * 2.5);
-        bd.push({label: `2nd Hour (${round2(Math.min(durationHrs - 1, 1))}h x 2.5)`, pts: p});
-        subtotal += p;
-      }
-      if (durationHrs > 2) {
-        const hrs = round2(durationHrs - 2);
-        const p = round2(hrs * 1.25);
-        bd.push({label: `Additional (${hrs}h x 1.25)${estLabel}`, pts: p});
-        subtotal += p;
-      }
     }
-    bd.push({label: 'OB Doubled (x2)', pts: round2(subtotal)});
+    if (durationHrs > 1) {
+      const p = round2(Math.min(durationHrs - 1, 1) * 3);
+      bd.push({label: `2nd Hour (${round2(Math.min(durationHrs - 1, 1))}h x 3)`, pts: p});
+      subtotal += p;
+    }
+    if (durationHrs > 2) {
+      const hrs = round2(durationHrs - 2);
+      const p = round2(hrs * 1.5);
+      bd.push({label: `Additional (${hrs}h x 1.5)${estLabel}`, pts: p});
+      subtotal += p;
+    }
+    if (shift && shift.assignmentType === 'OB_restricted') {
+      bd.push({label: 'UVH OB Doubled (x2)', pts: round2(subtotal)});
+    }
     return bd;
   }
 
