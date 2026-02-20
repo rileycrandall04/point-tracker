@@ -9823,8 +9823,10 @@ function renderProductionTrend() {
       }
     }
   });
-  const labels = monthKeys.map(k => { const [y, m] = k.split('-'); return monthNames[parseInt(m) - 1] + ' ' + y; });
-  const values = monthKeys.map(k => countByMonth[k] > 0 ? round2(hoursByMonth[k] / countByMonth[k]) : 0);
+  // Only show months that have shift data
+  const activeKeys = monthKeys.filter(k => countByMonth[k] > 0);
+  const labels = activeKeys.map(k => { const [y, m] = k.split('-'); return monthNames[parseInt(m) - 1] + ' ' + y; });
+  const values = activeKeys.map(k => round2(hoursByMonth[k] / countByMonth[k]));
   const ctx = document.getElementById('productionTrendChart').getContext('2d');
   if (productionTrendChart) productionTrendChart.destroy();
   productionTrendChart = new Chart(ctx, {
