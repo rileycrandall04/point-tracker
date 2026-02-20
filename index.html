@@ -2341,7 +2341,10 @@ input.mil-time.invalid {
     <div style="background:var(--surface2); border-radius:6px; height:8px; overflow:hidden;">
       <div id="paceBar" style="height:100%; background:var(--primary); border-radius:6px; transition:width 0.3s; width:0%;"></div>
     </div>
-    <div id="paceDiff" style="font-size:0.78rem; font-weight:600; margin-top:4px; text-align:center;"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
+      <div id="paceDiff" style="font-size:0.78rem; font-weight:600; flex:1; text-align:center;"></div>
+      <span id="paceTarget" style="font-size:0.7rem;color:var(--text-dim);cursor:pointer;white-space:nowrap;" title="Click to set a custom monthly goal"></span>
+    </div>
   </div>
 
   <!-- 2. Paycheck Projection (with $/point inline) -->
@@ -9758,6 +9761,15 @@ function renderMonthlyPace() {
     expectedByNow = round2(sumAtDay / priorMonthCurves.length);
   }
 
+  // Custom monthly goal overrides the rolling average target
+  const customGoal = settings.monthlyGoals && settings.monthlyGoals[thisPrefix];
+  const rollingAvg = avgMonthEnd;
+  if (customGoal > 0) {
+    // Scale expectedByNow proportionally to new target
+    if (avgMonthEnd > 0) expectedByNow = round2(expectedByNow * (customGoal / avgMonthEnd));
+    avgMonthEnd = customGoal;
+  }
+
   // Project end-of-month
   let projected;
   if (expectedByNow > 0) {
@@ -9809,6 +9821,38 @@ function renderMonthlyPace() {
     else paceColor = 'var(--danger)';
   }
   document.getElementById('paceBar').style.background = paceColor;
+
+  // Target label (bottom right of pace card)
+  const targetEl = document.getElementById('paceTarget');
+  if (avgMonthEnd > 0) {
+    const isCustom = customGoal > 0;
+    targetEl.innerHTML = 'Target: <strong>' + avgMonthEnd.toFixed(0) + '</strong>' + (isCustom ? ' <span style="font-size:0.6rem;">(custom)</span>' : '');
+    targetEl.title = isCustom ? 'Custom goal — click to edit or reset' : 'Rolling avg — click to set a custom goal';
+    targetEl.onclick = () => editPaceTarget(thisPrefix, rollingAvg, customGoal);
+  } else {
+    targetEl.textContent = '';
+    targetEl.onclick = null;
+  }
+}
+
+function editPaceTarget(monthKey, rollingAvg, currentGoal) {
+  const input = prompt(
+    'Monthly point target for ' + monthKey + '\n' +
+    'Rolling average: ' + rollingAvg.toFixed(0) + ' pts\n\n' +
+    'Enter a custom goal, or leave blank to reset to rolling average:',
+    currentGoal > 0 ? currentGoal : ''
+  );
+  if (input === null) return; // cancelled
+  if (!settings.monthlyGoals) settings.monthlyGoals = {};
+  const val = parseFloat(input);
+  if (input.trim() === '' || isNaN(val) || val <= 0) {
+    delete settings.monthlyGoals[monthKey];
+  } else {
+    settings.monthlyGoals[monthKey] = round2(val);
+  }
+  saveSettings(settings);
+  renderMonthlyPace();
+  updateHeaderPoints();
 }
 
 function renderPipelineChart() {
@@ -11847,6 +11891,7 @@ function updateHeaderPoints() {
 
     const mt = getMonthlyTotals();
     let sumAtDay = 0;
+    let sumTotal = 0;
     let curveCount = 0;
     for (let offset = 1; offset <= 6; offset++) {
       const d = new Date(eY, eM - 1 - offset, 1);
@@ -11865,11 +11910,18 @@ function updateHeaderPoints() {
       const hi = Math.min(Math.ceil(mapped), mDays);
       const f = mapped - lo;
       sumAtDay += lo >= 1 ? cum[lo] * (1 - f) + cum[hi] * f : cum[hi] * f;
+      sumTotal += cum[mDays];
       curveCount++;
     }
     if (curveCount > 0) {
-      const expected = round2(sumAtDay / curveCount);
-      const delta = round2(monthPts - expected);
+      let hdrExpected = round2(sumAtDay / curveCount);
+      // Apply custom monthly goal if set
+      const hdrCustomGoal = settings.monthlyGoals && settings.monthlyGoals[thisPrefix];
+      if (hdrCustomGoal > 0) {
+        const hdrAvg = round2(sumTotal / curveCount);
+        if (hdrAvg > 0) hdrExpected = round2(hdrExpected * (hdrCustomGoal / hdrAvg));
+      }
+      const delta = round2(monthPts - hdrExpected);
       const cls = delta >= 0 ? 'ahead' : 'behind';
       const sign = delta >= 0 ? '+' : '';
       paceHtml = `<span class="pace ${cls}">${sign}${delta.toFixed(0)} pace</span>`;
