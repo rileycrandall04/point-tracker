@@ -9653,10 +9653,12 @@ function renderProjectedAnnual() {
 }
 
 function renderMonthlyPace() {
-  const now = new Date();
-  const thisPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-  const dayOfMonth = now.getDate();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  // Use effective work date so pace doesn't advance until 0700
+  const effDate = effectiveWorkDate();
+  const [effY, effM, effD] = effDate.split('-').map(Number);
+  const thisPrefix = effY + '-' + String(effM).padStart(2, '0');
+  const dayOfMonth = effD;
+  const daysInMonth = new Date(effY, effM, 0).getDate();
 
   // Current month's shifts — use getShiftPointsForDate with estimate=true
   // so today's shift/cases with no end time use current time as surrogate
@@ -9674,10 +9676,10 @@ function renderMonthlyPace() {
   let weekdaysElapsed = 0;
   const vacDates = new Set(vacationDays.map(s => s.date));
   for (let d = 1; d <= daysInMonth; d++) {
-    const dt = new Date(now.getFullYear(), now.getMonth(), d);
+    const dt = new Date(effY, effM - 1, d);
     const dow = dt.getDay(); // 0=Sun, 6=Sat
     if (dow === 0 || dow === 6) continue; // skip weekends
-    const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    const dateStr = effY + '-' + String(effM).padStart(2, '0') + '-' + String(d).padStart(2, '0');
     if (vacDates.has(dateStr)) continue; // skip vacation days
     weekdaysInMonth++;
     if (d <= dayOfMonth) weekdaysElapsed++;
@@ -9689,7 +9691,7 @@ function renderMonthlyPace() {
   const priorMonthCurves = [];
   const mt = getMonthlyTotals();
   for (let offset = 1; offset <= 6; offset++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const d = new Date(effY, effM - 1 - offset, 1);
     const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     if (!mt[key]) continue;
 
@@ -11800,21 +11802,23 @@ function updateHeaderPoints() {
   monthPts = round2(monthPts);
 
   // Pace calculation — how far ahead/behind prior month average
+  // Use effective work date so pace doesn't advance until 0700
   let paceHtml = '';
-  const now = new Date();
-  const thisPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const effDateStr = effectiveWorkDate();
+  const [eY, eM, eD] = effDateStr.split('-').map(Number);
+  const thisPrefix = eY + '-' + String(eM).padStart(2, '0');
   if (prefix === thisPrefix) {
-    const dayOfMonth = now.getDate();
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const dayOfMonth = eD;
+    const daysInMonth = new Date(eY, eM, 0).getDate();
     const vacDays = monthShifts.filter(s => s.assignmentType === 'vacation');
     const hdrVacDates = new Set(vacDays.map(s => s.date));
     // Count weekdays (Mon-Fri) excluding vacation — same logic as renderMonthlyPace
     let hdrWeekdaysInMonth = 0, hdrWeekdaysElapsed = 0;
     for (let dd = 1; dd <= daysInMonth; dd++) {
-      const dt = new Date(now.getFullYear(), now.getMonth(), dd);
+      const dt = new Date(eY, eM - 1, dd);
       const dow = dt.getDay();
       if (dow === 0 || dow === 6) continue;
-      const ds = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
+      const ds = eY + '-' + String(eM).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
       if (hdrVacDates.has(ds)) continue;
       hdrWeekdaysInMonth++;
       if (dd <= dayOfMonth) hdrWeekdaysElapsed++;
@@ -11824,7 +11828,7 @@ function updateHeaderPoints() {
     let sumAtDay = 0;
     let curveCount = 0;
     for (let offset = 1; offset <= 6; offset++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const d = new Date(eY, eM - 1 - offset, 1);
       const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
       if (!mt[key]) continue;
       const mDays = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
