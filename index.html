@@ -2432,7 +2432,6 @@ input.mil-time.invalid {
     <div class="chart-container">
       <canvas id="monthlyChart"></canvas>
     </div>
-    <div id="monthlyChartInfoIcons" style="display:flex;gap:0;margin-top:-2px;font-size:0.65rem;box-sizing:border-box;"></div>
     <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
   </div>
 
@@ -8768,6 +8767,9 @@ function renderHistoricalTrends() {
   const tooltipData = [];
   const accuracyValues = [];
   let hasAnyAccuracy = false;
+  const decAdvChart = settings.decemberAdvance !== false;
+  const nowChart = new Date();
+  function mkKeyChart(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
 
   windowMonths.forEach(workMk => {
     const pd = computePaycheckData(workMk, mt);
@@ -8776,13 +8778,22 @@ function renderHistoricalTrends() {
     barValues.push(barVal);
     barColors.push(pd.hasOverride ? 'rgba(34,197,94,0.7)' : 'rgba(59,130,246,0.7)');
     barBorders.push(pd.hasOverride ? '#22c55e' : '#3b82f6');
+    const paidLabel = monthNames[pd.payDate.getMonth()] + ' ' + String(pd.payDate.getFullYear()).slice(2);
+    const payMkForRecv = pd.payDate.getFullYear() + '-' + String(pd.payDate.getMonth() + 1).padStart(2, '0');
+    const isReceiving = payMkForRecv === mkKeyChart(nowChart.getFullYear(), nowChart.getMonth());
+    const isDecWork = decAdvChart && pd.workDate.getMonth() === 11;
+    let paidTip;
+    if (isDecWork) paidTip = 'Paid in Dec (advance)';
+    else if (isReceiving) paidTip = 'Paid in ' + paidLabel + ' (receiving)';
+    else paidTip = 'Paid in ' + paidLabel;
     tooltipData.push({
       source: pd.hasOverride ? 'Actual' : 'Calculated',
       blended: pd.blended,
       pv: pd.pv,
       stipend: pd.stipend,
       total: barVal,
-      accuracy: pd.accuracy
+      accuracy: pd.accuracy,
+      paidTip: paidTip
     });
     if (pd.accuracy != null) { accuracyValues.push(pd.accuracy); hasAnyAccuracy = true; }
     else { accuracyValues.push(null); }
@@ -8871,6 +8882,7 @@ function renderHistoricalTrends() {
                 '$/pt: $' + (td.pv || 0).toFixed(2)
               ];
               if (td.stipend > 0) lines.push('Stipend: $' + td.stipend.toLocaleString('en-US', {maximumFractionDigits: 0}));
+              if (td.paidTip) lines.push(td.paidTip);
               return lines;
             }
           }
@@ -8880,40 +8892,6 @@ function renderHistoricalTrends() {
     }
   });
 
-  // Info icons aligned with chart x-axis labels — hide if > 6 months
-  const infoIconsEl = document.getElementById('monthlyChartInfoIcons');
-  if (windowMonths.length <= 6) {
-    const decAdvChart = settings.decemberAdvance !== false;
-    const nowChart = new Date();
-    function mkKeyChart(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
-    let wrappedIcons = '';
-    windowMonths.forEach((workMk) => {
-      const pd = computePaycheckData(workMk, mt);
-      const paidLabel = monthNames[pd.payDate.getMonth()] + ' ' + String(pd.payDate.getFullYear()).slice(2);
-      const payMkForRecv = pd.payDate.getFullYear() + '-' + String(pd.payDate.getMonth() + 1).padStart(2, '0');
-      const isReceiving = payMkForRecv === mkKeyChart(nowChart.getFullYear(), nowChart.getMonth());
-      const isDecWork = decAdvChart && pd.workDate.getMonth() === 11;
-      let tipText;
-      if (isDecWork) tipText = 'Paid in Dec (advance)';
-      else if (isReceiving) tipText = 'Paid in ' + paidLabel + ' (receiving)';
-      else tipText = 'Paid in ' + paidLabel;
-      const iconStyle = isReceiving ? 'background:var(--accent2);color:#fff;' : '';
-      wrappedIcons += '<div style="flex:1;text-align:center;"><span class="info-icon" data-tip="' + tipText + '" style="' + iconStyle + 'width:11px;height:11px;font-size:0.5rem;">i</span></div>';
-    });
-    infoIconsEl.style.display = 'flex';
-    infoIconsEl.innerHTML = wrappedIcons;
-    // Align icons with chart plot area
-    if (monthlyChart && monthlyChart.chartArea) {
-      const ca = monthlyChart.chartArea;
-      const canvas = document.getElementById('monthlyChart');
-      const totalWidth = canvas.clientWidth;
-      infoIconsEl.style.paddingLeft = ca.left + 'px';
-      infoIconsEl.style.paddingRight = (totalWidth - ca.right) + 'px';
-    }
-  } else {
-    infoIconsEl.style.display = 'none';
-    infoIconsEl.innerHTML = '';
-  }
 
   // Collapsible legend below chart
   const summaryEl = document.getElementById('monthlyChartSummary');
