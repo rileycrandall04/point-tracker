@@ -3424,13 +3424,21 @@ function parseCalendarEventTitle(title, dateStr) {
   // General work assignment
   if (/^work$/i.test(stripped)) return { type: 'OR', label: 'OR' };
 
-  // Post shifts (Post Call, Post 1-4, Post SF 1/2, Post Mole, Post OB, etc.) → OR
-  if (/^post\b/i.test(stripped)) return { type: 'OR', label: stripped };
+  // Post shifts → OR with clean label
+  if (/^post\b/i.test(stripped)) {
+    let postLabel = stripped;
+    postLabel = postLabel.replace(/\bSFH\s+1st\s*call\b/i, 'SF 1');
+    postLabel = postLabel.replace(/\bSFH\s+2nd\s*call\b/i, 'SF 2');
+    postLabel = postLabel.replace(/\bUVH\s+/ig, '');
+    postLabel = postLabel.replace(/\bSFH\s+/ig, '');
+    return { type: 'OR', label: postLabel };
+  }
 
   // Known skip words
   if (/^(off|vacation|vac|holiday|sick|conference|away|admin\/off|locums|job\s*share)$/i.test(stripped)) return null;
 
-  // Fallback: unrecognized
+  // Fallback: log unrecognized titles for debugging
+  console.log('Calendar event not recognized:', JSON.stringify(t));
   return null;
 }
 
