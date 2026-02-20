@@ -15188,10 +15188,11 @@ auth.onAuthStateChanged(async (user) => {
     }
 
     // Backfill shared cases on first run (or after re-enabling), or re-sync for schema v2
-    if (settings.shareData !== false && data.cases.length > 0 && (!settings.sharedDataSynced || !settings.sharedSchemaV2)) {
+    if (settings.shareData !== false && data.cases.length > 0 && (!settings.sharedDataSynced || !settings.sharedSchemaV2 || !settings.sharedSyncV3)) {
       syncAllSharedCases();
       settings.sharedDataSynced = true;
       settings.sharedSchemaV2 = true;
+      settings.sharedSyncV3 = true;
       saveSettings(settings);
     }
 
