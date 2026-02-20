@@ -3552,15 +3552,14 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 }
 
-// Floating tooltip for info icons — uses fixed positioning to avoid overflow clipping
+// Floating tooltip for info icons — click/tap to show, click elsewhere to dismiss
 const _tipEl = document.createElement('div');
 _tipEl.id = 'infoTipFloat';
 _tipEl.style.cssText = 'display:none;position:fixed;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.7rem;white-space:nowrap;z-index:9999;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
 document.body.appendChild(_tipEl);
+let _tipActiveIcon = null;
 
-document.addEventListener('pointerenter', function(e) {
-  const icon = e.target.closest('.info-icon');
-  if (!icon) return;
+function _showTip(icon) {
   const tip = icon.getAttribute('data-tip');
   if (!tip) return;
   if (tip.indexOf('\n') >= 0) {
@@ -3573,19 +3572,41 @@ document.addEventListener('pointerenter', function(e) {
     _tipEl.style.maxWidth = '';
   }
   _tipEl.style.display = 'block';
+  _tipActiveIcon = icon;
   const r = icon.getBoundingClientRect();
   let left = r.right + 8;
   let top = r.top + r.height / 2 - _tipEl.offsetHeight / 2;
-  // If it would go off-screen right, flip to left side
   if (left + _tipEl.offsetWidth > window.innerWidth - 8) left = r.left - _tipEl.offsetWidth - 8;
   if (top < 4) top = 4;
   if (top + _tipEl.offsetHeight > window.innerHeight - 4) top = window.innerHeight - 4 - _tipEl.offsetHeight;
   _tipEl.style.left = left + 'px';
   _tipEl.style.top = top + 'px';
+}
+
+function _hideTip() {
+  _tipEl.style.display = 'none';
+  _tipActiveIcon = null;
+}
+
+// Click/tap toggles tooltip
+document.addEventListener('click', function(e) {
+  const icon = e.target.closest('.info-icon');
+  if (icon) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (_tipActiveIcon === icon) { _hideTip(); } else { _showTip(icon); }
+    return;
+  }
+  if (_tipActiveIcon) _hideTip();
 }, true);
 
+// Desktop: also show on hover, hide on leave
+document.addEventListener('pointerenter', function(e) {
+  const icon = e.target.closest('.info-icon');
+  if (icon && e.pointerType === 'mouse') _showTip(icon);
+}, true);
 document.addEventListener('pointerleave', function(e) {
-  if (e.target.closest('.info-icon')) _tipEl.style.display = 'none';
+  if (e.target.closest('.info-icon') && e.pointerType === 'mouse') _hideTip();
 }, true);
 
 function showToast(msg) {
