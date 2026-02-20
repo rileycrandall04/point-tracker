@@ -1843,6 +1843,10 @@ input.mil-time.invalid {
           <input type="text" id="caseProcedure" placeholder="e.g., Lap Chole, Total Knee" autocomplete="off">
           <div class="proc-suggestions hidden" id="procSuggestions"></div>
         </div>
+        <div class="form-group">
+          <label>ASA Code</label>
+          <input type="text" id="caseASACode" placeholder="e.g., 00740">
+        </div>
 
         <div class="form-row">
           <div class="form-group">
@@ -2860,6 +2864,10 @@ input.mil-time.invalid {
       <div class="form-group">
         <label>Procedure Name</label>
         <input type="text" id="editCaseProcedure" placeholder="e.g., Lap Chole">
+      </div>
+      <div class="form-group">
+        <label>ASA Code</label>
+        <input type="text" id="editCaseASACode" placeholder="e.g., 00740">
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -5938,9 +5946,10 @@ document.getElementById('caseShared').addEventListener('change', function() {
       if (c.caseType !== 'standard' || !c.procedure) return;
       const name = c.procedure.trim();
       if (!name) return;
-      if (!map[name]) map[name] = { count: 0, lastUnits: '' };
+      if (!map[name]) map[name] = { count: 0, lastUnits: '', lastASACode: '' };
       map[name].count++;
       if (c.baseUnits) map[name].lastUnits = c.baseUnits;
+      if (c.asaCode) map[name].lastASACode = c.asaCode;
     });
     return map;
   }
@@ -5956,7 +5965,7 @@ document.getElementById('caseShared').addEventListener('change', function() {
     if (matches.length === 0) { hideSuggestions(); return; }
     activeIdx = -1;
     sugBox.innerHTML = matches.map(([name, d], i) =>
-      `<div class="proc-item" data-idx="${i}" data-name="${escHtml(name)}" data-units="${escHtml(d.lastUnits)}">${escHtml(name)}<span class="proc-units">${d.lastUnits ? d.lastUnits + 'u' : ''} (${d.count})</span></div>`
+      `<div class="proc-item" data-idx="${i}" data-name="${escHtml(name)}" data-units="${escHtml(d.lastUnits)}" data-asa="${escHtml(d.lastASACode)}">${escHtml(name)}<span class="proc-units">${d.lastASACode ? d.lastASACode + ' ' : ''}${d.lastUnits ? d.lastUnits + 'u' : ''} (${d.count})</span></div>`
     ).join('');
     sugBox.classList.remove('hidden');
   }
@@ -5967,6 +5976,8 @@ document.getElementById('caseShared').addEventListener('change', function() {
     procInput.value = el.dataset.name;
     const units = el.dataset.units;
     if (units) { baseUnitsInput.value = units; baseUnitsAutoFilled = true; }
+    const asa = el.dataset.asa;
+    if (asa) { document.getElementById('caseASACode').value = asa; }
     hideSuggestions();
     updatePointPreview();
   }
@@ -6133,6 +6144,7 @@ function buildCaseFromForm() {
   return {
     caseType: selectedCaseType,
     procedure: isLabor ? 'Labor Epidural' : (isAPS ? 'APS Rounding' : (document.getElementById('caseProcedure')?.value || selectedCaseType)),
+    asaCode: document.getElementById('caseASACode')?.value || '',
     baseUnits: document.getElementById('caseBaseUnits')?.value || '',
     physicalStatus: document.getElementById('casePhysicalStatus')?.value || 'P2',
     startTime: isLabor ? (document.getElementById('laborStart')?.value || '') : (document.getElementById('caseStart')?.value || ''),
@@ -6191,6 +6203,7 @@ function resetCaseForm() {
   document.getElementById('caseTypeSelect').value = 'standard';
   applyCaseTypeVisibility('standard');
   document.getElementById('caseProcedure').value = '';
+  document.getElementById('caseASACode').value = '';
   document.getElementById('caseBaseUnits').value = '';
   document.getElementById('casePhysicalStatus').value = 'P2';
   document.getElementById('caseStart').value = '';
@@ -11067,6 +11080,7 @@ function openCaseEdit(caseId) {
 
   // Fill fields
   document.getElementById('editCaseProcedure').value = c.procedure || '';
+  document.getElementById('editCaseASACode').value = c.asaCode || '';
   document.getElementById('editCaseBaseUnits').value = c.baseUnits || '';
   document.getElementById('editCasePhysicalStatus').value = c.physicalStatus || 'P2';
   document.getElementById('editCaseStart').value = c.startTime || '';
@@ -11123,6 +11137,7 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
   c.caseType = editCaseType;
   if (editCaseType === 'standard') {
     c.procedure = document.getElementById('editCaseProcedure').value;
+    c.asaCode = document.getElementById('editCaseASACode').value;
     c.baseUnits = document.getElementById('editCaseBaseUnits').value;
     c.physicalStatus = document.getElementById('editCasePhysicalStatus').value;
     c.startTime = document.getElementById('editCaseStart').value;
