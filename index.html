@@ -3546,11 +3546,10 @@ async function syncCalendarEvents(silent) {
       calendarId = chosen.id;
     }
 
-    // Sync window: 1st of current month → 90 days ahead (skip past months)
+    // Sync window: 1st of current month → end of next month
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now);
-    end.setDate(end.getDate() + 90);
+    const end = new Date(now.getFullYear(), now.getMonth() + 2, 0); // last day of next month
     const timeMin = start.toISOString();
     const timeMax = end.toISOString();
 
