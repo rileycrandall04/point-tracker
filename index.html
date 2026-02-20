@@ -15138,6 +15138,14 @@ function updateAccountUI(user) {
 // AUTH STATE LISTENER
 // ================================================================
 auth.onAuthStateChanged(async (user) => {
+  // Force re-sign-in once after v2 shared data update
+  const REAUTH_VERSION = 'v2-shared';
+  if (user && localStorage.getItem('pt_reauth') !== REAUTH_VERSION) {
+    localStorage.setItem('pt_reauth', REAUTH_VERSION);
+    await auth.signOut();
+    return;
+  }
+
   if (user) {
     currentUser = user;
     document.getElementById('authLoading').classList.add('hidden');
