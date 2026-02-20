@@ -4350,6 +4350,15 @@ function calcCasePoints(caseData, shift, ignoreManual) {
     let caseEndMin = timeToMinutes(caseData.endTime);
     if (caseEndMin <= caseStartMin) caseEndMin += 1440;
     caseHours = (caseEndMin - caseStartMin) / 60;
+  } else {
+    // No end time: estimate with current time if case is today
+    const caseDate = caseData.shiftDate || (shift && shift.date);
+    if (caseDate === effectiveWorkDate()) {
+      const now = new Date();
+      let nowMin = now.getHours() * 60 + now.getMinutes();
+      if (nowMin <= caseStartMin) nowMin += 1440;
+      caseHours = (nowMin - caseStartMin) / 60;
+    }
   }
   const isHol = shift ? shift.isHoliday : false;
   const isWknd = shift ? isWeekend(shift.date) : false;
@@ -6141,19 +6150,30 @@ function tickLiveUpdate() {
     }
   });
 
-  // Only tick AR if above the guaranteed minimum or actively in a case
+  // Determine if in guaranteed minimum period (first 4 hours of shift)
   const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
   const minApplies = !isHol && !isWknd && shift.assignmentType !== 'mole';
   const minPoints = isOBRate ? 52 : 80;
-  const hasOpenCases = openCases.length > 0;
-  const shouldTickAR = !minApplies || result.ar > minPoints;
-  const effectiveARRate = shouldTickAR ? currentRate : 0;
+  let inMinPeriod = false;
+  if (minApplies) {
+    const shiftEntries = shift.timeEntries || [];
+    if (shiftEntries.length > 0 && shiftEntries[0].start) {
+      let elapsedMin = currentMin - timeToMinutes(shiftEntries[0].start);
+      if (elapsedMin < 0) elapsedMin += 1440;
+      inMinPeriod = (elapsedMin / 60) < 4;
+    }
+  }
 
+  // AR paused during minimum period; ticks normally after
+  const effectiveARRate = inMinPeriod ? 0 : currentRate;
   const totalRate = effectiveARRate + pagerRate + prodRate;
 
   // Interpolate: add fractional seconds of accrual on top of minute-level base
   const secFraction = currentSec / 3600; // fraction of an hour
-  const liveTotal = result.total + (totalRate * secFraction);
+  // During minimum period, lock AR to fixed minimum to prevent drift
+  const liveTotal = inMinPeriod
+    ? (minPoints + result.prod + result.call + result.subspec + result.supervision + ((pagerRate + prodRate) * secFraction))
+    : (result.total + (totalRate * secFraction));
   const dollarTotal = round2(liveTotal * pv);
 
   // Update point total (3 decimals so every second is visible)
@@ -6167,7 +6187,7 @@ function tickLiveUpdate() {
   // Update component breakdown chips
   const compEl = document.getElementById('todayCompChips');
   if (compEl) {
-    const arLive = result.ar + (effectiveARRate * secFraction);
+    const arLive = inMinPeriod ? minPoints : (result.ar + (effectiveARRate * secFraction));
     const callLive = result.call + (pagerRate * secFraction);
     const prodLive = result.prod + (prodRate * secFraction);
     const comps = [];
