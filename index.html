@@ -11266,9 +11266,14 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
 });
 
 // Calendar sync button — uses GIS to get a properly-scoped token
-document.getElementById('syncCalendarBtn').addEventListener('click', async () => {
-  await syncCalendarEvents();
-});
+// Hidden until March 1 2026 to protect pre-existing assignments without source tags
+if (new Date() >= new Date(2026, 2, 1)) {
+  document.getElementById('syncCalendarBtn').addEventListener('click', async () => {
+    await syncCalendarEvents();
+  });
+} else {
+  document.getElementById('syncCalendarBtn').style.display = 'none';
+}
 
 // Initialize last sync display
 if (data.calendarLastSync) {
