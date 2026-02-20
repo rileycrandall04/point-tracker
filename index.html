@@ -6156,6 +6156,20 @@ document.getElementById('caseShared').addEventListener('change', function() {
       if (c.baseUnits) map[name].lastUnits = c.baseUnits;
       if (c.asaCode) map[name].lastASACode = c.asaCode;
     });
+    // Include procedures from shared pool
+    if (sharedCasesLoaded) {
+      const myUid = currentUser ? currentUser.uid : '';
+      sharedCasesCache.forEach(sc => {
+        if (sc.uid === myUid) return;
+        if (sc.caseType !== 'standard' || !sc.procedure) return;
+        const name = sc.procedure.trim();
+        if (!name) return;
+        if (!map[name]) map[name] = { count: 0, lastUnits: '', lastASACode: '' };
+        map[name].count++;
+        if (sc.baseUnits) map[name].lastUnits = sc.baseUnits;
+        if (sc.asaCode) map[name].lastASACode = sc.asaCode;
+      });
+    }
     return map;
   }
 
