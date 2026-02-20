@@ -2617,6 +2617,21 @@ input.mil-time.invalid {
     </details>
   </div>
 
+  <!-- Shared Data -->
+  <div class="card" style="margin-top:12px;">
+    <h2>Shared Data</h2>
+    <label class="toggle-row">
+      <span>Contribute case data to shared pool</span>
+      <span class="toggle-switch">
+        <input type="checkbox" id="shareDataToggle" checked>
+        <span class="slider"></span>
+      </span>
+    </label>
+    <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
+      Shares de-identified case data (procedure, times, ASA code) with your group for surgeon efficiency and procedure time lookups. No personal notes are shared.
+    </p>
+  </div>
+
   <!-- Export / Import -->
   <div class="card">
     <h2>Data Management</h2>
@@ -2785,6 +2800,7 @@ input.mil-time.invalid {
         <li><strong>Default shift start 07:10</strong> &mdash; New shifts default to a 07:10 start time (editable). Matches the most common clock-in time.</li>
         <li><strong>Pace target &amp; custom goals</strong> &mdash; The pace bar now shows the monthly point target (bottom-right). Click it to set a custom goal for any month; leave blank to reset to the rolling 3-month average.</li>
         <li><strong>Removed test data</strong> &mdash; The "Generate Test Data" button has been removed from settings.</li>
+        <li><strong>Shared case data pool</strong> &mdash; Case data (procedure, times, ASA code) is now shared to a community collection for group-wide surgeon efficiency and procedure time lookups. Opt out anytime from Settings &gt; Shared Data. Existing cases are backfilled automatically on first sign-in.</li>
       </ul>
     </div>
 
@@ -3276,6 +3292,84 @@ function syncToFirestore(docName, payload) {
       updateSyncStatus('error');
     });
   }, 500);
+}
+
+// ---- Shared case data (community pool) ----
+function buildSharedCase(caseData, shift) {
+  return {
+    uid: currentUser ? currentUser.uid : '',
+    procedure: caseData.procedure || '',
+    asaCode: caseData.asaCode || '',
+    caseType: caseData.caseType || '',
+    baseUnits: caseData.baseUnits || '',
+    physicalStatus: caseData.physicalStatus || '',
+    startTime: caseData.startTime || '',
+    endTime: caseData.endTime || '',
+    shiftDate: caseData.shiftDate || '',
+    assignmentType: shift ? (shift.assignmentType || '') : '',
+    isEmergency: caseData.isEmergency || false,
+    isORCase: caseData.isORCase || false,
+    nerveBlock: caseData.nerveBlock || 'none',
+    hasCentralLine: caseData.hasCentralLine || false,
+    hasArterialLine: caseData.hasArterialLine || false,
+    timestamp: caseData.timestamp || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function writeSharedCase(caseData, shift) {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (settings.shareData === false) return;
+  if (!caseData.id) return;
+  const docId = currentUser.uid + '_' + caseData.id;
+  const shared = buildSharedCase(caseData, shift);
+  db.collection('sharedCases').doc(docId).set(shared).catch(err => {
+    console.error('Shared case write error:', err);
+  });
+}
+
+function deleteSharedCase(caseId) {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (!caseId) return;
+  const docId = currentUser.uid + '_' + caseId;
+  db.collection('sharedCases').doc(docId).delete().catch(err => {
+    console.error('Shared case delete error:', err);
+  });
+}
+
+function syncAllSharedCases() {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (settings.shareData === false) return;
+  const batchSize = 500;
+  for (let i = 0; i < data.cases.length; i += batchSize) {
+    const batch = db.batch();
+    const chunk = data.cases.slice(i, i + batchSize);
+    chunk.forEach(c => {
+      if (!c.id) return;
+      const docId = currentUser.uid + '_' + c.id;
+      const shift = data.shifts[c.shiftDate];
+      batch.set(db.collection('sharedCases').doc(docId), buildSharedCase(c, shift));
+    });
+    batch.commit().catch(err => console.error('Shared batch write error:', err));
+  }
+}
+
+function deleteAllUserSharedCases() {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  db.collection('sharedCases')
+    .where('uid', '==', currentUser.uid)
+    .get()
+    .then(snapshot => {
+      if (snapshot.empty) return;
+      const batchSize = 500;
+      const docs = snapshot.docs;
+      for (let i = 0; i < docs.length; i += batchSize) {
+        const batch = db.batch();
+        docs.slice(i, i + batchSize).forEach(doc => batch.delete(doc.ref));
+        batch.commit().catch(err => console.error('Shared batch delete error:', err));
+      }
+    })
+    .catch(err => console.error('Shared case query error:', err));
 }
 
 function updateSyncStatus(status) {
@@ -5788,6 +5882,7 @@ function updateDETally() {
 function deleteCaseDE(id) {
   if (!confirm('Delete this case?')) return;
   data.cases = data.cases.filter(c => c.id !== id);
+  deleteSharedCase(id);
   saveData(data);
   updateHeaderPoints();
   renderDECaseList();
@@ -6237,6 +6332,7 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   }
   data.cases.push(caseData);
   saveData(data);
+  writeSharedCase(caseData, data.shifts[date]);
   updateHeaderPoints();
   showToast('Case saved! (' + calcCasePoints(caseData, data.shifts[date]).toFixed(2) + ' pts)');
   resetCaseForm();
@@ -7020,6 +7116,7 @@ function escHtml(s) {
 function deleteCase(id) {
   if (!confirm('Delete this case?')) return;
   data.cases = data.cases.filter(c => c.id !== id);
+  deleteSharedCase(id);
   saveData(data);
   updateHeaderPoints();
   renderToday();
@@ -7377,6 +7474,7 @@ document.getElementById('clDeleteSelectedBtn').addEventListener('click', () => {
   if (ids.length === 0) return;
   if (!confirm(`Delete ${ids.length} selected case${ids.length > 1 ? 's' : ''}?`)) return;
   const idSet = new Set(ids);
+  ids.forEach(id => deleteSharedCase(id));
   data.cases = data.cases.filter(c => !idSet.has(c.id));
   saveData(data);
   updateHeaderPoints();
@@ -8196,6 +8294,7 @@ function slUpdateDeleteBar() {
 
 function deleteShiftFromLog(dateStr) {
   if (!confirm('Delete this shift and its associated cases? This cannot be undone.')) return;
+  data.cases.filter(c => c.shiftDate === dateStr).forEach(c => deleteSharedCase(c.id));
   delete data.shifts[dateStr];
   data.cases = data.cases.filter(c => c.shiftDate !== dateStr);
   saveData(data);
@@ -8213,6 +8312,7 @@ function deleteSelectedShifts() {
   const unique = [...new Set(dates)];
   if (!confirm(`Delete ${unique.length} shift${unique.length > 1 ? 's' : ''} and their associated cases? This cannot be undone.`)) return;
   unique.forEach(dateStr => {
+    data.cases.filter(c => c.shiftDate === dateStr).forEach(c => deleteSharedCase(c.id));
     delete data.shifts[dateStr];
     data.cases = data.cases.filter(c => c.shiftDate !== dateStr);
   });
@@ -10926,6 +11026,7 @@ function renderDDCaseList(cases, shift) {
 function deleteCaseDayDetail(id) {
   if (!confirm('Delete this case?')) return;
   data.cases = data.cases.filter(c => c.id !== id);
+  deleteSharedCase(id);
   saveData(data);
   updateHeaderPoints();
   renderDayDetailContent();
@@ -11268,6 +11369,7 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
   c.unbilled = document.getElementById('editCaseUnbilled').checked;
   if (!c.unbilled && wasUnbilled) delete c.billingMonth;
   saveData(data);
+  writeSharedCase(c, data.shifts[c.shiftDate]);
   updateHeaderPoints();
   renderCaseLogTable();
   renderToday();
@@ -11290,6 +11392,7 @@ document.getElementById('deleteCaseEdit').addEventListener('click', () => {
   if (!editingCaseId) return;
   if (!confirm('Delete this case?')) return;
   data.cases = data.cases.filter(c => c.id !== editingCaseId);
+  deleteSharedCase(editingCaseId);
   saveData(data);
   updateHeaderPoints();
   renderCaseLogTable();
@@ -11304,6 +11407,7 @@ document.getElementById('deleteCaseEdit').addEventListener('click', () => {
 function deleteCaseFromList(id) {
   if (!confirm('Delete this case?')) return;
   data.cases = data.cases.filter(c => c.id !== id);
+  deleteSharedCase(id);
   saveData(data);
   updateHeaderPoints();
   renderCaseLogTable();
@@ -11357,6 +11461,7 @@ document.getElementById('importFile').addEventListener('change', (e) => {
           data = imported;
           migrateData(data); // handles timeEntries migration for old format
           saveData(data);
+          syncAllSharedCases();
           updateHeaderPoints();
           showToast('Data imported!');
           renderHistory();
@@ -11371,6 +11476,7 @@ document.getElementById('importFile').addEventListener('change', (e) => {
 document.getElementById('clearAllBtn').addEventListener('click', () => {
   if (confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
     if (confirm('Really delete everything?')) {
+      deleteAllUserSharedCases();
       data = { shifts: {}, cases: [], calendarAssignments: {} };
       saveData(data);
       updateHeaderPoints();
@@ -11473,6 +11579,21 @@ decAdvToggle.addEventListener('change', () => {
   saveSettings(settings);
   renderStabilization();
   renderPipelineChart();
+});
+
+// Shared data toggle
+const shareToggle = document.getElementById('shareDataToggle');
+shareToggle.checked = settings.shareData !== false; // default on
+shareToggle.addEventListener('change', () => {
+  settings.shareData = shareToggle.checked;
+  saveSettings(settings);
+  if (settings.shareData) {
+    syncAllSharedCases();
+    showToast('Data sharing enabled — syncing cases');
+  } else {
+    deleteAllUserSharedCases();
+    showToast('Data sharing disabled — shared cases removed');
+  }
 });
 
 // Vision API key
@@ -13129,6 +13250,7 @@ function showCSVImportConfirmation(result) {
 
     data.cases.push(...newCases);
     saveData(data);
+    newCases.forEach(c => writeSharedCase(c, data.shifts[c.shiftDate]));
     updateHeaderPoints();
     showToast(`Imported ${newCases.length} cases` + (shiftsCreated > 0 ? ` and created ${shiftsCreated} placeholder shifts` : ''));
   };
@@ -14749,6 +14871,7 @@ document.getElementById('scanImportBtn').addEventListener('click', () => {
 
   data.cases.push(...newCases);
   saveData(data);
+  newCases.forEach(c => writeSharedCase(c, data.shifts[c.shiftDate]));
   updateHeaderPoints();
 
   const skipped = scanParsedCases.length - newCases.length;
@@ -14840,6 +14963,13 @@ auth.onAuthStateChanged(async (user) => {
     // Show tutorial for brand-new users (no data at all)
     if (Object.keys(data.shifts).length === 0 && data.cases.length === 0) {
       showTutorial();
+    }
+
+    // Backfill shared cases on first run (or after re-enabling)
+    if (settings.shareData !== false && data.cases.length > 0 && !settings.sharedDataSynced) {
+      syncAllSharedCases();
+      settings.sharedDataSynced = true;
+      saveSettings(settings);
     }
 
     // Auto-sync calendar if last sync was >24 hours ago
