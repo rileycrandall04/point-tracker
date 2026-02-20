@@ -2595,6 +2595,9 @@ input.mil-time.invalid {
       <button class="btn btn-outline btn-sm" id="syncCalendarBtn">Sync Calendar</button>
       <span id="calendarLastSync" style="font-size:0.75rem;color:var(--text-dim);"></span>
     </div>
+    <div id="calMappingCount" class="hidden" style="margin-top:8px;font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;gap:8px;">
+    </div>
+    <button class="btn btn-outline btn-sm hidden" id="clearMappingsBtn" onclick="clearCalendarMappings()" style="margin-top:6px;font-size:0.7rem;padding:2px 8px;">Clear Mappings</button>
     <details style="margin-top:10px;">
       <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">Setup instructions</summary>
       <ol style="font-size:0.75rem;color:var(--text-dim);margin:8px 0 0 0;padding-left:20px;line-height:1.6;">
@@ -3053,6 +3056,19 @@ input.mil-time.invalid {
   </div>
 </div>
 
+<!-- Calendar Mapping Modal -->
+<div class="modal-overlay hidden" id="calMappingModal">
+  <div class="modal" style="max-height:80vh;overflow-y:auto;max-width:440px;">
+    <h2>Map Calendar Events</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">These events weren't recognized. Choose an assignment type for each:</p>
+    <div id="calMappingList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="cancelMappingModal()">Skip All</button>
+      <button class="btn btn-primary btn-sm" onclick="saveMappingModal()">Save Mappings</button>
+    </div>
+  </div>
+</div>
+
 <!-- Import confirmation modal -->
 <div class="modal-overlay hidden" id="importConfirmModal">
   <div class="modal">
@@ -3437,9 +3453,8 @@ function parseCalendarEventTitle(title, dateStr) {
   // Known skip words
   if (/^(off|vacation|vac|holiday|sick|conference|away|admin\/off|locums|job\s*share)$/i.test(stripped)) return null;
 
-  // Fallback: log unrecognized titles for debugging
-  console.log('Calendar event not recognized:', JSON.stringify(t));
-  return null;
+  // Unrecognized title — return false so caller can offer mapping
+  return false;
 }
 
 async function fetchCalendarList(token) {
@@ -3531,12 +3546,11 @@ async function syncCalendarEvents(silent) {
       calendarId = chosen.id;
     }
 
-    // 90-day window: past 30 + future 60
+    // Sync window: 1st of current month → 90 days ahead (skip past months)
     const now = new Date();
-    const start = new Date(now);
-    start.setDate(start.getDate() - 30);
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now);
-    end.setDate(end.getDate() + 60);
+    end.setDate(end.getDate() + 90);
     const timeMin = start.toISOString();
     const timeMax = end.toISOString();
 
@@ -3557,26 +3571,82 @@ async function syncCalendarEvents(silent) {
     }
     const events = eventsData.items || [];
 
-    // Clear stale entries within sync window, preserve outside
+    // Clear only calendar-sourced entries in sync window; preserve manual assignments
     const startStr = start.toISOString().substring(0, 10);
     const endStr = end.toISOString().substring(0, 10);
-    // Track which dates had assignments before clearing (to clean up orphaned pager shifts)
+    // Track which dates had calendar assignments before clearing (to clean up orphaned pager shifts)
     const prevAssignedDates = new Set(Object.keys(data.calendarAssignments).filter(k => k >= startStr && k <= endStr));
+    const manualDates = new Set();
     Object.keys(data.calendarAssignments).forEach(k => {
-      if (k >= startStr && k <= endStr) delete data.calendarAssignments[k];
+      if (k >= startStr && k <= endStr) {
+        if (data.calendarAssignments[k].source === 'manual') {
+          manualDates.add(k);
+        } else {
+          delete data.calendarAssignments[k];
+        }
+      }
     });
 
     let count = 0;
     const newAssignedDates = new Set();
+    if (!settings.calendarMappings) settings.calendarMappings = {};
+    const unmappedEvents = []; // events where parser returned false
+    const unmappedTitles = new Set();
+
     events.forEach(ev => {
       const dateStr = ev.start && (ev.start.date || (ev.start.dateTime && ev.start.dateTime.substring(0, 10)));
       if (!dateStr) return;
-      const parsed = parseCalendarEventTitle(ev.summary, dateStr);
-      if (!parsed) return;
+      // Skip dates with manual assignments — never overwrite user's work
+      if (manualDates.has(dateStr)) { newAssignedDates.add(dateStr); return; }
+      const title = (ev.summary || '').trim();
+      if (!title) return;
+
+      // 1. Check user's custom mappings first
+      if (title in settings.calendarMappings) {
+        const mapped = settings.calendarMappings[title];
+        if (mapped === null) return; // user chose to skip this title
+        data.calendarAssignments[dateStr] = { type: mapped.type, label: mapped.label, source: 'calendar' };
+        newAssignedDates.add(dateStr);
+        count++;
+        return;
+      }
+
+      // 2. Try built-in parser
+      const parsed = parseCalendarEventTitle(title, dateStr);
+      if (parsed === null) return; // intentional skip (known skip words)
+      if (parsed === false) {
+        // Unrecognized — collect for mapping modal
+        unmappedEvents.push({ title, dateStr });
+        unmappedTitles.add(title);
+        return;
+      }
+      // Successfully parsed
+      parsed.source = 'calendar';
       data.calendarAssignments[dateStr] = parsed;
       newAssignedDates.add(dateStr);
       count++;
     });
+
+    // Show mapping modal for unrecognized titles (manual sync only)
+    if (unmappedTitles.size > 0 && !silent) {
+      const mappings = await showMappingModal(Array.from(unmappedTitles));
+      if (mappings) {
+        // Save new mappings and apply them
+        Object.assign(settings.calendarMappings, mappings);
+        saveSettings(settings);
+        updateMappingCountUI();
+
+        // Apply mappings to collected unmapped events
+        unmappedEvents.forEach(({ title, dateStr }) => {
+          if (manualDates.has(dateStr)) { newAssignedDates.add(dateStr); return; }
+          const mapped = mappings[title];
+          if (!mapped) return; // skipped or not mapped
+          data.calendarAssignments[dateStr] = { type: mapped.type, label: mapped.label, source: 'calendar' };
+          newAssignedDates.add(dateStr);
+          count++;
+        });
+      }
+    }
 
     // Sync pager-only shifts: create for new assignments, update changed ones
     newAssignedDates.forEach(dateStr => {
@@ -3674,6 +3744,125 @@ function updateCalendarConnectedUI() {
   } else {
     infoEl.classList.add('hidden');
   }
+}
+
+// Calendar Mapping Modal functions
+let calMappingResolve = null;
+
+const ASSIGNMENT_TYPE_OPTIONS = [
+  { value: 'OR', label: 'OR / General' },
+  { value: 'OB_restricted', label: 'UVH OB' },
+  { value: 'cardiac_liver', label: 'Cardiac / Liver' },
+  { value: 'mole', label: 'Mole' },
+  { value: '1st_call', label: '1st Call' },
+  { value: '2nd_call', label: '2nd Call' },
+  { value: '3rd_call', label: '3rd Call' },
+  { value: '4th_call', label: '4th Call' },
+  { value: 'endo', label: 'Endo' },
+  { value: 'SF1', label: 'SF 1' },
+  { value: 'SF2', label: 'SF 2' },
+  { value: 'ACS', label: 'ACS' },
+  { value: 'NORA', label: 'NORA' },
+  { value: 'pre_call', label: 'Pre-Call' },
+  { value: 'CRNA_supervision', label: 'CRNA Supervision' },
+  { value: 'forced_off', label: 'Forced Off' },
+  { value: 'vacation', label: 'Vacation / Off' }
+];
+
+function showMappingModal(titles) {
+  return new Promise((resolve) => {
+    calMappingResolve = resolve;
+    const listEl = document.getElementById('calMappingList');
+    listEl.innerHTML = titles.map((title, i) => {
+      const optionsHtml = '<option value="">— Skip —</option>' +
+        ASSIGNMENT_TYPE_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+      // Suggest a label from the title (extract numbers for WB hint)
+      const numMatch = title.match(/\d+/);
+      const wbHint = numMatch ? 'WB: ' + numMatch[0] : '';
+      return `<div style="margin-bottom:10px;padding:8px 10px;background:var(--surface);border-radius:6px;">
+        <div style="font-size:0.85rem;font-weight:500;margin-bottom:6px;color:var(--text);">"${title.replace(/"/g, '&quot;')}"</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="calMap_type_${i}" style="flex:1;padding:6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:0.8rem;"
+            onchange="onMappingTypeChange(${i},'${wbHint.replace(/'/g, "\\'")}')">
+            ${optionsHtml}
+          </select>
+          <input id="calMap_label_${i}" type="text" placeholder="Label" style="width:80px;padding:6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:0.8rem;">
+        </div>
+      </div>`;
+    }).join('');
+    // Store titles for retrieval in save
+    listEl.dataset.titles = JSON.stringify(titles);
+    document.getElementById('calMappingModal').classList.remove('hidden');
+  });
+}
+
+function onMappingTypeChange(index, wbHint) {
+  const typeEl = document.getElementById('calMap_type_' + index);
+  const labelEl = document.getElementById('calMap_label_' + index);
+  const type = typeEl.value;
+  if (!type) {
+    labelEl.value = '';
+    return;
+  }
+  // Auto-populate label
+  if (type === 'OR' && wbHint) {
+    labelEl.value = wbHint;
+  } else {
+    labelEl.value = getAssignmentTypeName(type);
+  }
+}
+
+function saveMappingModal() {
+  const listEl = document.getElementById('calMappingList');
+  const titles = JSON.parse(listEl.dataset.titles);
+  const result = {};
+  titles.forEach((title, i) => {
+    const type = document.getElementById('calMap_type_' + i).value;
+    const label = document.getElementById('calMap_label_' + i).value.trim();
+    if (!type) {
+      result[title] = null; // skip
+    } else {
+      result[title] = { type, label: label || getAssignmentTypeName(type) };
+    }
+  });
+  document.getElementById('calMappingModal').classList.add('hidden');
+  if (calMappingResolve) {
+    const resolve = calMappingResolve;
+    calMappingResolve = null;
+    resolve(result);
+  }
+}
+
+function cancelMappingModal() {
+  document.getElementById('calMappingModal').classList.add('hidden');
+  if (calMappingResolve) {
+    const resolve = calMappingResolve;
+    calMappingResolve = null;
+    resolve(null);
+  }
+}
+
+function updateMappingCountUI() {
+  const el = document.getElementById('calMappingCount');
+  const clearBtn = document.getElementById('clearMappingsBtn');
+  if (!el) return;
+  const mappings = settings.calendarMappings || {};
+  const count = Object.keys(mappings).length;
+  if (count > 0) {
+    el.textContent = count + ' custom mapping' + (count !== 1 ? 's' : '') + ' saved';
+    el.classList.remove('hidden');
+    if (clearBtn) clearBtn.classList.remove('hidden');
+  } else {
+    el.classList.add('hidden');
+    if (clearBtn) clearBtn.classList.add('hidden');
+  }
+}
+
+function clearCalendarMappings() {
+  settings.calendarMappings = {};
+  saveSettings(settings);
+  updateMappingCountUI();
+  showToast('Calendar mappings cleared');
 }
 
 // ================================================================
@@ -10507,7 +10696,7 @@ function syncPagerShift(dateStr, type) {
 
 function applyAssignment(type, label) {
   if (!assignPickerDate) return;
-  data.calendarAssignments[assignPickerDate] = { type: type, label: label };
+  data.calendarAssignments[assignPickerDate] = { type: type, label: label, source: 'manual' };
   syncPagerShift(assignPickerDate, type);
   saveData(data);
   closeAssignPicker();
@@ -10518,7 +10707,7 @@ function applyWbAssignment() {
   if (!assignPickerDate) return;
   const wb = document.getElementById('assignWbInput').value.trim();
   if (!wb) { showToast('Enter a worker number'); return; }
-  data.calendarAssignments[assignPickerDate] = { type: 'OR', label: 'WB: ' + wb };
+  data.calendarAssignments[assignPickerDate] = { type: 'OR', label: 'WB: ' + wb, source: 'manual' };
   syncPagerShift(assignPickerDate, 'OR');
   saveData(data);
   closeAssignPicker();
@@ -11088,6 +11277,7 @@ if (data.calendarLastSync) {
   if (el) el.textContent = 'Last synced: ' + new Date(data.calendarLastSync).toLocaleString();
 }
 updateCalendarConnectedUI();
+updateMappingCountUI();
 
 document.getElementById('copyFlaggedEmailBtn').addEventListener('click', () => {
   const text = document.getElementById('flaggedList').dataset.emailText || '';
