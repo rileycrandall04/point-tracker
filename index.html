@@ -2761,6 +2761,8 @@ input.mil-time.invalid {
       <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
         <li><strong>Calendar picker</strong> &mdash; Calendar sync now shows a picker instead of searching for a hardcoded name. Partners can select their own Qgenda calendar.</li>
         <li><strong>Change Calendar button</strong> &mdash; Settings shows which calendar is connected with an option to switch.</li>
+        <li><strong>Qgenda support</strong> &mdash; Calendar sync now recognizes Qgenda assignment names (UVH/SFH prefixes, CV Call, ACSR, OB am/pm, Mole Call, etc.).</li>
+        <li><strong>Recent Updates page</strong> &mdash; This page! See what's changed in the app.</li>
       </ul>
     </div>
 
@@ -3371,42 +3373,56 @@ function parseCalendarEventTitle(title) {
   if (!title || !title.trim()) return null;
   const t = title.trim();
 
-  // Pure number → OR worker
-  if (/^\d+$/.test(t)) return { type: 'OR', label: 'WB: ' + t };
+  // Strip common Qgenda prefixes: "UVH ", "SFH ", "UVH/SFH ", "UH "
+  const stripped = t.replace(/^(?:UVH\/SFH|UVH|SFH|UH)\s+/i, '');
 
-  // SF variants
-  if (/^SF\s*1$/i.test(t)) return { type: 'SF1', label: 'SF 1' };
-  if (/^SF\s*2$/i.test(t)) return { type: 'SF2', label: 'SF 2' };
+  // Pure number → OR worker (handles both "5" and "UVH 5")
+  if (/^\d+$/.test(stripped)) return { type: 'OR', label: 'WB: ' + stripped };
+
+  // SFH call assignments (must check before stripping — prefix matters)
+  if (/^SFH\s+1st\s*call$/i.test(t)) return { type: 'SF1', label: 'SF 1' };
+  if (/^SFH\s+2nd\s*call$/i.test(t)) return { type: 'SF2', label: 'SF 2' };
+
+  // SF variants (short form)
+  if (/^SF\s*1$/i.test(stripped)) return { type: 'SF1', label: 'SF 1' };
+  if (/^SF\s*2$/i.test(stripped)) return { type: 'SF2', label: 'SF 2' };
+
+  // UVH call assignments
+  if (/^1st\s*call$/i.test(stripped)) return { type: '1st_call', label: '1st Call' };
+  if (/^2nd\s*call$/i.test(stripped)) return { type: '2nd_call', label: '2nd Call' };
+  if (/^3rd\s*call$/i.test(stripped)) return { type: '3rd_call', label: '3rd Call' };
+  if (/^4th\s*call$/i.test(stripped)) return { type: '4th_call', label: '4th Call' };
+
+  // CV (Cardiac) — am/pm variants
+  if (/^CV\s*(am|pm)?\s*call$/i.test(stripped)) return { type: 'cardiac_liver', label: 'Cardiac' };
+  if (/^cardiac$/i.test(stripped)) return { type: 'cardiac_liver', label: 'Cardiac' };
+  if (/^liver$/i.test(stripped)) return { type: 'cardiac_liver', label: 'Liver' };
+
+  // ACSR → ACS (Trauma)
+  if (/^ACSR$/i.test(stripped)) return { type: 'ACS', label: 'ACS' };
+  if (/^trauma$/i.test(stripped)) return { type: 'ACS', label: 'Trauma' };
 
   // Mole / Endo
-  if (/^mole$/i.test(t)) return { type: 'mole', label: 'Mole' };
-  if (/^endo[\s/]*mole$/i.test(t)) return { type: 'mole', label: 'Mole' };
-  if (/^endo$/i.test(t)) return { type: 'mole', label: 'Mole' };
+  if (/^mole\s*call$/i.test(stripped)) return { type: 'mole', label: 'Mole' };
+  if (/^mole$/i.test(stripped)) return { type: 'mole', label: 'Mole' };
+  if (/^endo[\s/]*mole$/i.test(stripped)) return { type: 'mole', label: 'Mole' };
+  if (/^endo$/i.test(stripped)) return { type: 'mole', label: 'Mole' };
 
-  // Call assignments
-  if (/^1st\s*call$/i.test(t)) return { type: '1st_call', label: '1st Call' };
-  if (/^2nd\s*call$/i.test(t)) return { type: '2nd_call', label: '2nd Call' };
-  if (/^3rd\s*call$/i.test(t)) return { type: '3rd_call', label: '3rd Call' };
-  if (/^4th\s*call$/i.test(t)) return { type: '4th_call', label: '4th Call' };
-
-  // Trauma → ACS
-  if (/^trauma$/i.test(t)) return { type: 'ACS', label: 'Trauma' };
-
-  // OB
-  if (/^OB$/i.test(t)) return { type: 'OB_restricted', label: 'OB' };
+  // OB — am/pm variants
+  if (/^OB\s*(am|pm)?\s*call$/i.test(stripped)) return { type: 'OB_restricted', label: 'OB' };
+  if (/^OB$/i.test(stripped)) return { type: 'OB_restricted', label: 'OB' };
 
   // NORA
-  if (/^NORA$/i.test(t)) return { type: 'NORA', label: 'NORA' };
+  if (/^NORA$/i.test(stripped)) return { type: 'NORA', label: 'NORA' };
 
-  // Cardiac / Liver
-  if (/^cardiac$/i.test(t)) return { type: 'cardiac_liver', label: 'Cardiac' };
-  if (/^liver$/i.test(t)) return { type: 'cardiac_liver', label: 'Liver' };
+  // General work assignment
+  if (/^work$/i.test(stripped)) return { type: 'OR', label: 'OR' };
 
-  // Post shifts (Post Call, Post 1-4, Post SF 1/2, etc.) → OR with specific label
-  if (/^post\b/i.test(t)) return { type: 'OR', label: t };
+  // Post shifts (Post Call, Post 1-4, Post SF 1/2, Post Mole, Post OB, etc.) → OR
+  if (/^post\b/i.test(stripped)) return { type: 'OR', label: stripped };
 
   // Known skip words
-  if (/^(off|vacation|vac|holiday|sick|conference|away)$/i.test(t)) return null;
+  if (/^(off|vacation|vac|holiday|sick|conference|away|admin\/off|locums|job\s*share)$/i.test(stripped)) return null;
 
   // Fallback: unrecognized
   return null;
