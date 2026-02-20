@@ -6818,8 +6818,13 @@ function renderCaseLogTable() {
   if (watchCases.length > 0) {
     const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const curMonthName = mn[clMonth] + ' ' + clYear;
-    watchHtml += '<div class="watching-box"><h4>&#x1f4b2; Watching for Billing (' + watchCases.length + ')</h4>';
+    let watchTotal = 0;
     watchCases.sort((a,b) => a.shiftDate.localeCompare(b.shiftDate)).forEach(c => {
+      const shift = data.shifts[c.shiftDate];
+      watchTotal += calcCasePoints(c, shift);
+    });
+    watchHtml += '<div class="watching-box"><h4>&#x1f4b2; Watching for Billing (' + watchCases.length + ') &mdash; ' + watchTotal.toFixed(1) + ' pts pending</h4>';
+    watchCases.forEach(c => {
       const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
       const shift = data.shifts[c.shiftDate];
       const pts = calcCasePoints(c, shift);
