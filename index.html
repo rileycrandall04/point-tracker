@@ -2586,6 +2586,11 @@ input.mil-time.invalid {
     <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:10px;">
       Sync your Google Calendar assignments to auto-fill shift types and label the weekly chart.
     </p>
+    <div id="calendarConnectedInfo" class="hidden" style="margin-bottom:8px;padding:6px 10px;background:var(--surface);border-radius:6px;font-size:0.8rem;">
+      <span style="color:var(--accent);">Connected:</span>
+      <span id="calendarConnectedName" style="color:var(--text);"></span>
+      <button class="btn btn-outline btn-sm" style="margin-left:8px;padding:2px 8px;font-size:0.7rem;" onclick="clearCalendarChoice()">Change</button>
+    </div>
     <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <button class="btn btn-outline btn-sm" id="syncCalendarBtn">Sync Calendar</button>
       <span id="calendarLastSync" style="font-size:0.75rem;color:var(--text-dim);"></span>
@@ -2596,8 +2601,7 @@ input.mil-time.invalid {
         <li>Go to <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener" style="color:var(--primary);">Google Cloud Console</a></li>
         <li>Select the <strong>mwa-point-tracker</strong> project</li>
         <li>Click <strong>Enable</strong> for the Google Calendar API</li>
-        <li>Sign out and sign back in to grant calendar permission</li>
-        <li>Your calendar named "Riley" will be synced automatically</li>
+        <li>Tap <strong>Sync Calendar</strong> — you'll be prompted to choose which calendar to sync</li>
       </ol>
     </details>
   </div>
@@ -3019,6 +3023,17 @@ input.mil-time.invalid {
   </div>
 </div>
 
+<!-- Calendar Picker Bottom Sheet -->
+<div class="assign-picker-overlay hidden" id="calPickerOverlay" onclick="if(event.target===this)closeCalPicker()">
+  <div class="assign-picker">
+    <div class="assign-picker-header">
+      <h3>Select Calendar</h3>
+      <button class="assign-picker-close" onclick="closeCalPicker()">&times;</button>
+    </div>
+    <div id="calPickerList" style="overflow-y:auto;padding:8px 0;max-height:60vh;"></div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -3402,12 +3417,29 @@ async function syncCalendarEvents(silent) {
     // Get token — silent mode reuses prior consent, manual forces prompt
     await requestCalendarToken(silent);
 
-    // Find the "Riley" calendar
-    const calList = await fetchCalendarList(googleAccessToken);
-    const rileyCal = calList.items.find(c => c.summary && c.summary.toLowerCase().includes('riley'));
-    if (!rileyCal) {
-      if (!silent) showToast('No "Riley" calendar found');
-      return;
+    // Determine which calendar to sync
+    let calendarId = settings.calendarId;
+
+    if (!calendarId) {
+      // No saved calendar — need to show picker (can't do this in silent mode)
+      if (silent) {
+        console.log('Auto calendar sync skipped: no calendar selected');
+        return;
+      }
+      const calList = await fetchCalendarList(googleAccessToken);
+      const calendars = (calList.items || []).filter(c => c.summary);
+      if (calendars.length === 0) {
+        showToast('No calendars found in your Google account');
+        return;
+      }
+      // Show picker and wait for user selection
+      const chosen = await showCalPicker(calendars);
+      if (!chosen) return; // user cancelled
+      settings.calendarId = chosen.id;
+      settings.calendarName = chosen.summary;
+      saveSettings(settings);
+      updateCalendarConnectedUI();
+      calendarId = chosen.id;
     }
 
     // 90-day window: past 30 + future 60
@@ -3419,7 +3451,21 @@ async function syncCalendarEvents(silent) {
     const timeMin = start.toISOString();
     const timeMax = end.toISOString();
 
-    const eventsData = await fetchCalendarEvents(googleAccessToken, rileyCal.id, timeMin, timeMax);
+    let eventsData;
+    try {
+      eventsData = await fetchCalendarEvents(googleAccessToken, calendarId, timeMin, timeMax);
+    } catch (fetchErr) {
+      // Calendar ID may no longer exist — clear saved choice and notify
+      if (fetchErr.message && fetchErr.message.includes('404')) {
+        settings.calendarId = '';
+        settings.calendarName = '';
+        saveSettings(settings);
+        updateCalendarConnectedUI();
+        if (!silent) showToast('Saved calendar not found — tap Sync to re-select');
+        return;
+      }
+      throw fetchErr;
+    }
     const events = eventsData.items || [];
 
     // Clear stale entries within sync window, preserve outside
@@ -3482,6 +3528,62 @@ async function syncCalendarEvents(silent) {
       console.error('Calendar sync error:', err);
       showToast('Calendar: ' + (err.message || 'sync failed'));
     }
+  }
+}
+
+// Calendar Picker functions
+let calPickerResolve = null;
+
+function showCalPicker(calendars) {
+  return new Promise((resolve) => {
+    calPickerResolve = resolve;
+    const listEl = document.getElementById('calPickerList');
+    listEl.innerHTML = calendars.map(c => {
+      const name = c.summary || '(untitled)';
+      const desc = c.description ? `<div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">${c.description}</div>` : '';
+      return `<div class="assign-item" onclick="pickCalendar('${c.id.replace(/'/g, "\\'")}','${name.replace(/'/g, "\\'")}')" style="cursor:pointer;padding:12px 16px;">
+        <span style="font-size:0.85rem;">${name}</span>${desc}
+      </div>`;
+    }).join('');
+    document.getElementById('calPickerOverlay').classList.remove('hidden');
+  });
+}
+
+function pickCalendar(id, name) {
+  document.getElementById('calPickerOverlay').classList.add('hidden');
+  if (calPickerResolve) {
+    const resolve = calPickerResolve;
+    calPickerResolve = null;
+    resolve({ id, summary: name });
+  }
+}
+
+function closeCalPicker() {
+  document.getElementById('calPickerOverlay').classList.add('hidden');
+  if (calPickerResolve) {
+    const resolve = calPickerResolve;
+    calPickerResolve = null;
+    resolve(null);
+  }
+}
+
+function clearCalendarChoice() {
+  settings.calendarId = '';
+  settings.calendarName = '';
+  saveSettings(settings);
+  updateCalendarConnectedUI();
+  showToast('Calendar cleared — next sync will show picker');
+}
+
+function updateCalendarConnectedUI() {
+  const infoEl = document.getElementById('calendarConnectedInfo');
+  const nameEl = document.getElementById('calendarConnectedName');
+  if (!infoEl || !nameEl) return;
+  if (settings.calendarId && settings.calendarName) {
+    nameEl.textContent = settings.calendarName;
+    infoEl.classList.remove('hidden');
+  } else {
+    infoEl.classList.add('hidden');
   }
 }
 
@@ -10895,6 +10997,7 @@ if (data.calendarLastSync) {
   const el = document.getElementById('calendarLastSync');
   if (el) el.textContent = 'Last synced: ' + new Date(data.calendarLastSync).toLocaleString();
 }
+updateCalendarConnectedUI();
 
 document.getElementById('copyFlaggedEmailBtn').addEventListener('click', () => {
   const text = document.getElementById('flaggedList').dataset.emailText || '';
