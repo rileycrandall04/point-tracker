@@ -3555,7 +3555,7 @@ function genId() {
 // Floating tooltip for info icons — click/tap to show, click elsewhere to dismiss
 const _tipEl = document.createElement('div');
 _tipEl.id = 'infoTipFloat';
-_tipEl.style.cssText = 'display:none;position:fixed;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.7rem;white-space:nowrap;z-index:9999;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+_tipEl.style.cssText = 'display:none;position:fixed;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:0.7rem;white-space:normal;max-width:min(260px, calc(100vw - 24px));z-index:9999;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);word-wrap:break-word;';
 document.body.appendChild(_tipEl);
 let _tipActiveIcon = null;
 
@@ -3564,27 +3564,32 @@ function _showTip(icon) {
   if (!tip) return;
   if (tip.indexOf('\n') >= 0) {
     _tipEl.innerHTML = escHtml(tip).replace(/\n/g, '<br>');
-    _tipEl.style.whiteSpace = 'normal';
-    _tipEl.style.maxWidth = '260px';
   } else {
     _tipEl.textContent = tip;
-    _tipEl.style.whiteSpace = 'nowrap';
-    _tipEl.style.maxWidth = '';
   }
   _tipEl.style.display = 'block';
   _tipActiveIcon = icon;
   const r = icon.getBoundingClientRect();
-  let left = r.right + 8;
+  const pad = 8;
+  let left = r.right + pad;
   let top = r.top + r.height / 2 - _tipEl.offsetHeight / 2;
-  if (left + _tipEl.offsetWidth > window.innerWidth - 8) left = r.left - _tipEl.offsetWidth - 8;
-  if (top < 4) top = 4;
-  if (top + _tipEl.offsetHeight > window.innerHeight - 4) top = window.innerHeight - 4 - _tipEl.offsetHeight;
+  // If overflows right, try left side
+  if (left + _tipEl.offsetWidth > window.innerWidth - pad) left = r.left - _tipEl.offsetWidth - pad;
+  // If still overflows (too wide for either side), pin to screen edges with padding
+  if (left < pad) left = pad;
+  if (left + _tipEl.offsetWidth > window.innerWidth - pad) {
+    _tipEl.style.maxWidth = (window.innerWidth - pad * 2) + 'px';
+    left = pad;
+  }
+  if (top < pad) top = pad;
+  if (top + _tipEl.offsetHeight > window.innerHeight - pad) top = window.innerHeight - pad - _tipEl.offsetHeight;
   _tipEl.style.left = left + 'px';
   _tipEl.style.top = top + 'px';
 }
 
 function _hideTip() {
   _tipEl.style.display = 'none';
+  _tipEl.style.maxWidth = 'min(260px, calc(100vw - 24px))';
   _tipActiveIcon = null;
 }
 
