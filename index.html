@@ -3405,6 +3405,24 @@ function migrateData(d) {
   // Ensure overrides object exists
   if (!d.overrides) { d.overrides = {}; changed = true; }
   if (!d.calendarAssignments) { d.calendarAssignments = {}; changed = true; }
+  // Backfill shift entries for vacation/forced_off calendar assignments
+  if (d.calendarAssignments) {
+    Object.entries(d.calendarAssignments).forEach(([dateStr, cal]) => {
+      if ((cal.type === 'vacation' || cal.type === 'forced_off') && !d.shifts[dateStr]) {
+        d.shifts[dateStr] = {
+          date: dateStr, assignmentType: cal.type,
+          startTime: '', endTime: '',
+          timeEntries: [{ start: '', end: '' }],
+          isHoliday: false, forcedOff: cal.type === 'forced_off',
+          subspecCoverage: false, teeCount: 0,
+          supervisionStart: '', supervisionEnd: '',
+          preCallStart: '', preCallEnd: '',
+          tempCoverage: []
+        };
+        changed = true;
+      }
+    });
+  }
   if (changed) saveData(d);
 }
 migrateData(data);
