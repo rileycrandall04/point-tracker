@@ -2569,6 +2569,39 @@ input.mil-time.invalid {
       </div>
     </div>
   </div>
+
+  <!-- 7. Paycheck Tracking -->
+  <div class="card hidden" id="paycheckTrackingCard">
+    <h2>Paycheck Tracking</h2>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:120px;">
+        <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:2px;">Month</label>
+        <input type="month" id="paycheckMonth" class="text-input" style="width:100%;font-size:0.85rem;">
+      </div>
+      <div style="flex:1;min-width:120px;">
+        <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:2px;">Amount Deposited</label>
+        <input type="number" id="paycheckAmount" class="text-input" placeholder="$0.00" min="0" step="0.01" style="width:100%;font-size:0.85rem;">
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="savePaycheckEntry()" style="height:36px;white-space:nowrap;">Save</button>
+    </div>
+    <div style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;" id="paycheckRangeBtns">
+      <button class="btn btn-outline btn-sm active" onclick="setPaycheckRange('3m')">3m</button>
+      <button class="btn btn-outline btn-sm" onclick="setPaycheckRange('6m')">6m</button>
+      <button class="btn btn-outline btn-sm" onclick="setPaycheckRange('12m')">12m</button>
+      <button class="btn btn-outline btn-sm" onclick="setPaycheckRange('ytd')">YTD</button>
+    </div>
+    <div style="height:220px;margin-bottom:12px;">
+      <canvas id="paycheckChart"></canvas>
+    </div>
+    <div id="paycheckTableContainer"></div>
+    <div id="paycheckPagination" style="display:none;margin-top:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <button class="btn btn-outline btn-sm" onclick="paycheckPageNav(-1)" id="paycheckPrevBtn">&larr; Prev</button>
+        <span style="font-size:0.75rem;color:var(--text-dim);" id="paycheckPageLabel"></span>
+        <button class="btn btn-outline btn-sm" onclick="paycheckPageNav(1)" id="paycheckNextBtn">Next &rarr;</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- SETTINGS PAGE -->
@@ -2683,6 +2716,18 @@ input.mil-time.invalid {
     <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
       Shares de-identified case data (procedure, times, ASA code) with your group for surgeon efficiency and procedure time lookups. No personal notes are shared.
     </p>
+  </div>
+
+  <!-- Paycheck Tracking -->
+  <div class="card" style="margin-top:12px;">
+    <h2>Paycheck Tracking</h2>
+    <label class="toggle-row">
+      <span>Track monthly bank deposits on the Compensation page</span>
+      <span class="toggle-switch">
+        <input type="checkbox" id="paycheckTrackingToggle">
+        <span class="slider"></span>
+      </span>
+    </label>
   </div>
 
   <!-- Export / Import -->
@@ -3335,10 +3380,11 @@ function loadData() {
       if (!d.overrides) d.overrides = {};
       if (!d.stipends) d.stipends = {};
       if (!d.calendarAssignments) d.calendarAssignments = {};
+      if (!d.paychecks) d.paychecks = {};
       return d;
     }
   } catch(e) {}
-  return { shifts: {}, cases: [], overrides: {}, stipends: {}, calendarAssignments: {} };
+  return { shifts: {}, cases: [], overrides: {}, stipends: {}, calendarAssignments: {}, paychecks: {} };
 }
 
 function saveData(d) {
@@ -7403,6 +7449,10 @@ let breakdownChart = null; // unused, kept for compat
 let histRangeFrom = '';
 let histRangeTo = '';
 let pipelineChart = null;
+let paycheckChartInstance = null;
+let paycheckRange = '3m';
+let paycheckShowAll = false;
+let paycheckPage = 0;
 let productionTrendChart = null;
 let activeDashTab = 'daily';
 
@@ -9306,6 +9356,7 @@ function renderProjections() {
   loadOverrideUI();
   loadStipendUI();
   checkPVReminder();
+  renderPaycheckCard();
 }
 
 function getMonthlyTotals() {
@@ -9712,6 +9763,237 @@ function renderHistoricalComp() {
   }
 
   el.innerHTML = html;
+}
+
+// ================================================================
+// PAYCHECK TRACKING
+// ================================================================
+function renderPaycheckCard() {
+  const card = document.getElementById('paycheckTrackingCard');
+  if (!card) return;
+  if (settings.paycheckTracking !== true) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  // Default month input to current month
+  const mi = document.getElementById('paycheckMonth');
+  if (mi && !mi.value) {
+    const now = new Date();
+    mi.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  }
+  renderPaycheckChart();
+  renderPaycheckTable();
+}
+
+function getPaycheckMonths(range) {
+  const now = new Date();
+  const allMonths = Object.keys(data.paychecks || {}).sort();
+  if (allMonths.length === 0) return [];
+  if (range === 'all') return allMonths.slice().reverse();
+  let cutoff;
+  if (range === '3m') { cutoff = new Date(now.getFullYear(), now.getMonth() - 2, 1); }
+  else if (range === '6m') { cutoff = new Date(now.getFullYear(), now.getMonth() - 5, 1); }
+  else if (range === '12m') { cutoff = new Date(now.getFullYear(), now.getMonth() - 11, 1); }
+  else if (range === 'ytd') { cutoff = new Date(now.getFullYear(), 0, 1); }
+  else { cutoff = new Date(now.getFullYear(), now.getMonth() - 2, 1); }
+  const cutoffKey = cutoff.getFullYear() + '-' + String(cutoff.getMonth() + 1).padStart(2, '0');
+  return allMonths.filter(m => m >= cutoffKey).reverse();
+}
+
+function setPaycheckRange(range) {
+  paycheckRange = range;
+  paycheckShowAll = false;
+  paycheckPage = 0;
+  document.querySelectorAll('#paycheckRangeBtns button').forEach(b => b.classList.remove('active'));
+  const labels = { '3m': '3m', '6m': '6m', '12m': '12m', 'ytd': 'YTD' };
+  document.querySelectorAll('#paycheckRangeBtns button').forEach(b => {
+    if (b.textContent === labels[range]) b.classList.add('active');
+  });
+  renderPaycheckChart();
+  renderPaycheckTable();
+}
+
+function savePaycheckEntry() {
+  const mi = document.getElementById('paycheckMonth');
+  const ai = document.getElementById('paycheckAmount');
+  const month = mi.value;
+  const amount = parseFloat(ai.value);
+  if (!month) { showToast('Select a month'); return; }
+  if (isNaN(amount) || amount < 0) { showToast('Enter a valid amount'); return; }
+  if (!data.paychecks) data.paychecks = {};
+  data.paychecks[month] = amount;
+  saveData(data);
+  ai.value = '';
+  showToast('Paycheck saved');
+  renderPaycheckChart();
+  renderPaycheckTable();
+}
+
+function deletePaycheckEntry(month) {
+  if (!confirm('Delete paycheck entry for ' + month + '?')) return;
+  delete data.paychecks[month];
+  saveData(data);
+  showToast('Entry deleted');
+  renderPaycheckChart();
+  renderPaycheckTable();
+}
+
+function renderPaycheckChart() {
+  const ctx = document.getElementById('paycheckChart');
+  if (!ctx) return;
+  const months = paycheckShowAll ? getPaycheckMonths('all').slice().reverse() : getPaycheckMonths(paycheckRange).slice().reverse();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  const labels = months.map(m => {
+    const [y, mo] = m.split('-');
+    return monthNames[parseInt(mo) - 1] + ' ' + y.slice(2);
+  });
+  const values = months.map(m => data.paychecks[m] || 0);
+
+  if (paycheckChartInstance) paycheckChartInstance.destroy();
+
+  if (months.length === 0) {
+    ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height);
+    return;
+  }
+
+  const nonZero = values.filter(v => v > 0);
+  const avg = nonZero.length >= 2 ? round2(nonZero.reduce((a, b) => a + b, 0) / nonZero.length) : 0;
+
+  const datasets = [{
+    label: 'Deposit',
+    data: values,
+    backgroundColor: 'rgba(59,130,246,0.7)',
+    borderColor: '#3b82f6',
+    borderWidth: 1,
+    borderRadius: 4
+  }];
+
+  if (avg > 0) {
+    datasets.push({
+      label: 'Average',
+      data: values.map(() => avg),
+      type: 'line',
+      borderColor: '#f59e0b',
+      borderWidth: 2,
+      borderDash: [6, 3],
+      pointRadius: 0,
+      fill: false
+    });
+  }
+
+  paycheckChartInstance = new Chart(ctx.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              if (context.dataset.label === 'Average') return 'Avg: $' + context.raw.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+              return '$' + context.raw.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            }
+          }
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { color: '#94a3b8', callback: function(v) { return '$' + v.toLocaleString(); } }, grid: { color: 'rgba(71,85,105,0.3)' } },
+        x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderPaycheckTable() {
+  const el = document.getElementById('paycheckTableContainer');
+  const pagEl = document.getElementById('paycheckPagination');
+  if (!el) return;
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  let months;
+  if (paycheckShowAll) {
+    const all = getPaycheckMonths('all');
+    const totalPages = Math.ceil(all.length / 12);
+    if (paycheckPage >= totalPages) paycheckPage = totalPages - 1;
+    if (paycheckPage < 0) paycheckPage = 0;
+    months = all.slice(paycheckPage * 12, (paycheckPage + 1) * 12);
+    if (pagEl) {
+      pagEl.style.display = totalPages > 1 ? '' : 'none';
+      document.getElementById('paycheckPageLabel').textContent = 'Page ' + (paycheckPage + 1) + ' of ' + totalPages;
+      document.getElementById('paycheckPrevBtn').disabled = paycheckPage === 0;
+      document.getElementById('paycheckNextBtn').disabled = paycheckPage >= totalPages - 1;
+    }
+  } else {
+    months = getPaycheckMonths(paycheckRange);
+    if (pagEl) pagEl.style.display = 'none';
+  }
+
+  if (months.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No paycheck entries yet.</p>';
+    return;
+  }
+
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">';
+  html += '<thead><tr style="border-bottom:2px solid var(--border);text-align:left;">';
+  html += '<th style="padding:5px 4px;color:var(--text-dim);font-weight:600;font-size:0.72rem;">Month</th>';
+  html += '<th style="padding:5px 4px;color:var(--text-dim);font-weight:600;font-size:0.72rem;text-align:right;">Amount</th>';
+  html += '<th style="padding:5px 4px;width:40px;"></th>';
+  html += '</tr></thead><tbody>';
+
+  let total = 0;
+  months.forEach((m, i) => {
+    const amt = data.paychecks[m] || 0;
+    total += amt;
+    const [y, mo] = m.split('-');
+    const label = monthNames[parseInt(mo) - 1] + ' ' + y;
+    const bg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
+    html += `<tr style="border-bottom:1px solid var(--border);background:${bg};">`;
+    html += `<td style="padding:6px 4px;">${label}</td>`;
+    html += `<td style="padding:6px 4px;text-align:right;font-weight:600;color:var(--primary);">$${amt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
+    html += `<td style="padding:6px 4px;text-align:center;"><button onclick="deletePaycheckEntry('${m}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:0.8rem;padding:2px 6px;" title="Delete">&times;</button></td>`;
+    html += '</tr>';
+  });
+
+  // Total row
+  html += `<tr style="border-top:2px solid var(--border);">`;
+  html += `<td style="padding:6px 4px;font-weight:700;">Total (${months.length} mo)</td>`;
+  html += `<td style="padding:6px 4px;text-align:right;font-weight:700;color:var(--accent);">$${total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
+  html += `<td></td></tr>`;
+
+  // Average row
+  const avg = months.length > 0 ? total / months.length : 0;
+  html += `<tr>`;
+  html += `<td style="padding:4px 4px;font-size:0.75rem;color:var(--text-dim);">Monthly Avg</td>`;
+  html += `<td style="padding:4px 4px;text-align:right;font-size:0.75rem;color:var(--text-dim);">$${avg.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
+  html += `<td></td></tr>`;
+
+  html += '</tbody></table>';
+
+  // Show All / Show Range toggle
+  html += `<div style="text-align:center;margin-top:8px;">`;
+  if (paycheckShowAll) {
+    html += `<button class="btn btn-outline btn-sm" onclick="togglePaycheckShowAll()" style="font-size:0.72rem;">Show Range Only</button>`;
+  } else {
+    const allCount = Object.keys(data.paychecks || {}).length;
+    if (allCount > months.length) {
+      html += `<button class="btn btn-outline btn-sm" onclick="togglePaycheckShowAll()" style="font-size:0.72rem;">Show All (${allCount} entries)</button>`;
+    }
+  }
+  html += `</div>`;
+
+  el.innerHTML = html;
+}
+
+function togglePaycheckShowAll() {
+  paycheckShowAll = !paycheckShowAll;
+  paycheckPage = 0;
+  renderPaycheckChart();
+  renderPaycheckTable();
+}
+
+function paycheckPageNav(dir) {
+  paycheckPage += dir;
+  renderPaycheckTable();
 }
 
 function editHistCompActual(payMk) {
@@ -12056,6 +12338,16 @@ shareToggle.addEventListener('change', () => {
     deleteAllUserSharedCases();
     showToast('Data sharing disabled — shared cases removed');
   }
+});
+
+// Paycheck tracking toggle
+const paycheckToggle = document.getElementById('paycheckTrackingToggle');
+paycheckToggle.checked = settings.paycheckTracking === true; // default off
+paycheckToggle.addEventListener('change', () => {
+  settings.paycheckTracking = paycheckToggle.checked;
+  saveSettings(settings);
+  renderPaycheckCard();
+  showToast(settings.paycheckTracking ? 'Paycheck tracking enabled' : 'Paycheck tracking hidden');
 });
 
 // Vision API key
