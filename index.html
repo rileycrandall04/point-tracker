@@ -11905,12 +11905,12 @@ function renderCollectiveCases() {
     html += `<div class="proc-case-item"><span>${escHtml(label)}</span><span>${count} case${count !== 1 ? 's' : ''}</span></div>`;
   });
   html += `</div>`;
-  html += `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:6px;">`;
-  html += `<button class="btn btn-outline btn-sm" onclick="openSurgeonCaseEditor()" style="width:100%;font-size:0.8rem;">&#9998; Edit Case Names</button>`;
   if (isAdmin()) {
+    html += `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:6px;">`;
+    html += `<button class="btn btn-outline btn-sm" onclick="openSurgeonCaseEditor()" style="width:100%;font-size:0.8rem;">&#9998; Edit Case Names</button>`;
     html += `<button class="btn btn-outline btn-sm" onclick="openSurgeonMappingModal()" style="width:100%;font-size:0.8rem;">&#128279; Manage Surgeon Mappings</button>`;
+    html += `</div>`;
   }
-  html += `</div>`;
   el.innerHTML = html;
 }
 
@@ -12088,8 +12088,9 @@ let sceSelected = new Set();
 let sceDirty = new Set();
 
 function openSurgeonCaseEditor() {
+  if (!isAdmin()) return;
   const myUid = currentUser ? currentUser.uid : '';
-  const admin = isAdmin();
+  const admin = true;
   const uidLabels = {};
   let otherIdx = 1;
 
