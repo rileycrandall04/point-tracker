@@ -9558,7 +9558,10 @@ function computePaycheckData(workMk, mt) {
   const ov = data.overrides[workMk];
   const hasOverride = ov && ov.compTotal != null;
   const actualAmt = hasOverride ? ov.compTotal : null;
-  const accuracy = hasOverride && calcPaycheck > 0 ? calcAccuracy(calcPaycheck, actualAmt) : null;
+  // Accuracy excludes stipends — compare production-only calc vs actual minus stipend
+  const calcProduction = pv > 0 ? round2(blended * pv) : 0;
+  const actualProduction = hasOverride ? actualAmt - stipend : null;
+  const accuracy = hasOverride && calcProduction > 0 && actualProduction > 0 ? calcAccuracy(calcProduction, actualProduction) : null;
   return { workDate, payDate, blended, workKey: workMk, pv, isConfirmedPV, stipend, calcPaycheck, hasOverride, actualAmt, accuracy };
 }
 
