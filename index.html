@@ -618,6 +618,51 @@ textarea { resize: vertical; min-height: 60px; }
   justify-content: flex-end;
 }
 
+/* ===== SURGEON MAPPING MODAL ===== */
+.surgeon-mapping-group {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.surgeon-mapping-group .canonical-input {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 0.85rem;
+  margin-bottom: 6px;
+  box-sizing: border-box;
+}
+.surgeon-mapping-group .variant-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.surgeon-mapping-group .variant-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.surgeon-mapping-group .variant-chip .chip-count {
+  color: var(--primary);
+  font-weight: 600;
+}
+.surgeon-mapping-group .variant-chip.is-canonical {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ===== TAB SWITCHER ===== */
 .tab-bar {
   display: flex;
@@ -3148,6 +3193,21 @@ input.mil-time.invalid {
   </div>
 </div>
 
+<!-- Surgeon Name Mapping Modal -->
+<div class="modal-overlay hidden" id="surgeonMappingModal" onclick="if(event.target===this)closeSurgeonMappingModal()">
+  <div class="modal" style="max-height:85vh;overflow-y:auto;max-width:500px;">
+    <h2>Manage Surgeon Names</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Map variant surgeon names to a single canonical name. Changes affect analytics for all users.
+    </p>
+    <div id="surgeonMappingList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeSurgeonMappingModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveSurgeonMappings()" style="width:auto;">Save Mappings</button>
+    </div>
+  </div>
+</div>
+
 <!-- Assignment Picker Bottom Sheet -->
 <div class="assign-picker-overlay hidden" id="assignPickerOverlay" onclick="if(event.target===this)closeAssignPicker()">
   <div class="assign-picker">
@@ -3254,6 +3314,8 @@ let currentUser = null;
 let firestoreSyncEnabled = false;
 let syncDebounceTimer = null;
 let googleAccessToken = null;
+const ADMIN_UID = 'ZCXVQgTIknSVa7MvOnXSw550MCo2';
+function isAdmin() { return currentUser && currentUser.uid === ADMIN_UID; }
 
 // ================================================================
 // DATA STORE
@@ -3388,6 +3450,8 @@ function deleteAllUserSharedCases() {
 
 let sharedCasesCache = [];
 let sharedCasesLoaded = false;
+let surgeonMappingsCache = {};
+let surgeonMappingsLoaded = false;
 
 async function loadSharedCases() {
   try {
@@ -3434,6 +3498,34 @@ function approxSharedCasePoints(sc) {
   const timePoints = caseHours * 6;
   const nerveBlockPts = sc.hasNerveBlock ? 3 : 0;
   return round2(basePoints + timePoints + nerveBlockPts);
+}
+
+async function loadSurgeonMappings() {
+  try {
+    const doc = await db.collection('surgeonMappings').doc('canonical').get();
+    if (doc.exists) {
+      surgeonMappingsCache = doc.data().mappings || {};
+    } else {
+      surgeonMappingsCache = {};
+    }
+    surgeonMappingsLoaded = true;
+  } catch (err) {
+    console.error('Failed to load surgeon mappings:', err);
+    surgeonMappingsCache = {};
+    surgeonMappingsLoaded = true;
+  }
+}
+
+function normalizeSurgeonName(rawName) {
+  if (!rawName) return rawName;
+  const trimmed = rawName.trim();
+  if (!trimmed) return trimmed;
+  if (surgeonMappingsCache[trimmed]) return surgeonMappingsCache[trimmed];
+  const lower = trimmed.toLowerCase();
+  for (const [variant, canonical] of Object.entries(surgeonMappingsCache)) {
+    if (variant.toLowerCase() === lower) return canonical;
+  }
+  return trimmed;
 }
 
 function updateSyncStatus(status) {
@@ -6241,7 +6333,7 @@ document.getElementById('caseShared').addEventListener('change', function() {
   function getSurgeonHistory() {
     const map = {};
     data.cases.forEach(c => {
-      const name = (c.notes || '').trim();
+      const name = normalizeSurgeonName((c.notes || '').trim());
       if (!name) return;
       if (!map[name]) map[name] = 0;
       map[name]++;
@@ -6251,7 +6343,7 @@ document.getElementById('caseShared').addEventListener('change', function() {
       const myUid = currentUser ? currentUser.uid : '';
       sharedCasesCache.forEach(sc => {
         if (sc.uid === myUid) return;
-        const name = (sc.surgeon || '').trim();
+        const name = normalizeSurgeonName((sc.surgeon || '').trim());
         if (!name) return;
         if (!map[name]) map[name] = 0;
         map[name]++;
@@ -10626,7 +10718,7 @@ function renderProcLookup() {
     const name = c.caseType === 'standard' ? (c.procedure || '') : getCaseTypeName(c.caseType);
     if (!name || !name.toLowerCase().includes(query)) return;
     if (!procNames[name]) procNames[name] = [];
-    const surgeon = (c.notes || '').trim();
+    const surgeon = normalizeSurgeonName((c.notes || '').trim());
     let s = timeToMinutes(c.startTime);
     let e = timeToMinutes(c.endTime);
     if (e <= s) e += 1440;
@@ -10653,7 +10745,7 @@ function renderProcLookup() {
       if (e <= s) e += 1440;
       const mins = e - s;
       if (mins <= 0) return;
-      procNames[name].push({ surgeon: sc.surgeon || 'Unknown', mins, id: null, date: sc.shiftDate, startTime: sc.startTime, endTime: sc.endTime, isFromShared: true });
+      procNames[name].push({ surgeon: normalizeSurgeonName(sc.surgeon || '') || 'Unknown', mins, id: null, date: sc.shiftDate, startTime: sc.startTime, endTime: sc.endTime, isFromShared: true });
     });
   }
 
@@ -11200,7 +11292,163 @@ function renderCollectiveCases() {
     html += `<div class="proc-case-item"><span>${escHtml(label)}</span><span>${count} case${count !== 1 ? 's' : ''}</span></div>`;
   });
   html += `</div>`;
+  if (isAdmin()) {
+    html += `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">`;
+    html += `<button class="btn btn-outline btn-sm" onclick="openSurgeonMappingModal()" style="width:100%;font-size:0.8rem;">&#9998; Manage Surgeon Names</button>`;
+    html += `</div>`;
+  }
   el.innerHTML = html;
+}
+
+// ---- Surgeon Name Mapping Admin UI ----
+function openSurgeonMappingModal() {
+  if (!isAdmin()) return;
+  const nameMap = {};
+  data.cases.forEach(c => {
+    const name = (c.notes || '').trim();
+    if (!name) return;
+    nameMap[name] = (nameMap[name] || 0) + 1;
+  });
+  sharedCasesCache.forEach(sc => {
+    const name = (sc.surgeon || '').trim();
+    if (!name) return;
+    nameMap[name] = (nameMap[name] || 0) + 1;
+  });
+  const groups = buildSurgeonGroups(nameMap);
+  renderSurgeonMappingGroups(groups);
+  document.getElementById('surgeonMappingModal').classList.remove('hidden');
+}
+
+function buildSurgeonGroups(nameMap) {
+  const names = Object.keys(nameMap).sort((a, b) => nameMap[b] - nameMap[a]);
+  const groups = [];
+  const assigned = new Set();
+
+  // First pass: honor existing mappings
+  const reverseMap = {};
+  for (const [variant, canonical] of Object.entries(surgeonMappingsCache)) {
+    if (!reverseMap[canonical]) reverseMap[canonical] = [];
+    reverseMap[canonical].push(variant);
+  }
+  for (const [canonical, variants] of Object.entries(reverseMap)) {
+    const group = { canonical, variants: [] };
+    if (nameMap[canonical]) {
+      group.variants.push({ name: canonical, count: nameMap[canonical] });
+      assigned.add(canonical);
+    }
+    variants.forEach(v => {
+      if (assigned.has(v)) return;
+      group.variants.push({ name: v, count: nameMap[v] || 0 });
+      assigned.add(v);
+    });
+    groups.push(group);
+  }
+
+  // Second pass: auto-group remaining unassigned names by normalized key
+  const remaining = names.filter(n => !assigned.has(n));
+  const autoGroups = {};
+  remaining.forEach(name => {
+    const key = name.toLowerCase().replace(/[.,\s]+/g, ' ').trim().split(/\s+/).sort().join(' ');
+    if (!autoGroups[key]) autoGroups[key] = [];
+    autoGroups[key].push({ name, count: nameMap[name] });
+  });
+  for (const members of Object.values(autoGroups)) {
+    members.sort((a, b) => b.count - a.count);
+    groups.push({ canonical: members[0].name, variants: members });
+  }
+
+  groups.sort((a, b) => {
+    const totalB = b.variants.reduce((s, v) => s + v.count, 0);
+    const totalA = a.variants.reduce((s, v) => s + v.count, 0);
+    return totalB - totalA;
+  });
+  return groups;
+}
+
+function renderSurgeonMappingGroups(groups) {
+  const el = document.getElementById('surgeonMappingList');
+  if (groups.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No surgeon names found in cases.</p>';
+    return;
+  }
+  let html = '';
+  const multiGroups = groups.filter(g => g.variants.length > 1);
+  const singleGroups = groups.filter(g => g.variants.length === 1);
+
+  if (multiGroups.length > 0) {
+    html += `<div style="font-size:0.78rem;color:var(--accent2);font-weight:600;margin-bottom:8px;">${multiGroups.length} name${multiGroups.length !== 1 ? 's' : ''} with variants</div>`;
+    multiGroups.forEach((g, i) => { html += surgeonGroupHtml(g, i, false); });
+  }
+  if (singleGroups.length > 0) {
+    html += `<div style="font-size:0.78rem;color:var(--text-dim);font-weight:600;margin:12px 0 8px;">${singleGroups.length} unique name${singleGroups.length !== 1 ? 's' : ''} (no variants detected)</div>`;
+    html += `<div id="singleSurgeonGroups" style="display:none;">`;
+    singleGroups.forEach((g, i) => { html += surgeonGroupHtml(g, multiGroups.length + i, true); });
+    html += `</div>`;
+    html += `<button class="btn btn-outline btn-sm" onclick="toggleSingleSurgeonGroups()" style="width:100%;font-size:0.75rem;margin-top:4px;" id="toggleSingleBtn">Show All Names</button>`;
+  }
+  el.innerHTML = html;
+  el._groups = groups;
+}
+
+function surgeonGroupHtml(group, index, isSingle) {
+  const totalCount = group.variants.reduce((s, v) => s + v.count, 0);
+  let html = `<div class="surgeon-mapping-group" data-group-idx="${index}">`;
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">`;
+  html += `<span style="font-size:0.72rem;color:var(--text-dim);">Canonical name:</span>`;
+  html += `<span style="font-size:0.72rem;color:var(--text-dim);">${totalCount} cases</span></div>`;
+  html += `<input class="canonical-input" id="surgCanonical_${index}" value="${escHtml(group.canonical)}" placeholder="Canonical name">`;
+  if (!isSingle) {
+    html += `<div class="variant-list">`;
+    group.variants.forEach(v => {
+      const isCan = v.name === group.canonical;
+      html += `<span class="variant-chip${isCan ? ' is-canonical' : ''}" onclick="document.getElementById('surgCanonical_${index}').value=this.dataset.name" data-name="${escHtml(v.name)}">${escHtml(v.name)} <span class="chip-count">(${v.count})</span></span>`;
+    });
+    html += `</div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+function toggleSingleSurgeonGroups() {
+  const el = document.getElementById('singleSurgeonGroups');
+  const btn = document.getElementById('toggleSingleBtn');
+  if (el.style.display === 'none') { el.style.display = ''; btn.textContent = 'Hide Unique Names'; }
+  else { el.style.display = 'none'; btn.textContent = 'Show All Names'; }
+}
+
+async function saveSurgeonMappings() {
+  if (!isAdmin()) return;
+  const el = document.getElementById('surgeonMappingList');
+  const groups = el._groups || [];
+  const newMappings = {};
+  groups.forEach((g, i) => {
+    const input = document.getElementById('surgCanonical_' + i);
+    const canonical = input ? input.value.trim() : g.canonical;
+    if (!canonical) return;
+    g.variants.forEach(v => {
+      if (v.name !== canonical) newMappings[v.name] = canonical;
+    });
+  });
+  try {
+    await db.collection('surgeonMappings').doc('canonical').set({
+      mappings: newMappings,
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser.uid
+    });
+    surgeonMappingsCache = newMappings;
+    showToast('Surgeon mappings saved');
+    closeSurgeonMappingModal();
+    renderSurgeonEfficiency();
+    renderTopProcedures();
+    renderCollectiveCases();
+  } catch (err) {
+    console.error('Failed to save surgeon mappings:', err);
+    showToast('Error saving mappings');
+  }
+}
+
+function closeSurgeonMappingModal() {
+  document.getElementById('surgeonMappingModal').classList.add('hidden');
 }
 
 function renderCaseMix() {
@@ -11335,7 +11583,7 @@ function renderSurgeonEfficiency() {
   // Pass 1: Local cases
   data.cases.forEach(c => {
     if (c.isSharedCase) return;
-    const surgeon = (c.notes || '').trim();
+    const surgeon = normalizeSurgeonName((c.notes || '').trim());
     if (!surgeon || !c.startTime || !c.endTime) return;
     const shift = data.shifts[c.shiftDate];
     const pts = calcCasePoints(c, shift || {}, true);
@@ -11358,7 +11606,7 @@ function renderSurgeonEfficiency() {
   if (sharedCasesLoaded) {
     sharedCasesCache.forEach(sc => {
       if (sc.uid === myUid) return;
-      const surgeon = (sc.surgeon || '').trim();
+      const surgeon = normalizeSurgeonName((sc.surgeon || '').trim());
       if (!surgeon || !sc.startTime || !sc.endTime) return;
       const dedupKey = sc.uid + '|' + sc.shiftDate + '|' + sc.startTime;
       if (seen.has(dedupKey)) return;
@@ -15196,8 +15444,10 @@ auth.onAuthStateChanged(async (user) => {
       saveSettings(settings);
     }
 
-    // Load shared cases from community pool (non-blocking)
+    // Load shared cases and surgeon mappings from community pool (non-blocking)
     loadSharedCases().then(() => {
+      return loadSurgeonMappings();
+    }).then(() => {
       renderCollectiveCases();
       // Re-render analytics if currently visible
       const analyticsPage = document.getElementById('page-analytics');
