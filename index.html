@@ -2439,24 +2439,14 @@ input.mil-time.invalid {
     <h2>Production Pipeline</h2>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:0 0 12px;padding:10px 12px;background:var(--surface2);border-radius:8px;">
       <div style="text-align:center;">
-        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Avg/Mo</div>
-        <div style="font-size:0.95rem;font-weight:600;color:var(--primary);" id="projRollingAvg">&mdash;</div>
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">YTD Earnings</div>
+        <div style="font-size:0.95rem;font-weight:600;color:#facc15;" id="projYTDRevenue">&mdash;</div>
       </div>
       <div style="text-align:center;">
         <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Annual Proj</div>
         <div style="font-size:0.95rem;font-weight:600;color:var(--accent2);"><span id="projAnnualIncome">&mdash;</span> <span class="info-icon" id="projAnnualTip" data-tip="" style="vertical-align:middle;">i</span></div>
       </div>
-      <div style="text-align:center;">
-        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">YTD Gross</div>
-        <div style="font-size:0.95rem;font-weight:600;color:#facc15;" id="projYTDRevenue">&mdash;</div>
-        <div style="font-size:0.65rem;color:var(--text-dim);" id="projYTDProduction"></div>
-      </div>
-      <div style="text-align:center;">
-        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Remaining</div>
-        <div style="font-size:0.95rem;font-weight:600;color:#a78bfa;" id="projRemaining">&mdash;</div>
-      </div>
     </div>
-    <div id="projYTDDetail" style="font-size:0.72rem; color:var(--text-dim); text-align:center; margin-bottom:8px;"></div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
       <p style="font-size:0.78rem; color:var(--text-dim); margin:0;">
         Estimated paychecks from recorded data
@@ -10307,43 +10297,13 @@ function renderProjectedAnnual() {
   const now = new Date();
   const thisYear = now.getFullYear();
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  function mk(offset) { const d = new Date(now.getFullYear(), now.getMonth() - offset, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
-
-  // Helper: get compensation $ for a work month (override or calculated)
-  function getMonthComp(workKey) {
-    const ov = data.overrides && data.overrides[workKey];
-    if (ov && ov.compTotal != null) return { amt: ov.compTotal, source: 'actual' };
-    if (!mt[workKey]) return null;
-    const amt = mt[workKey] * getPointValueForMonth(workKey) + getMonthlyStipendTotal(workKey);
-    return { amt, source: 'calc' };
-  }
 
   const decAdv = settings.decemberAdvance !== false;
-
-  // 3-month rolling average of actual monthly COMPENSATION (not points)
-  // Use last 3 complete work months that have data
-  // When decAdv: skip January ($0 — advanced in Dec) and halve December (includes Jan advance)
-  const recentComp = [];
-  for (let offset = 1; offset <= 8 && recentComp.length < 3; offset++) {
-    const key = mk(offset);
-    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-    const workMonth = d.getMonth();
-    if (decAdv && workMonth === 0) continue; // skip January (paycheck is $0)
-    const comp = getMonthComp(key);
-    if (comp) {
-      let amt = comp.amt;
-      if (decAdv && workMonth === 11) amt = round2(amt / 2); // December includes Jan advance, halve it
-      recentComp.push(amt);
-    }
-  }
-  const avgComp = recentComp.length > 0 ? round2(recentComp.reduce((a,b)=>a+b,0) / recentComp.length) : 0;
-  document.getElementById('projRollingAvg').textContent = avgComp > 0 ? '$' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) : '0';
 
   // YTD revenue received: only count paychecks already received (received on 20th of pay month)
   let ytdRevenue = 0;
   let ytdMonths = 0;
-  let ytdStipends = 0;
-  const receivedMonths = []; // track received month data for tooltip
+  const receivedMonths = [];
   for (let i = -1; i <= 11; i++) {
     const workDate = new Date(thisYear, i, 1);
     const wYear = workDate.getFullYear();
@@ -10359,7 +10319,6 @@ function renderProjectedAnnual() {
     if (!mt[workKey]) continue;
     const ov = data.overrides && data.overrides[workKey];
     const stip = getMonthlyStipendTotal(workKey);
-    ytdStipends += stip;
     let amt, source;
     if (ov && ov.compTotal != null) {
       amt = ov.compTotal; source = 'actual';
@@ -10372,63 +10331,59 @@ function renderProjectedAnnual() {
     receivedMonths.push({ payMonth: recvDate.getMonth(), amt, source });
   }
 
-  if (avgComp > 0) {
+  // Average of current-year received months where amt > $0
+  const nonZeroMonths = receivedMonths.filter(r => r.amt > 0);
+  const avgComp = nonZeroMonths.length > 0 ? round2(nonZeroMonths.reduce((a, r) => a + r.amt, 0) / nonZeroMonths.length) : 0;
+
+  // Don't show annual projection before first check is received (Feb 20)
+  const firstCheckDate = new Date(thisYear, 1, 20);
+  const hasReceivedFirstCheck = now >= firstCheckDate && ytdMonths > 0;
+
+  // Always show YTD earnings if any paychecks received
+  document.getElementById('projYTDRevenue').textContent = ytdMonths > 0
+    ? '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 })
+    : '\u2014';
+
+  if (hasReceivedFirstCheck && avgComp > 0) {
     const paychecksRemaining = 12 - ytdMonths;
     let projRemaining = round2(avgComp * paychecksRemaining);
-    // Under Dec advance: adjust projection for Dec double and Jan $0
-    // Build receivedMap early so we can check which months are still projected
+
+    // Dec advance adjustments for remaining projection
     const receivedMap = {};
     receivedMonths.forEach(r => { receivedMap[r.payMonth] = r; });
     if (decAdv && paychecksRemaining > 0) {
-      // If Dec paycheck hasn't been received, it will be double (includes Jan advance)
-      if (!receivedMap[11]) projRemaining = round2(projRemaining + avgComp);
-      // If Jan paycheck hasn't been received, it will be $0 (not avgComp)
-      if (!receivedMap[0]) projRemaining = round2(projRemaining - avgComp);
+      if (!receivedMap[11]) projRemaining = round2(projRemaining + avgComp); // Dec double
+      if (!receivedMap[0]) projRemaining = round2(projRemaining - avgComp); // Jan $0
     }
+
     const annual = round2(ytdRevenue + projRemaining);
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
-    document.getElementById('projYTDRevenue').textContent = '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 });
-    const ytdProduction = round2(ytdRevenue - ytdStipends);
-    document.getElementById('projYTDProduction').textContent = ytdStipends !== 0 ? '$' + ytdProduction.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' production' : '';
-    document.getElementById('projRemaining').textContent = '$' + projRemaining.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
     // Build month-by-month breakdown tooltip
-    let breakdownLines = [];
+    const receivedMap2 = {};
+    receivedMonths.forEach(r => { receivedMap2[r.payMonth] = r; });
+    const breakdownLines = [];
     for (let pm = 0; pm < 12; pm++) {
       const label = monthNames[pm];
       if (decAdv && pm === 0) {
         breakdownLines.push(label + ': $0 (Dec advance)');
-      } else if (receivedMap[pm]) {
-        const r = receivedMap[pm];
+      } else if (receivedMap2[pm]) {
+        const r = receivedMap2[pm];
         breakdownLines.push(label + ': $' + r.amt.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (' + r.source + ')');
       } else {
         breakdownLines.push(label + ': $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj)');
       }
     }
-    if (decAdv) {
-      const decIdx = 11;
-      if (!receivedMap[decIdx]) {
-        breakdownLines[decIdx] = 'Dec: $' + (avgComp * 2).toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj, +Jan)';
-      }
+    if (decAdv && !receivedMap2[11]) {
+      breakdownLines[11] = 'Dec: $' + (avgComp * 2).toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj, +Jan)';
     }
     breakdownLines.push('');
-    breakdownLines.push('Avg: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo (' + recentComp.length + '-mo avg)');
+    breakdownLines.push('Avg: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo (' + nonZeroMonths.length + ' month' + (nonZeroMonths.length !== 1 ? 's' : '') + ')');
     breakdownLines.push('Total: $' + annual.toLocaleString('en-US', {maximumFractionDigits:0}));
     document.getElementById('projAnnualTip').setAttribute('data-tip', breakdownLines.join('\n'));
-
-    let detail = `${ytdMonths} paycheck${ytdMonths !== 1 ? 's' : ''} received YTD \u2022 ${paychecksRemaining} paycheck${paychecksRemaining !== 1 ? 's' : ''} remaining`;
-    if (ytdStipends !== 0) {
-      const stipLabel = ytdStipends > 0 ? 'stipends' : 'net deductions';
-      detail += ` \u2022 ${ytdStipends < 0 ? '-' : ''}$${Math.abs(ytdStipends).toLocaleString('en-US', {maximumFractionDigits:0})} ${stipLabel} YTD`;
-    }
-    document.getElementById('projYTDDetail').textContent = detail;
   } else {
     document.getElementById('projAnnualIncome').innerHTML = '&mdash;';
-    document.getElementById('projYTDRevenue').innerHTML = '&mdash;';
-    document.getElementById('projYTDProduction').textContent = '';
-    document.getElementById('projRemaining').innerHTML = '&mdash;';
     document.getElementById('projAnnualTip').setAttribute('data-tip', '');
-    document.getElementById('projYTDDetail').textContent = 'Need data from prior months for projections';
   }
 }
 
