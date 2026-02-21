@@ -2447,8 +2447,9 @@ input.mil-time.invalid {
         <div style="font-size:0.95rem;font-weight:600;color:var(--accent2);"><span id="projAnnualIncome">&mdash;</span> <span class="info-icon" id="projAnnualTip" data-tip="" style="vertical-align:middle;">i</span></div>
       </div>
       <div style="text-align:center;">
-        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">YTD Received</div>
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">YTD Gross</div>
         <div style="font-size:0.95rem;font-weight:600;color:#facc15;" id="projYTDRevenue">&mdash;</div>
+        <div style="font-size:0.65rem;color:var(--text-dim);" id="projYTDProduction"></div>
       </div>
       <div style="text-align:center;">
         <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Remaining</div>
@@ -2532,7 +2533,7 @@ input.mil-time.invalid {
             </div>
           </div>
           <div style="margin-top:8px;">
-            <label style="display:block;font-size:0.7rem;color:var(--text-dim);margin-bottom:3px;">Compensation Total ($)</label>
+            <label style="display:block;font-size:0.7rem;color:var(--text-dim);margin-bottom:3px;">Pooled Compensation Total ($) <span style="font-style:italic;opacity:0.7;">— from compensation summary report</span></label>
             <input type="number" id="overrideCompTotal" min="0" step="0.01" placeholder="Calc: —" inputmode="decimal" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.8rem;box-sizing:border-box;">
           </div>
           <div style="margin-top:8px;display:flex;gap:8px;">
@@ -5102,8 +5103,8 @@ function calcCasePoints(caseData, shift, ignoreManual) {
     let caseEndMin = timeToMinutes(caseData.endTime);
     if (caseEndMin <= caseStartMin) caseEndMin += 1440;
     caseHours = (caseEndMin - caseStartMin) / 60;
-  } else {
-    // No end time: estimate with current time if case is today
+  } else if (caseData.startTime) {
+    // No end time but has start: estimate with current time if case is today
     const caseDate = caseData.shiftDate || (shift && shift.date);
     if (caseDate === effectiveWorkDate()) {
       const now = new Date();
@@ -5452,6 +5453,7 @@ document.querySelectorAll('.bottom-nav button[data-page]').forEach(btn => {
     closeDrawer();
     exitHistoryTutorialMode();
     if (typeof stopLiveTicker === 'function') stopLiveTicker();
+    if (typeof stopCasePreviewTicker === 'function') stopCasePreviewTicker();
     document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
@@ -5501,6 +5503,7 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     closeDrawer();
     exitHistoryTutorialMode();
     if (typeof stopLiveTicker === 'function') stopLiveTicker();
+    if (typeof stopCasePreviewTicker === 'function') stopCasePreviewTicker();
     document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
@@ -6549,8 +6552,16 @@ function updatePointPreview() {
   const tempCase = buildCaseFromForm();
   const shift = data.shifts[workingDate] || { date: workingDate, assignmentType: 'OR', isHoliday: false };
   const pts = calcCasePoints(tempCase, shift);
+  // Detect live estimate: start time present, no end time, working date is today
+  const isLiveEstimate = tempCase.startTime && !tempCase.endTime && workingDate === effectiveWorkDate();
   previewEl.classList.remove('hidden');
-  previewPts.textContent = pts.toFixed(2) + ' pts';
+  previewPts.textContent = pts.toFixed(2) + ' pts' + (isLiveEstimate ? ' (est.)' : '');
+  // Start/stop live ticker based on whether we're estimating with current time
+  if (isLiveEstimate) {
+    startCasePreviewTicker();
+  } else {
+    stopCasePreviewTicker();
+  }
 }
 
 function buildCaseFromForm() {
@@ -6582,7 +6593,8 @@ function buildCaseFromForm() {
     epiduralRounds: document.getElementById('apsEpiduralCount')?.value || 0,
     painRounds: document.getElementById('apsPainCount')?.value || 0,
     notes: document.getElementById('caseNotes')?.value || '',
-    caseNotes: document.getElementById('caseCaseNotes')?.value || ''
+    caseNotes: document.getElementById('caseCaseNotes')?.value || '',
+    shiftDate: workingDate
   };
 }
 
@@ -6646,6 +6658,7 @@ function resetCaseForm() {
   document.getElementById('casePointPreview').classList.add('hidden');
   document.getElementById('modifiersSection').removeAttribute('open');
   updateModifierTags();
+  stopCasePreviewTicker();
 }
 
 // ================================================================
@@ -6953,6 +6966,20 @@ function updateTodayRateChips() {
 // LIVE EARNING TICKER
 // ================================================================
 let liveTicker = null;
+let casePreviewTicker = null;
+
+function startCasePreviewTicker() {
+  if (casePreviewTicker) return;
+  casePreviewTicker = setInterval(() => {
+    const dePage = document.getElementById('page-dataentry');
+    if (!dePage || !dePage.classList.contains('active')) { stopCasePreviewTicker(); return; }
+    updatePointPreview();
+  }, 30000); // refresh every 30 seconds
+}
+
+function stopCasePreviewTicker() {
+  if (casePreviewTicker) { clearInterval(casePreviewTicker); casePreviewTicker = null; }
+}
 
 // Auto-update rate chips every 60 seconds (skipped when live ticker is running)
 setInterval(() => {
@@ -7423,6 +7450,7 @@ document.getElementById('weeklyToggleBtn').addEventListener('click', () => {
 function navigateToDataEntry() {
   closeDrawer();
   if (typeof stopLiveTicker === 'function') stopLiveTicker();
+  if (typeof stopCasePreviewTicker === 'function') stopCasePreviewTicker();
   document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-dataentry').classList.add('active');
@@ -8863,6 +8891,7 @@ function openShiftEdit(dateStr) {
 }
 
 function navigateBackFromDE() {
+  if (typeof stopCasePreviewTicker === 'function') stopCasePreviewTicker();
   if (returnToToday) {
     returnToToday = false;
     returnToShiftLogs = false;
@@ -9034,9 +9063,14 @@ function loadOverrideUI() {
       const prodAcc = calcAccuracy(calcProd, ov.prodPoints);
       if (prodAcc != null) accParts.push('Prod: ' + prodAcc.toFixed(1) + '%');
     }
-    if (ov.compTotal != null && calcComp > 0) {
-      const compAcc = calcAccuracy(calcComp, ov.compTotal);
-      if (compAcc != null) accParts.push('Comp: ' + compAcc.toFixed(1) + '%');
+    if (ov.compTotal != null) {
+      // Exclude stipends: compare production-only calculated vs actual minus stipend
+      const calcProdDollars = round2(pd.blended * pd.pv);
+      const actualProdDollars = round2(ov.compTotal - pd.stipend);
+      if (calcProdDollars > 0 && actualProdDollars > 0) {
+        const compAcc = calcAccuracy(calcProdDollars, actualProdDollars);
+        if (compAcc != null) accParts.push('Comp: ' + compAcc.toFixed(1) + '%');
+      }
     }
     if (accParts.length > 0) {
       statusHtml += '<br><span style="font-size:0.72rem;color:var(--text-dim);">Prediction: ' + accParts.join(' | ') + ' accurate</span>';
@@ -10318,13 +10352,13 @@ function renderProjectedAnnual() {
     if (recvDate.getFullYear() !== thisYear || recvDate > now) continue;
     if (!mt[workKey]) continue;
     const ov = data.overrides && data.overrides[workKey];
+    const stip = getMonthlyStipendTotal(workKey);
+    ytdStipends += stip;
     let amt, source;
     if (ov && ov.compTotal != null) {
       amt = ov.compTotal; source = 'actual';
     } else {
-      const stip = getMonthlyStipendTotal(workKey);
       amt = mt[workKey] * getPointValueForMonth(workKey) + stip;
-      ytdStipends += stip;
       source = 'calc';
     }
     ytdRevenue += amt;
@@ -10338,6 +10372,8 @@ function renderProjectedAnnual() {
     const annual = round2(ytdRevenue + projRemaining);
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projYTDRevenue').textContent = '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    const ytdProduction = round2(ytdRevenue - ytdStipends);
+    document.getElementById('projYTDProduction').textContent = ytdStipends > 0 ? '$' + ytdProduction.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' production' : '';
     document.getElementById('projRemaining').textContent = '$' + projRemaining.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
     // Build month-by-month breakdown tooltip
@@ -10372,6 +10408,7 @@ function renderProjectedAnnual() {
   } else {
     document.getElementById('projAnnualIncome').innerHTML = '&mdash;';
     document.getElementById('projYTDRevenue').innerHTML = '&mdash;';
+    document.getElementById('projYTDProduction').textContent = '';
     document.getElementById('projRemaining').innerHTML = '&mdash;';
     document.getElementById('projAnnualTip').setAttribute('data-tip', '');
     document.getElementById('projYTDDetail').textContent = 'Need data from prior months for projections';
