@@ -9043,7 +9043,7 @@ function loadOverrideUI() {
   // Compute calculated compensation for placeholder — reuse computePaycheckData for consistency with historical table
   const allMt = getMonthlyTotals();
   const pd = computePaycheckData(mk, allMt);
-  const calcComp = pd.calcPaycheck;
+  const calcComp = pd.calcProduction;
   compInput.placeholder = calcComp > 0 ? `Calculated: $${calcComp.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}` : 'Calculated: —';
   compInput.value = ov && ov.compTotal != null ? ov.compTotal : '';
 
@@ -9063,14 +9063,10 @@ function loadOverrideUI() {
       const prodAcc = calcAccuracy(calcProd, ov.prodPoints);
       if (prodAcc != null) accParts.push('Prod: ' + prodAcc.toFixed(1) + '%');
     }
-    if (ov.compTotal != null) {
-      // Exclude stipends: compare production-only calculated vs actual minus stipend
-      const calcProdDollars = round2(pd.blended * pd.pv);
-      const actualProdDollars = round2(ov.compTotal - pd.stipend);
-      if (calcProdDollars > 0 && actualProdDollars > 0) {
-        const compAcc = calcAccuracy(calcProdDollars, actualProdDollars);
-        if (compAcc != null) accParts.push('Comp: ' + compAcc.toFixed(1) + '%');
-      }
+    if (ov.compTotal != null && pd.calcProduction > 0 && ov.compTotal > 0) {
+      // Compare production-only: compTotal is already production-only (pooled comp report)
+      const compAcc = calcAccuracy(pd.calcProduction, ov.compTotal);
+      if (compAcc != null) accParts.push('Comp: ' + compAcc.toFixed(1) + '%');
     }
     if (accParts.length > 0) {
       statusHtml += '<br><span style="font-size:0.72rem;color:var(--text-dim);">Prediction: ' + accParts.join(' | ') + ' accurate</span>';
@@ -9600,15 +9596,14 @@ function computePaycheckData(workMk, mt) {
   const pv = getPointValueForMonth(workMk);
   const isConfirmedPV = settings.pointValues[workMk] != null;
   const stipend = getMonthlyStipendTotal(workMk);
-  let calcPaycheck = pv > 0 ? round2(blended * pv + stipend) : 0;
+  const calcProduction = pv > 0 ? round2(blended * pv) : 0;
+  let calcPaycheck = round2(calcProduction + stipend); // gross total (production + stipend)
   const ov = data.overrides[workMk];
   const hasOverride = ov && ov.compTotal != null;
-  const actualAmt = hasOverride ? ov.compTotal : null;
-  // Accuracy excludes stipends — compare production-only calc vs actual minus stipend
-  const calcProduction = pv > 0 ? round2(blended * pv) : 0;
-  const actualProduction = hasOverride ? actualAmt - stipend : null;
-  const accuracy = hasOverride && calcProduction > 0 && actualProduction > 0 ? calcAccuracy(calcProduction, actualProduction) : null;
-  return { workDate, payDate, blended, workKey: workMk, pv, isConfirmedPV, stipend, calcPaycheck, hasOverride, actualAmt, accuracy };
+  const actualAmt = hasOverride ? ov.compTotal : null; // production-only from pooled comp report
+  // Accuracy: compare production-only calc vs actual (compTotal is already production-only)
+  const accuracy = hasOverride && calcProduction > 0 && actualAmt > 0 ? calcAccuracy(calcProduction, actualAmt) : null;
+  return { workDate, payDate, blended, workKey: workMk, pv, isConfirmedPV, stipend, calcProduction, calcPaycheck, hasOverride, actualAmt, accuracy };
 }
 
 function getHistRangeMonths() {
@@ -9721,7 +9716,7 @@ function renderHistoricalTrends() {
   windowMonths.forEach(workMk => {
     const pd = computePaycheckData(workMk, mt);
     labels.push(monthNames[pd.workDate.getMonth()] + ' ' + pd.workDate.getFullYear());
-    const barVal = pd.hasOverride ? pd.actualAmt : pd.calcPaycheck;
+    const barVal = pd.hasOverride ? pd.actualAmt : pd.calcProduction;
     barValues.push(barVal);
     barColors.push(pd.hasOverride ? 'rgba(34,197,94,0.7)' : 'rgba(59,130,246,0.7)');
     barBorders.push(pd.hasOverride ? '#22c55e' : '#3b82f6');
@@ -9875,9 +9870,9 @@ function renderHistoricalComp() {
   let accSum = 0, accCount = 0;
   const visibleData = rangeMonths.map(workMk => {
     const pd = computePaycheckData(workMk, mt);
-    grandCalc += pd.calcPaycheck;
+    grandCalc += pd.calcProduction;
     if (pd.hasOverride) { grandActual += pd.actualAmt; hasAnyActual = true; }
-    else { grandActual += pd.calcPaycheck; }
+    else { grandActual += pd.calcProduction; }
     if (pd.accuracy != null) { accSum += pd.accuracy; accCount++; }
     return { workMk, ...pd };
   });
@@ -9904,7 +9899,7 @@ function renderHistoricalComp() {
     html += `<td style="padding:5px 3px;white-space:nowrap;overflow:hidden;">${workLabel}</td>`;
     html += `<td style="padding:5px 3px;text-align:right;color:var(--text-dim);">${d.blended.toFixed(1)}</td>`;
     html += `<td style="padding:5px 2px;text-align:right;"><input type="number" data-pvmonth="${d.workKey}" min="0" step="0.01" placeholder="${(settings.pointValue || 0).toFixed(0)}" value="${pvDisplay}" inputmode="decimal" style="max-width:54px;width:100%;padding:3px 4px;font-size:0.73rem;border-radius:4px;${pvBorder}background:var(--surface);color:var(--text);text-align:right;box-sizing:border-box;"></td>`;
-    html += `<td style="padding:5px 3px;text-align:right;color:var(--primary);">${d.pv > 0 ? '$' + d.calcPaycheck.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
+    html += `<td style="padding:5px 3px;text-align:right;color:var(--primary);">${d.pv > 0 ? '$' + d.calcProduction.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
     const actualDisplay = d.hasOverride
       ? '$' + d.actualAmt.toLocaleString('en-US', {maximumFractionDigits: 0})
       : '<span style="color:var(--text-dim);font-size:0.65rem;">tap</span>';
@@ -10327,11 +10322,19 @@ function renderProjectedAnnual() {
 
   // 3-month rolling average of actual monthly COMPENSATION (not points)
   // Use last 3 complete work months that have data
+  // When decAdv: skip January ($0 — advanced in Dec) and halve December (includes Jan advance)
   const recentComp = [];
-  for (let offset = 1; offset <= 6 && recentComp.length < 3; offset++) {
+  for (let offset = 1; offset <= 8 && recentComp.length < 3; offset++) {
     const key = mk(offset);
+    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const workMonth = d.getMonth();
+    if (decAdv && workMonth === 0) continue; // skip January (paycheck is $0)
     const comp = getMonthComp(key);
-    if (comp) recentComp.push(comp.amt);
+    if (comp) {
+      let amt = comp.amt;
+      if (decAdv && workMonth === 11) amt = round2(amt / 2); // December includes Jan advance, halve it
+      recentComp.push(amt);
+    }
   }
   const avgComp = recentComp.length > 0 ? round2(recentComp.reduce((a,b)=>a+b,0) / recentComp.length) : 0;
   document.getElementById('projRollingAvg').textContent = avgComp > 0 ? '$' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) : '0';
@@ -10371,7 +10374,17 @@ function renderProjectedAnnual() {
 
   if (avgComp > 0) {
     const paychecksRemaining = 12 - ytdMonths;
-    const projRemaining = round2(avgComp * paychecksRemaining);
+    let projRemaining = round2(avgComp * paychecksRemaining);
+    // Under Dec advance: adjust projection for Dec double and Jan $0
+    // Build receivedMap early so we can check which months are still projected
+    const receivedMap = {};
+    receivedMonths.forEach(r => { receivedMap[r.payMonth] = r; });
+    if (decAdv && paychecksRemaining > 0) {
+      // If Dec paycheck hasn't been received, it will be double (includes Jan advance)
+      if (!receivedMap[11]) projRemaining = round2(projRemaining + avgComp);
+      // If Jan paycheck hasn't been received, it will be $0 (not avgComp)
+      if (!receivedMap[0]) projRemaining = round2(projRemaining - avgComp);
+    }
     const annual = round2(ytdRevenue + projRemaining);
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
     document.getElementById('projYTDRevenue').textContent = '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -10380,8 +10393,6 @@ function renderProjectedAnnual() {
     document.getElementById('projRemaining').textContent = '$' + projRemaining.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
     // Build month-by-month breakdown tooltip
-    const receivedMap = {};
-    receivedMonths.forEach(r => { receivedMap[r.payMonth] = r; });
     let breakdownLines = [];
     for (let pm = 0; pm < 12; pm++) {
       const label = monthNames[pm];
