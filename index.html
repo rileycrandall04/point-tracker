@@ -3253,9 +3253,12 @@ input.mil-time.invalid {
       Map variant surgeon names to a single canonical name. Changes affect analytics for all users.
     </p>
     <div id="surgeonMappingList"></div>
-    <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeSurgeonMappingModal()">Cancel</button>
-      <button class="btn btn-primary btn-sm" onclick="saveSurgeonMappings()" style="width:auto;">Save Mappings</button>
+    <div class="modal-actions" style="justify-content:space-between;">
+      <button class="btn btn-danger btn-sm" onclick="resetSurgeonMappings()" style="font-size:0.72rem;">Reset All</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline btn-sm" onclick="closeSurgeonMappingModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="saveSurgeonMappings()" style="width:auto;">Save Mappings</button>
+      </div>
     </div>
   </div>
 </div>
@@ -11873,6 +11876,23 @@ async function saveSurgeonMappings() {
   } catch (err) {
     console.error('Failed to save surgeon mappings:', err);
     showToast('Error saving mappings');
+  }
+}
+
+async function resetSurgeonMappings() {
+  if (!isAdmin()) return;
+  if (!confirm('Reset all surgeon name mappings? Original names will be restored. This cannot be undone.')) return;
+  try {
+    await db.collection('surgeonMappings').doc('canonical').delete();
+    surgeonMappingsCache = {};
+    showToast('Surgeon mappings reset');
+    closeSurgeonMappingModal();
+    renderSurgeonEfficiency();
+    renderTopProcedures();
+    renderCollectiveCases();
+  } catch (err) {
+    console.error('Failed to reset surgeon mappings:', err);
+    showToast('Error resetting mappings');
   }
 }
 
