@@ -2120,7 +2120,7 @@ input.mil-time.invalid {
     <div id="weeklySummary" style="text-align:center;font-size:0.8rem;color:var(--text-dim);"></div>
   </div>
 
-  <button class="btn btn-danger btn-sm hidden" id="todaySignOutBtn" onclick="todaySignOut()" style="width:100%;margin-bottom:8px;">Sign Out</button>
+  <button class="btn btn-danger btn-sm hidden" id="todaySignOutBtn" onclick="shiftSignOut()" style="width:100%;margin-bottom:8px;">Sign Out of Shift</button>
 
   <div class="card" id="todayBreakdownCard" style="padding:12px 16px;">
     <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -3165,15 +3165,15 @@ input.mil-time.invalid {
   </div>
 </div>
 
-<!-- Sign Out Warning Modal -->
+<!-- Shift Sign Out Warning Modal -->
 <div class="modal-overlay hidden" id="signOutWarningModal" onclick="if(event.target===this)closeSignOutWarning()">
   <div class="modal" style="max-width:400px;">
     <h2 style="color:var(--danger);">Open Case Running</h2>
-    <p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:12px;">You have a case without an end time. Please close it before signing out:</p>
+    <p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:12px;">You have a case without an end time. Please close it before ending your shift:</p>
     <div id="signOutWarningCases"></div>
     <div class="modal-actions" style="flex-direction:column;gap:8px;margin-top:16px;">
       <button class="btn btn-outline btn-sm" onclick="closeSignOutWarning()" style="width:100%;">Cancel</button>
-      <button class="btn btn-danger btn-sm" onclick="forceSignOut()" style="width:100%;">Sign Out Anyway</button>
+      <button class="btn btn-danger btn-sm" onclick="forceShiftSignOut()" style="width:100%;">End Shift Anyway</button>
       <p style="font-size:0.7rem;color:var(--text-dim);text-align:center;margin:0;">This will set the current time as the end time for open cases</p>
     </div>
   </div>
@@ -6764,20 +6764,19 @@ function renderToday() {
   });
   document.getElementById('todayCaseList').innerHTML = listHtml;
 
-  // Show sign-out button when authenticated
+  // Show shift sign-out button only when clocked in (shift in progress)
   const signOutBtn = document.getElementById('todaySignOutBtn');
   if (signOutBtn) {
-    if (currentUser) signOutBtn.classList.remove('hidden');
+    if (shift && result.isInProgress) signOutBtn.classList.remove('hidden');
     else signOutBtn.classList.add('hidden');
   }
 }
 
-function todaySignOut() {
-  const date = effectiveWorkDate();
+function shiftSignOut() {
+  const date = workingDate;
   const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
   if (openCases.length === 0) {
-    if (!confirm('Sign out? Your data is saved in the cloud.')) return;
-    performSignOut();
+    openShiftEdit(date);
     return;
   }
   // Show warning modal with open case details
@@ -6806,8 +6805,8 @@ function goToOpenCase(caseId) {
   openCaseEdit(caseId);
 }
 
-async function forceSignOut() {
-  const date = effectiveWorkDate();
+function forceShiftSignOut() {
+  const date = workingDate;
   const now = new Date();
   const nowStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
   const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
@@ -6817,7 +6816,7 @@ async function forceSignOut() {
   });
   saveData(data);
   closeSignOutWarning();
-  performSignOut();
+  openShiftEdit(date);
 }
 
 async function performSignOut() {
