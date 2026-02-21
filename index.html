@@ -1640,7 +1640,7 @@ input.mil-time.invalid {
 
   <!-- Shift section (all existing shift HTML, IDs preserved) -->
   <div id="deShiftSection">
-    <button class="btn btn-sm btn-outline hidden" id="backToShiftLogsBtn" onclick="navigateToShiftLogs()" style="margin-bottom:10px;font-size:0.8rem;">&larr; Back to Shift Logs</button>
+    <button class="btn btn-sm btn-outline hidden" id="backToShiftLogsBtn" onclick="navigateBackFromDE()" style="margin-bottom:10px;font-size:0.8rem;">&larr; Shift Logs</button>
     <div class="hidden" id="editShiftBanner" style="background:rgba(59,130,246,0.15); border:1px solid var(--primary); border-radius:var(--radius); padding:10px 14px; margin-bottom:12px; font-size:0.82rem; color:var(--primary); font-weight:600;"></div>
     <div class="end-time-warning hidden" id="endTimeWarning">
       Shift end time is missing — AR points will be 0 until an end time is entered.
@@ -5386,6 +5386,7 @@ function getCaseTypeName(type) {
 let workingDate = effectiveWorkDate();
 let deShiftEditing = false;
 let returnToShiftLogs = false;
+let returnToToday = false;
 
 function setWorkingDate(d) {
   workingDate = d;
@@ -5456,6 +5457,7 @@ document.querySelectorAll('.bottom-nav button[data-page]').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('page-' + btn.dataset.page).classList.add('active');
     returnToShiftLogs = false;
+    returnToToday = false;
     if (btn.dataset.page === 'time') renderTimeTab();
     if (btn.dataset.page === 'today') { returnToDailyTab = false; renderToday(); }
     if (btn.dataset.page === 'dashboard') { switchDashboardTab(activeDashTab); }
@@ -5503,6 +5505,7 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
     returnToShiftLogs = false;
+    returnToToday = false;
     if (page === 'dataentry') loadDataEntryPage();
     if (page === 'settings') { /* no special init needed */ }
     if (page === 'history') { renderHistory(); }
@@ -6001,8 +6004,17 @@ function loadDataEntryPage() {
   renderDECaseList();
   updateDETally();
   initScanPage();
-  // Show/hide back button based on whether we came from Shift Logs
-  document.getElementById('backToShiftLogsBtn').classList.toggle('hidden', !returnToShiftLogs);
+  // Show/hide back button based on where we came from
+  const backBtn = document.getElementById('backToShiftLogsBtn');
+  if (returnToToday) {
+    backBtn.classList.remove('hidden');
+    backBtn.textContent = '← Today';
+  } else if (returnToShiftLogs) {
+    backBtn.classList.remove('hidden');
+    backBtn.textContent = '← Shift Logs';
+  } else {
+    backBtn.classList.add('hidden');
+  }
 }
 
 function updateDataEntryState() {
@@ -6143,7 +6155,17 @@ document.getElementById('deleteShiftDE').addEventListener('click', () => {
   updateDETally();
   renderShiftLogTable();
   renderToday();
-  if (returnToShiftLogs) {
+  if (returnToToday) {
+    returnToToday = false;
+    returnToShiftLogs = false;
+    document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const todayBtn = document.querySelector('.bottom-nav button[data-page="today"]');
+    if (todayBtn) todayBtn.classList.add('active');
+    document.getElementById('page-today').classList.add('active');
+    renderToday();
+    showToast('Shift deleted');
+  } else if (returnToShiftLogs) {
     navigateToShiftLogs();
   } else {
     showToast('Shift deleted');
@@ -6254,7 +6276,16 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     showToast('Shift saved!');
   }
   deShiftEditing = false;
-  if (returnToShiftLogs) {
+  if (returnToToday) {
+    returnToToday = false;
+    returnToShiftLogs = false;
+    document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const todayBtn = document.querySelector('.bottom-nav button[data-page="today"]');
+    if (todayBtn) todayBtn.classList.add('active');
+    document.getElementById('page-today').classList.add('active');
+    renderToday();
+  } else if (returnToShiftLogs) {
     navigateToShiftLogs();
   } else {
     updateDataEntryState();
@@ -6776,6 +6807,7 @@ function shiftSignOut() {
   const date = workingDate;
   const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
   if (openCases.length === 0) {
+    returnToToday = true;
     openShiftEdit(date);
     return;
   }
@@ -6816,6 +6848,7 @@ function forceShiftSignOut() {
   });
   saveData(data);
   closeSignOutWarning();
+  returnToToday = true;
   openShiftEdit(date);
 }
 
@@ -8827,6 +8860,21 @@ function openShiftEdit(dateStr) {
   deShiftEditing = true;
   returnToShiftLogs = true;
   navigateToDataEntry();
+}
+
+function navigateBackFromDE() {
+  if (returnToToday) {
+    returnToToday = false;
+    returnToShiftLogs = false;
+    document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const todayBtn = document.querySelector('.bottom-nav button[data-page="today"]');
+    if (todayBtn) todayBtn.classList.add('active');
+    document.getElementById('page-today').classList.add('active');
+    renderToday();
+  } else {
+    navigateToShiftLogs();
+  }
 }
 
 function navigateToShiftLogs() {
