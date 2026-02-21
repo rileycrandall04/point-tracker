@@ -663,6 +663,143 @@ textarea { resize: vertical; min-height: 60px; }
   color: var(--accent);
 }
 
+/* ===== SURGEON CASE EDITOR ===== */
+.sce-modal {
+  max-height: 90vh;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+.sce-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.sce-header h2 { margin: 0; font-size: 1rem; }
+.sce-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.sce-toolbar select, .sce-toolbar input[type="text"] {
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+.sce-toolbar input[type="text"] { flex: 1; min-width: 100px; }
+.sce-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  -webkit-overflow-scrolling: touch;
+}
+.sce-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.sce-row:last-child { border-bottom: none; }
+.sce-row.selected { background: rgba(99,102,241,0.08); }
+.sce-row input[type="checkbox"] {
+  margin-top: 4px;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+.sce-row-body { flex: 1; min-width: 0; }
+.sce-row-meta {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.sce-row-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sce-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sce-field label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  width: 58px;
+  flex-shrink: 0;
+}
+.sce-field input {
+  flex: 1;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 0.8rem;
+  min-width: 0;
+}
+.sce-field input.sce-dirty { border-color: var(--accent2); }
+.sce-footer {
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+}
+.sce-bulk-bar {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  background: var(--surface2);
+  border-radius: 6px;
+}
+.sce-bulk-bar.visible { display: flex; }
+.sce-bulk-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sce-bulk-row label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  width: 65px;
+  flex-shrink: 0;
+}
+.sce-bulk-row input {
+  flex: 1;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.8rem;
+  min-width: 0;
+}
+.sce-bulk-row button { flex-shrink: 0; }
+.sce-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sce-status {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
 /* ===== TAB SWITCHER ===== */
 .tab-bar {
   display: flex;
@@ -3263,6 +3400,49 @@ input.mil-time.invalid {
   </div>
 </div>
 
+<!-- Surgeon Case Editor Modal -->
+<div class="modal-overlay hidden" id="surgeonCaseEditorModal" onclick="if(event.target===this)closeSurgeonCaseEditor()">
+  <div class="modal sce-modal">
+    <div class="sce-header">
+      <h2>Edit Case Names</h2>
+      <button onclick="closeSurgeonCaseEditor()" style="background:none;border:none;color:var(--text);font-size:1.3rem;cursor:pointer;padding:0 4px;">&times;</button>
+    </div>
+    <div class="sce-toolbar">
+      <input type="checkbox" id="sceSelectAll" onchange="toggleSCESelectAll()" title="Select all">
+      <select id="sceSortKey" onchange="renderSCEList()">
+        <option value="date-desc">Date &#8595;</option>
+        <option value="date-asc">Date &#8593;</option>
+        <option value="surgeon-asc">Surgeon A-Z</option>
+        <option value="procedure-asc">Procedure A-Z</option>
+        <option value="contributor">Contributor</option>
+      </select>
+      <input type="text" id="sceFilter" placeholder="Search..." oninput="renderSCEList()">
+    </div>
+    <div class="sce-list" id="sceList"></div>
+    <div class="sce-footer">
+      <div class="sce-bulk-bar" id="sceBulkBar">
+        <div class="sce-bulk-row">
+          <label>Surgeon:</label>
+          <input type="text" id="sceBulkSurgeon" placeholder="Surgeon name">
+          <button class="btn btn-primary btn-sm" onclick="applySCEBulkEdit('surgeon')" style="padding:3px 10px;font-size:0.75rem;">Apply</button>
+        </div>
+        <div class="sce-bulk-row">
+          <label>Procedure:</label>
+          <input type="text" id="sceBulkProcedure" placeholder="Procedure name">
+          <button class="btn btn-primary btn-sm" onclick="applySCEBulkEdit('procedure')" style="padding:3px 10px;font-size:0.75rem;">Apply</button>
+        </div>
+      </div>
+      <div class="sce-footer-actions">
+        <span class="sce-status" id="sceStatus"></span>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline btn-sm" onclick="closeSurgeonCaseEditor()">Cancel</button>
+          <button class="btn btn-primary btn-sm" onclick="saveSCEChanges()">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Assignment Picker Bottom Sheet -->
 <div class="assign-picker-overlay hidden" id="assignPickerOverlay" onclick="if(event.target===this)closeAssignPicker()">
   <div class="assign-picker">
@@ -3521,6 +3701,7 @@ async function loadSharedCases() {
       }
       // Old docs may not have surgeon field
       if (!d.surgeon && d.surgeon !== '') d.surgeon = '';
+      d._docId = doc.id;
       sharedCasesCache.push(d);
     });
     sharedCasesLoaded = true;
@@ -11724,11 +11905,12 @@ function renderCollectiveCases() {
     html += `<div class="proc-case-item"><span>${escHtml(label)}</span><span>${count} case${count !== 1 ? 's' : ''}</span></div>`;
   });
   html += `</div>`;
+  html += `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:6px;">`;
+  html += `<button class="btn btn-outline btn-sm" onclick="openSurgeonCaseEditor()" style="width:100%;font-size:0.8rem;">&#9998; Edit Case Names</button>`;
   if (isAdmin()) {
-    html += `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">`;
-    html += `<button class="btn btn-outline btn-sm" onclick="openSurgeonMappingModal()" style="width:100%;font-size:0.8rem;">&#9998; Manage Surgeon Names</button>`;
-    html += `</div>`;
+    html += `<button class="btn btn-outline btn-sm" onclick="openSurgeonMappingModal()" style="width:100%;font-size:0.8rem;">&#128279; Manage Surgeon Mappings</button>`;
   }
+  html += `</div>`;
   el.innerHTML = html;
 }
 
@@ -11898,6 +12080,278 @@ async function resetSurgeonMappings() {
 
 function closeSurgeonMappingModal() {
   document.getElementById('surgeonMappingModal').classList.add('hidden');
+}
+
+// ---- Surgeon Case Editor ----
+let sceAllCases = [];
+let sceSelected = new Set();
+let sceDirty = new Set();
+
+function openSurgeonCaseEditor() {
+  const myUid = currentUser ? currentUser.uid : '';
+  const admin = isAdmin();
+  const uidLabels = {};
+  let otherIdx = 1;
+
+  sceAllCases = [];
+  sceSelected = new Set();
+  sceDirty = new Set();
+
+  // Personal cases
+  data.cases.forEach(c => {
+    sceAllCases.push({
+      _key: 'p_' + c.id,
+      source: 'personal',
+      id: c.id,
+      date: c.shiftDate || '',
+      procedure: c.procedure || '',
+      surgeon: (c.notes || '').trim(),
+      caseType: c.caseType || 'standard',
+      asaCode: c.asaCode || '',
+      startTime: c.startTime || '',
+      endTime: c.endTime || '',
+      contributor: 'You',
+      uid: myUid
+    });
+  });
+
+  // Shared cases (admin only, skip own to avoid duplicates)
+  if (admin) {
+    sharedCasesCache.forEach(sc => {
+      if (sc.uid === myUid) return;
+      if (!uidLabels[sc.uid]) uidLabels[sc.uid] = 'Contributor ' + otherIdx++;
+      sceAllCases.push({
+        _key: 's_' + (sc._docId || sc.uid + '_' + sc.shiftDate + '_' + sc.startTime),
+        source: 'shared',
+        _docId: sc._docId || '',
+        id: null,
+        date: sc.shiftDate || '',
+        procedure: sc.procedure || '',
+        surgeon: (sc.surgeon || '').trim(),
+        caseType: sc.caseType || 'standard',
+        asaCode: sc.asaCode || '',
+        startTime: sc.startTime || '',
+        endTime: sc.endTime || '',
+        contributor: uidLabels[sc.uid],
+        uid: sc.uid
+      });
+    });
+  }
+
+  document.getElementById('sceSelectAll').checked = false;
+  document.getElementById('sceFilter').value = '';
+  document.getElementById('sceSortKey').value = 'date-desc';
+  renderSCEList();
+  updateSCEStatus();
+  document.getElementById('surgeonCaseEditorModal').classList.remove('hidden');
+}
+
+function getSCESorted() {
+  const sortKey = document.getElementById('sceSortKey').value;
+  const filterText = (document.getElementById('sceFilter').value || '').toLowerCase().trim();
+  let list = sceAllCases;
+  if (filterText) {
+    list = list.filter(c =>
+      c.surgeon.toLowerCase().includes(filterText) ||
+      c.procedure.toLowerCase().includes(filterText) ||
+      c.date.includes(filterText) ||
+      c.contributor.toLowerCase().includes(filterText) ||
+      (c.asaCode || '').toLowerCase().includes(filterText) ||
+      getCaseTypeName(c.caseType).toLowerCase().includes(filterText)
+    );
+  }
+  const cmp = (a, b, key, dir) => {
+    const va = (a[key] || '').toLowerCase();
+    const vb = (b[key] || '').toLowerCase();
+    return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+  };
+  switch (sortKey) {
+    case 'date-desc': list.sort((a, b) => cmp(a, b, 'date', 'desc') || cmp(a, b, 'startTime', 'desc')); break;
+    case 'date-asc': list.sort((a, b) => cmp(a, b, 'date', 'asc') || cmp(a, b, 'startTime', 'asc')); break;
+    case 'surgeon-asc': list.sort((a, b) => cmp(a, b, 'surgeon', 'asc')); break;
+    case 'procedure-asc': list.sort((a, b) => cmp(a, b, 'procedure', 'asc')); break;
+    case 'contributor': list.sort((a, b) => cmp(a, b, 'contributor', 'asc') || cmp(a, b, 'date', 'desc')); break;
+  }
+  return list;
+}
+
+function renderSCEList() {
+  const list = getSCESorted();
+  const el = document.getElementById('sceList');
+  if (list.length === 0) {
+    el.innerHTML = '<p style="padding:20px;text-align:center;color:var(--text-dim);font-size:0.85rem;">No cases found.</p>';
+    return;
+  }
+  let html = '';
+  list.forEach(c => {
+    const checked = sceSelected.has(c._key) ? 'checked' : '';
+    const selectedCls = sceSelected.has(c._key) ? ' selected' : '';
+    const typeLabel = c.caseType === 'standard' ? (c.asaCode ? 'ASA ' + c.asaCode : '') : getCaseTypeName(c.caseType);
+    const timeStr = c.startTime ? (c.startTime + (c.endTime ? ' - ' + c.endTime : ' - ?')) : '';
+    const surgeonDirty = sceDirty.has(c._key + '_surgeon') ? ' sce-dirty' : '';
+    const procDirty = sceDirty.has(c._key + '_procedure') ? ' sce-dirty' : '';
+    html += `<div class="sce-row${selectedCls}" data-key="${escHtml(c._key)}">`;
+    html += `<input type="checkbox" ${checked} onchange="toggleSCERow('${escHtml(c._key)}')">`;
+    html += `<div class="sce-row-body">`;
+    html += `<div class="sce-row-meta">`;
+    html += `<span>${escHtml(c.date)}</span>`;
+    if (typeLabel) html += `<span>${escHtml(typeLabel)}</span>`;
+    if (timeStr) html += `<span>${escHtml(timeStr)}</span>`;
+    html += `<span>${escHtml(c.contributor)}</span>`;
+    html += `</div>`;
+    html += `<div class="sce-row-fields">`;
+    html += `<div class="sce-field"><label>Surgeon:</label><input type="text" value="${escHtml(c.surgeon)}" data-key="${escHtml(c._key)}" data-field="surgeon" class="${surgeonDirty}" oninput="markSCEDirty(this)"></div>`;
+    html += `<div class="sce-field"><label>Procedure:</label><input type="text" value="${escHtml(c.procedure)}" data-key="${escHtml(c._key)}" data-field="procedure" class="${procDirty}" oninput="markSCEDirty(this)"></div>`;
+    html += `</div></div></div>`;
+  });
+  el.innerHTML = html;
+}
+
+function markSCEDirty(input) {
+  const key = input.dataset.key + '_' + input.dataset.field;
+  const c = sceAllCases.find(x => x._key === input.dataset.key);
+  const original = c ? c[input.dataset.field] : '';
+  if (input.value.trim() !== original) {
+    sceDirty.add(key);
+    input.classList.add('sce-dirty');
+  } else {
+    sceDirty.delete(key);
+    input.classList.remove('sce-dirty');
+  }
+  updateSCEStatus();
+}
+
+function toggleSCERow(key) {
+  if (sceSelected.has(key)) sceSelected.delete(key);
+  else sceSelected.add(key);
+  const row = document.querySelector(`.sce-row[data-key="${key}"]`);
+  if (row) row.classList.toggle('selected', sceSelected.has(key));
+  updateSCEBulkBar();
+  updateSCEStatus();
+}
+
+function toggleSCESelectAll() {
+  const checked = document.getElementById('sceSelectAll').checked;
+  const visible = getSCESorted();
+  if (checked) {
+    visible.forEach(c => sceSelected.add(c._key));
+  } else {
+    visible.forEach(c => sceSelected.delete(c._key));
+  }
+  renderSCEList();
+  updateSCEBulkBar();
+  updateSCEStatus();
+}
+
+function updateSCEBulkBar() {
+  const bar = document.getElementById('sceBulkBar');
+  bar.classList.toggle('visible', sceSelected.size > 0);
+}
+
+function updateSCEStatus() {
+  const status = document.getElementById('sceStatus');
+  const parts = [];
+  if (sceSelected.size > 0) parts.push(sceSelected.size + ' selected');
+  if (sceDirty.size > 0) parts.push(sceDirty.size + ' edited');
+  status.textContent = parts.join(' \u2022 ') || sceAllCases.length + ' cases';
+}
+
+function applySCEBulkEdit(field) {
+  const inputId = field === 'surgeon' ? 'sceBulkSurgeon' : 'sceBulkProcedure';
+  const value = document.getElementById(inputId).value.trim();
+  if (!value) return;
+  sceSelected.forEach(key => {
+    const input = document.querySelector(`.sce-field input[data-key="${key}"][data-field="${field}"]`);
+    if (input) {
+      input.value = value;
+      markSCEDirty(input);
+    }
+  });
+  document.getElementById(inputId).value = '';
+  showToast('Applied to ' + sceSelected.size + ' case' + (sceSelected.size !== 1 ? 's' : ''));
+}
+
+async function saveSCEChanges() {
+  // Collect all dirty fields from the DOM
+  const dirtyInputs = document.querySelectorAll('.sce-field input.sce-dirty');
+  if (dirtyInputs.length === 0) {
+    showToast('No changes to save');
+    return;
+  }
+  // Group changes by case key
+  const changes = {};
+  dirtyInputs.forEach(input => {
+    const key = input.dataset.key;
+    const field = input.dataset.field;
+    if (!changes[key]) changes[key] = {};
+    changes[key][field] = input.value.trim();
+  });
+
+  let personalUpdated = 0;
+  let sharedUpdated = 0;
+  const sharedBatch = [];
+
+  for (const [key, fields] of Object.entries(changes)) {
+    const c = sceAllCases.find(x => x._key === key);
+    if (!c) continue;
+    if (c.source === 'personal') {
+      const caseObj = data.cases.find(x => x.id === c.id);
+      if (!caseObj) continue;
+      if (fields.surgeon !== undefined) caseObj.notes = fields.surgeon;
+      if (fields.procedure !== undefined) caseObj.procedure = fields.procedure;
+      // Update the sceAllCases entry too
+      if (fields.surgeon !== undefined) c.surgeon = fields.surgeon;
+      if (fields.procedure !== undefined) c.procedure = fields.procedure;
+      // Sync shared case
+      const shift = data.shifts[caseObj.shiftDate];
+      writeSharedCase(caseObj, shift);
+      personalUpdated++;
+    } else if (c.source === 'shared' && c._docId) {
+      const updateObj = {};
+      if (fields.surgeon !== undefined) { updateObj.surgeon = fields.surgeon; c.surgeon = fields.surgeon; }
+      if (fields.procedure !== undefined) { updateObj.procedure = fields.procedure; c.procedure = fields.procedure; }
+      updateObj.updatedAt = new Date().toISOString();
+      sharedBatch.push({ docId: c._docId, update: updateObj });
+      // Also update sharedCasesCache
+      const sc = sharedCasesCache.find(x => x._docId === c._docId);
+      if (sc) {
+        if (fields.surgeon !== undefined) sc.surgeon = fields.surgeon;
+        if (fields.procedure !== undefined) sc.procedure = fields.procedure;
+      }
+      sharedUpdated++;
+    }
+  }
+
+  // Save personal data
+  if (personalUpdated > 0) {
+    saveData();
+  }
+
+  // Save shared cases to Firestore
+  for (const item of sharedBatch) {
+    try {
+      await db.collection('sharedCases').doc(item.docId).update(item.update);
+    } catch (err) {
+      console.error('Failed to update shared case ' + item.docId, err);
+    }
+  }
+
+  sceDirty.clear();
+  const total = personalUpdated + sharedUpdated;
+  showToast(total + ' case' + (total !== 1 ? 's' : '') + ' updated');
+  closeSurgeonCaseEditor();
+  renderSurgeonEfficiency();
+  renderTopProcedures();
+  renderCollectiveCases();
+}
+
+function closeSurgeonCaseEditor() {
+  if (sceDirty.size > 0) {
+    if (!confirm('You have unsaved changes. Discard them?')) return;
+  }
+  sceDirty.clear();
+  sceSelected.clear();
+  document.getElementById('surgeonCaseEditorModal').classList.add('hidden');
 }
 
 function renderCaseMix() {
