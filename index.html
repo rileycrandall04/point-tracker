@@ -9132,8 +9132,17 @@ function addStipendRow(container, label, amount) {
   row.querySelector('.stip-remove').addEventListener('click', () => {
     row.remove();
     if (container.children.length === 0) addStipendRow(container, '', '');
+    const collapseBody = document.getElementById('compStipendsBody');
+    if (collapseBody && collapseBody.style.maxHeight && collapseBody.style.maxHeight !== '0px') {
+      collapseBody.style.maxHeight = collapseBody.scrollHeight + 'px';
+    }
   });
   container.appendChild(row);
+  // Expand collapse body to fit new content
+  const collapseBody = document.getElementById('compStipendsBody');
+  if (collapseBody && collapseBody.style.maxHeight && collapseBody.style.maxHeight !== '0px') {
+    collapseBody.style.maxHeight = collapseBody.scrollHeight + 'px';
+  }
 }
 
 function updateStipendStatus() {
