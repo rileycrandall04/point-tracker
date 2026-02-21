@@ -2137,6 +2137,8 @@ input.mil-time.invalid {
     </div>
     <button type="button" class="btn btn-primary" id="todayAddCasesBtn" style="margin-top:12px;">+ Add Cases</button>
   </div>
+
+  <button class="btn btn-danger btn-sm hidden" id="todaySignOutBtn" onclick="todaySignOut()" style="width:100%;margin-top:4px;">Sign Out</button>
 </div>
 
 <!-- DASHBOARD PAGE -->
@@ -3159,6 +3161,20 @@ input.mil-time.invalid {
         <button class="btn btn-outline btn-sm" id="cancelCaseEdit">Cancel</button>
         <button class="btn btn-primary btn-sm" id="saveCaseEdit" style="width:auto;">Save</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sign Out Warning Modal -->
+<div class="modal-overlay hidden" id="signOutWarningModal" onclick="if(event.target===this)closeSignOutWarning()">
+  <div class="modal" style="max-width:400px;">
+    <h2 style="color:var(--danger);">Open Case Running</h2>
+    <p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:12px;">You have a case without an end time. Please close it before signing out:</p>
+    <div id="signOutWarningCases"></div>
+    <div class="modal-actions" style="flex-direction:column;gap:8px;margin-top:16px;">
+      <button class="btn btn-outline btn-sm" onclick="closeSignOutWarning()" style="width:100%;">Cancel</button>
+      <button class="btn btn-danger btn-sm" onclick="forceSignOut()" style="width:100%;">Sign Out Anyway</button>
+      <p style="font-size:0.7rem;color:var(--text-dim);text-align:center;margin:0;">This will set the current time as the end time for open cases</p>
     </div>
   </div>
 </div>
@@ -6747,6 +6763,69 @@ function renderToday() {
       </div>`;
   });
   document.getElementById('todayCaseList').innerHTML = listHtml;
+
+  // Show sign-out button when authenticated
+  const signOutBtn = document.getElementById('todaySignOutBtn');
+  if (signOutBtn) {
+    if (currentUser) signOutBtn.classList.remove('hidden');
+    else signOutBtn.classList.add('hidden');
+  }
+}
+
+function todaySignOut() {
+  const date = effectiveWorkDate();
+  const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
+  if (openCases.length === 0) {
+    if (!confirm('Sign out? Your data is saved in the cloud.')) return;
+    performSignOut();
+    return;
+  }
+  // Show warning modal with open case details
+  const el = document.getElementById('signOutWarningCases');
+  let html = '';
+  openCases.forEach(c => {
+    const name = c.procedure || c.notes || getCaseTypeName(c.caseType) || 'Case';
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;" onclick="goToOpenCase('${c.id}')">`;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;">`;
+    html += `<span style="font-weight:600;font-size:0.85rem;">${escHtml(name)}</span>`;
+    html += `<span style="font-size:0.75rem;color:var(--accent2);">${c.startTime} - now</span>`;
+    html += `</div>`;
+    html += `<div style="font-size:0.72rem;color:var(--primary);margin-top:4px;">Tap to edit end time &rarr;</div>`;
+    html += `</div>`;
+  });
+  el.innerHTML = html;
+  document.getElementById('signOutWarningModal').classList.remove('hidden');
+}
+
+function closeSignOutWarning() {
+  document.getElementById('signOutWarningModal').classList.add('hidden');
+}
+
+function goToOpenCase(caseId) {
+  closeSignOutWarning();
+  openCaseEdit(caseId);
+}
+
+async function forceSignOut() {
+  const date = effectiveWorkDate();
+  const now = new Date();
+  const nowStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
+  openCases.forEach(c => {
+    c.endTime = nowStr;
+    writeSharedCase(c, data.shifts[c.shiftDate]);
+  });
+  saveData(data);
+  closeSignOutWarning();
+  performSignOut();
+}
+
+async function performSignOut() {
+  firestoreSyncEnabled = false;
+  currentUser = null;
+  [STORAGE_KEY, SETTINGS_KEY, QGENDA_KEY, PROD_KEY, RECON_DECISIONS_KEY, SHIFT_RECON_DECISIONS_KEY].forEach(k => localStorage.removeItem(k));
+  await auth.signOut();
+  document.getElementById('authOverlay').classList.remove('hidden');
 }
 
 function updateTodayRateChips() {
@@ -15670,11 +15749,7 @@ document.getElementById('googleSignInBtn').addEventListener('click', async () =>
 
 document.getElementById('signOutBtn').addEventListener('click', async () => {
   if (!confirm('Sign out? Your data is saved in the cloud.')) return;
-  firestoreSyncEnabled = false;
-  currentUser = null;
-  [STORAGE_KEY, SETTINGS_KEY, QGENDA_KEY, PROD_KEY, RECON_DECISIONS_KEY, SHIFT_RECON_DECISIONS_KEY].forEach(k => localStorage.removeItem(k));
-  await auth.signOut();
-  document.getElementById('authOverlay').classList.remove('hidden');
+  performSignOut();
 });
 
 function updateAccountUI(user) {
