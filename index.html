@@ -2444,15 +2444,21 @@ input.mil-time.invalid {
       <span style="font-size:0.78rem;font-weight:600;">Time Summary</span>
       <span style="font-size:0.68rem;color:var(--text-dim);">Past 3 Months</span>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;text-align:center;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 8px;text-align:center;margin-bottom:6px;">
       <div>
-        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Hrs/Mo</div>
-        <div style="font-size:0.9rem;font-weight:600;color:var(--primary);" id="timeAvgMonth">0</div>
+        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Pts/Hr</div>
+        <div style="font-size:0.9rem;font-weight:600;color:var(--accent2);" id="timeAvgPtsHr">0</div>
       </div>
       <div>
-        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Hrs/Wk</div>
-        <div style="font-size:0.9rem;font-weight:600;color:var(--accent);" id="timeAvgWeek">0</div>
+        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Clocked Hrs/Wk</div>
+        <div style="font-size:0.9rem;font-weight:600;color:var(--primary);" id="timeClockedWk">0</div>
       </div>
+      <div>
+        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Avail Hrs/Wk</div>
+        <div style="font-size:0.9rem;font-weight:600;color:var(--accent);" id="timeAvailWk">0</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;text-align:center;">
       <div>
         <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;">Avg Start</div>
         <div style="font-size:0.9rem;font-weight:600;color:#facc15;" id="timeAvgStart">--:--</div>
@@ -11352,17 +11358,28 @@ function getRecentShifts(months) {
 function renderTimeSummary() {
   const recent = getRecentShifts(3);
   if (recent.length === 0) {
-    document.getElementById('timeAvgMonth').textContent = '0';
-    document.getElementById('timeAvgWeek').textContent = '0';
+    document.getElementById('timeAvgPtsHr').textContent = '0';
+    document.getElementById('timeClockedWk').textContent = '0';
+    document.getElementById('timeAvailWk').textContent = '0';
     document.getElementById('timeAvgStart').textContent = '--:--';
     document.getElementById('timeAvgEnd').textContent = '--:--';
     return;
   }
-  let totalHours = 0, totalStartMin = 0, totalEndMin = 0, count = 0;
+  let totalClockedHrs = 0, totalAvailHrs = 0, totalPoints = 0;
+  let totalStartMin = 0, totalEndMin = 0, count = 0;
   recent.forEach(s => {
+    if (!s.assignmentType || s.assignmentType === 'vacation' || s.assignmentType === 'forced_off' || s.forcedOff) return;
     const hrs = calcShiftHours(s);
+    const st = calcShiftTotal(s);
+    totalPoints += st.total;
+    totalClockedHrs += hrs;
+    // Availability: 24 hrs for pager-pay-eligible call shifts
+    if (UNRESTRICTED_CALL_TYPES.has(s.assignmentType)) {
+      totalAvailHrs += 24;
+    } else {
+      totalAvailHrs += hrs;
+    }
     if (hrs > 0) {
-      totalHours += hrs;
       const entries = s.timeEntries || [{ start: s.startTime, end: s.endTime }];
       totalStartMin += timeToMinutes(entries[0].start);
       const lastEnd = entries[entries.length - 1].end;
@@ -11370,10 +11387,12 @@ function renderTimeSummary() {
       count++;
     }
   });
-  const avgMonthHrs = count > 0 ? round2(totalHours / 3) : 0;
-  const avgWeekHrs = count > 0 ? round2(totalHours / 13) : 0; // ~13 weeks in 3 months
-  document.getElementById('timeAvgMonth').textContent = avgMonthHrs.toFixed(0);
-  document.getElementById('timeAvgWeek').textContent = avgWeekHrs.toFixed(0);
+  const avgPtsHr = totalClockedHrs > 0 ? round2(totalPoints / totalClockedHrs) : 0;
+  const avgClockedWk = round2(totalClockedHrs / 13); // ~13 weeks in 3 months
+  const avgAvailWk = round2(totalAvailHrs / 13);
+  document.getElementById('timeAvgPtsHr').textContent = avgPtsHr.toFixed(1);
+  document.getElementById('timeClockedWk').textContent = avgClockedWk.toFixed(0);
+  document.getElementById('timeAvailWk').textContent = avgAvailWk.toFixed(0);
   if (count > 0) {
     const avgSM = Math.round(totalStartMin / count);
     const avgEM = Math.round(totalEndMin / count);
