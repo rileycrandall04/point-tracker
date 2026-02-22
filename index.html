@@ -2749,9 +2749,14 @@ input.mil-time.invalid {
     </div>
   </div>
 
-  <!-- 8. Paycheck Tracking -->
-  <div class="card hidden" id="paycheckTrackingCard">
-    <h2>Paycheck Tracking</h2>
+  <!-- 8. Paycheck Tracking (collapsible) -->
+  <div class="card collapse-section" id="paycheckTrackingCard">
+    <div class="collapse-header" onclick="toggleCollapse('paycheckTrack')">
+      <h3>Paycheck Tracking</h3>
+      <span class="arrow" id="paycheckTrackArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="paycheckTrackBody">
+      <div style="padding-top:12px;">
     <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px;flex-wrap:wrap;">
       <div style="flex:1;min-width:120px;">
         <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:2px;">Month</label>
@@ -2778,6 +2783,8 @@ input.mil-time.invalid {
         <button class="btn btn-outline btn-sm" onclick="paycheckPageNav(-1)" id="paycheckPrevBtn">&larr; Prev</button>
         <span style="font-size:0.75rem;color:var(--text-dim);" id="paycheckPageLabel"></span>
         <button class="btn btn-outline btn-sm" onclick="paycheckPageNav(1)" id="paycheckNextBtn">Next &rarr;</button>
+      </div>
+    </div>
       </div>
     </div>
   </div>
@@ -2897,17 +2904,6 @@ input.mil-time.invalid {
     </p>
   </div>
 
-  <!-- Paycheck Tracking -->
-  <div class="card" style="margin-top:12px;">
-    <h2>Paycheck Tracking</h2>
-    <label class="toggle-row">
-      <span>Track monthly bank deposits on the Compensation page</span>
-      <span class="toggle-switch">
-        <input type="checkbox" id="paycheckTrackingToggle">
-        <span class="slider"></span>
-      </span>
-    </label>
-  </div>
 
   <!-- Export / Import -->
   <div class="card">
@@ -10336,8 +10332,6 @@ function renderEarningsEstimator() {
 function renderPaycheckCard() {
   const card = document.getElementById('paycheckTrackingCard');
   if (!card) return;
-  if (settings.paycheckTracking !== true) { card.classList.add('hidden'); return; }
-  card.classList.remove('hidden');
   // Default month input to current month
   const mi = document.getElementById('paycheckMonth');
   if (mi && !mi.value) {
@@ -13203,16 +13197,6 @@ shareToggle.addEventListener('change', () => {
     deleteAllUserSharedCases();
     showToast('Data sharing disabled — shared cases removed');
   }
-});
-
-// Paycheck tracking toggle
-const paycheckToggle = document.getElementById('paycheckTrackingToggle');
-paycheckToggle.checked = settings.paycheckTracking === true; // default off
-paycheckToggle.addEventListener('change', () => {
-  settings.paycheckTracking = paycheckToggle.checked;
-  saveSettings(settings);
-  renderPaycheckCard();
-  showToast(settings.paycheckTracking ? 'Paycheck tracking enabled' : 'Paycheck tracking hidden');
 });
 
 // Vision API key
