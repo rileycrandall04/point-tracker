@@ -2766,6 +2766,10 @@ input.mil-time.invalid {
         <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:2px;">Amount Deposited</label>
         <input type="number" id="paycheckAmount" class="text-input" placeholder="$0.00" min="0" step="0.01" style="width:100%;font-size:0.85rem;">
       </div>
+      <div style="flex:1;min-width:120px;">
+        <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:2px;">Retirement Contribution</label>
+        <input type="number" id="paycheckRetirement" class="text-input" placeholder="$0.00" min="0" step="0.01" style="width:100%;font-size:0.85rem;">
+      </div>
       <button class="btn btn-primary btn-sm" onclick="savePaycheckEntry()" style="height:36px;white-space:nowrap;">Save</button>
     </div>
     <div style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;" id="paycheckRangeBtns">
@@ -10373,14 +10377,23 @@ function setPaycheckRange(range) {
 function savePaycheckEntry() {
   const mi = document.getElementById('paycheckMonth');
   const ai = document.getElementById('paycheckAmount');
+  const ri = document.getElementById('paycheckRetirement');
   const month = mi.value;
   const amount = parseFloat(ai.value);
+  const retirement = parseFloat(ri.value) || 0;
   if (!month) { showToast('Select a month'); return; }
   if (isNaN(amount) || amount < 0) { showToast('Enter a valid amount'); return; }
   if (!data.paychecks) data.paychecks = {};
+  if (!data.retirement) data.retirement = {};
   data.paychecks[month] = amount;
+  if (retirement > 0) {
+    data.retirement[month] = retirement;
+  } else {
+    delete data.retirement[month];
+  }
   saveData(data);
   ai.value = '';
+  ri.value = '';
   showToast('Paycheck saved');
   renderPaycheckChart();
   renderPaycheckTable();
@@ -10389,6 +10402,7 @@ function savePaycheckEntry() {
 function deletePaycheckEntry(month) {
   if (!confirm('Delete paycheck entry for ' + month + '?')) return;
   delete data.paychecks[month];
+  if (data.retirement) delete data.retirement[month];
   saveData(data);
   showToast('Entry deleted');
   renderPaycheckChart();
@@ -10406,6 +10420,7 @@ function renderPaycheckChart() {
     return monthNames[parseInt(mo) - 1] + ' ' + y.slice(2);
   });
   const values = months.map(m => data.paychecks[m] || 0);
+  const retValues = months.map(m => (data.retirement || {})[m] || 0);
 
   if (paycheckChartInstance) paycheckChartInstance.destroy();
 
@@ -10414,8 +10429,10 @@ function renderPaycheckChart() {
     return;
   }
 
-  const nonZero = values.filter(v => v > 0);
+  const totals = values.map((v, i) => v + retValues[i]);
+  const nonZero = totals.filter(v => v > 0);
   const avg = nonZero.length >= 2 ? round2(nonZero.reduce((a, b) => a + b, 0) / nonZero.length) : 0;
+  const hasRetirement = retValues.some(v => v > 0);
 
   const datasets = [{
     label: 'Deposit',
@@ -10423,13 +10440,26 @@ function renderPaycheckChart() {
     backgroundColor: 'rgba(59,130,246,0.7)',
     borderColor: '#3b82f6',
     borderWidth: 1,
-    borderRadius: 4
+    borderRadius: hasRetirement ? 0 : 4,
+    stack: 'paycheck'
   }];
+
+  if (hasRetirement) {
+    datasets.push({
+      label: 'Retirement',
+      data: retValues,
+      backgroundColor: 'rgba(34,197,94,0.45)',
+      borderColor: 'rgba(34,197,94,0.7)',
+      borderWidth: 1,
+      borderRadius: 4,
+      stack: 'paycheck'
+    });
+  }
 
   if (avg > 0) {
     datasets.push({
       label: 'Average',
-      data: values.map(() => avg),
+      data: totals.map(() => avg),
       type: 'line',
       borderColor: '#f59e0b',
       borderWidth: 2,
@@ -10445,19 +10475,27 @@ function renderPaycheckChart() {
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: { display: hasRetirement, labels: { boxWidth: 12, font: { size: 10 }, color: '#94a3b8' } },
         tooltip: {
           callbacks: {
             label: function(context) {
-              if (context.dataset.label === 'Average') return 'Avg: $' + context.raw.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-              return '$' + context.raw.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+              const fmt = '$' + context.raw.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+              if (context.dataset.label === 'Average') return 'Avg: ' + fmt;
+              if (context.dataset.label === 'Retirement') return 'Retirement: ' + fmt;
+              return 'Deposit: ' + fmt;
+            },
+            afterBody: function(contexts) {
+              if (!hasRetirement) return '';
+              const idx = contexts[0].dataIndex;
+              const total = totals[idx];
+              return 'Total: $' + total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
             }
           }
         }
       },
       scales: {
-        y: { beginAtZero: true, ticks: { color: '#94a3b8', callback: function(v) { return '$' + v.toLocaleString(); } }, grid: { color: 'rgba(71,85,105,0.3)' } },
-        x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+        y: { beginAtZero: true, stacked: true, ticks: { color: '#94a3b8', callback: function(v) { return '$' + v.toLocaleString(); } }, grid: { color: 'rgba(71,85,105,0.3)' } },
+        x: { stacked: true, ticks: { color: '#94a3b8' }, grid: { display: false } }
       }
     }
   });
@@ -10492,38 +10530,53 @@ function renderPaycheckTable() {
     return;
   }
 
+  const hasRetirement = months.some(m => ((data.retirement || {})[m] || 0) > 0);
+  const fmt = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
   let html = '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">';
   html += '<thead><tr style="border-bottom:2px solid var(--border);text-align:left;">';
   html += '<th style="padding:5px 4px;color:var(--text-dim);font-weight:600;font-size:0.72rem;">Month</th>';
-  html += '<th style="padding:5px 4px;color:var(--text-dim);font-weight:600;font-size:0.72rem;text-align:right;">Amount</th>';
+  html += '<th style="padding:5px 4px;color:var(--text-dim);font-weight:600;font-size:0.72rem;text-align:right;">Deposit</th>';
+  if (hasRetirement) html += '<th style="padding:5px 4px;color:var(--text-dim);font-weight:600;font-size:0.72rem;text-align:right;">Retire</th>';
+  if (hasRetirement) html += '<th style="padding:5px 4px;color:var(--text-dim);font-weight:600;font-size:0.72rem;text-align:right;">Total</th>';
   html += '<th style="padding:5px 4px;width:40px;"></th>';
   html += '</tr></thead><tbody>';
 
-  let total = 0;
+  let totalDeposit = 0, totalRetire = 0;
   months.forEach((m, i) => {
     const amt = data.paychecks[m] || 0;
-    total += amt;
+    const ret = (data.retirement || {})[m] || 0;
+    totalDeposit += amt;
+    totalRetire += ret;
+    const rowTotal = amt + ret;
     const [y, mo] = m.split('-');
     const label = monthNames[parseInt(mo) - 1] + ' ' + y;
     const bg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
     html += `<tr style="border-bottom:1px solid var(--border);background:${bg};">`;
     html += `<td style="padding:6px 4px;">${label}</td>`;
-    html += `<td style="padding:6px 4px;text-align:right;font-weight:600;color:var(--primary);">$${amt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
+    html += `<td style="padding:6px 4px;text-align:right;font-weight:600;color:var(--primary);">${fmt(amt)}</td>`;
+    if (hasRetirement) html += `<td style="padding:6px 4px;text-align:right;font-weight:600;color:#22c55e;">${ret > 0 ? fmt(ret) : '—'}</td>`;
+    if (hasRetirement) html += `<td style="padding:6px 4px;text-align:right;font-weight:600;color:var(--text);">${fmt(rowTotal)}</td>`;
     html += `<td style="padding:6px 4px;text-align:center;"><button onclick="deletePaycheckEntry('${m}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:0.8rem;padding:2px 6px;" title="Delete">&times;</button></td>`;
     html += '</tr>';
   });
 
   // Total row
+  const grandTotal = totalDeposit + totalRetire;
   html += `<tr style="border-top:2px solid var(--border);">`;
   html += `<td style="padding:6px 4px;font-weight:700;">Total (${months.length} mo)</td>`;
-  html += `<td style="padding:6px 4px;text-align:right;font-weight:700;color:var(--accent);">$${total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
+  html += `<td style="padding:6px 4px;text-align:right;font-weight:700;color:var(--accent);">${fmt(totalDeposit)}</td>`;
+  if (hasRetirement) html += `<td style="padding:6px 4px;text-align:right;font-weight:700;color:#22c55e;">${fmt(totalRetire)}</td>`;
+  if (hasRetirement) html += `<td style="padding:6px 4px;text-align:right;font-weight:700;color:var(--accent);">${fmt(grandTotal)}</td>`;
   html += `<td></td></tr>`;
 
   // Average row
-  const avg = months.length > 0 ? total / months.length : 0;
+  const avg = months.length > 0 ? grandTotal / months.length : 0;
   html += `<tr>`;
   html += `<td style="padding:4px 4px;font-size:0.75rem;color:var(--text-dim);">Monthly Avg</td>`;
-  html += `<td style="padding:4px 4px;text-align:right;font-size:0.75rem;color:var(--text-dim);">$${avg.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
+  html += `<td style="padding:4px 4px;text-align:right;font-size:0.75rem;color:var(--text-dim);">${fmt(months.length > 0 ? totalDeposit / months.length : 0)}</td>`;
+  if (hasRetirement) html += `<td style="padding:4px 4px;text-align:right;font-size:0.75rem;color:var(--text-dim);">${fmt(months.length > 0 ? totalRetire / months.length : 0)}</td>`;
+  if (hasRetirement) html += `<td style="padding:4px 4px;text-align:right;font-size:0.75rem;color:var(--text-dim);">${fmt(avg)}</td>`;
   html += `<td></td></tr>`;
 
   html += '</tbody></table>';
