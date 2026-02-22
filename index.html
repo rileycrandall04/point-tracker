@@ -7866,14 +7866,18 @@ function toggleCollapse(sectionId) {
     timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
     compStipends: 'compStipendsBody',
     histComp: 'histCompBody',
-    importScan: 'importScanBody'
+    importScan: 'importScanBody',
+    earningsEst: 'earningsEstBody',
+    paycheckTrack: 'paycheckTrackBody'
   };
   const arrowMap = {
     deScan: 'deScanArrow',
     timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
     compStipends: 'compStipendsArrow',
     histComp: 'histCompArrow',
-    importScan: 'importScanArrow'
+    importScan: 'importScanArrow',
+    earningsEst: 'earningsEstArrow',
+    paycheckTrack: 'paycheckTrackArrow'
   };
   const body = document.getElementById(bodyMap[sectionId]);
   const arrow = document.getElementById(arrowMap[sectionId]);
