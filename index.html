@@ -10383,9 +10383,10 @@ function savePaycheckEntry() {
   const ai = document.getElementById('paycheckAmount');
   const ri = document.getElementById('paycheckRetirement');
   const month = mi.value;
-  const amount = parseFloat(ai.value);
   const retirement = parseFloat(ri.value) || 0;
   if (!month) { showToast('Select a month'); return; }
+  const existingAmt = (data.paychecks || {})[month];
+  const amount = ai.value.trim() === '' && existingAmt != null ? existingAmt : parseFloat(ai.value);
   if (isNaN(amount) || amount < 0) { showToast('Enter a valid amount'); return; }
   if (!data.paychecks) data.paychecks = {};
   if (!data.retirement) data.retirement = {};
