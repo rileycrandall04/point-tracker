@@ -2700,7 +2700,43 @@ input.mil-time.invalid {
     </div>
   </div>
 
-  <!-- 7. Paycheck Tracking -->
+  <!-- 7. Earnings Estimator -->
+  <div class="card" id="earningsEstimatorCard" style="padding:12px 16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <h2 style="margin:0;font-size:0.95rem;">Earnings Estimator</h2>
+      <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+        <button class="btn btn-sm" id="eeToggleClocked" onclick="setEarningsMode('clocked')" style="border:none;border-radius:0;padding:3px 10px;font-size:0.7rem;background:var(--primary);color:#fff;">Clocked In</button>
+        <button class="btn btn-sm" id="eeToggleAvail" onclick="setEarningsMode('availability')" style="border:none;border-radius:0;padding:3px 10px;font-size:0.7rem;background:var(--surface2);color:var(--text-dim);">Availability</button>
+      </div>
+    </div>
+    <div id="earningsEstimatorBody">
+      <div style="text-align:center;margin-bottom:10px;">
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Avg Points / Hour</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:4px;">
+          <input type="number" id="eeAvgPtsHr" class="text-input" step="0.01" min="0" style="width:90px;font-size:1.4rem;font-weight:700;color:var(--accent2);text-align:center;padding:2px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;" oninput="onEEAvgOverride()">
+          <button class="btn btn-outline btn-sm" id="eeResetAvgBtn" onclick="resetEEAvg()" style="font-size:0.65rem;padding:2px 6px;display:none;" title="Reset to calculated average">&#x21bb;</button>
+        </div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;" id="eeAvgDetail"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div>
+          <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:2px;">Hours / Week</label>
+          <input type="number" id="eeHrsPerWeek" class="text-input" value="40" min="1" max="168" step="1" style="width:100%;font-size:0.85rem;" oninput="eeManualOverride ? updateEEResult() : renderEarningsEstimator()">
+        </div>
+        <div>
+          <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:2px;">Weeks / Year</label>
+          <input type="number" id="eeWeeksPerYear" class="text-input" value="48" min="1" max="52" step="1" style="width:100%;font-size:0.85rem;" oninput="eeManualOverride ? updateEEResult() : renderEarningsEstimator()">
+        </div>
+      </div>
+      <div style="text-align:center;margin-bottom:6px;">
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Estimated Annual Earnings</div>
+        <div style="font-size:1.5rem;font-weight:700;color:#facc15;" id="eeAnnualEst">&mdash;</div>
+      </div>
+      <div style="text-align:center;font-size:0.7rem;color:var(--text-dim);" id="eeBreakdown"></div>
+    </div>
+  </div>
+
+  <!-- 8. Paycheck Tracking -->
   <div class="card hidden" id="paycheckTrackingCard">
     <h2>Paycheck Tracking</h2>
     <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px;flex-wrap:wrap;">
@@ -9572,6 +9608,7 @@ document.addEventListener('click', function(e) {
     renderStabilization();
     renderProjectedAnnual();
     renderPipelineChart();
+    renderEarningsEstimator();
     // Fix collapsible height after re-render
     const histBody = document.getElementById('histCompBody');
     if (histBody && histBody.style.maxHeight && histBody.style.maxHeight !== '0px') {
@@ -9698,6 +9735,7 @@ function renderProjections() {
   loadOverrideUI();
   loadStipendUI();
   checkPVReminder();
+  renderEarningsEstimator();
   renderPaycheckCard();
 }
 
@@ -10112,6 +10150,176 @@ function renderHistoricalComp() {
 // ================================================================
 // PAYCHECK TRACKING
 // ================================================================
+// ================================================================
+// EARNINGS ESTIMATOR
+// ================================================================
+let earningsEstimatorMode = 'clocked';
+let eeCalcAvgClocked = 0;
+let eeCalcAvgAvail = 0;
+let eeManualOverride = false;
+
+function setEarningsMode(mode) {
+  earningsEstimatorMode = mode;
+  const cBtn = document.getElementById('eeToggleClocked');
+  const aBtn = document.getElementById('eeToggleAvail');
+  if (mode === 'clocked') {
+    cBtn.style.background = 'var(--primary)'; cBtn.style.color = '#fff';
+    aBtn.style.background = 'var(--surface2)'; aBtn.style.color = 'var(--text-dim)';
+  } else {
+    aBtn.style.background = 'var(--primary)'; aBtn.style.color = '#fff';
+    cBtn.style.background = 'var(--surface2)'; cBtn.style.color = 'var(--text-dim)';
+  }
+  eeManualOverride = false;
+  renderEarningsEstimator();
+}
+
+function onEEAvgOverride() {
+  eeManualOverride = true;
+  document.getElementById('eeResetAvgBtn').style.display = '';
+  updateEEResult();
+}
+
+function resetEEAvg() {
+  eeManualOverride = false;
+  document.getElementById('eeResetAvgBtn').style.display = 'none';
+  renderEarningsEstimator();
+}
+
+function updateEEResult() {
+  const pv = settings.pointValue || 0;
+  if (!pv) return;
+  const avgInput = document.getElementById('eeAvgPtsHr');
+  const activeAvg = parseFloat(avgInput.value) || 0;
+  const hrsPerWeek = parseFloat(document.getElementById('eeHrsPerWeek').value) || 40;
+  const weeksPerYear = parseFloat(document.getElementById('eeWeeksPerYear').value) || 48;
+
+  if (activeAvg > 0) {
+    const annual = round2(activeAvg * hrsPerWeek * weeksPerYear * pv);
+    document.getElementById('eeAnnualEst').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    document.getElementById('eeBreakdown').textContent =
+      activeAvg.toFixed(2) + ' pts/hr \u00D7 ' + hrsPerWeek + ' hrs \u00D7 ' + weeksPerYear + ' wks \u00D7 $' + pv.toFixed(2) + '/pt';
+  } else {
+    document.getElementById('eeAnnualEst').innerHTML = '&mdash;';
+    document.getElementById('eeBreakdown').textContent = '';
+  }
+
+  // Debounce save
+  clearTimeout(window._eeSaveTimer);
+  window._eeSaveTimer = setTimeout(() => {
+    settings.eeHrsPerWeek = hrsPerWeek;
+    settings.eeWeeksPerYear = weeksPerYear;
+    saveSettings(settings);
+  }, 1000);
+}
+
+function renderEarningsEstimator() {
+  const pv = settings.pointValue || 0;
+  const body = document.getElementById('earningsEstimatorBody');
+  if (!body) return;
+
+  // Load saved inputs
+  const hrsInput = document.getElementById('eeHrsPerWeek');
+  const wksInput = document.getElementById('eeWeeksPerYear');
+  if (settings.eeHrsPerWeek && hrsInput.value === '40' && settings.eeHrsPerWeek !== 40) hrsInput.value = settings.eeHrsPerWeek;
+  if (settings.eeWeeksPerYear && wksInput.value === '48' && settings.eeWeeksPerYear !== 48) wksInput.value = settings.eeWeeksPerYear;
+
+  // Check for $/pt
+  if (!pv) {
+    document.getElementById('eeAvgPtsHr').value = '';
+    document.getElementById('eeAvgDetail').textContent = '';
+    document.getElementById('eeAnnualEst').innerHTML = '&mdash;';
+    document.getElementById('eeBreakdown').innerHTML = 'Set your <strong>$/point</strong> in the Paycheck Projection card above to see estimates';
+    document.getElementById('eeResetAvgBtn').style.display = 'none';
+    return;
+  }
+
+  // Calculate total points and hours from all shifts
+  let totalPoints = 0;
+  let totalClockedHrs = 0;
+  let totalAvailHrs = 0;
+  let shiftCount = 0;
+
+  Object.values(data.shifts).forEach(shift => {
+    if (!shift.assignmentType) return;
+    if (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off') return;
+    if (shift.forcedOff) return;
+
+    const st = calcShiftTotal(shift);
+    totalPoints += st.total;
+
+    let clockedMin = 0;
+    const entries = shift.timeEntries || [];
+    if (entries.length > 0) {
+      entries.forEach(e => {
+        if (!e.start || !e.end) return;
+        let s = timeToMinutes(e.start);
+        let en = timeToMinutes(e.end);
+        if (en <= s) en += 1440;
+        clockedMin += (en - s);
+      });
+    } else if (shift.startTime && shift.endTime) {
+      let s = timeToMinutes(shift.startTime);
+      let en = timeToMinutes(shift.endTime);
+      if (en <= s) en += 1440;
+      clockedMin += (en - s);
+    }
+
+    const clockedHrs = clockedMin / 60;
+    totalClockedHrs += clockedHrs;
+
+    if (UNRESTRICTED_CALL_TYPES.has(shift.assignmentType)) {
+      totalAvailHrs += 24;
+    } else {
+      totalAvailHrs += clockedHrs;
+    }
+
+    shiftCount++;
+  });
+
+  eeCalcAvgClocked = totalClockedHrs > 0 ? totalPoints / totalClockedHrs : 0;
+  eeCalcAvgAvail = totalAvailHrs > 0 ? totalPoints / totalAvailHrs : 0;
+  const calcAvg = earningsEstimatorMode === 'clocked' ? eeCalcAvgClocked : eeCalcAvgAvail;
+  const modeLabel = earningsEstimatorMode === 'clocked' ? 'clocked in' : 'availability';
+  const totalHrsLabel = earningsEstimatorMode === 'clocked'
+    ? round2(totalClockedHrs).toLocaleString('en-US', { maximumFractionDigits: 0 })
+    : round2(totalAvailHrs).toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+  // Set avg pts/hr input (only if not manually overridden)
+  const avgInput = document.getElementById('eeAvgPtsHr');
+  if (!eeManualOverride) {
+    avgInput.value = calcAvg > 0 ? calcAvg.toFixed(2) : '';
+    document.getElementById('eeResetAvgBtn').style.display = 'none';
+  }
+
+  document.getElementById('eeAvgDetail').textContent = shiftCount > 0
+    ? round2(totalPoints).toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' pts / ' + totalHrsLabel + ' hrs (' + modeLabel + ') \u2022 ' + shiftCount + ' shifts'
+    : 'No shift data';
+
+  // Use the input value (which may be manual override)
+  const activeAvg = parseFloat(avgInput.value) || 0;
+  const hrsPerWeek = parseFloat(hrsInput.value) || 40;
+  const weeksPerYear = parseFloat(wksInput.value) || 48;
+
+  // Save to settings if changed
+  if (settings.eeHrsPerWeek !== hrsPerWeek || settings.eeWeeksPerYear !== weeksPerYear) {
+    settings.eeHrsPerWeek = hrsPerWeek;
+    settings.eeWeeksPerYear = weeksPerYear;
+    clearTimeout(window._eeSaveTimer);
+    window._eeSaveTimer = setTimeout(() => saveSettings(settings), 1000);
+  }
+
+  // Annual estimate
+  if (activeAvg > 0) {
+    const annual = round2(activeAvg * hrsPerWeek * weeksPerYear * pv);
+    document.getElementById('eeAnnualEst').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    document.getElementById('eeBreakdown').textContent =
+      activeAvg.toFixed(2) + ' pts/hr \u00D7 ' + hrsPerWeek + ' hrs \u00D7 ' + weeksPerYear + ' wks \u00D7 $' + pv.toFixed(2) + '/pt';
+  } else {
+    document.getElementById('eeAnnualEst').innerHTML = '&mdash;';
+    document.getElementById('eeBreakdown').textContent = shiftCount > 0 ? '' : 'No shift data to calculate average';
+  }
+}
+
 function renderPaycheckCard() {
   const card = document.getElementById('paycheckTrackingCard');
   if (!card) return;
