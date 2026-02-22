@@ -11388,8 +11388,17 @@ function renderTimeSummary() {
     }
   });
   const avgPtsHr = totalClockedHrs > 0 ? round2(totalPoints / totalClockedHrs) : 0;
-  const avgClockedWk = round2(totalClockedHrs / 13); // ~13 weeks in 3 months
-  const avgAvailWk = round2(totalAvailHrs / 13);
+  // Calculate actual weeks of data instead of hardcoded 13
+  const dates = recent.filter(s => s.assignmentType && s.assignmentType !== 'vacation' && s.assignmentType !== 'forced_off' && !s.forcedOff).map(s => s.date).sort();
+  let weeks = 13;
+  if (dates.length > 0) {
+    const earliest = new Date(dates[0]);
+    const latest = new Date(dates[dates.length - 1]);
+    const spanDays = Math.max(1, (latest - earliest) / (1000 * 60 * 60 * 24) + 1);
+    weeks = Math.max(spanDays / 7, 1); // at least 1 week (projects forward if < 1 week)
+  }
+  const avgClockedWk = round2(totalClockedHrs / weeks);
+  const avgAvailWk = round2(totalAvailHrs / weeks);
   document.getElementById('timeAvgPtsHr').textContent = avgPtsHr.toFixed(1);
   document.getElementById('timeClockedWk').textContent = avgClockedWk.toFixed(0);
   document.getElementById('timeAvailWk').textContent = avgAvailWk.toFixed(0);
