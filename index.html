@@ -1645,6 +1645,44 @@ input.mil-time.invalid {
 .ha-ai-loading .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: ha-spin 0.8s linear infinite; }
 @keyframes ha-spin { to { transform: rotate(360deg); } }
 
+/* Holiday Schedule Builder */
+.hs-builder-section { margin-bottom: 16px; }
+.hs-builder-section h3 { font-size: 0.85rem; margin-bottom: 8px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.hs-date-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.hs-date-row input { flex: 1; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem; }
+.hs-date-row .hs-day-label { font-size: 0.72rem; color: var(--text-dim); min-width: 28px; }
+.hs-date-row .hs-remove-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 1rem; padding: 2px 6px; }
+.hs-shift-grid { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+.hs-shift-grid th { padding: 6px 4px; text-align: center; color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 0.7rem; }
+.hs-shift-grid td { padding: 4px; text-align: center; }
+.hs-shift-grid td:first-child { text-align: left; font-weight: 600; color: var(--text); }
+.hs-shift-grid select { width: 100%; padding: 4px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.72rem; }
+.hs-shift-grid input[type="text"] { width: 100%; padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.75rem; }
+.hs-add-btn { background: none; border: 1px dashed var(--border); color: var(--primary); cursor: pointer; padding: 6px 12px; border-radius: 6px; font-size: 0.78rem; margin-top: 4px; width: 100%; }
+.hs-add-btn:hover { background: rgba(66,133,244,0.08); }
+
+/* Breakeven display */
+.hs-be-card { background: var(--surface2); border-radius: 8px; padding: 12px; margin-bottom: 8px; cursor: pointer; transition: background 0.15s; }
+.hs-be-card:hover { background: var(--surface); }
+.hs-be-header { display: flex; justify-content: space-between; align-items: center; }
+.hs-be-label { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.hs-be-pot { font-size: 1rem; font-weight: 700; }
+.hs-be-pot.positive { color: var(--accent); }
+.hs-be-pot.negative { color: var(--danger); }
+.hs-be-pot.zero { color: var(--text-dim); }
+.hs-be-summary { font-size: 0.72rem; color: var(--text-dim); margin-top: 4px; }
+.hs-be-detail { overflow: hidden; max-height: 0; transition: max-height 0.3s ease; }
+.hs-be-detail.open { max-height: 500px; }
+.hs-be-detail-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.72rem; }
+.hs-be-detail-table th { padding: 6px 4px; text-align: left; color: var(--text-dim); border-bottom: 1px solid var(--border); font-weight: 600; }
+.hs-be-detail-table td { padding: 5px 4px; border-bottom: 1px solid rgba(71,85,105,0.1); }
+.hs-be-detail-table tr:last-child td { border-bottom: none; font-weight: 600; }
+
+/* Schedule selector */
+.hs-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.hs-selector select { flex: 1; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.85rem; min-width: 160px; }
+.hs-selector .btn { white-space: nowrap; }
+
 /* ===== BOTTOM NAV — 5 items ===== */
 .bottom-nav button { font-size: 0.6rem; }
 .bottom-nav button .nav-icon { font-size: 1.15rem; }
@@ -2912,6 +2950,11 @@ input.mil-time.invalid {
       <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.8rem;" id="shiftExpectedHoursGrid"></div>
     </details>
     <details style="margin-top:8px;">
+      <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">Family Hours Lost Defaults</summary>
+      <p style="font-size:0.7rem;color:var(--text-dim);margin:6px 0 4px;">Hours of family time lost per shift type (used for breakeven calculations).</p>
+      <div style="margin-top:4px;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.8rem;" id="familyHoursLostGrid"></div>
+    </details>
+    <details style="margin-top:8px;">
       <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">How to get an API key</summary>
       <ol style="font-size:0.75rem;color:var(--text-dim);margin:8px 0 0 0;padding-left:20px;line-height:1.6;">
         <li>Go to <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="color:var(--primary);">console.anthropic.com</a></li>
@@ -3594,6 +3637,57 @@ input.mil-time.invalid {
   </div>
 </div>
 
+<!-- Holiday Schedule Builder Modal -->
+<div class="modal-overlay hidden" id="holidayScheduleModal" onclick="if(event.target===this)closeHolidayScheduleBuilder()">
+  <div class="modal" style="max-height:90vh;overflow-y:auto;max-width:600px;width:95vw;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h2 id="hsModalTitle" style="margin:0;">New Holiday Schedule</h2>
+      <button onclick="closeHolidayScheduleBuilder()" style="background:none;border:none;color:var(--text);font-size:1.3rem;cursor:pointer;padding:0 4px;">&times;</button>
+    </div>
+    <input type="hidden" id="hsEditId" value="">
+
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-bottom:12px;">
+      <div class="settings-field">
+        <label>Holiday Name</label>
+        <input type="text" id="hsHolidayName" placeholder="e.g., July 4th" list="hsHolidaySuggestions"
+          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+        <datalist id="hsHolidaySuggestions">
+          <option value="New Year's Day"><option value="MLK Day"><option value="Presidents Day">
+          <option value="Memorial Day"><option value="July 4th"><option value="Labor Day">
+          <option value="Thanksgiving"><option value="Christmas Eve"><option value="Christmas Day"><option value="New Year's Eve">
+        </datalist>
+      </div>
+      <div class="settings-field">
+        <label>Year</label>
+        <input type="number" id="hsYear" min="2020" max="2040" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+      </div>
+    </div>
+
+    <div class="hs-builder-section">
+      <h3>Dates <button class="hs-add-btn" onclick="addHSDate()" style="width:auto;display:inline-block;padding:2px 10px;font-size:0.72rem;">+ Add Date</button></h3>
+      <div id="hsDatesContainer"></div>
+    </div>
+
+    <div class="hs-builder-section">
+      <h3>UV Shifts <button class="hs-add-btn" onclick="addHSUVShift()" style="width:auto;display:inline-block;padding:2px 10px;font-size:0.72rem;">+ Add Shift</button></h3>
+      <div id="hsUVShiftsContainer" style="overflow-x:auto;"></div>
+    </div>
+
+    <div class="hs-builder-section">
+      <h3>SF Shifts <button class="hs-add-btn" onclick="addHSSFShift()" style="width:auto;display:inline-block;padding:2px 10px;font-size:0.72rem;">+ Add Shift</button>
+        <button class="hs-add-btn" onclick="autoPopulateSFShifts()" style="width:auto;display:inline-block;padding:2px 10px;font-size:0.72rem;margin-left:4px;">Auto-fill</button>
+      </h3>
+      <div id="hsSFShiftsContainer" style="overflow-x:auto;"></div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="btn btn-outline btn-sm" onclick="closeHolidayScheduleBuilder()">Cancel</button>
+      <button class="btn btn-outline btn-sm" id="hsDeleteBtn" onclick="deleteHolidaySchedule()" style="color:var(--danger);border-color:var(--danger);display:none;">Delete</button>
+      <button class="btn btn-primary btn-sm" onclick="saveHolidaySchedule()" style="width:auto;">Save Schedule</button>
+    </div>
+  </div>
+</div>
+
 <!-- Surgeon Case Editor Modal -->
 <div class="modal-overlay hidden" id="surgeonCaseEditorModal" onclick="if(event.target===this)closeSurgeonCaseEditor()">
   <div class="modal sce-modal">
@@ -3766,10 +3860,11 @@ function loadData() {
       if (!d.calendarAssignments) d.calendarAssignments = {};
       if (!d.paychecks) d.paychecks = {};
       if (!d.holidayAuctions) d.holidayAuctions = [];
+      if (!d.holidaySchedules) d.holidaySchedules = [];
       return d;
     }
   } catch(e) {}
-  return { shifts: {}, cases: [], overrides: {}, stipends: {}, calendarAssignments: {}, paychecks: {}, holidayAuctions: [] };
+  return { shifts: {}, cases: [], overrides: {}, stipends: {}, calendarAssignments: {}, paychecks: {}, holidayAuctions: [], holidaySchedules: [] };
 }
 
 function saveData(d) {
@@ -3980,6 +4075,7 @@ async function loadFromFirestore(uid) {
       if (!d.stipends) d.stipends = {};
       if (!d.calendarAssignments) d.calendarAssignments = {};
       if (!d.holidayAuctions) d.holidayAuctions = [];
+      if (!d.holidaySchedules) d.holidaySchedules = [];
       // Ensure cases is an array
       if (!Array.isArray(d.cases)) d.cases = [];
       data = d;
@@ -12305,13 +12401,100 @@ document.getElementById('dayDetailModal').addEventListener('click', (e) => {
 // HOLIDAY SHIFT VALUATION
 // ================================================================
 
-const HOLIDAY_CALL_POSITIONS = { UV: ['1st','2nd','3rd','4th'], SF: ['1st','2nd'] };
-const DEFAULT_EXPECTED_HOURS = { 'UV-1st':8, 'UV-2nd':4, 'UV-3rd':2, 'UV-4th':1, 'SF-1st':6, 'SF-2nd':1 };
+const HOLIDAY_CALL_POSITIONS = { UV: ['1st','2nd','3rd','4th','mole','off'], SF: ['1st','2nd'] };
+const DEFAULT_EXPECTED_HOURS = { 'UV-1st':8, 'UV-2nd':4, 'UV-3rd':2, 'UV-4th':1, 'UV-mole':2, 'UV-off':0, 'SF-1st':6, 'SF-2nd':0.5 };
+const DEFAULT_FAMILY_HOURS_LOST = { '1st':8, '2nd':5, '3rd':3, '4th':1.5, 'mole':1, 'off':0 };
 
 function getExpectedHours(hospital, callPosition) {
   const key = hospital + '-' + callPosition;
   const custom = settings.shiftExpectedHours || {};
   return custom[key] !== undefined ? custom[key] : (DEFAULT_EXPECTED_HOURS[key] || 0);
+}
+
+function getFamilyHoursLost(position) {
+  const custom = settings.familyHoursLost || {};
+  return custom[position] !== undefined ? custom[position] : (DEFAULT_FAMILY_HOURS_LOST[position] || 0);
+}
+
+// Map schedule position names to assignment types used by the compensation engine
+function positionToAssignmentType(hospital, position) {
+  if (hospital === 'SF') return position === '1st' ? 'SF1' : 'SF2';
+  const map = { '1st':'1st_call', '2nd':'2nd_call', '3rd':'3rd_call', '4th':'4th_call', 'mole':'mole' };
+  return map[position] || null;
+}
+
+// Calculate single-day breakeven for a position on a holiday
+// Returns { pagerPts, arPts, timePts, totalPts, dollars, familyCost, netCost, expectedHours, familyHours }
+function calcDayBreakeven(hospital, position, dateStr) {
+  if (position === 'off') {
+    return { pagerPts: 0, arPts: 0, timePts: 0, totalPts: 0, dollars: 0,
+             familyCost: 0, netCost: 0, expectedHours: 0, familyHours: 0 };
+  }
+  const assignmentType = positionToAssignmentType(hospital, position);
+  if (!assignmentType) {
+    return { pagerPts: 0, arPts: 0, timePts: 0, totalPts: 0, dollars: 0,
+             familyCost: 0, netCost: 0, expectedHours: 0, familyHours: 0 };
+  }
+
+  // Pager points: holiday = 24hr window (420-1860 = 1440 min)
+  const pagerWindow = getPagerPayWindow(assignmentType, true); // holidays always wknd/hol
+  const pagerPts = pagerWindow ? round2(((pagerWindow.end - pagerWindow.start) / 60) * 3.5) : 0;
+
+  // Expected work hours for this position
+  const expectedHours = getExpectedHours(hospital, position);
+
+  // AR points: estimate using expected hours, assume evenly distributed across day
+  // Use holiday daytime rate as a reasonable average (most work is daytime)
+  // For more precision, we weight: assume work starts at 0700 for 1st call, etc.
+  let arPts = 0;
+  if (expectedHours > 0) {
+    // Simulate work minutes starting from shift start
+    const workMinutes = Math.round(expectedHours * 60);
+    let workStart = 420; // 07:00 default for most positions
+    if (position === 'mole') workStart = 1260; // 21:00 for mole
+    for (let i = 0; i < workMinutes; i++) {
+      const minute = (workStart + i) % 1440;
+      arPts += getARRate(assignmentType, true, false, minute) / 60;
+    }
+    arPts = round2(arPts);
+  }
+
+  // Time points: 6 pts/hr for expected case hours
+  const timePts = round2(expectedHours * 6);
+
+  const totalPts = round2(pagerPts + arPts + timePts);
+
+  // Convert to dollars
+  const monthKey = dateStr ? dateStr.substring(0, 7) : new Date().toISOString().substring(0, 7);
+  const pv = getPointValueForMonth(monthKey);
+  const dollars = round2(totalPts * pv);
+
+  // Family hours lost
+  const familyHours = getFamilyHoursLost(position);
+  const personalRate = settings.personalTimeValue || 100;
+  const familyCost = round2(familyHours * personalRate);
+
+  // Net cost = what the pot needs to cover (family cost minus earned compensation)
+  const netCost = round2(Math.max(0, familyCost - dollars));
+
+  return { pagerPts, arPts, timePts, totalPts, dollars, familyCost, netCost, expectedHours, familyHours };
+}
+
+// Calculate total breakeven for a multi-day shift
+// shift: { id, hospital, label, schedule: { 'YYYY-MM-DD': 'position', ... } }
+// Returns { totalBreakeven, totalComp, totalFamilyCost, days: [{ date, position, ...dayResult }] }
+function calcShiftBreakeven(shift, dates) {
+  const days = [];
+  let totalComp = 0, totalFamilyCost = 0;
+  dates.forEach(dateStr => {
+    const position = shift.schedule[dateStr] || 'off';
+    const dayResult = calcDayBreakeven(shift.hospital, position, dateStr);
+    days.push({ date: dateStr, position, ...dayResult });
+    totalComp += dayResult.dollars;
+    totalFamilyCost += dayResult.familyCost;
+  });
+  const totalBreakeven = round2(Math.max(0, totalFamilyCost - totalComp));
+  return { totalBreakeven, totalComp: round2(totalComp), totalFamilyCost: round2(totalFamilyCost), days };
 }
 
 // Calculate actual hours worked on holiday dates using shared + local case data
@@ -12456,23 +12639,31 @@ function renderHolidayPotChart() {
 function renderHolidayCalculator() {
   const el = document.getElementById('holidayCalcContent');
   if (!el) return;
+
+  const schedules = data.holidaySchedules || [];
+
+  // If schedules exist, show schedule-based breakeven UI
+  if (schedules.length > 0) {
+    renderBreakevenCalculator(el, schedules);
+    return;
+  }
+
+  // Fallback: old auction-based calculator
   if (!data.holidayAuctions || data.holidayAuctions.length === 0) {
-    el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">Add auction records first to see shift valuations.</p>';
+    el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No schedules yet.</p>'
+      + '<button class="btn btn-primary btn-sm" onclick="openHolidayScheduleBuilder()" style="margin-top:8px;">Create Holiday Schedule</button>';
     return;
   }
 
   const personalRate = settings.personalTimeValue || 100;
   const auctions = data.holidayAuctions;
   const actualHours = getHolidayActualHours();
-
-  // Build summary by hospital + position
   const combos = {};
   auctions.forEach(a => {
     const key = a.hospital + ' ' + a.callPosition + ' Call';
     if (!combos[key]) combos[key] = { pots: [], hours: [], hospital: a.hospital, position: a.callPosition, dates: [] };
     combos[key].pots.push(a.finalPotAmount);
     combos[key].dates.push(a.date);
-    // Use actual hours from case data if available, otherwise fall back to manual/defaults
     const actual = actualHours[a.date];
     if (actual && actual.caseCount > 0) {
       combos[key].hours.push(actual.totalHours);
@@ -12480,20 +12671,15 @@ function renderHolidayCalculator() {
       combos[key].hours.push(a.expectedHours || getExpectedHours(a.hospital, a.callPosition));
     }
   });
-
-  // Count dates with actual data
   const datesWithData = Object.keys(actualHours).filter(d => actualHours[d].caseCount > 0).length;
   const totalDates = new Set(auctions.map(a => a.date)).size;
-
-  let html = '<div class="ha-calc-grid">';
+  let html = '<div style="margin-bottom:12px;"><button class="btn btn-primary btn-sm" onclick="openHolidayScheduleBuilder()">+ New Schedule</button></div>';
+  html += '<div class="ha-calc-grid">';
   html += '<div class="ha-calc-card"><div class="ha-calc-label">Your Time Value</div><div class="ha-calc-value" style="color:var(--text-dim);">$' + personalRate + '/hr</div></div>';
   html += '<div class="ha-calc-card"><div class="ha-calc-label">Data-Driven Hours</div><div class="ha-calc-value" style="color:var(--primary);">' + datesWithData + '/' + totalDates + ' dates</div></div>';
   html += '</div>';
-
   html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:10px;">Hours worked estimated from ' + (datesWithData > 0 ? 'shared case data (' + datesWithData + ' holidays) + manual defaults' : 'manual defaults (no matching case data yet)') + '</div>';
-
-  html += '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;font-weight:600;">Value by Shift Type</div>';
-
+  html += '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;font-weight:600;">Value by Shift Type (Historical)</div>';
   Object.entries(combos).sort((a,b) => a[0].localeCompare(b[0])).forEach(([label, c]) => {
     const avgPot = round2(c.pots.reduce((s,v) => s+v, 0) / c.pots.length);
     const avgHrs = round2(c.hours.reduce((s,v) => s+v, 0) / c.hours.length);
@@ -12501,7 +12687,6 @@ function renderHolidayCalculator() {
     const netValue = round2(avgPot - timeCost);
     const effectiveRate = avgHrs > 0 ? round2(avgPot / avgHrs) : 0;
     const color = netValue >= 0 ? 'var(--accent)' : 'var(--danger)';
-
     html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;">';
     html += '<span style="font-size:0.82rem;font-weight:600;">' + escHtml(label) + ' <span style="font-size:0.7rem;color:var(--text-dim);">(n=' + c.pots.length + ')</span></span>';
     html += '<span style="font-weight:700;color:' + color + ';">Net: $' + netValue.toLocaleString() + '</span>';
@@ -12510,8 +12695,142 @@ function renderHolidayCalculator() {
     html += 'Avg pot: $' + avgPot.toLocaleString() + ' | Avg hrs: ' + avgHrs + ' | $' + effectiveRate.toLocaleString() + '/hr effective vs $' + personalRate + '/hr opportunity';
     html += '</div>';
   });
+  el.innerHTML = html;
+}
+
+function renderBreakevenCalculator(el, schedules) {
+  const personalRate = settings.personalTimeValue || 100;
+
+  // Schedule selector
+  let html = '<div class="hs-selector">';
+  html += '<select id="hsScheduleSelector" onchange="renderBreakevenForSelected()">';
+  schedules.forEach((s, i) => {
+    html += '<option value="' + s.id + '"' + (i === 0 ? ' selected' : '') + '>' + escHtml(s.holidayName) + ' ' + s.year + ' (' + s.dates.length + ' days)</option>';
+  });
+  html += '</select>';
+  html += '<button class="btn btn-outline btn-sm" onclick="editSelectedSchedule()" style="padding:6px 10px;">Edit</button>';
+  html += '<button class="btn btn-primary btn-sm" onclick="openHolidayScheduleBuilder()" style="padding:6px 10px;">+ New</button>';
+  html += '</div>';
 
   el.innerHTML = html;
+
+  // Render breakeven for first/selected schedule
+  const detailDiv = document.createElement('div');
+  detailDiv.id = 'hsBreakevenContent';
+  el.appendChild(detailDiv);
+  renderBreakevenForSelected();
+}
+
+function renderBreakevenForSelected() {
+  const sel = document.getElementById('hsScheduleSelector');
+  const contentEl = document.getElementById('hsBreakevenContent');
+  if (!sel || !contentEl) return;
+
+  const schedule = (data.holidaySchedules || []).find(s => s.id === sel.value);
+  if (!schedule) { contentEl.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">Select a schedule.</p>'; return; }
+
+  const personalRate = settings.personalTimeValue || 100;
+  const pv = getPointValueForMonth(schedule.dates[0] ? schedule.dates[0].substring(0, 7) : new Date().toISOString().substring(0, 7));
+
+  // Summary cards
+  let html = '<div class="ha-calc-grid" style="grid-template-columns:1fr 1fr 1fr;">';
+  html += '<div class="ha-calc-card"><div class="ha-calc-label">Time Value</div><div class="ha-calc-value" style="color:var(--text-dim);">$' + personalRate + '/hr</div></div>';
+  html += '<div class="ha-calc-card"><div class="ha-calc-label">Point Value</div><div class="ha-calc-value" style="color:var(--primary);">$' + (pv || 0).toFixed(2) + '</div></div>';
+  html += '<div class="ha-calc-card"><div class="ha-calc-label">Days</div><div class="ha-calc-value" style="color:var(--text-dim);">' + schedule.dates.length + '</div></div>';
+  html += '</div>';
+
+  // Date labels
+  html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:12px;">';
+  html += schedule.dates.map((d, i) => getDayLabel(d) + ' ' + d.substring(5)).join(' &bull; ');
+  html += '</div>';
+
+  if (!pv || pv === 0) {
+    html += '<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px;margin-bottom:12px;font-size:0.78rem;color:var(--danger);">';
+    html += '⚠ Point value is $0 for ' + (schedule.dates[0] ? schedule.dates[0].substring(0, 7) : 'this month') + '. Set it in Settings → Point Values to get accurate breakeven calculations.';
+    html += '</div>';
+  }
+
+  // UV shifts section
+  const uvShifts = schedule.shifts.filter(s => s.hospital === 'UV');
+  const sfShifts = schedule.shifts.filter(s => s.hospital === 'SF');
+
+  if (uvShifts.length > 0) {
+    html += '<div style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:8px;">UV Shifts — Breakeven Pot</div>';
+    uvShifts.forEach(shift => {
+      const result = calcShiftBreakeven(shift, schedule.dates);
+      html += renderBreakevenCard(shift, result, schedule.dates);
+    });
+  }
+
+  if (sfShifts.length > 0) {
+    html += '<div style="font-size:0.82rem;font-weight:600;color:var(--text);margin:12px 0 8px;">SF Shifts — Breakeven Pot</div>';
+    sfShifts.forEach(shift => {
+      const result = calcShiftBreakeven(shift, schedule.dates);
+      html += renderBreakevenCard(shift, result, schedule.dates);
+    });
+  }
+
+  contentEl.innerHTML = html;
+}
+
+function renderBreakevenCard(shift, result, dates) {
+  const potClass = result.totalBreakeven > 0 ? 'negative' : (result.totalBreakeven === 0 && result.totalFamilyCost > 0 ? 'zero' : 'positive');
+  const potLabel = result.totalBreakeven > 0 ? '$' + result.totalBreakeven.toLocaleString() : (result.totalFamilyCost === 0 ? 'Free' : 'Comp covers it');
+  const cardId = 'hsbe_' + shift.id;
+
+  let html = '<div class="hs-be-card" onclick="toggleHSDetail(\'' + cardId + '\')">';
+  html += '<div class="hs-be-header">';
+  html += '<span class="hs-be-label">' + escHtml(shift.label) + '</span>';
+  html += '<span class="hs-be-pot ' + potClass + '">Min Pot: ' + potLabel + '</span>';
+  html += '</div>';
+
+  // Summary line
+  const positions = dates.map(d => shift.schedule[d] || 'off');
+  html += '<div class="hs-be-summary">';
+  html += positions.map((p, i) => getDayLabel(dates[i]) + ': ' + p).join(' → ');
+  html += ' | Comp: $' + result.totalComp.toLocaleString() + ' | Family cost: $' + result.totalFamilyCost.toLocaleString();
+  html += '</div>';
+
+  // Detail table (hidden by default)
+  html += '<div class="hs-be-detail" id="' + cardId + '">';
+  html += '<table class="hs-be-detail-table"><thead><tr>';
+  html += '<th>Day</th><th>Position</th><th>Pager</th><th>AR</th><th>Time</th><th>Comp $</th><th>Family $</th><th>Net</th>';
+  html += '</tr></thead><tbody>';
+
+  result.days.forEach(day => {
+    const net = round2(day.dollars - day.familyCost);
+    const netColor = net >= 0 ? 'var(--accent)' : 'var(--danger)';
+    html += '<tr>';
+    html += '<td>' + getDayLabel(day.date) + ' ' + day.date.substring(5) + '</td>';
+    html += '<td style="font-weight:600;">' + day.position + '</td>';
+    html += '<td>' + day.pagerPts.toFixed(1) + '</td>';
+    html += '<td>' + day.arPts.toFixed(1) + '</td>';
+    html += '<td>' + day.timePts.toFixed(1) + '</td>';
+    html += '<td>$' + day.dollars.toLocaleString() + '</td>';
+    html += '<td>$' + day.familyCost.toLocaleString() + '</td>';
+    html += '<td style="color:' + netColor + ';font-weight:600;">$' + net.toLocaleString() + '</td>';
+    html += '</tr>';
+  });
+
+  // Totals row
+  const totalNet = round2(result.totalComp - result.totalFamilyCost);
+  const totalNetColor = totalNet >= 0 ? 'var(--accent)' : 'var(--danger)';
+  html += '<tr style="border-top:2px solid var(--border);">';
+  html += '<td colspan="5" style="text-align:right;">Totals:</td>';
+  html += '<td>$' + result.totalComp.toLocaleString() + '</td>';
+  html += '<td>$' + result.totalFamilyCost.toLocaleString() + '</td>';
+  html += '<td style="color:' + totalNetColor + ';">$' + totalNet.toLocaleString() + '</td>';
+  html += '</tr>';
+
+  html += '</tbody></table>';
+  html += '</div>'; // detail
+  html += '</div>'; // card
+  return html;
+}
+
+function toggleHSDetail(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('open');
 }
 
 function renderHolidayAIPanel() {
@@ -12644,18 +12963,40 @@ async function runHolidayAIAnalysis() {
     };
   });
 
+  // Build schedule breakeven data if available
+  let scheduleSection = '';
+  const schedules = data.holidaySchedules || [];
+  if (schedules.length > 0) {
+    const scheduleData = schedules.map(sched => {
+      const shiftResults = sched.shifts.map(shift => {
+        const be = calcShiftBreakeven(shift, sched.dates);
+        return {
+          label: shift.label, hospital: shift.hospital,
+          positions: sched.dates.map(d => shift.schedule[d] || 'off'),
+          breakevenPot: be.totalBreakeven, totalComp: be.totalComp,
+          totalFamilyCost: be.totalFamilyCost
+        };
+      });
+      return { holiday: sched.holidayName, year: sched.year, dates: sched.dates, shifts: shiftResults };
+    });
+    scheduleSection = '\n\nUpcoming holiday schedule breakeven analysis:\n' + JSON.stringify(scheduleData, null, 2) + '\n' +
+      'Breakeven pot = minimum auction pot needed for the shift to be worth taking (family cost minus earned compensation). $0 means compensation alone covers the family time cost.\n';
+  }
+
   const prompt = 'You are an analyst helping an anesthesiologist evaluate holiday call shift auctions.\n\n' +
     'Context: At this medical group, holiday call shifts are assigned through an auction. A fixed dollar amount is added to a "pot" each day. Someone eventually claims the pot and works the shift. The pot is a bonus on top of normal shift pay (pager pay, production, clock-in time).\n\n' +
-    'Hospitals: Utah Valley (UV) has 1st-4th call positions. Spanish Fork (SF) has 1st-2nd call. Higher call numbers are less likely to be called in.\n\n' +
+    'Hospitals: Utah Valley (UV) has 1st-4th call + mole + off positions. Spanish Fork (SF) has 1st-2nd call. Higher call numbers are less likely to be called in. Mole is overnight (21:00-07:00). Multi-day holidays rotate UV positions across days.\n\n' +
     'Historical auction data (' + auctions.length + ' records):\n' + JSON.stringify(summary, null, 2) + '\n\n' +
     'The user values personal holiday time at $' + personalRate + '/hour.\n' +
-    'Hours data marked "case_data" comes from actual shift records across all users; "manual_estimate" is a manual fallback.\n\n' +
+    'Hours data marked "case_data" comes from actual shift records across all users; "manual_estimate" is a manual fallback.\n' +
+    scheduleSection + '\n' +
     'Please provide:\n' +
     '1. **Pattern Analysis**: Patterns in pot values by holiday and shift type. Which holidays/shifts command higher pots?\n' +
     '2. **Expected Values**: Estimated next pot value for each holiday+shift combination with enough data.\n' +
     '3. **Desirability Ranking**: Rank shifts by net value (pot minus time cost). Which offer the best deal above the user\'s time value?\n' +
     '4. **Timing Insights**: If daily rate data is available, when does claiming offer the best expected value? (Earlier = lower pot but guaranteed; later = higher but risk someone else claims first.)\n' +
-    '5. **Recommendation**: Which upcoming holiday shifts should the user consider, and at approximately what pot level?\n\n' +
+    '5. **Schedule Recommendations**: For any upcoming holiday schedules, which specific shifts have the lowest breakeven pots and represent the best value? Factor in the multi-day nature of the shifts.\n' +
+    '6. **Recommendation**: Which upcoming holiday shifts should the user consider, and at approximately what pot level?\n\n' +
     'Keep analysis concise and actionable. Use specific dollar amounts.';
 
   try {
@@ -12701,6 +13042,273 @@ function formatAIResponse(text) {
     .replace(/\n/g, '<br>');
 }
 
+// ================================================================
+// HOLIDAY SCHEDULE BUILDER
+// ================================================================
+
+// Temp state for the builder form
+let _hsDates = [];
+let _hsUVShifts = [];
+let _hsSFShifts = [];
+
+function getDayLabel(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()] || '';
+}
+
+function openHolidayScheduleBuilder(editId) {
+  const modal = document.getElementById('holidayScheduleModal');
+  document.getElementById('hsEditId').value = editId || '';
+  document.getElementById('hsDeleteBtn').style.display = editId ? 'inline-block' : 'none';
+  document.getElementById('hsModalTitle').textContent = editId ? 'Edit Holiday Schedule' : 'New Holiday Schedule';
+
+  if (editId) {
+    const rec = (data.holidaySchedules || []).find(s => s.id === editId);
+    if (rec) {
+      document.getElementById('hsHolidayName').value = rec.holidayName || '';
+      document.getElementById('hsYear').value = rec.year || new Date().getFullYear();
+      _hsDates = (rec.dates || []).slice();
+      _hsUVShifts = (rec.shifts || []).filter(s => s.hospital === 'UV').map(s => ({...s, schedule: {...s.schedule}}));
+      _hsSFShifts = (rec.shifts || []).filter(s => s.hospital === 'SF').map(s => ({...s, schedule: {...s.schedule}}));
+    }
+  } else {
+    document.getElementById('hsHolidayName').value = '';
+    document.getElementById('hsYear').value = new Date().getFullYear();
+    _hsDates = [];
+    _hsUVShifts = [];
+    _hsSFShifts = [];
+  }
+  renderHSBuilderForm();
+  modal.classList.remove('hidden');
+}
+
+function closeHolidayScheduleBuilder() {
+  document.getElementById('holidayScheduleModal').classList.add('hidden');
+}
+
+function addHSDate() {
+  // Default to next date after last added, or today
+  const year = parseInt(document.getElementById('hsYear').value) || new Date().getFullYear();
+  let defaultDate;
+  if (_hsDates.length > 0) {
+    const last = new Date(_hsDates[_hsDates.length - 1] + 'T12:00:00');
+    last.setDate(last.getDate() + 1);
+    defaultDate = last.toISOString().substring(0, 10);
+  } else {
+    defaultDate = year + '-01-01';
+  }
+  _hsDates.push(defaultDate);
+  renderHSBuilderForm();
+}
+
+function removeHSDate(idx) {
+  const removedDate = _hsDates[idx];
+  _hsDates.splice(idx, 1);
+  // Clean up shift schedules for removed date
+  _hsUVShifts.forEach(s => { delete s.schedule[removedDate]; });
+  _hsSFShifts.forEach(s => { delete s.schedule[removedDate]; });
+  renderHSBuilderForm();
+}
+
+function updateHSDate(idx, value) {
+  const oldDate = _hsDates[idx];
+  _hsDates[idx] = value;
+  // Migrate shift schedules
+  _hsUVShifts.forEach(s => {
+    if (s.schedule[oldDate] !== undefined) {
+      s.schedule[value] = s.schedule[oldDate];
+      delete s.schedule[oldDate];
+    }
+  });
+  _hsSFShifts.forEach(s => {
+    if (s.schedule[oldDate] !== undefined) {
+      s.schedule[value] = s.schedule[oldDate];
+      delete s.schedule[oldDate];
+    }
+  });
+  renderHSBuilderForm();
+}
+
+function addHSUVShift() {
+  const num = _hsUVShifts.length + 1;
+  const shift = { id: 'uv' + genId(), hospital: 'UV', label: 'UV Shift ' + num, schedule: {} };
+  // Default all dates to appropriate positions cycling through
+  const positions = ['1st','2nd','3rd','4th','mole','off'];
+  _hsDates.forEach((d, i) => {
+    shift.schedule[d] = positions[(num - 1 + i) % positions.length] || 'off';
+  });
+  _hsUVShifts.push(shift);
+  renderHSBuilderForm();
+}
+
+function removeHSUVShift(idx) {
+  _hsUVShifts.splice(idx, 1);
+  renderHSBuilderForm();
+}
+
+function addHSSFShift() {
+  const num = _hsSFShifts.length + 1;
+  const shift = { id: 'sf' + genId(), hospital: 'SF', label: 'SF ' + num, schedule: {} };
+  // Default: pick the first date available, 1st call
+  if (_hsDates.length > 0) {
+    shift.schedule[_hsDates[0]] = '1st';
+  }
+  _hsSFShifts.push(shift);
+  renderHSBuilderForm();
+}
+
+function removeSFShift(idx) {
+  _hsSFShifts.splice(idx, 1);
+  renderHSBuilderForm();
+}
+
+function autoPopulateSFShifts() {
+  // Create SF1 and SF2 for each date
+  _hsSFShifts = [];
+  _hsDates.forEach(d => {
+    const dayLabel = getDayLabel(d);
+    _hsSFShifts.push({ id: 'sf' + genId(), hospital: 'SF', label: 'SF 1 ' + dayLabel, schedule: { [d]: '1st' } });
+    _hsSFShifts.push({ id: 'sf' + genId(), hospital: 'SF', label: 'SF 2 ' + dayLabel, schedule: { [d]: '2nd' } });
+  });
+  renderHSBuilderForm();
+}
+
+function renderHSBuilderForm() {
+  // Dates
+  const datesEl = document.getElementById('hsDatesContainer');
+  let dHtml = '';
+  _hsDates.forEach((d, i) => {
+    const dayLabel = getDayLabel(d);
+    dHtml += '<div class="hs-date-row">';
+    dHtml += '<input type="date" value="' + d + '" onchange="updateHSDate(' + i + ', this.value)">';
+    dHtml += '<span class="hs-day-label">' + dayLabel + '</span>';
+    dHtml += '<button class="hs-remove-btn" onclick="removeHSDate(' + i + ')" title="Remove">&times;</button>';
+    dHtml += '</div>';
+  });
+  if (_hsDates.length === 0) dHtml = '<p style="font-size:0.78rem;color:var(--text-dim);">No dates added yet. Click + Add Date.</p>';
+  datesEl.innerHTML = dHtml;
+
+  // UV Shifts table
+  const uvEl = document.getElementById('hsUVShiftsContainer');
+  if (_hsUVShifts.length === 0 || _hsDates.length === 0) {
+    uvEl.innerHTML = _hsDates.length === 0
+      ? '<p style="font-size:0.78rem;color:var(--text-dim);">Add dates first.</p>'
+      : '<p style="font-size:0.78rem;color:var(--text-dim);">No UV shifts. Click + Add Shift.</p>';
+  } else {
+    let html = '<table class="hs-shift-grid"><thead><tr><th style="text-align:left;">Shift</th>';
+    _hsDates.forEach(d => { html += '<th>' + getDayLabel(d) + '<br><span style="font-size:0.62rem;font-weight:400;">' + d.substring(5) + '</span></th>'; });
+    html += '<th></th></tr></thead><tbody>';
+    _hsUVShifts.forEach((s, si) => {
+      html += '<tr><td><input type="text" value="' + escHtml(s.label) + '" onchange="_hsUVShifts[' + si + '].label=this.value" style="max-width:100px;"></td>';
+      _hsDates.forEach(d => {
+        const pos = s.schedule[d] || 'off';
+        html += '<td><select onchange="_hsUVShifts[' + si + '].schedule[\'' + d + '\']=this.value">';
+        ['1st','2nd','3rd','4th','mole','off'].forEach(p => {
+          html += '<option value="' + p + '"' + (pos === p ? ' selected' : '') + '>' + p + '</option>';
+        });
+        html += '</select></td>';
+      });
+      html += '<td><button class="hs-remove-btn" onclick="removeHSUVShift(' + si + ')">&times;</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    uvEl.innerHTML = html;
+  }
+
+  // SF Shifts table
+  const sfEl = document.getElementById('hsSFShiftsContainer');
+  if (_hsSFShifts.length === 0 || _hsDates.length === 0) {
+    sfEl.innerHTML = _hsDates.length === 0
+      ? '<p style="font-size:0.78rem;color:var(--text-dim);">Add dates first.</p>'
+      : '<p style="font-size:0.78rem;color:var(--text-dim);">No SF shifts. Click + Add Shift or Auto-fill.</p>';
+  } else {
+    let html = '<table class="hs-shift-grid"><thead><tr><th style="text-align:left;">Shift</th>';
+    _hsDates.forEach(d => { html += '<th>' + getDayLabel(d) + '<br><span style="font-size:0.62rem;font-weight:400;">' + d.substring(5) + '</span></th>'; });
+    html += '<th></th></tr></thead><tbody>';
+    _hsSFShifts.forEach((s, si) => {
+      html += '<tr><td><input type="text" value="' + escHtml(s.label) + '" onchange="_hsSFShifts[' + si + '].label=this.value" style="max-width:100px;"></td>';
+      _hsDates.forEach(d => {
+        const pos = s.schedule[d] || '';
+        html += '<td><select onchange="_hsSFShifts[' + si + '].schedule[\'' + d + '\']=this.value">';
+        html += '<option value=""' + (pos === '' ? ' selected' : '') + '>—</option>';
+        ['1st','2nd'].forEach(p => {
+          html += '<option value="' + p + '"' + (pos === p ? ' selected' : '') + '>' + p + '</option>';
+        });
+        html += '</select></td>';
+      });
+      html += '<td><button class="hs-remove-btn" onclick="removeSFShift(' + si + ')">&times;</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    sfEl.innerHTML = html;
+  }
+}
+
+function saveHolidaySchedule() {
+  const name = document.getElementById('hsHolidayName').value.trim();
+  const year = parseInt(document.getElementById('hsYear').value) || new Date().getFullYear();
+  if (!name) { showToast('Enter a holiday name'); return; }
+  if (_hsDates.length === 0) { showToast('Add at least one date'); return; }
+  if (_hsUVShifts.length === 0 && _hsSFShifts.length === 0) { showToast('Add at least one shift'); return; }
+
+  if (!data.holidaySchedules) data.holidaySchedules = [];
+  const editId = document.getElementById('hsEditId').value;
+
+  const dateLabels = _hsDates.map(d => getDayLabel(d));
+  const allShifts = [
+    ..._hsUVShifts.map(s => ({ id: s.id, hospital: 'UV', label: s.label, schedule: {...s.schedule} })),
+    ..._hsSFShifts.map(s => ({ id: s.id, hospital: 'SF', label: s.label, schedule: {...s.schedule} }))
+  ];
+
+  // Clean up empty schedule entries for SF (remove dates where position is empty)
+  allShifts.forEach(s => {
+    if (s.hospital === 'SF') {
+      Object.keys(s.schedule).forEach(d => {
+        if (!s.schedule[d]) delete s.schedule[d];
+      });
+    }
+  });
+
+  const record = {
+    id: editId || genId(),
+    holidayName: name,
+    year: year,
+    dates: _hsDates.slice(),
+    dateLabels: dateLabels,
+    shifts: allShifts
+  };
+
+  if (editId) {
+    const idx = data.holidaySchedules.findIndex(s => s.id === editId);
+    if (idx >= 0) data.holidaySchedules[idx] = record;
+    else data.holidaySchedules.push(record);
+  } else {
+    data.holidaySchedules.push(record);
+  }
+
+  saveData(data);
+  closeHolidayScheduleBuilder();
+  renderHolidayCalculator();
+  showToast('Schedule saved');
+}
+
+function deleteHolidaySchedule() {
+  const editId = document.getElementById('hsEditId').value;
+  if (!editId) return;
+  if (!confirm('Delete this holiday schedule?')) return;
+  data.holidaySchedules = (data.holidaySchedules || []).filter(s => s.id !== editId);
+  saveData(data);
+  closeHolidayScheduleBuilder();
+  renderHolidayCalculator();
+  showToast('Schedule deleted');
+}
+
+function editSelectedSchedule() {
+  const sel = document.getElementById('hsScheduleSelector');
+  if (!sel || !sel.value) return;
+  openHolidayScheduleBuilder(sel.value);
+}
+
 // ---- Settings: Expected Hours Defaults ----
 function renderShiftExpectedHoursDefaults() {
   const grid = document.getElementById('shiftExpectedHoursGrid');
@@ -12722,6 +13330,30 @@ function renderShiftExpectedHoursDefaults() {
     inp.addEventListener('change', () => {
       if (!settings.shiftExpectedHours) settings.shiftExpectedHours = {};
       settings.shiftExpectedHours[inp.dataset.shiftKey] = parseFloat(inp.value) || 0;
+      saveSettings(settings);
+    });
+  });
+}
+
+function renderFamilyHoursLostDefaults() {
+  const grid = document.getElementById('familyHoursLostGrid');
+  if (!grid) return;
+  const custom = settings.familyHoursLost || {};
+  const positions = ['1st','2nd','3rd','4th','mole','off'];
+  let html = '';
+  positions.forEach(pos => {
+    const val = custom[pos] !== undefined ? custom[pos] : DEFAULT_FAMILY_HOURS_LOST[pos];
+    const label = pos === 'mole' ? 'Mole' : pos === 'off' ? 'Off' : pos + ' Call';
+    html += '<div style="display:flex;align-items:center;gap:4px;">';
+    html += '<label style="flex:1;color:var(--text-dim);font-size:0.75rem;">' + label + '</label>';
+    html += '<input type="number" min="0" step="0.5" value="' + (val || 0) + '" data-fhl-key="' + pos + '" class="fhl-input" style="width:60px;padding:4px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.78rem;">';
+    html += '</div>';
+  });
+  grid.innerHTML = html;
+  grid.querySelectorAll('.fhl-input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      if (!settings.familyHoursLost) settings.familyHoursLost = {};
+      settings.familyHoursLost[inp.dataset.fhlKey] = parseFloat(inp.value) || 0;
       saveSettings(settings);
     });
   });
@@ -13858,6 +14490,7 @@ ptValInput.addEventListener('change', () => {
   showToast('Personal time value saved');
 });
 renderShiftExpectedHoursDefaults();
+renderFamilyHoursLostDefaults();
 
 document.getElementById('pipelineProjectToggle').addEventListener('change', () => {
   renderPipelineChart();
@@ -17219,6 +17852,7 @@ auth.onAuthStateChanged(async (user) => {
       document.getElementById('settingsClaudeKey').value = settings.claudeApiKey || '';
       document.getElementById('settingsPersonalTimeValue').value = settings.personalTimeValue || '';
       renderShiftExpectedHoursDefaults();
+      renderFamilyHoursLostDefaults();
     }
 
     if (result === 'migrated') {
