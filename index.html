@@ -1626,6 +1626,25 @@ input.mil-time.invalid {
 .account-card .ac-name { font-size: 0.85rem; font-weight: 600; }
 .account-card .ac-email { font-size: 0.72rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ===== HOLIDAY AUCTION ===== */
+.ha-table { width: 100%; font-size: 0.78rem; border-collapse: collapse; }
+.ha-table th { text-align: left; padding: 6px 4px; color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.ha-table td { padding: 6px 4px; border-bottom: 1px solid rgba(71,85,105,0.2); }
+.ha-table tr:last-child td { border-bottom: none; }
+.ha-table .ha-pot { font-weight: 700; color: var(--accent); }
+.ha-table .ha-actions { white-space: nowrap; }
+.ha-table .ha-actions button { background: none; border: none; color: var(--primary); cursor: pointer; padding: 2px 6px; font-size: 0.75rem; }
+.ha-table .ha-actions button.ha-delete { color: var(--danger); }
+.ha-calc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.ha-calc-card { background: var(--surface2); border-radius: 8px; padding: 10px 12px; text-align: center; }
+.ha-calc-card .ha-calc-label { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.ha-calc-card .ha-calc-value { font-size: 1rem; font-weight: 700; margin-top: 2px; }
+.ha-ai-result { background: var(--surface2); border-radius: 8px; padding: 14px; margin-top: 12px; font-size: 0.82rem; line-height: 1.6; white-space: pre-wrap; }
+.ha-ai-result .ha-ai-heading { font-weight: 700; color: var(--primary); margin-bottom: 6px; }
+.ha-ai-loading { text-align: center; padding: 20px; color: var(--text-dim); font-size: 0.85rem; }
+.ha-ai-loading .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: ha-spin 0.8s linear infinite; }
+@keyframes ha-spin { to { transform: rotate(360deg); } }
+
 /* ===== BOTTOM NAV — 5 items ===== */
 .bottom-nav button { font-size: 0.6rem; }
 .bottom-nav button .nav-icon { font-size: 1.15rem; }
@@ -2366,6 +2385,27 @@ input.mil-time.invalid {
         <p style="color:var(--text-dim);font-size:0.85rem;">Loading shared data...</p>
       </div>
     </div>
+
+    <!-- Holiday Shift Valuation (admin only) -->
+    <div class="card hidden" id="holidayAuctionCard">
+      <h2>Holiday Shift Valuation</h2>
+      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="tab-btn active" id="haTabHistory" onclick="switchHolidayTab('history')">History</button>
+        <button class="tab-btn" id="haTabCalculator" onclick="switchHolidayTab('calculator')">Calculator</button>
+        <button class="tab-btn" id="haTabAI" onclick="switchHolidayTab('ai')">AI Analysis</button>
+      </div>
+      <div id="haHistory">
+        <div id="holidayAuctionTable"></div>
+        <button class="add-entry-btn" onclick="openHolidayAuctionForm()" style="margin:8px 0;">+ Add Auction Record</button>
+        <div style="height:200px;"><canvas id="holidayPotChart"></canvas></div>
+      </div>
+      <div id="haCalculator" class="hidden">
+        <div id="holidayCalcContent"></div>
+      </div>
+      <div id="haAI" class="hidden">
+        <div id="holidayAIContent"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Daily Totals Tab -->
@@ -2845,6 +2885,41 @@ input.mil-time.invalid {
             <li>API restrictions &rarr; <strong>Restrict key</strong> &rarr; select <strong>Cloud Vision API</strong> only</li>
           </ul>
         </li>
+      </ol>
+    </details>
+  </div>
+
+  <!-- Claude AI Settings (admin only) -->
+  <div class="card hidden" id="claudeAISettingsCard" style="margin-top:12px;">
+    <h2>AI Analysis (Claude API)</h2>
+    <div style="margin-bottom:12px;">
+      <label for="settingsClaudeKey" style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:6px;">Anthropic API Key</label>
+      <input type="password" id="settingsClaudeKey" placeholder="sk-ant-..."
+        style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
+    </div>
+    <p style="font-size:0.72rem;color:var(--accent2);margin-bottom:8px;">
+      &#9888; Your API key is stored in your device settings and synced with your account data. Each AI analysis costs ~$0.01-0.05. You are responsible for your own usage.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div class="settings-field">
+        <label style="font-size:0.8rem;color:var(--text-dim);">Personal Time Value ($/hr)</label>
+        <input type="number" id="settingsPersonalTimeValue" min="0" step="1" placeholder="100"
+          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+      </div>
+    </div>
+    <details style="margin-top:4px;">
+      <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">Expected Hours Defaults</summary>
+      <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.8rem;" id="shiftExpectedHoursGrid"></div>
+    </details>
+    <details style="margin-top:8px;">
+      <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">How to get an API key</summary>
+      <ol style="font-size:0.75rem;color:var(--text-dim);margin:8px 0 0 0;padding-left:20px;line-height:1.6;">
+        <li>Go to <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="color:var(--primary);">console.anthropic.com</a></li>
+        <li>Create an account or sign in</li>
+        <li>Go to <strong>API Keys</strong></li>
+        <li>Click <strong>Create Key</strong></li>
+        <li>Copy the key and paste it above</li>
+        <li>Add credits to your account under <strong>Billing</strong></li>
       </ol>
     </details>
   </div>
@@ -3449,6 +3524,76 @@ input.mil-time.invalid {
   </div>
 </div>
 
+<!-- Holiday Auction Entry Modal -->
+<div class="modal-overlay hidden" id="holidayAuctionModal" onclick="if(event.target===this)closeHolidayAuctionModal()">
+  <div class="modal" style="max-height:85vh;overflow-y:auto;max-width:500px;">
+    <h2 id="haModalTitle">Add Auction Record</h2>
+    <input type="hidden" id="haEditId" value="">
+    <div class="settings-field" style="margin-bottom:10px;">
+      <label>Holiday Name</label>
+      <input type="text" id="haHolidayName" placeholder="e.g., July 4th, Thanksgiving" list="haHolidaySuggestions"
+        style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+      <datalist id="haHolidaySuggestions">
+        <option value="New Year's Day"><option value="MLK Day"><option value="Presidents Day">
+        <option value="Memorial Day"><option value="July 4th"><option value="Labor Day">
+        <option value="Thanksgiving"><option value="Christmas Eve"><option value="Christmas Day"><option value="New Year's Eve">
+      </datalist>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+      <div class="settings-field">
+        <label>Date</label>
+        <input type="date" id="haDate" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+      </div>
+      <div class="settings-field">
+        <label>Hospital</label>
+        <select id="haHospital" onchange="updateHACallPositions()" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+          <option value="UV">Utah Valley (UV)</option>
+          <option value="SF">Spanish Fork (SF)</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+      <div class="settings-field">
+        <label>Call Position</label>
+        <select id="haCallPosition" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+          <option value="1st">1st Call</option><option value="2nd">2nd Call</option>
+          <option value="3rd">3rd Call</option><option value="4th">4th Call</option>
+        </select>
+      </div>
+      <div class="settings-field">
+        <label>Final Pot ($)</label>
+        <input type="number" id="haFinalPot" min="0" step="1" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+      <div class="settings-field">
+        <label>Daily Rate ($)</label>
+        <input type="number" id="haDailyRate" min="0" step="1" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+      </div>
+      <div class="settings-field">
+        <label>Days Open</label>
+        <input type="number" id="haDaysOpen" min="1" step="1" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+      </div>
+      <div class="settings-field">
+        <label>Exp. Hours</label>
+        <input type="number" id="haExpectedHours" min="0" step="0.5" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+      </div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:0.85rem;color:var(--text-dim);">
+      <input type="checkbox" id="haWorkedByMe"> I claimed/worked this shift
+    </label>
+    <div class="settings-field" style="margin-bottom:10px;">
+      <label>Notes (optional)</label>
+      <input type="text" id="haNotes" placeholder="Any details..."
+        style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeHolidayAuctionModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveHolidayAuction()" style="width:auto;">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Surgeon Case Editor Modal -->
 <div class="modal-overlay hidden" id="surgeonCaseEditorModal" onclick="if(event.target===this)closeSurgeonCaseEditor()">
   <div class="modal sce-modal">
@@ -3620,10 +3765,11 @@ function loadData() {
       if (!d.stipends) d.stipends = {};
       if (!d.calendarAssignments) d.calendarAssignments = {};
       if (!d.paychecks) d.paychecks = {};
+      if (!d.holidayAuctions) d.holidayAuctions = [];
       return d;
     }
   } catch(e) {}
-  return { shifts: {}, cases: [], overrides: {}, stipends: {}, calendarAssignments: {}, paychecks: {} };
+  return { shifts: {}, cases: [], overrides: {}, stipends: {}, calendarAssignments: {}, paychecks: {}, holidayAuctions: [] };
 }
 
 function saveData(d) {
@@ -3833,6 +3979,7 @@ async function loadFromFirestore(uid) {
       if (!d.overrides) d.overrides = {};
       if (!d.stipends) d.stipends = {};
       if (!d.calendarAssignments) d.calendarAssignments = {};
+      if (!d.holidayAuctions) d.holidayAuctions = [];
       // Ensure cases is an array
       if (!Array.isArray(d.cases)) d.cases = [];
       data = d;
@@ -7811,6 +7958,7 @@ let breakdownChart = null; // unused, kept for compat
 let histRangeFrom = '';
 let histRangeTo = '';
 let pipelineChart = null;
+let holidayPotChart = null;
 let paycheckChartInstance = null;
 let paycheckRange = '3m';
 let paycheckShowAll = false;
@@ -12158,11 +12306,440 @@ document.getElementById('dayDetailModal').addEventListener('click', (e) => {
   if (e.target.id === 'dayDetailModal') document.getElementById('dayDetailModal').classList.add('hidden');
 });
 
+// ================================================================
+// HOLIDAY SHIFT VALUATION
+// ================================================================
+
+const HOLIDAY_CALL_POSITIONS = { UV: ['1st','2nd','3rd','4th'], SF: ['1st','2nd'] };
+const DEFAULT_EXPECTED_HOURS = { 'UV-1st':8, 'UV-2nd':4, 'UV-3rd':2, 'UV-4th':1, 'SF-1st':6, 'SF-2nd':1 };
+
+function getExpectedHours(hospital, callPosition) {
+  const key = hospital + '-' + callPosition;
+  const custom = settings.shiftExpectedHours || {};
+  return custom[key] !== undefined ? custom[key] : (DEFAULT_EXPECTED_HOURS[key] || 0);
+}
+
+// Calculate actual hours worked on holiday dates using shared + local case data
+function getHolidayActualHours() {
+  if (!data.holidayAuctions || data.holidayAuctions.length === 0) return {};
+  const holidayDates = new Set(data.holidayAuctions.map(a => a.date));
+  const result = {}; // key: date -> { totalHours, caseCount, sources }
+
+  // Local cases
+  (data.cases || []).forEach(c => {
+    if (!holidayDates.has(c.shiftDate)) return;
+    if (!c.startTime || !c.endTime) return;
+    const hrs = calcCaseHours(c.startTime, c.endTime);
+    if (hrs <= 0) return;
+    if (!result[c.shiftDate]) result[c.shiftDate] = { totalHours: 0, caseCount: 0, sources: new Set() };
+    result[c.shiftDate].totalHours += hrs;
+    result[c.shiftDate].caseCount++;
+    result[c.shiftDate].sources.add('local');
+  });
+
+  // Shared cases from community pool
+  (sharedCasesCache || []).forEach(sc => {
+    if (!holidayDates.has(sc.shiftDate)) return;
+    if (!sc.startTime || !sc.endTime) return;
+    // Skip own cases to avoid double-counting
+    if (currentUser && sc.uid === currentUser.uid) return;
+    const hrs = calcCaseHours(sc.startTime, sc.endTime);
+    if (hrs <= 0) return;
+    if (!result[sc.shiftDate]) result[sc.shiftDate] = { totalHours: 0, caseCount: 0, sources: new Set() };
+    result[sc.shiftDate].totalHours += hrs;
+    result[sc.shiftDate].caseCount++;
+    result[sc.shiftDate].sources.add('shared');
+  });
+
+  return result;
+}
+
+function calcCaseHours(startTime, endTime) {
+  const toMin = t => { const [h,m] = t.split(':').map(Number); return h * 60 + (m || 0); };
+  const s = toMin(startTime), e = toMin(endTime);
+  if (e <= s) return 0;
+  return round2((e - s) / 60);
+}
+
+function switchHolidayTab(tab) {
+  ['history','calculator','ai'].forEach(t => {
+    const el = document.getElementById('ha' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (el) el.classList.toggle('hidden', t !== tab);
+  });
+  document.getElementById('haTabHistory').classList.toggle('active', tab === 'history');
+  document.getElementById('haTabCalculator').classList.toggle('active', tab === 'calculator');
+  document.getElementById('haTabAI').classList.toggle('active', tab === 'ai');
+}
+
+function renderHolidayAuctionCard() {
+  const card = document.getElementById('holidayAuctionCard');
+  if (!card) return;
+  if (!isAdmin()) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  renderHolidayAuctionTable();
+  renderHolidayPotChart();
+  renderHolidayCalculator();
+  renderHolidayAIPanel();
+}
+
+function renderHolidayAuctionTable() {
+  const el = document.getElementById('holidayAuctionTable');
+  if (!el) return;
+  if (!data.holidayAuctions) data.holidayAuctions = [];
+  const auctions = data.holidayAuctions.slice().sort((a, b) => b.date.localeCompare(a.date));
+
+  if (auctions.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No auction records yet. Add your first one below.</p>';
+    return;
+  }
+
+  let html = '<div style="overflow-x:auto;"><table class="ha-table"><thead><tr>';
+  html += '<th>Holiday</th><th>Date</th><th>Shift</th><th>Pot</th><th>$/day</th><th>Days</th><th></th>';
+  html += '</tr></thead><tbody>';
+
+  auctions.forEach(a => {
+    const d = new Date(a.date + 'T12:00:00');
+    const dateStr = d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'2-digit' });
+    html += '<tr>';
+    html += '<td>' + escHtml(a.holidayName) + (a.workedByMe ? ' <span style="color:var(--accent);font-size:0.7rem;">&#10003;</span>' : '') + '</td>';
+    html += '<td>' + dateStr + '</td>';
+    html += '<td>' + a.hospital + ' ' + a.callPosition + '</td>';
+    html += '<td class="ha-pot">$' + a.finalPotAmount.toLocaleString() + '</td>';
+    html += '<td>' + (a.dailyRate ? '$' + a.dailyRate : '—') + '</td>';
+    html += '<td>' + (a.daysOpen || '—') + '</td>';
+    html += '<td class="ha-actions">';
+    html += '<button onclick="editHolidayAuction(\'' + a.id + '\')">&#9998;</button>';
+    html += '<button class="ha-delete" onclick="deleteHolidayAuction(\'' + a.id + '\')">&#10005;</button>';
+    html += '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+function renderHolidayPotChart() {
+  const canvas = document.getElementById('holidayPotChart');
+  if (!canvas) return;
+  if (!data.holidayAuctions || data.holidayAuctions.length === 0) {
+    if (holidayPotChart) { holidayPotChart.destroy(); holidayPotChart = null; }
+    return;
+  }
+
+  const byHoliday = {};
+  data.holidayAuctions.forEach(a => {
+    if (!byHoliday[a.holidayName]) byHoliday[a.holidayName] = [];
+    byHoliday[a.holidayName].push(a.finalPotAmount);
+  });
+
+  const labels = Object.keys(byHoliday).sort();
+  const avgData = labels.map(h => { const v = byHoliday[h]; return round2(v.reduce((s,x) => s+x, 0) / v.length); });
+  const maxData = labels.map(h => Math.max(...byHoliday[h]));
+
+  if (holidayPotChart) holidayPotChart.destroy();
+  holidayPotChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Avg Pot', data: avgData, backgroundColor: '#10b981', borderRadius: 4 },
+        { label: 'Max Pot', data: maxData, backgroundColor: 'rgba(245,158,11,0.35)', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#94a3b8', boxWidth: 12, padding: 8 } },
+        tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString() } }
+      },
+      scales: {
+        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { color: '#94a3b8', callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(71,85,105,0.3)' } }
+      }
+    }
+  });
+}
+
+function renderHolidayCalculator() {
+  const el = document.getElementById('holidayCalcContent');
+  if (!el) return;
+  if (!data.holidayAuctions || data.holidayAuctions.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">Add auction records first to see shift valuations.</p>';
+    return;
+  }
+
+  const personalRate = settings.personalTimeValue || 100;
+  const auctions = data.holidayAuctions;
+  const actualHours = getHolidayActualHours();
+
+  // Build summary by hospital + position
+  const combos = {};
+  auctions.forEach(a => {
+    const key = a.hospital + ' ' + a.callPosition + ' Call';
+    if (!combos[key]) combos[key] = { pots: [], hours: [], hospital: a.hospital, position: a.callPosition, dates: [] };
+    combos[key].pots.push(a.finalPotAmount);
+    combos[key].dates.push(a.date);
+    // Use actual hours from case data if available, otherwise fall back to manual/defaults
+    const actual = actualHours[a.date];
+    if (actual && actual.caseCount > 0) {
+      combos[key].hours.push(actual.totalHours);
+    } else {
+      combos[key].hours.push(a.expectedHours || getExpectedHours(a.hospital, a.callPosition));
+    }
+  });
+
+  // Count dates with actual data
+  const datesWithData = Object.keys(actualHours).filter(d => actualHours[d].caseCount > 0).length;
+  const totalDates = new Set(auctions.map(a => a.date)).size;
+
+  let html = '<div class="ha-calc-grid">';
+  html += '<div class="ha-calc-card"><div class="ha-calc-label">Your Time Value</div><div class="ha-calc-value" style="color:var(--text-dim);">$' + personalRate + '/hr</div></div>';
+  html += '<div class="ha-calc-card"><div class="ha-calc-label">Data-Driven Hours</div><div class="ha-calc-value" style="color:var(--primary);">' + datesWithData + '/' + totalDates + ' dates</div></div>';
+  html += '</div>';
+
+  html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:10px;">Hours worked estimated from ' + (datesWithData > 0 ? 'shared case data (' + datesWithData + ' holidays) + manual defaults' : 'manual defaults (no matching case data yet)') + '</div>';
+
+  html += '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;font-weight:600;">Value by Shift Type</div>';
+
+  Object.entries(combos).sort((a,b) => a[0].localeCompare(b[0])).forEach(([label, c]) => {
+    const avgPot = round2(c.pots.reduce((s,v) => s+v, 0) / c.pots.length);
+    const avgHrs = round2(c.hours.reduce((s,v) => s+v, 0) / c.hours.length);
+    const timeCost = round2(avgHrs * personalRate);
+    const netValue = round2(avgPot - timeCost);
+    const effectiveRate = avgHrs > 0 ? round2(avgPot / avgHrs) : 0;
+    const color = netValue >= 0 ? 'var(--accent)' : 'var(--danger)';
+
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;">';
+    html += '<span style="font-size:0.82rem;font-weight:600;">' + escHtml(label) + ' <span style="font-size:0.7rem;color:var(--text-dim);">(n=' + c.pots.length + ')</span></span>';
+    html += '<span style="font-weight:700;color:' + color + ';">Net: $' + netValue.toLocaleString() + '</span>';
+    html += '</div>';
+    html += '<div style="font-size:0.72rem;color:var(--text-dim);padding:0 0 8px;border-bottom:1px solid rgba(71,85,105,0.15);">';
+    html += 'Avg pot: $' + avgPot.toLocaleString() + ' | Avg hrs: ' + avgHrs + ' | $' + effectiveRate.toLocaleString() + '/hr effective vs $' + personalRate + '/hr opportunity';
+    html += '</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+function renderHolidayAIPanel() {
+  const el = document.getElementById('holidayAIContent');
+  if (!el) return;
+  const hasKey = !!(settings.claudeApiKey);
+  const hasData = data.holidayAuctions && data.holidayAuctions.length >= 3;
+
+  let html = '';
+  if (!hasKey) {
+    html = '<p style="color:var(--text-dim);font-size:0.82rem;">Add your Claude API key in Settings to enable AI analysis.</p>';
+  } else if (!hasData) {
+    html = '<p style="color:var(--text-dim);font-size:0.82rem;">Add at least 3 auction records for meaningful AI analysis.</p>';
+  } else {
+    html = '<button class="btn btn-primary btn-sm" onclick="runHolidayAIAnalysis()" id="haAIBtn" style="width:auto;margin-bottom:8px;">Analyze with Claude</button>';
+    html += '<p style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">Sends your auction history to Claude for prediction and recommendations. ~$0.01-0.05 per analysis.</p>';
+    html += '<div id="holidayAIResult"></div>';
+  }
+  el.innerHTML = html;
+}
+
+// ---- Holiday Auction CRUD ----
+function openHolidayAuctionForm(editId) {
+  document.getElementById('haEditId').value = editId || '';
+  document.getElementById('haModalTitle').textContent = editId ? 'Edit Auction Record' : 'Add Auction Record';
+
+  if (editId) {
+    const rec = (data.holidayAuctions || []).find(a => a.id === editId);
+    if (rec) {
+      document.getElementById('haHolidayName').value = rec.holidayName;
+      document.getElementById('haDate').value = rec.date;
+      document.getElementById('haHospital').value = rec.hospital;
+      updateHACallPositions();
+      document.getElementById('haCallPosition').value = rec.callPosition;
+      document.getElementById('haFinalPot').value = rec.finalPotAmount;
+      document.getElementById('haDailyRate').value = rec.dailyRate || '';
+      document.getElementById('haDaysOpen').value = rec.daysOpen || '';
+      document.getElementById('haExpectedHours').value = rec.expectedHours || '';
+      document.getElementById('haWorkedByMe').checked = rec.workedByMe || false;
+      document.getElementById('haNotes').value = rec.notes || '';
+    }
+  } else {
+    ['haHolidayName','haDate','haFinalPot','haDailyRate','haDaysOpen','haExpectedHours','haNotes'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('haHospital').value = 'UV';
+    updateHACallPositions();
+    document.getElementById('haWorkedByMe').checked = false;
+  }
+  document.getElementById('holidayAuctionModal').classList.remove('hidden');
+}
+
+function updateHACallPositions() {
+  const hospital = document.getElementById('haHospital').value;
+  const select = document.getElementById('haCallPosition');
+  const positions = HOLIDAY_CALL_POSITIONS[hospital] || ['1st'];
+  const currentVal = select.value;
+  select.innerHTML = positions.map(p => '<option value="' + p + '">' + p + ' Call</option>').join('');
+  if (positions.includes(currentVal)) select.value = currentVal;
+}
+
+function closeHolidayAuctionModal() {
+  document.getElementById('holidayAuctionModal').classList.add('hidden');
+}
+
+function editHolidayAuction(id) { openHolidayAuctionForm(id); }
+
+function saveHolidayAuction() {
+  if (!data.holidayAuctions) data.holidayAuctions = [];
+  const editId = document.getElementById('haEditId').value;
+  const record = {
+    id: editId || genId(),
+    holidayName: document.getElementById('haHolidayName').value.trim(),
+    date: document.getElementById('haDate').value,
+    hospital: document.getElementById('haHospital').value,
+    callPosition: document.getElementById('haCallPosition').value,
+    finalPotAmount: parseFloat(document.getElementById('haFinalPot').value) || 0,
+    dailyRate: parseFloat(document.getElementById('haDailyRate').value) || 0,
+    daysOpen: parseInt(document.getElementById('haDaysOpen').value) || 0,
+    expectedHours: parseFloat(document.getElementById('haExpectedHours').value) || 0,
+    workedByMe: document.getElementById('haWorkedByMe').checked,
+    notes: document.getElementById('haNotes').value.trim()
+  };
+  if (!record.holidayName || !record.date) { showToast('Holiday name and date are required'); return; }
+  if (editId) {
+    const idx = data.holidayAuctions.findIndex(a => a.id === editId);
+    if (idx >= 0) data.holidayAuctions[idx] = record;
+  } else {
+    data.holidayAuctions.push(record);
+  }
+  saveData(data);
+  closeHolidayAuctionModal();
+  renderHolidayAuctionCard();
+  showToast(editId ? 'Auction record updated' : 'Auction record added');
+}
+
+function deleteHolidayAuction(id) {
+  if (!confirm('Delete this auction record?')) return;
+  data.holidayAuctions = (data.holidayAuctions || []).filter(a => a.id !== id);
+  saveData(data);
+  renderHolidayAuctionCard();
+  showToast('Record deleted');
+}
+
+// ---- Claude AI Analysis ----
+async function runHolidayAIAnalysis() {
+  const apiKey = settings.claudeApiKey;
+  if (!apiKey) { showToast('No Claude API key set'); return; }
+
+  const btn = document.getElementById('haAIBtn');
+  if (btn) btn.disabled = true;
+  const resultEl = document.getElementById('holidayAIResult');
+  resultEl.innerHTML = '<div class="ha-ai-loading"><div class="spinner"></div><br>Analyzing auction data...</div>';
+
+  const auctions = data.holidayAuctions || [];
+  const personalRate = settings.personalTimeValue || 100;
+  const actualHours = getHolidayActualHours();
+
+  const summary = auctions.map(a => {
+    const actual = actualHours[a.date];
+    const hrs = (actual && actual.caseCount > 0)
+      ? { value: round2(actual.totalHours), source: 'case_data', cases: actual.caseCount }
+      : { value: a.expectedHours || getExpectedHours(a.hospital, a.callPosition), source: 'manual_estimate' };
+    return {
+      holiday: a.holidayName, date: a.date,
+      hospital: a.hospital, callPosition: a.callPosition + ' call',
+      finalPot: a.finalPotAmount, dailyRate: a.dailyRate || null,
+      daysOpen: a.daysOpen || null, hoursWorked: hrs,
+      workedByMe: a.workedByMe
+    };
+  });
+
+  const prompt = 'You are an analyst helping an anesthesiologist evaluate holiday call shift auctions.\n\n' +
+    'Context: At this medical group, holiday call shifts are assigned through an auction. A fixed dollar amount is added to a "pot" each day. Someone eventually claims the pot and works the shift. The pot is a bonus on top of normal shift pay (pager pay, production, clock-in time).\n\n' +
+    'Hospitals: Utah Valley (UV) has 1st-4th call positions. Spanish Fork (SF) has 1st-2nd call. Higher call numbers are less likely to be called in.\n\n' +
+    'Historical auction data (' + auctions.length + ' records):\n' + JSON.stringify(summary, null, 2) + '\n\n' +
+    'The user values personal holiday time at $' + personalRate + '/hour.\n' +
+    'Hours data marked "case_data" comes from actual shift records across all users; "manual_estimate" is a manual fallback.\n\n' +
+    'Please provide:\n' +
+    '1. **Pattern Analysis**: Patterns in pot values by holiday and shift type. Which holidays/shifts command higher pots?\n' +
+    '2. **Expected Values**: Estimated next pot value for each holiday+shift combination with enough data.\n' +
+    '3. **Desirability Ranking**: Rank shifts by net value (pot minus time cost). Which offer the best deal above the user\'s time value?\n' +
+    '4. **Timing Insights**: If daily rate data is available, when does claiming offer the best expected value? (Earlier = lower pot but guaranteed; later = higher but risk someone else claims first.)\n' +
+    '5. **Recommendation**: Which upcoming holiday shifts should the user consider, and at approximately what pot level?\n\n' +
+    'Keep analysis concise and actionable. Use specific dollar amounts.';
+
+  try {
+    const response = await callClaudeAPI(apiKey, prompt);
+    resultEl.innerHTML = '<div class="ha-ai-result"><div class="ha-ai-heading">AI Analysis</div>' + formatAIResponse(response) + '</div>';
+  } catch (err) {
+    console.error('Claude API error:', err);
+    resultEl.innerHTML = '<div style="color:var(--danger);font-size:0.82rem;">Error: ' + escHtml(err.message) + '</div>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function callClaudeAPI(apiKey, userMessage) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true'
+  };
+  const body = {
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1500,
+    messages: [{ role: 'user', content: userMessage }]
+  };
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST', headers, body: JSON.stringify(body)
+  });
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({}));
+    throw new Error('API ' + response.status + ': ' + (errBody.error?.message || response.statusText));
+  }
+  const result = await response.json();
+  return result.content?.[0]?.text || 'No response generated.';
+}
+
+function formatAIResponse(text) {
+  return escHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n- /g, '<br>&bull; ')
+    .replace(/\n(\d+)\. /g, '<br>$1. ')
+    .replace(/\n/g, '<br>');
+}
+
+// ---- Settings: Expected Hours Defaults ----
+function renderShiftExpectedHoursDefaults() {
+  const grid = document.getElementById('shiftExpectedHoursGrid');
+  if (!grid) return;
+  const custom = settings.shiftExpectedHours || {};
+  let html = '';
+  ['UV','SF'].forEach(hosp => {
+    (HOLIDAY_CALL_POSITIONS[hosp] || []).forEach(pos => {
+      const key = hosp + '-' + pos;
+      const val = custom[key] !== undefined ? custom[key] : DEFAULT_EXPECTED_HOURS[key];
+      html += '<div style="display:flex;align-items:center;gap:4px;">';
+      html += '<label style="flex:1;color:var(--text-dim);font-size:0.75rem;">' + hosp + ' ' + pos + ' Call</label>';
+      html += '<input type="number" min="0" step="0.5" value="' + (val || 0) + '" data-shift-key="' + key + '" class="ha-exp-hrs-input" style="width:60px;padding:4px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.78rem;">';
+      html += '</div>';
+    });
+  });
+  grid.innerHTML = html;
+  grid.querySelectorAll('.ha-exp-hrs-input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      if (!settings.shiftExpectedHours) settings.shiftExpectedHours = {};
+      settings.shiftExpectedHours[inp.dataset.shiftKey] = parseFloat(inp.value) || 0;
+      saveSettings(settings);
+    });
+  });
+}
+
+// ================================================================
+
 function renderAnalyticsTab() {
   renderCaseMix();
   renderTopProcedures();
   renderSurgeonEfficiency();
   renderCollectiveCases();
+  renderHolidayAuctionCard();
 }
 
 function renderCollectiveCases() {
@@ -13265,6 +13842,27 @@ visionKeyInput.addEventListener('change', () => {
   saveSettings(settings);
   showToast('Vision API key saved');
 });
+
+// Claude AI settings (admin only)
+if (isAdmin()) {
+  const aiCard = document.getElementById('claudeAISettingsCard');
+  if (aiCard) aiCard.classList.remove('hidden');
+}
+const claudeKeyInput = document.getElementById('settingsClaudeKey');
+claudeKeyInput.value = settings.claudeApiKey || '';
+claudeKeyInput.addEventListener('change', () => {
+  settings.claudeApiKey = claudeKeyInput.value.trim();
+  saveSettings(settings);
+  showToast('Claude API key saved');
+});
+const ptValInput = document.getElementById('settingsPersonalTimeValue');
+ptValInput.value = settings.personalTimeValue || '';
+ptValInput.addEventListener('change', () => {
+  settings.personalTimeValue = parseFloat(ptValInput.value) || 100;
+  saveSettings(settings);
+  showToast('Personal time value saved');
+});
+renderShiftExpectedHoursDefaults();
 
 document.getElementById('pipelineProjectToggle').addEventListener('change', () => {
   renderPipelineChart();
