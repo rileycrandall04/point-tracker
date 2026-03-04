@@ -17217,6 +17217,15 @@ auth.onAuthStateChanged(async (user) => {
     migrateData(data);
     initApp();
 
+    // Show admin-only settings after auth and sync values from cloud
+    if (isAdmin()) {
+      const aiCard = document.getElementById('claudeAISettingsCard');
+      if (aiCard) aiCard.classList.remove('hidden');
+      document.getElementById('settingsClaudeKey').value = settings.claudeApiKey || '';
+      document.getElementById('settingsPersonalTimeValue').value = settings.personalTimeValue || '';
+      renderShiftExpectedHoursDefaults();
+    }
+
     if (result === 'migrated') {
       showToast('Local data synced to cloud');
     } else if (result === 'loaded') {
