@@ -13311,12 +13311,10 @@ var HISTORICAL_AUCTION_DATA = [{"id":"imp0001","holidayName":"MLK Day","date":"2
 function autoImportHistoricalData() {
   if (!data.holidayAuctions) data.holidayAuctions = [];
   var currentVersion = data.holidayDataVersion || 0;
-  // If data version is outdated, clear old data and re-import fresh
-  if (currentVersion < HISTORICAL_DATA_VERSION && data.holidayAuctions.length > 0) {
+  // If data version is outdated, clear ALL auction data and re-import fresh
+  if (currentVersion < HISTORICAL_DATA_VERSION) {
     console.log("Historical data version " + currentVersion + " → " + HISTORICAL_DATA_VERSION + ": clearing " + data.holidayAuctions.length + " old records for re-import");
-    // Keep only manually-added records (ones not in the embedded dataset)
-    var embeddedIds = new Set(HISTORICAL_AUCTION_DATA.map(function(r) { return r.id; }));
-    data.holidayAuctions = data.holidayAuctions.filter(function(a) { return !embeddedIds.has(a.id); });
+    data.holidayAuctions = [];
   }
   if (currentVersion >= HISTORICAL_DATA_VERSION && data.holidayAuctions.length >= 100) return; // Already up-to-date
   var existingKeys = new Set(data.holidayAuctions.map(function(a) {
