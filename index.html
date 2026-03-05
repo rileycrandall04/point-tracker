@@ -8197,7 +8197,8 @@ function renderWeeklyChart() {
   const prefix = weeklyShowDollars ? '$' : '';
   const suffix = weeklyShowDollars ? '' : ' pts';
   const monthName = new Date(workingDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' });
-  document.getElementById('weeklySummary').textContent = 'Week: ' + prefix + weekTotal.toFixed(2) + suffix + '  \u00B7  ' + monthName + ': ' + prefix + monthTotal.toFixed(2) + suffix;
+  const weekHrs = round2(hoursArr.reduce((a, b) => a + b, 0));
+  document.getElementById('weeklySummary').textContent = 'Week: ' + prefix + weekTotal.toFixed(2) + suffix + '  \u00B7  ' + monthName + ': ' + prefix + monthTotal.toFixed(2) + suffix + '  \u00B7  ' + weekHrs.toFixed(1) + ' hrs';
 }
 
 document.getElementById('weeklyToggleBtn').addEventListener('click', () => {
