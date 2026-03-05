@@ -11976,8 +11976,11 @@ function renderTimeSummary() {
   }
   let totalClockedHrs = 0, totalAvailHrs = 0, totalPoints = 0;
   let totalStartMin = 0, totalEndMin = 0, count = 0;
+  const workedWeeks = new Set();
   recent.forEach(s => {
     if (!s.assignmentType || s.assignmentType === 'vacation' || s.assignmentType === 'forced_off' || s.forcedOff) return;
+    // Skip future pager-only placeholder shifts
+    if (isFuturePagerOnly(s)) return;
     const hrs = calcShiftHours(s);
     const st = calcShiftTotal(s);
     totalPoints += st.total;
@@ -11988,6 +11991,11 @@ function renderTimeSummary() {
     } else {
       totalAvailHrs += hrs;
     }
+    // Track distinct ISO weeks with at least one worked shift
+    const d = new Date(s.date + 'T12:00:00');
+    const jan1 = new Date(d.getFullYear(), 0, 1);
+    const weekNum = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+    workedWeeks.add(d.getFullYear() + '-W' + weekNum);
     if (hrs > 0) {
       const entries = s.timeEntries || [{ start: s.startTime, end: s.endTime }];
       totalStartMin += timeToMinutes(entries[0].start);
@@ -11997,15 +12005,8 @@ function renderTimeSummary() {
     }
   });
   const avgPtsHr = totalClockedHrs > 0 ? round2(totalPoints / totalClockedHrs) : 0;
-  // Calculate actual weeks of data instead of hardcoded 13
-  const dates = recent.filter(s => s.assignmentType && s.assignmentType !== 'vacation' && s.assignmentType !== 'forced_off' && !s.forcedOff).map(s => s.date).sort();
-  let weeks = 13;
-  if (dates.length > 0) {
-    const earliest = new Date(dates[0]);
-    const latest = new Date(dates[dates.length - 1]);
-    const spanDays = Math.max(1, (latest - earliest) / (1000 * 60 * 60 * 24) + 1);
-    weeks = Math.max(spanDays / 7, 1); // at least 1 week (projects forward if < 1 week)
-  }
+  // Count distinct calendar weeks that had at least one worked shift
+  const weeks = Math.max(workedWeeks.size, 1);
   const avgClockedWk = round2(totalClockedHrs / weeks);
   const avgAvailWk = round2(totalAvailHrs / weeks);
   document.getElementById('timeAvgPtsHr').textContent = avgPtsHr.toFixed(1);
@@ -12039,7 +12040,7 @@ function renderProductionTrend() {
     const mk = dateKey.substring(0, 7);
     if (hoursByMonth.hasOwnProperty(mk)) {
       const shift = shifts[dateKey];
-      if (shift && shift.assignmentType !== 'vacation') {
+      if (shift && shift.assignmentType !== 'vacation' && shift.assignmentType !== 'forced_off' && !shift.forcedOff && !isFuturePagerOnly(shift)) {
         const hrs = calcShiftHours(shift);
         hoursByMonth[mk] += hrs;
         countByMonth[mk] += 1;
@@ -12094,6 +12095,8 @@ function buildDayOfWeek() {
   const countByDay = [0,0,0,0,0,0,0];
   const recent = getRecentShifts(3);
   recent.forEach(s => {
+    if (!s.assignmentType || s.assignmentType === 'vacation' || s.assignmentType === 'forced_off' || s.forcedOff) return;
+    if (isFuturePagerOnly(s)) return;
     const d = new Date(s.date + 'T12:00:00');
     const dow = d.getDay();
     ptsByDay[dow] += calcShiftTotal(s).total;
@@ -12123,6 +12126,8 @@ function buildDayOfWeek() {
 function renderWeekendVsWeekday() {
   let wdHrs = 0, wdPts = 0, wdN = 0, weHrs = 0, wePts = 0, weN = 0;
   Object.values(data.shifts).forEach(s => {
+    if (!s.assignmentType || s.assignmentType === 'vacation' || s.assignmentType === 'forced_off' || s.forcedOff) return;
+    if (isFuturePagerOnly(s)) return;
     const hrs = calcShiftHours(s);
     const pts = calcShiftTotal(s).total;
     if (isWeekend(s.date)) { weHrs += hrs; wePts += pts; weN++; }
