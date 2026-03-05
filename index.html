@@ -10770,10 +10770,9 @@ function updateEEResult() {
     document.getElementById('eeBreakdown').textContent = '';
   }
 
-  // Debounce save
+  // Debounce save (only weeks/year — hrs/week auto-computes from shift data each session)
   clearTimeout(window._eeSaveTimer);
   window._eeSaveTimer = setTimeout(() => {
-    settings.eeHrsPerWeek = hrsPerWeek;
     settings.eeWeeksPerYear = weeksPerYear;
     saveSettings(settings);
   }, 1000);
@@ -10784,30 +10783,25 @@ function renderEarningsEstimator() {
   const body = document.getElementById('earningsEstimatorBody');
   if (!body) return;
 
-  // Calculate 3-month rolling clocked hrs/wk for default
+  // Default hrs/week to 3-month rolling average from shift data
   const hrsInput = document.getElementById('eeHrsPerWeek');
   const wksInput = document.getElementById('eeWeeksPerYear');
   if (!hrsInput.dataset.loaded) {
-    if (settings.eeHrsPerWeek) {
-      hrsInput.value = settings.eeHrsPerWeek;
-    } else {
-      // Compute from recent 3 months of shift data
-      const recent = getRecentShifts(3);
-      let recentHrs = 0;
-      const recentWeeks = new Set();
-      recent.forEach(s => {
-        if (!s.assignmentType || s.assignmentType === 'vacation' || s.assignmentType === 'forced_off' || s.forcedOff) return;
-        if (isFuturePagerOnly(s)) return;
-        recentHrs += calcShiftHours(s);
-        const d = new Date(s.date + 'T12:00:00');
-        const jan1 = new Date(d.getFullYear(), 0, 1);
-        const weekNum = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
-        recentWeeks.add(d.getFullYear() + '-W' + weekNum);
-      });
-      const numWeeks = Math.max(recentWeeks.size, 1);
-      const calcHrsWk = recentHrs > 0 ? Math.round(recentHrs / numWeeks) : 40;
-      hrsInput.value = calcHrsWk;
-    }
+    const recent = getRecentShifts(3);
+    let recentHrs = 0;
+    const recentWeeks = new Set();
+    recent.forEach(s => {
+      if (!s.assignmentType || s.assignmentType === 'vacation' || s.assignmentType === 'forced_off' || s.forcedOff) return;
+      if (isFuturePagerOnly(s)) return;
+      recentHrs += calcShiftHours(s);
+      const d = new Date(s.date + 'T12:00:00');
+      const jan1 = new Date(d.getFullYear(), 0, 1);
+      const weekNum = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+      recentWeeks.add(d.getFullYear() + '-W' + weekNum);
+    });
+    const numWeeks = Math.max(recentWeeks.size, 1);
+    const calcHrsWk = recentHrs > 0 ? Math.round(recentHrs / numWeeks) : 40;
+    hrsInput.value = calcHrsWk;
     hrsInput.dataset.loaded = '1';
   }
   if (!wksInput.dataset.loaded) {
@@ -10896,9 +10890,8 @@ function renderEarningsEstimator() {
   const hrsPerWeek = parseFloat(hrsInput.value) || 40;
   const weeksPerYear = parseFloat(wksInput.value) || 48;
 
-  // Save to settings if changed
-  if (settings.eeHrsPerWeek !== hrsPerWeek || settings.eeWeeksPerYear !== weeksPerYear) {
-    settings.eeHrsPerWeek = hrsPerWeek;
+  // Save weeks/year to settings if changed (hrs/week auto-computes each session)
+  if (settings.eeWeeksPerYear !== weeksPerYear) {
     settings.eeWeeksPerYear = weeksPerYear;
     clearTimeout(window._eeSaveTimer);
     window._eeSaveTimer = setTimeout(() => saveSettings(settings), 1000);
