@@ -2857,11 +2857,11 @@ input.mil-time.invalid {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
             <div>
               <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:2px;">Hours / Week</label>
-              <input type="number" id="eeHrsPerWeek" class="text-input" value="40" min="1" max="168" step="1" style="width:100%;font-size:0.85rem;" oninput="eeManualOverride ? updateEEResult() : renderEarningsEstimator()">
+              <input type="number" id="eeHrsPerWeek" class="text-input" value="40" min="1" max="168" step="1" style="width:100%;font-size:0.85rem;" oninput="updateEEResult()">
             </div>
             <div>
               <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:2px;">Weeks / Year</label>
-              <input type="number" id="eeWeeksPerYear" class="text-input" value="48" min="1" max="52" step="1" style="width:100%;font-size:0.85rem;" oninput="eeManualOverride ? updateEEResult() : renderEarningsEstimator()">
+              <input type="number" id="eeWeeksPerYear" class="text-input" value="48" min="1" max="52" step="1" style="width:100%;font-size:0.85rem;" oninput="updateEEResult()">
             </div>
           </div>
           <div style="text-align:center;margin-bottom:6px;">
@@ -10783,11 +10783,17 @@ function renderEarningsEstimator() {
   const body = document.getElementById('earningsEstimatorBody');
   if (!body) return;
 
-  // Load saved inputs
+  // Load saved inputs (only restore on first render when still at HTML defaults)
   const hrsInput = document.getElementById('eeHrsPerWeek');
   const wksInput = document.getElementById('eeWeeksPerYear');
-  if (settings.eeHrsPerWeek && hrsInput.value === '40' && settings.eeHrsPerWeek !== 40) hrsInput.value = settings.eeHrsPerWeek;
-  if (settings.eeWeeksPerYear && wksInput.value === '48' && settings.eeWeeksPerYear !== 48) wksInput.value = settings.eeWeeksPerYear;
+  if (!hrsInput.dataset.loaded && settings.eeHrsPerWeek) {
+    hrsInput.value = settings.eeHrsPerWeek;
+    hrsInput.dataset.loaded = '1';
+  }
+  if (!wksInput.dataset.loaded && settings.eeWeeksPerYear) {
+    wksInput.value = settings.eeWeeksPerYear;
+    wksInput.dataset.loaded = '1';
+  }
 
   // Check for $/pt
   if (!pv) {
