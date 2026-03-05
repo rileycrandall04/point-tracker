@@ -7902,8 +7902,10 @@ function renderWeeklyChart() {
   let weekTotal = 0;
 
   weekDates.forEach((d, i) => {
-    const result = getShiftPointsForDate(d, true);
     const shift = data.shifts[d];
+    // Skip future pager-only shifts — don't show pager pay on chart before it's earned
+    const futPager = shift && isFuturePagerOnly(shift);
+    const result = futPager ? { total: 0, isInProgress: false, ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0 } : getShiftPointsForDate(d, true);
     const hrs = shift ? calcShiftHours(shift) : 0;
     rawPts.push(result.total);
     hoursArr.push(hrs);
@@ -12360,6 +12362,11 @@ function renderDailyTab() {
   Object.values(data.shifts).forEach(s => {
     if (!s.date || !s.date.startsWith(prefix)) return;
     const day = parseInt(s.date.split('-')[2]);
+    // Skip future pager-only shifts — don't show pager pay on calendar before it's earned
+    if (isFuturePagerOnly(s)) {
+      dailyTypes[day] = s.assignmentType;
+      return;
+    }
     const t = getShiftPointsForDate(s.date, true);
     dailyPts[day] = (dailyPts[day] || 0) + t.total;
     dailyTypes[day] = s.assignmentType;
