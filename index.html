@@ -10784,15 +10784,36 @@ function renderEarningsEstimator() {
   const body = document.getElementById('earningsEstimatorBody');
   if (!body) return;
 
-  // Load saved inputs (only restore on first render when still at HTML defaults)
+  // Calculate 3-month rolling clocked hrs/wk for default
   const hrsInput = document.getElementById('eeHrsPerWeek');
   const wksInput = document.getElementById('eeWeeksPerYear');
-  if (!hrsInput.dataset.loaded && settings.eeHrsPerWeek) {
-    hrsInput.value = settings.eeHrsPerWeek;
+  if (!hrsInput.dataset.loaded) {
+    if (settings.eeHrsPerWeek) {
+      hrsInput.value = settings.eeHrsPerWeek;
+    } else {
+      // Compute from recent 3 months of shift data
+      const recent = getRecentShifts(3);
+      let recentHrs = 0;
+      const recentWeeks = new Set();
+      recent.forEach(s => {
+        if (!s.assignmentType || s.assignmentType === 'vacation' || s.assignmentType === 'forced_off' || s.forcedOff) return;
+        if (isFuturePagerOnly(s)) return;
+        recentHrs += calcShiftHours(s);
+        const d = new Date(s.date + 'T12:00:00');
+        const jan1 = new Date(d.getFullYear(), 0, 1);
+        const weekNum = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+        recentWeeks.add(d.getFullYear() + '-W' + weekNum);
+      });
+      const numWeeks = Math.max(recentWeeks.size, 1);
+      const calcHrsWk = recentHrs > 0 ? Math.round(recentHrs / numWeeks) : 40;
+      hrsInput.value = calcHrsWk;
+    }
     hrsInput.dataset.loaded = '1';
   }
-  if (!wksInput.dataset.loaded && settings.eeWeeksPerYear) {
-    wksInput.value = settings.eeWeeksPerYear;
+  if (!wksInput.dataset.loaded) {
+    if (settings.eeWeeksPerYear) {
+      wksInput.value = settings.eeWeeksPerYear;
+    }
     wksInput.dataset.loaded = '1';
   }
 
