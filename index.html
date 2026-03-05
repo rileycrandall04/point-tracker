@@ -10292,11 +10292,21 @@ function renderProjections() {
   renderPaycheckCard();
 }
 
+function isFuturePagerOnly(shift) {
+  // Returns true if this is a future pager-only placeholder shift (not yet earned)
+  const today = effectiveWorkDate();
+  if (shift.date <= today) return false;
+  const hasRealEntries = shift.timeEntries && shift.timeEntries.some(e => e.start);
+  return !hasRealEntries;
+}
+
 function getMonthlyTotals() {
   const months = {};
   // First compute from shift data
   const monthBreakdowns = {};
   Object.values(data.shifts).forEach(shift => {
+    // Skip future pager-only shifts — don't count pager pay before it's earned
+    if (isFuturePagerOnly(shift)) return;
     const mk = shift.date.substring(0, 7);
     if (!monthBreakdowns[mk]) monthBreakdowns[mk] = { time: 0, prod: 0 };
     const t = calcShiftTotal(shift);
@@ -11392,7 +11402,8 @@ function renderMonthlyPace() {
   // so today's shift/cases with no end time use current time as surrogate
   const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(thisPrefix));
   let currentPts = 0;
-  monthShifts.forEach(s => { currentPts += getShiftPointsForDate(s.date, true).total; });
+  // Only count points for shifts that have been earned (not future pager-only placeholders)
+  monthShifts.forEach(s => { if (!isFuturePagerOnly(s)) currentPts += getShiftPointsForDate(s.date, true).total; });
   currentPts = round2(currentPts);
 
   // Count weekdays and vacation days this month
@@ -15346,8 +15357,11 @@ function updateHeaderPoints() {
   const monthShifts = [];
   Object.values(data.shifts).forEach(s => {
     if (s.date && s.date.startsWith(prefix)) {
-      monthPts += getShiftPointsForDate(s.date, true).total;
-      monthShifts.push(s);
+      // Skip future pager-only shifts — don't count pager pay before it's earned
+      if (!isFuturePagerOnly(s)) {
+        monthPts += getShiftPointsForDate(s.date, true).total;
+      }
+      monthShifts.push(s); // Still include in monthShifts for pace/vacation counting
     }
   });
   monthPts = round2(monthPts);
