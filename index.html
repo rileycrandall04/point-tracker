@@ -4006,6 +4006,7 @@ function deleteAllUserSharedCases() {
 
 let sharedCasesCache = [];
 let sharedCasesLoaded = false;
+let sharedCaseOverridesCache = {}; // { docId: { surgeon, procedure, updatedAt } }
 let surgeonMappingsCache = {};
 let surgeonMappingsLoaded = false;
 
@@ -4024,6 +4025,8 @@ async function loadSharedCases() {
       d._docId = doc.id;
       sharedCasesCache.push(d);
     });
+    // Apply admin overrides on top of raw shared data
+    applySharedCaseOverrides();
     sharedCasesLoaded = true;
     console.log('Loaded ' + sharedCasesCache.length + ' shared cases');
     return sharedCasesCache;
@@ -4031,6 +4034,29 @@ async function loadSharedCases() {
     console.error('Failed to load shared cases:', err);
     return [];
   }
+}
+
+async function loadSharedCaseOverrides() {
+  try {
+    const snapshot = await db.collection('sharedCaseOverrides').get();
+    sharedCaseOverridesCache = {};
+    snapshot.forEach(doc => {
+      sharedCaseOverridesCache[doc.id] = doc.data();
+    });
+    console.log('Loaded ' + Object.keys(sharedCaseOverridesCache).length + ' shared case overrides');
+  } catch (err) {
+    console.error('Failed to load shared case overrides:', err);
+  }
+}
+
+function applySharedCaseOverrides() {
+  sharedCasesCache.forEach(sc => {
+    const override = sharedCaseOverridesCache[sc._docId];
+    if (override) {
+      if (override.surgeon !== undefined) sc.surgeon = override.surgeon;
+      if (override.procedure !== undefined) sc.procedure = override.procedure;
+    }
+  });
 }
 
 function approxSharedCasePoints(sc) {
@@ -14398,12 +14424,13 @@ async function saveSCEChanges() {
       writeSharedCase(caseObj, shift);
       personalUpdated++;
     } else if (c.source === 'shared' && c._docId) {
-      const updateObj = {};
-      if (fields.surgeon !== undefined) { updateObj.surgeon = fields.surgeon; c.surgeon = fields.surgeon; }
-      if (fields.procedure !== undefined) { updateObj.procedure = fields.procedure; c.procedure = fields.procedure; }
-      updateObj.updatedAt = new Date().toISOString();
-      sharedBatch.push({ docId: c._docId, update: updateObj });
-      // Also update sharedCasesCache
+      const overrideObj = {};
+      if (fields.surgeon !== undefined) { overrideObj.surgeon = fields.surgeon; c.surgeon = fields.surgeon; }
+      if (fields.procedure !== undefined) { overrideObj.procedure = fields.procedure; c.procedure = fields.procedure; }
+      overrideObj.updatedAt = new Date().toISOString();
+      sharedBatch.push({ docId: c._docId, override: overrideObj });
+      // Update local caches immediately
+      sharedCaseOverridesCache[c._docId] = Object.assign(sharedCaseOverridesCache[c._docId] || {}, overrideObj);
       const sc = sharedCasesCache.find(x => x._docId === c._docId);
       if (sc) {
         if (fields.surgeon !== undefined) sc.surgeon = fields.surgeon;
@@ -14418,12 +14445,12 @@ async function saveSCEChanges() {
     saveData();
   }
 
-  // Save shared cases to Firestore
+  // Save shared case overrides to Firestore (separate collection, survives user re-sync)
   for (const item of sharedBatch) {
     try {
-      await db.collection('sharedCases').doc(item.docId).update(item.update);
+      await db.collection('sharedCaseOverrides').doc(item.docId).set(item.override, { merge: true });
     } catch (err) {
-      console.error('Failed to update shared case ' + item.docId, err);
+      console.error('Failed to save shared case override ' + item.docId, err);
     }
   }
 
@@ -18466,8 +18493,10 @@ auth.onAuthStateChanged(async (user) => {
       saveSettings(settings);
     }
 
-    // Load shared cases and surgeon mappings from community pool (non-blocking)
-    loadSharedCases().then(() => {
+    // Load shared cases, overrides, and surgeon mappings from community pool (non-blocking)
+    loadSharedCaseOverrides().then(() => {
+      return loadSharedCases(); // applies overrides after loading
+    }).then(() => {
       return loadSurgeonMappings();
     }).then(() => {
       renderCollectiveCases();
