@@ -1683,6 +1683,20 @@ input.mil-time.invalid {
 .hs-selector select { flex: 1; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.85rem; min-width: 160px; }
 .hs-selector .btn { white-space: nowrap; }
 
+/* EV Optimizer */
+.ev-optimizer { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
+.ev-optimizer-title { font-size: 0.82rem; font-weight: 600; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.ev-optimizer-title .ev-badge { font-size: 0.62rem; background: var(--primary); color: white; padding: 1px 6px; border-radius: 10px; font-weight: 600; }
+.ev-input-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.ev-input-row label { font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; }
+.ev-input-row input { width: 80px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem; text-align: right; }
+.ev-input-row select { flex: 1; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem; }
+.ev-summary { background: var(--surface2); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; font-size: 0.78rem; line-height: 1.5; }
+.ev-summary .ev-optimal { color: var(--accent); font-weight: 700; font-size: 0.9rem; }
+.ev-summary .ev-detail { color: var(--text-dim); font-size: 0.72rem; margin-top: 2px; }
+.ev-chart-wrap { height: 200px; margin-top: 8px; }
+.ev-no-data { font-size: 0.78rem; color: var(--text-dim); font-style: italic; padding: 4px 0; margin-bottom: 6px; }
+
 /* ===== BOTTOM NAV — 5 items ===== */
 .bottom-nav button { font-size: 0.6rem; }
 .bottom-nav button .nav-icon { font-size: 1.15rem; }
@@ -8055,6 +8069,7 @@ let histRangeFrom = '';
 let histRangeTo = '';
 let pipelineChart = null;
 let holidayPotChart = null;
+let evOptimizerChart = null;
 let paycheckChartInstance = null;
 let paycheckRange = '3m';
 let paycheckShowAll = false;
@@ -12771,6 +12786,12 @@ function renderBreakevenForSelected() {
   }
 
   contentEl.innerHTML = html;
+
+  // Append EV Optimizer section below breakeven cards
+  const evDiv = document.createElement('div');
+  evDiv.id = 'evOptimizerSection';
+  contentEl.appendChild(evDiv);
+  renderEVOptimizerSection(schedule);
 }
 
 function renderBreakevenCard(shift, result, dates) {
@@ -12831,6 +12852,274 @@ function renderBreakevenCard(shift, result, dates) {
 function toggleHSDetail(id) {
   const el = document.getElementById(id);
   if (el) el.classList.toggle('open');
+}
+
+// ================================================================
+// EXPECTED VALUE OPTIMIZER
+// ================================================================
+
+// Build survival function from historical daysOpen data
+// Returns P(pot still unclaimed on day N)
+function buildSurvivalFunction() {
+  const auctions = (data.holidayAuctions || []).filter(a => a.daysOpen > 0);
+  if (auctions.length < 3) {
+    // Fallback: exponential decay, median ~14 days
+    return function(n) { return Math.exp(-0.05 * n); };
+  }
+  const daysOpenValues = auctions.map(a => a.daysOpen).sort((a, b) => a - b);
+  const total = daysOpenValues.length;
+  return function(n) {
+    const survived = daysOpenValues.filter(d => d > n).length;
+    return survived / total;
+  };
+}
+
+// Compute EV for each day, find optimal
+function computeEVOptimal(dailyRate, breakeven, maxDays) {
+  const survival = buildSurvivalFunction();
+  maxDays = maxDays || 60;
+  const results = [];
+  let bestDay = 1, bestEV = -Infinity;
+
+  for (let n = 1; n <= maxDays; n++) {
+    const potValue = round2(dailyRate * n);
+    const pN = survival(n);
+    const ev = round2(Math.max(0, potValue - breakeven) * pN);
+    results.push({ day: n, potValue: potValue, survival: pN, ev: ev });
+    if (ev > bestEV) { bestEV = ev; bestDay = n; }
+    // Stop if survival is negligible and EV declining
+    if (pN < 0.01 && ev < bestEV * 0.5) break;
+  }
+
+  return { results: results, bestDay: bestDay, bestEV: round2(bestEV) };
+}
+
+// Get default daily rate from most recent auction
+function getDefaultDailyRate() {
+  const auctions = (data.holidayAuctions || []).filter(a => a.dailyRate > 0);
+  if (auctions.length === 0) return 200;
+  const sorted = auctions.slice().sort((a, b) => b.date.localeCompare(a.date));
+  return sorted[0].dailyRate;
+}
+
+// Render the mixed Chart.js chart
+function renderEVOptimizerChart(canvasId, evData, breakeven) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  if (evOptimizerChart) { evOptimizerChart.destroy(); evOptimizerChart = null; }
+
+  const labels = evData.results.map(function(r) { return 'Day ' + r.day; });
+  const evValues = evData.results.map(function(r) { return r.ev; });
+  const potValues = evData.results.map(function(r) { return r.potValue; });
+  const survivalValues = evData.results.map(function(r) { return round2(r.survival * 100); });
+
+  // Highlight optimal day bar
+  const barColors = evData.results.map(function(r) {
+    return r.day === evData.bestDay ? 'rgba(16,185,129,0.85)' : 'rgba(59,130,246,0.5)';
+  });
+  const barBorders = evData.results.map(function(r) {
+    return r.day === evData.bestDay ? '#10b981' : '#3b82f6';
+  });
+
+  const datasets = [
+    {
+      label: 'Expected Value',
+      data: evValues,
+      backgroundColor: barColors,
+      borderColor: barBorders,
+      borderWidth: 1,
+      borderRadius: 3,
+      yAxisID: 'y',
+      order: 2
+    },
+    {
+      label: 'Survival %',
+      data: survivalValues,
+      type: 'line',
+      borderColor: '#4285f4',
+      borderWidth: 2,
+      pointRadius: 0,
+      fill: false,
+      yAxisID: 'y1',
+      order: 0
+    }
+  ];
+
+  // Pot value as a hidden dataset (only shows in tooltips, doesn't affect Y-axis scale)
+  datasets.push({
+    label: 'Pot Value',
+    data: potValues,
+    type: 'line',
+    borderColor: '#10b981',
+    borderWidth: 2,
+    borderDash: [6, 3],
+    pointRadius: 0,
+    fill: false,
+    yAxisID: 'y2',
+    order: 1
+  });
+
+  // Breakeven threshold line (scaled to EV axis)
+  if (breakeven > 0) {
+    datasets.push({
+      label: 'Breakeven',
+      data: evData.results.map(function() { return breakeven; }),
+      type: 'line',
+      borderColor: '#ef4444',
+      borderWidth: 1.5,
+      borderDash: [4, 4],
+      pointRadius: 0,
+      fill: false,
+      yAxisID: 'y2',
+      order: 0
+    });
+  }
+
+  evOptimizerChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#94a3b8', boxWidth: 10, padding: 8, font: { size: 10 } } },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              if (ctx.dataset.label === 'Survival %') return 'Available: ' + ctx.raw.toFixed(1) + '%';
+              if (ctx.dataset.label === 'Breakeven') return 'Breakeven: $' + ctx.raw.toLocaleString();
+              return ctx.dataset.label + ': $' + ctx.raw.toLocaleString();
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#94a3b8', callback: function(v) { return '$' + v.toLocaleString(); } },
+          grid: { color: 'rgba(71,85,105,0.3)' }
+        },
+        y1: {
+          position: 'right',
+          min: 0, max: 100,
+          ticks: { color: '#4285f4', stepSize: 25, callback: function(v) { return v + '%'; } },
+          grid: { display: false }
+        },
+        y2: {
+          display: false,
+          beginAtZero: true
+        },
+        x: {
+          ticks: {
+            color: '#94a3b8',
+            font: { size: 9 },
+            maxRotation: 0,
+            callback: function(val, idx) { return (idx % 5 === 0) ? this.getLabelForValue(val) : ''; }
+          },
+          grid: { display: false }
+        }
+      }
+    }
+  });
+}
+
+// Render the full EV Optimizer UI section
+function renderEVOptimizerSection(schedule) {
+  const el = document.getElementById('evOptimizerSection');
+  if (!el) return;
+
+  const auctions = (data.holidayAuctions || []).filter(a => a.daysOpen > 0);
+  const defaultRate = getDefaultDailyRate();
+
+  let html = '<div class="ev-optimizer">';
+  html += '<div class="ev-optimizer-title">Expected Value Optimizer <span class="ev-badge">EV</span></div>';
+
+  // Data status
+  if (auctions.length < 3) {
+    html += '<div class="ev-no-data">Using default timing model (need 3+ auction records with days-open data for historical model). ';
+    html += 'Have ' + auctions.length + ' record' + (auctions.length !== 1 ? 's' : '') + '.</div>';
+  } else {
+    html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">Timing model based on ' + auctions.length + ' historical auction' + (auctions.length !== 1 ? 's' : '') + '.</div>';
+  }
+
+  // Daily rate input
+  html += '<div class="ev-input-row">';
+  html += '<label>Daily Rate: $</label>';
+  html += '<input type="number" id="evDailyRate" value="' + defaultRate + '" min="1" step="10" onchange="updateEVOptimizer()">';
+  html += '<label style="margin-left:4px;">/ day added to pot</label>';
+  html += '</div>';
+
+  // Shift selector
+  html += '<div class="ev-input-row">';
+  html += '<label>Shift:</label>';
+  html += '<select id="evShiftSelector" onchange="updateEVOptimizer()">';
+  schedule.shifts.forEach(function(shift, i) {
+    const be = calcShiftBreakeven(shift, schedule.dates);
+    html += '<option value="' + i + '">' + escHtml(shift.label) + ' (breakeven: $' + be.totalBreakeven.toLocaleString() + ')</option>';
+  });
+  html += '</select>';
+  html += '</div>';
+
+  // Summary placeholder
+  html += '<div id="evSummaryBox" class="ev-summary"></div>';
+
+  // Chart canvas
+  html += '<div class="ev-chart-wrap"><canvas id="evOptimizerCanvas"></canvas></div>';
+
+  html += '</div>';
+  el.innerHTML = html;
+
+  // Store schedule reference for updates
+  window._evCurrentSchedule = schedule;
+
+  // Initial render
+  updateEVOptimizer();
+}
+
+// Called when daily rate or shift changes
+function updateEVOptimizer() {
+  const schedule = window._evCurrentSchedule;
+  if (!schedule) return;
+
+  const dailyRate = parseFloat(document.getElementById('evDailyRate').value) || 0;
+  const shiftIdx = parseInt(document.getElementById('evShiftSelector').value) || 0;
+  const shift = schedule.shifts[shiftIdx];
+  if (!shift || dailyRate <= 0) return;
+
+  const be = calcShiftBreakeven(shift, schedule.dates);
+  const breakeven = be.totalBreakeven;
+  const evData = computeEVOptimal(dailyRate, breakeven, 60);
+
+  // Summary
+  const summaryEl = document.getElementById('evSummaryBox');
+  if (summaryEl && evData.results.length > 0) {
+    const best = evData.results.find(function(r) { return r.day === evData.bestDay; });
+    if (best && evData.bestEV > 0) {
+      const gain = round2(best.potValue - breakeven);
+      summaryEl.innerHTML =
+        '<div class="ev-optimal">Optimal claim: Day ' + best.day +
+        ' ($' + best.potValue.toLocaleString() + ' pot)</div>' +
+        '<div class="ev-detail">' + round2(best.survival * 100).toFixed(0) +
+        '% chance still available &bull; Expected gain: $' + gain.toLocaleString() +
+        ' above breakeven ($' + breakeven.toLocaleString() + ') &bull; EV = $' + evData.bestEV.toLocaleString() + '</div>';
+    } else if (breakeven === 0) {
+      // Comp already covers it — any pot is pure bonus
+      const best0 = evData.results.find(function(r) { return r.day === evData.bestDay; });
+      summaryEl.innerHTML =
+        '<div class="ev-optimal">Optimal claim: Day ' + best0.day +
+        ' ($' + best0.potValue.toLocaleString() + ' pot)</div>' +
+        '<div class="ev-detail">Compensation already covers family cost — entire pot is bonus. ' +
+        round2(best0.survival * 100).toFixed(0) + '% chance still available. EV = $' + evData.bestEV.toLocaleString() + '</div>';
+    } else {
+      summaryEl.innerHTML =
+        '<div style="color:var(--text-dim);">At $' + dailyRate + '/day, the pot never exceeds breakeven ($' +
+        breakeven.toLocaleString() + ') with sufficient probability. Consider waiting for a higher daily rate or a shift with lower breakeven.</div>';
+    }
+  }
+
+  // Chart
+  renderEVOptimizerChart('evOptimizerCanvas', evData, breakeven);
 }
 
 function renderHolidayAIPanel() {
