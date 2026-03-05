@@ -10809,6 +10809,8 @@ function renderEarningsEstimator() {
     if (!shift.assignmentType) return;
     if (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off') return;
     if (shift.forcedOff) return;
+    // Skip future pager-only placeholder shifts — no real hours to count
+    if (isFuturePagerOnly(shift)) return;
 
     const st = calcShiftTotal(shift);
     totalPoints += st.total;
