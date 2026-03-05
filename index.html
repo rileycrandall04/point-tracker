@@ -800,6 +800,23 @@ textarea { resize: vertical; min-height: 60px; }
   color: var(--text-dim);
 }
 
+/* ===== COMPENSATION RULES PAGE ===== */
+.cr-section { margin-bottom: 16px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.cr-section-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface); cursor: pointer; user-select: none; font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.cr-section-header .cr-toggle { font-size: 0.7rem; color: var(--text-dim); transition: transform 0.2s; }
+.cr-section-header.open .cr-toggle { transform: rotate(90deg); }
+.cr-section-body { display: none; padding: 10px 14px; font-size: 0.8rem; line-height: 1.6; color: var(--text); }
+.cr-section-body.open { display: block; }
+.cr-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; margin: 8px 0; }
+.cr-table th { text-align: left; padding: 5px 8px; background: var(--surface2); border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text-dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+.cr-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.cr-table tr:last-child td { border-bottom: none; }
+.cr-note { font-size: 0.72rem; color: var(--text-dim); margin-top: 6px; font-style: italic; }
+.cr-formula { background: var(--surface2); padding: 6px 10px; border-radius: 6px; font-family: monospace; font-size: 0.75rem; margin: 6px 0; overflow-x: auto; }
+.cr-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem; font-weight: 600; }
+.cr-badge-yes { background: rgba(52,211,153,0.15); color: var(--accent2); }
+.cr-badge-no { background: rgba(255,107,107,0.15); color: #ff6b6b; }
+
 /* ===== TAB SWITCHER ===== */
 .tab-bar {
   display: flex;
@@ -3211,6 +3228,16 @@ input.mil-time.invalid {
     <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:16px;">What's new in the Point Tracker.</p>
 
     <div style="margin-bottom:20px;">
+      <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Mar 5, 2026</h3>
+      <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
+        <li><strong>Compensation Rules reference</strong> &mdash; New page under More tab with all point formulas, shift types, AR rates, pager pay, case points, add-ons, time multipliers, and blending weights.</li>
+        <li><strong>Forced Off time entries hidden</strong> &mdash; Selecting Forced Off now hides and clears time entry fields since no time tracking is needed. Switching back to another shift type restores the fields.</li>
+        <li><strong>Admin case name editing</strong> &mdash; Admin edits to other users' case surgeon/procedure names now persist across user re-syncs via a separate overrides collection.</li>
+        <li><strong>Holiday auction data fix</strong> &mdash; Multi-day sign-up detection improved. Package vs single-day filter now correctly captures 2, 3, and 4-day sign-ups.</li>
+      </ul>
+    </div>
+
+    <div style="margin-bottom:20px;">
       <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Feb 20, 2026</h3>
       <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
         <li><strong>Shared data pool integration</strong> &mdash; Procedure Time Lookup, Procedure Efficiency, and Surgeon Efficiency now combine your local cases with shared cases from your group. Shared entries are labeled and non-editable. Surgeon autocomplete also suggests names from the shared pool.</li>
@@ -3287,6 +3314,193 @@ input.mil-time.invalid {
         <li><strong>Google Calendar sync</strong> &mdash; Auto-fill shift types and weekly chart labels from your Google Calendar assignments.</li>
         <li><strong>Stale sync banner</strong> &mdash; Dashboard shows a banner when calendar hasn't been synced in 48+ hours.</li>
       </ul>
+    </div>
+
+  </div>
+</div>
+
+<div class="page" id="page-comprules">
+  <div class="card">
+    <h2>Compensation Rules</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:16px;">Quick reference for all point calculation formulas, shift types, and modifiers.</p>
+
+    <!-- Shift Types & AR Points -->
+    <div class="cr-section">
+      <div class="cr-section-header open" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Shift Types &amp; AR Points</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body open">
+        <table class="cr-table">
+          <thead><tr><th>Shift</th><th>Day Rate</th><th>Eve/Night</th><th>Hol/Wknd</th><th>Pager</th></tr></thead>
+          <tbody>
+            <tr><td>OR / General</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
+            <tr><td>UVH OB</td><td>13 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
+            <tr><td>SF 1</td><td>13 pts/hr*</td><td>20 &times;1.10 / &times;1.25</td><td>20 &times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
+            <tr><td>SF 2</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
+            <tr><td>1st&ndash;4th Call</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
+            <tr><td>Mole</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
+            <tr><td>Endo</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
+            <tr><td>Cardiac / Liver</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
+            <tr><td>NORA</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
+            <tr><td>ACS</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
+            <tr><td>Pre-Call</td><td>20 pts/hr</td><td>Eve assignment</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
+            <tr><td>CRNA Supervision</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
+            <tr><td>Forced Off</td><td colspan="3">56 pts flat (no time required)</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
+            <tr><td>Vacation / Off</td><td colspan="4">0 pts</td></tr>
+          </tbody>
+        </table>
+        <p class="cr-note">*SF1 uses 13 pts/hr on weekday daytime only; 20 pts/hr at all other times.</p>
+        <p class="cr-note">Evening = 17:00&ndash;23:00 (&times;1.10). Night = 23:00&ndash;07:00 (&times;1.25). Holiday/Weekend daytime = &times;1.10.</p>
+      </div>
+    </div>
+
+    <!-- Pager Pay -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Pager Pay</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <div class="cr-formula">Rate: 3.5 pts/hr</div>
+        <p><strong>Eligible shifts:</strong> SF1, SF2, 1st&ndash;4th Call, Mole, Endo</p>
+        <table class="cr-table">
+          <thead><tr><th>Day Type</th><th>Window</th><th>Hours</th><th>Points</th></tr></thead>
+          <tbody>
+            <tr><td>Weekday</td><td>17:00 &ndash; 07:00</td><td>14 hrs</td><td>49 pts</td></tr>
+            <tr><td>Weekend / Holiday</td><td>07:00 &ndash; 07:00</td><td>24 hrs</td><td>84 pts</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Case Points -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Standard Case Points</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <div class="cr-formula">Total = Base + Time + Medical + Acute Pain + Emergency + Add-Ons</div>
+        <table class="cr-table">
+          <thead><tr><th>Component</th><th>Formula</th></tr></thead>
+          <tbody>
+            <tr><td>Base Points</td><td>0.5 &times; base units</td></tr>
+            <tr><td>Time Points</td><td>case hours &times; time multiplier &times; 6 pts/hr</td></tr>
+            <tr><td>Medical Proc</td><td>0.20 &times; medical units</td></tr>
+            <tr><td>Acute Pain</td><td>0.375 &times; acute pain units</td></tr>
+            <tr><td>Emergency</td><td>+1 pt if emergency</td></tr>
+            <tr><td>Shared Case</td><td>Base &times; (shared % / 100), default 50%</td></tr>
+          </tbody>
+        </table>
+        <p class="cr-note">OB shift doubling: non-OR cases on UVH OB, SF1, or SF2 shifts are doubled (&times;2).</p>
+      </div>
+    </div>
+
+    <!-- Time Multipliers -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Time Multipliers</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="cr-table">
+          <thead><tr><th>Modifier</th><th>Weekday Day</th><th>Weekday Eve</th><th>Wknd/Hol Day</th></tr></thead>
+          <tbody>
+            <tr><td>P4 Physical Status</td><td>&times;1.33</td><td>&times;1.0</td><td>&times;1.0</td></tr>
+            <tr><td>P5 Physical Status</td><td>&times;1.83</td><td>&times;1.5</td><td>&times;1.5</td></tr>
+            <tr><td>High-Risk Peds</td><td>&times;1.33 (min)</td><td>&times;1.0</td><td>&times;1.0</td></tr>
+          </tbody>
+        </table>
+        <p class="cr-note">Multipliers apply to the time component of case points only. Base default is &times;1.0.</p>
+      </div>
+    </div>
+
+    <!-- Add-On Points -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Add-On Points</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="cr-table">
+          <thead><tr><th>Add-On</th><th>Points</th></tr></thead>
+          <tbody>
+            <tr><td>Brachial Plexus Nerve Block</td><td>3.0 pts</td></tr>
+            <tr><td>Other Nerve Block</td><td>2.6 pts</td></tr>
+            <tr><td>IT Morphine</td><td>3.0 pts</td></tr>
+            <tr><td>PAC</td><td>2.0 pts</td></tr>
+            <tr><td>Central Line</td><td>0.8 pts</td></tr>
+            <tr><td>Arterial Line</td><td>0.6 pts</td></tr>
+            <tr><td>TEE Add-On</td><td>0.4 pts</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Fixed-Point Cases -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Fixed-Point Case Types</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="cr-table">
+          <thead><tr><th>Case Type</th><th>Points</th></tr></thead>
+          <tbody>
+            <tr><td>TEE Exam</td><td>22 pts</td></tr>
+            <tr><td>Epidural Blood Patch</td><td>5 pts</td></tr>
+            <tr><td>Emergency Intubation</td><td>4 pts</td></tr>
+            <tr><td>Epidural Rounding (01996)</td><td>3 pts per round</td></tr>
+            <tr><td>CRNA Supervision Block</td><td>2.63 pts</td></tr>
+            <tr><td>Pain Rounding (99231)</td><td>2 pts per round</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Labor Epidural -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Labor Epidural</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="cr-table">
+          <thead><tr><th>Component</th><th>Rate</th></tr></thead>
+          <tbody>
+            <tr><td>Startup</td><td>2.5 pts (5 units &times; 50%)</td></tr>
+            <tr><td>1st Hour</td><td>6 pts/hr</td></tr>
+            <tr><td>2nd Hour</td><td>3 pts/hr</td></tr>
+            <tr><td>3rd+ Hours</td><td>1.5 pts/hr (max 24 hrs total)</td></tr>
+          </tbody>
+        </table>
+        <p class="cr-note">Doubled (&times;2) on UVH OB shifts only (not SF1/SF2).</p>
+      </div>
+    </div>
+
+    <!-- Pre-Call Minimums -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Pre-Call &amp; Evening Minimums</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="cr-table">
+          <thead><tr><th>Period</th><th>Minimum</th><th>Condition</th></tr></thead>
+          <tbody>
+            <tr><td>Pre-Call OR</td><td>80 pts</td><td>4 hrs &times; 20 pts/hr (weekday non-holiday)</td></tr>
+            <tr><td>Evening OB</td><td>52 pts</td><td>4 hrs &times; 13 pts/hr (weekday non-holiday)</td></tr>
+            <tr><td>Evening Other</td><td>80 pts</td><td>4 hrs &times; 20 pts/hr (weekday non-holiday, excl. mole)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Blended Points & Production -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Blended Points &amp; Production</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <p><strong>5-Month Stabilization Weights:</strong></p>
+        <div class="cr-formula">[M-2: 10%] [M-1: 40%] [M: 25%] [M+1: 15%] [M+2: 10%]</div>
+        <p style="margin-top:8px;"><strong>Formulas:</strong></p>
+        <div class="cr-formula">Blended = &Sigma;(weight &times; month points)<br>Production = Blended &times; Point Value ($/pt)<br>Paycheck = Production + Stipends</div>
+        <p class="cr-note">December Advance: January paycheck = $0, December paycheck = double (advance + month).</p>
+      </div>
     </div>
 
   </div>
@@ -3842,6 +4056,10 @@ input.mil-time.invalid {
   <div class="drawer-item" data-page="updates">
     <span class="drawer-icon">&#128227;</span>
     <span>Updates</span>
+  </div>
+  <div class="drawer-item" data-page="comprules">
+    <span class="drawer-icon">&#128214;</span>
+    <span>Compensation Rules</span>
   </div>
 </div>
 
@@ -6037,6 +6255,7 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     if (page === 'import') { /* no special init needed */ }
     if (page === 'flagged') { renderFlaggedPage(); }
     if (page === 'updates') { /* no special init needed */ }
+    if (page === 'comprules') { /* static content, no init needed */ }
   });
 });
 
