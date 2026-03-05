@@ -6228,7 +6228,10 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
     document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
   }
   if (type === 'forced_off') {
-    populateTimeEntries([{ start: '07:00', end: '20:00' }]);
+    populateTimeEntries([{ start: '', end: '' }]);
+    document.getElementById('timeEntriesGroup').classList.add('hidden');
+  } else {
+    document.getElementById('timeEntriesGroup').classList.remove('hidden');
   }
   updateUnrestrictedCallVisibility();
   updateSupervisionOverlayVisibility();
@@ -6373,6 +6376,7 @@ function loadShiftForDate() {
     } else {
       document.getElementById('shiftAssignmentType').value = effectiveType;
       const isPreCall = effectiveType === 'pre_call';
+      const isForcedOff = effectiveType === 'forced_off';
       document.getElementById('timeEntriesLabel').textContent = isPreCall ? 'Pre-Call Times' : 'Time Entries';
       document.getElementById('eveningAssignmentSection').classList.toggle('hidden', !isPreCall);
       if (!isPreCall) {
@@ -6380,7 +6384,13 @@ function loadShiftForDate() {
         document.getElementById('eveningTimeSection').classList.add('hidden');
         document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
       }
-      populateTimeEntries(shift.timeEntries || [{ start: shift.startTime || '07:00', end: shift.endTime || '' }]);
+      if (isForcedOff) {
+        populateTimeEntries([{ start: '', end: '' }]);
+        document.getElementById('timeEntriesGroup').classList.add('hidden');
+      } else {
+        document.getElementById('timeEntriesGroup').classList.remove('hidden');
+        populateTimeEntries(shift.timeEntries || [{ start: shift.startTime || '07:00', end: shift.endTime || '' }]);
+      }
     }
     document.getElementById('shiftHoliday').checked = shift.isHoliday || false;
     document.getElementById('cardiacLiverOptions').classList.toggle('hidden', shift.assignmentType !== 'cardiac_liver');
@@ -6451,8 +6461,14 @@ function loadShiftForDate() {
     } else {
       banner.classList.add('hidden');
       document.getElementById('shiftAssignmentType').value = 'OR';
+      document.getElementById('timeEntriesGroup').classList.remove('hidden');
     }
-    populateTimeEntries([{ start: '07:10', end: '' }]);
+    const calType = calAssignment ? calAssignment.type : 'OR';
+    if (calType === 'forced_off') {
+      populateTimeEntries([{ start: '', end: '' }]);
+    } else {
+      populateTimeEntries([{ start: '07:10', end: '' }]);
+    }
     document.getElementById('shiftHoliday').checked = false;
     document.getElementById('cardiacLiverOptions').classList.add('hidden');
     document.getElementById('vacationRangeSection').classList.add('hidden');
@@ -6681,7 +6697,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
   const eveningAssignment = assignmentType === 'pre_call' ? (document.getElementById('eveningAssignmentType').value || '') : '';
   const isVacation = assignmentType === 'vacation';
   const isForcedOff = assignmentType === 'forced_off';
-  const timeEntries = isVacation ? [{ start: '', end: '' }] : isForcedOff ? [{ start: '07:00', end: '20:00' }] : collectTimeEntries();
+  const timeEntries = isVacation || isForcedOff ? [{ start: '', end: '' }] : collectTimeEntries();
   const effectiveType = eveningAssignment || assignmentType;
   const hasPagerWindow = getPagerPayWindow(effectiveType, isWeekend(date) || document.getElementById('holidayCheck')?.checked) !== null;
   if (!isVacation && !isForcedOff && (timeEntries.length === 0 || !timeEntries[0].start) && !hasPagerWindow) {
@@ -6689,7 +6705,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     return;
   }
   // Validate: entries should be in chronological order, no overlaps (cross-midnight aware)
-  if (!isVacation) {
+  if (!isVacation && !isForcedOff) {
     for (let i = 1; i < timeEntries.length; i++) {
       const prevEnd = timeToMinutes(timeEntries[i-1].end);
       let currStart = timeToMinutes(timeEntries[i].start);
