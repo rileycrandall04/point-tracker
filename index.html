@@ -1696,6 +1696,17 @@ input.mil-time.invalid {
 .ev-summary .ev-detail { color: var(--text-dim); font-size: 0.72rem; margin-top: 2px; }
 .ev-chart-wrap { height: 200px; margin-top: 8px; }
 .ev-no-data { font-size: 0.78rem; color: var(--text-dim); font-style: italic; padding: 4px 0; margin-bottom: 6px; }
+.ev-filter-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.ev-filter-row label { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; }
+.ev-filter-row select { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.78rem; }
+.ev-model-info { font-size: 0.68rem; color: var(--text-dim); padding: 4px 8px; background: var(--surface); border-radius: 6px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.ev-model-info .ev-tier-badge { font-size: 0.6rem; padding: 1px 6px; border-radius: 8px; font-weight: 600; color: white; }
+.ev-tier-major { background: #ef4444; }
+.ev-tier-standard { background: #f59e0b; }
+.ev-tier-minor { background: #6366f1; }
+.ha-import-area { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.ha-import-area .btn-sm { font-size: 0.72rem; padding: 4px 10px; }
+.ha-import-count { font-size: 0.68rem; color: var(--text-dim); }
 
 /* ===== BOTTOM NAV — 5 items ===== */
 .bottom-nav button { font-size: 0.6rem; }
@@ -2448,7 +2459,12 @@ input.mil-time.invalid {
       </div>
       <div id="haHistory">
         <div id="holidayAuctionTable"></div>
-        <button class="add-entry-btn" onclick="openHolidayAuctionForm()" style="margin:8px 0;">+ Add Auction Record</button>
+        <div class="ha-import-area">
+          <button class="add-entry-btn" onclick="openHolidayAuctionForm()" style="margin:0;">+ Add Record</button>
+          <button class="btn btn-sm" onclick="document.getElementById('haImportFile').click()" style="background:var(--surface2);color:var(--text);">&#8593; Import JSON</button>
+          <input type="file" id="haImportFile" accept=".json" style="display:none;" onchange="handleAuctionImport(event)">
+          <span id="haImportStatus" class="ha-import-count"></span>
+        </div>
         <div style="height:200px;"><canvas id="holidayPotChart"></canvas></div>
       </div>
       <div id="haCalculator" class="hidden">
@@ -12582,11 +12598,17 @@ function renderHolidayAuctionTable() {
   const auctions = data.holidayAuctions.slice().sort((a, b) => b.date.localeCompare(a.date));
 
   if (auctions.length === 0) {
-    el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No auction records yet. Add your first one below.</p>';
+    el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No auction records yet. Add your first one or import historical data below.</p>';
     return;
   }
 
-  let html = '<div style="overflow-x:auto;"><table class="ha-table"><thead><tr>';
+  // Summary counts
+  var years = {};
+  auctions.forEach(function(a) { var y = a.date.substring(0, 4); years[y] = (years[y] || 0) + 1; });
+  var yearStr = Object.keys(years).sort().map(function(y) { return y + ': ' + years[y]; }).join(', ');
+  let html = '<div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">' + auctions.length + ' records (' + yearStr + ')</div>';
+
+  html += '<div style="overflow-x:auto;"><table class="ha-table"><thead><tr>';
   html += '<th>Holiday</th><th>Date</th><th>Shift</th><th>Pot</th><th>$/day</th><th>Days</th><th></th>';
   html += '</tr></thead><tbody>';
 
@@ -12858,33 +12880,73 @@ function toggleHSDetail(id) {
 // EXPECTED VALUE OPTIMIZER
 // ================================================================
 
-// Build survival function from historical daysOpen data
-// Returns P(pot still unclaimed on day N)
-function buildSurvivalFunction() {
-  const auctions = (data.holidayAuctions || []).filter(a => a.daysOpen > 0);
-  if (auctions.length < 3) {
-    // Fallback: exponential decay, median ~14 days
-    return function(n) { return Math.exp(-0.05 * n); };
+// Build survival function using pot-amount-based empirical model
+// P(available on day N) = P(historicalPot >= dailyRate * N)
+// Filters: { position, tier, hospital }
+// dailyRate: used to convert day N to a pot threshold
+function buildSurvivalFunction(dailyRate, filters) {
+  var allAuctions = (data.holidayAuctions || []).filter(function(a) { return a.finalPotAmount > 0; });
+
+  // Apply filters
+  if (filters) {
+    if (filters.position && filters.position !== 'all') {
+      allAuctions = allAuctions.filter(function(a) { return a.callPosition === filters.position; });
+    }
+    if (filters.tier && filters.tier !== 'all') {
+      allAuctions = allAuctions.filter(function(a) { return getHolidayTier(a.holidayName) === filters.tier; });
+    }
+    if (filters.hospital && filters.hospital !== 'all') {
+      allAuctions = allAuctions.filter(function(a) { return a.hospital === filters.hospital; });
+    }
   }
-  const daysOpenValues = auctions.map(a => a.daysOpen).sort((a, b) => a - b);
-  const total = daysOpenValues.length;
-  return function(n) {
-    const survived = daysOpenValues.filter(d => d > n).length;
-    return survived / total;
-  };
+
+  // Store count for display
+  buildSurvivalFunction._lastCount = allAuctions.length;
+  buildSurvivalFunction._lastModel = 'fallback';
+
+  // First priority: use daysOpen data if enough records have it
+  var daysOpenAuctions = allAuctions.filter(function(a) { return a.daysOpen > 0; });
+  if (daysOpenAuctions.length >= 3) {
+    buildSurvivalFunction._lastModel = 'empirical-days';
+    buildSurvivalFunction._lastCount = daysOpenAuctions.length;
+    var daysOpenValues = daysOpenAuctions.map(function(a) { return a.daysOpen; }).sort(function(a, b) { return a - b; });
+    var total = daysOpenValues.length;
+    return function(n) {
+      var survived = daysOpenValues.filter(function(d) { return d > n; }).length;
+      return survived / total;
+    };
+  }
+
+  // Second priority: pot-based survival (main model for imported data)
+  if (allAuctions.length >= 3 && dailyRate > 0) {
+    buildSurvivalFunction._lastModel = 'pot-based';
+    buildSurvivalFunction._lastCount = allAuctions.length;
+    var pots = allAuctions.map(function(a) { return a.finalPotAmount; }).sort(function(a, b) { return a - b; });
+    var potTotal = pots.length;
+    return function(n) {
+      var potThreshold = dailyRate * n;
+      var survived = pots.filter(function(p) { return p > potThreshold; }).length;
+      return survived / potTotal;
+    };
+  }
+
+  // Fallback: exponential decay, median ~14 days
+  buildSurvivalFunction._lastModel = 'fallback';
+  buildSurvivalFunction._lastCount = 0;
+  return function(n) { return Math.exp(-0.05 * n); };
 }
 
 // Compute EV for each day, find optimal
-function computeEVOptimal(dailyRate, breakeven, maxDays) {
-  const survival = buildSurvivalFunction();
+function computeEVOptimal(dailyRate, breakeven, maxDays, filters) {
+  var survival = buildSurvivalFunction(dailyRate, filters);
   maxDays = maxDays || 60;
-  const results = [];
-  let bestDay = 1, bestEV = -Infinity;
+  var results = [];
+  var bestDay = 1, bestEV = -Infinity;
 
-  for (let n = 1; n <= maxDays; n++) {
-    const potValue = round2(dailyRate * n);
-    const pN = survival(n);
-    const ev = round2(Math.max(0, potValue - breakeven) * pN);
+  for (var n = 1; n <= maxDays; n++) {
+    var potValue = round2(dailyRate * n);
+    var pN = survival(n);
+    var ev = round2(Math.max(0, potValue - breakeven) * pN);
     results.push({ day: n, potValue: potValue, survival: pN, ev: ev });
     if (ev > bestEV) { bestEV = ev; bestDay = n; }
     // Stop if survival is negligible and EV declining
@@ -13026,27 +13088,32 @@ function renderEVOptimizerChart(canvasId, evData, breakeven) {
 
 // Render the full EV Optimizer UI section
 function renderEVOptimizerSection(schedule) {
-  const el = document.getElementById('evOptimizerSection');
+  var el = document.getElementById('evOptimizerSection');
   if (!el) return;
 
-  const auctions = (data.holidayAuctions || []).filter(a => a.daysOpen > 0);
-  const defaultRate = getDefaultDailyRate();
+  var allAuctions = (data.holidayAuctions || []).filter(function(a) { return a.finalPotAmount > 0; });
+  var defaultRate = getDefaultDailyRate();
 
-  let html = '<div class="ev-optimizer">';
+  // Collect unique positions and tiers for filter dropdowns
+  var positionSet = {};
+  var tierSet = {};
+  allAuctions.forEach(function(a) {
+    positionSet[a.callPosition] = true;
+    tierSet[getHolidayTier(a.holidayName)] = true;
+  });
+  var positions = Object.keys(positionSet).sort();
+  var tiers = ['all'];
+  if (tierSet.major) tiers.push('major');
+  if (tierSet.standard) tiers.push('standard');
+  if (tierSet.minor) tiers.push('minor');
+
+  var html = '<div class="ev-optimizer">';
   html += '<div class="ev-optimizer-title">Expected Value Optimizer <span class="ev-badge">EV</span></div>';
-
-  // Data status
-  if (auctions.length < 3) {
-    html += '<div class="ev-no-data">Using default timing model (need 3+ auction records with days-open data for historical model). ';
-    html += 'Have ' + auctions.length + ' record' + (auctions.length !== 1 ? 's' : '') + '.</div>';
-  } else {
-    html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">Timing model based on ' + auctions.length + ' historical auction' + (auctions.length !== 1 ? 's' : '') + '.</div>';
-  }
 
   // Daily rate input
   html += '<div class="ev-input-row">';
   html += '<label>Daily Rate: $</label>';
-  html += '<input type="number" id="evDailyRate" value="' + defaultRate + '" min="1" step="10" onchange="updateEVOptimizer()">';
+  html += '<input type="number" id="evDailyRate" value="' + defaultRate + '" min="1" step="10" oninput="updateEVOptimizer()">';
   html += '<label style="margin-left:4px;">/ day added to pot</label>';
   html += '</div>';
 
@@ -13055,11 +13122,35 @@ function renderEVOptimizerSection(schedule) {
   html += '<label>Shift:</label>';
   html += '<select id="evShiftSelector" onchange="updateEVOptimizer()">';
   schedule.shifts.forEach(function(shift, i) {
-    const be = calcShiftBreakeven(shift, schedule.dates);
+    var be = calcShiftBreakeven(shift, schedule.dates);
     html += '<option value="' + i + '">' + escHtml(shift.label) + ' (breakeven: $' + be.totalBreakeven.toLocaleString() + ')</option>';
   });
   html += '</select>';
   html += '</div>';
+
+  // Survival model filters
+  html += '<div class="ev-filter-row">';
+  html += '<label>Survival model:</label>';
+
+  // Holiday tier filter
+  html += '<select id="evTierFilter" onchange="updateEVOptimizer()">';
+  tiers.forEach(function(t) {
+    var label = t === 'all' ? 'All Holidays' : getHolidayTierLabel(t) + ' Holidays';
+    html += '<option value="' + t + '">' + label + '</option>';
+  });
+  html += '</select>';
+
+  // Position filter
+  html += '<select id="evPositionFilter" onchange="updateEVOptimizer()">';
+  html += '<option value="all">All Positions</option>';
+  positions.forEach(function(p) {
+    html += '<option value="' + p + '">' + p + ' call</option>';
+  });
+  html += '</select>';
+  html += '</div>';
+
+  // Model info placeholder
+  html += '<div id="evModelInfo" class="ev-model-info"></div>';
 
   // Summary placeholder
   html += '<div id="evSummaryBox" class="ev-summary"></div>';
@@ -13077,26 +13168,56 @@ function renderEVOptimizerSection(schedule) {
   updateEVOptimizer();
 }
 
-// Called when daily rate or shift changes
+// Called when daily rate, shift, or filters change
 function updateEVOptimizer() {
-  const schedule = window._evCurrentSchedule;
+  var schedule = window._evCurrentSchedule;
   if (!schedule) return;
 
-  const dailyRate = parseFloat(document.getElementById('evDailyRate').value) || 0;
-  const shiftIdx = parseInt(document.getElementById('evShiftSelector').value) || 0;
-  const shift = schedule.shifts[shiftIdx];
+  var dailyRate = parseFloat(document.getElementById('evDailyRate').value) || 0;
+  var shiftIdx = parseInt(document.getElementById('evShiftSelector').value) || 0;
+  var shift = schedule.shifts[shiftIdx];
   if (!shift || dailyRate <= 0) return;
 
-  const be = calcShiftBreakeven(shift, schedule.dates);
-  const breakeven = be.totalBreakeven;
-  const evData = computeEVOptimal(dailyRate, breakeven, 60);
+  // Read filters
+  var tierEl = document.getElementById('evTierFilter');
+  var posEl = document.getElementById('evPositionFilter');
+  var filters = {
+    tier: tierEl ? tierEl.value : 'all',
+    position: posEl ? posEl.value : 'all'
+  };
+
+  var be = calcShiftBreakeven(shift, schedule.dates);
+  var breakeven = be.totalBreakeven;
+  var evData = computeEVOptimal(dailyRate, breakeven, 60, filters);
+
+  // Model info
+  var modelEl = document.getElementById('evModelInfo');
+  if (modelEl) {
+    var modelType = buildSurvivalFunction._lastModel || 'fallback';
+    var recordCount = buildSurvivalFunction._lastCount || 0;
+    var modelLabel = '';
+    if (modelType === 'pot-based') {
+      modelLabel = 'Pot-based survival from ' + recordCount + ' auction' + (recordCount !== 1 ? 's' : '');
+    } else if (modelType === 'empirical-days') {
+      modelLabel = 'Empirical survival from ' + recordCount + ' auction' + (recordCount !== 1 ? 's' : '') + ' with days-open data';
+    } else {
+      modelLabel = 'Default exponential model (no matching auction data)';
+    }
+
+    var tierBadge = '';
+    if (filters.tier && filters.tier !== 'all') {
+      tierBadge = '<span class="ev-tier-badge ev-tier-' + filters.tier + '">' + getHolidayTierLabel(filters.tier) + '</span>';
+    }
+    var posLabel = filters.position && filters.position !== 'all' ? ' &bull; ' + filters.position + ' call' : '';
+    modelEl.innerHTML = tierBadge + modelLabel + posLabel;
+  }
 
   // Summary
-  const summaryEl = document.getElementById('evSummaryBox');
+  var summaryEl = document.getElementById('evSummaryBox');
   if (summaryEl && evData.results.length > 0) {
-    const best = evData.results.find(function(r) { return r.day === evData.bestDay; });
+    var best = evData.results.find(function(r) { return r.day === evData.bestDay; });
     if (best && evData.bestEV > 0) {
-      const gain = round2(best.potValue - breakeven);
+      var gain = round2(best.potValue - breakeven);
       summaryEl.innerHTML =
         '<div class="ev-optimal">Optimal claim: Day ' + best.day +
         ' ($' + best.potValue.toLocaleString() + ' pot)</div>' +
@@ -13105,7 +13226,7 @@ function updateEVOptimizer() {
         ' above breakeven ($' + breakeven.toLocaleString() + ') &bull; EV = $' + evData.bestEV.toLocaleString() + '</div>';
     } else if (breakeven === 0) {
       // Comp already covers it — any pot is pure bonus
-      const best0 = evData.results.find(function(r) { return r.day === evData.bestDay; });
+      var best0 = evData.results.find(function(r) { return r.day === evData.bestDay; });
       summaryEl.innerHTML =
         '<div class="ev-optimal">Optimal claim: Day ' + best0.day +
         ' ($' + best0.potValue.toLocaleString() + ' pot)</div>' +
@@ -13139,6 +13260,77 @@ function renderHolidayAIPanel() {
     html += '<div id="holidayAIResult"></div>';
   }
   el.innerHTML = html;
+}
+
+// ---- Holiday Tier Classification ----
+const HOLIDAY_TIERS = {
+  'Christmas': 'major', 'Thanksgiving': 'major', 'July 4th': 'major', "New Year's": 'major',
+  'Memorial Day': 'standard', 'Labor Day': 'standard',
+  'MLK Day': 'minor', 'Presidents Day': 'minor'
+};
+function getHolidayTier(holidayName) {
+  return HOLIDAY_TIERS[holidayName] || 'minor';
+}
+function getHolidayTierLabel(tier) {
+  return tier === 'major' ? 'Major' : tier === 'standard' ? 'Standard' : 'Minor';
+}
+
+// ---- Bulk Import ----
+function handleAuctionImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const records = JSON.parse(e.target.result);
+      if (!Array.isArray(records)) { showToast('Invalid JSON: expected an array'); return; }
+      importHolidayAuctions(records);
+    } catch (err) {
+      showToast('Failed to parse JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = ''; // reset file input
+}
+
+function importHolidayAuctions(records) {
+  if (!data.holidayAuctions) data.holidayAuctions = [];
+  const existingIds = new Set(data.holidayAuctions.map(a => a.id));
+  let added = 0, skipped = 0;
+  records.forEach(function(r) {
+    // Skip if no holiday name or date
+    if (!r.holidayName || !r.date) { skipped++; return; }
+    // Skip duplicates by id
+    if (r.id && existingIds.has(r.id)) { skipped++; return; }
+    // Check for content duplicates (same holiday + date + hospital + position + pot)
+    const isDup = data.holidayAuctions.some(a =>
+      a.holidayName === r.holidayName && a.date === r.date &&
+      a.hospital === r.hospital && a.callPosition === r.callPosition &&
+      a.finalPotAmount === r.finalPotAmount
+    );
+    if (isDup) { skipped++; return; }
+    // Normalize and add
+    data.holidayAuctions.push({
+      id: r.id || genId(),
+      holidayName: r.holidayName,
+      date: r.date,
+      hospital: r.hospital || 'UV',
+      callPosition: r.callPosition || '1st',
+      finalPotAmount: parseFloat(r.finalPotAmount) || 0,
+      dailyRate: parseFloat(r.dailyRate) || 0,
+      daysOpen: parseInt(r.daysOpen) || 0,
+      expectedHours: parseFloat(r.expectedHours) || 0,
+      workedByMe: !!r.workedByMe,
+      notes: r.notes || ''
+    });
+    existingIds.add(r.id);
+    added++;
+  });
+  saveData(data);
+  renderHolidayAuctionCard();
+  const statusEl = document.getElementById('haImportStatus');
+  if (statusEl) statusEl.textContent = 'Imported ' + added + ' records' + (skipped > 0 ? ' (' + skipped + ' skipped)' : '');
+  showToast('Imported ' + added + ' auction records');
 }
 
 // ---- Holiday Auction CRUD ----
