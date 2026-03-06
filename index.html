@@ -19013,12 +19013,12 @@ function initApp() {
   checkEndTimeNotification();
 
   // One-time migration: fix Post SF types and sync all calendar assignments to shifts
-  if (data.calendarAssignments && !data._syncedAllTypes3) {
+  if (data.calendarAssignments && !data._syncedAllTypes4) {
     let changed = false;
     Object.entries(data.calendarAssignments).forEach(([dateStr, cal]) => {
       if (!cal || !cal.type) return;
-      // Fix Post SF1/SF2: label says "Post" but type was incorrectly SF1/SF2
-      if (cal.label && /^Post\s/i.test(cal.label) && (cal.type === 'SF1' || cal.type === 'SF2')) {
+      // Fix all "Post" assignments: label says "Post ..." but type was incorrectly pager-eligible
+      if (cal.label && /^Post\s/i.test(cal.label) && getPagerPayWindow(cal.type, false) !== null) {
         cal.type = 'OR';
         changed = true;
       }
@@ -19035,7 +19035,7 @@ function initApp() {
         }
       }
     });
-    data._syncedAllTypes3 = true;
+    data._syncedAllTypes4 = true;
     if (changed) saveData(data);
   }
 }
