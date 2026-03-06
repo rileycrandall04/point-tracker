@@ -2680,10 +2680,8 @@ input.mil-time.invalid {
       </div>
     </div>
     <div id="stabPaycheckRow" style="text-align:center; margin-bottom:12px;">
-      <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
-        <span class="info-icon" id="stabEarningIcon" data-tip="Earning for: —" style="flex-shrink:0;">i</span>
-        <div style="font-size:1.6rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
-      </div>
+      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:2px;" id="stabEarningLabel">Earning for: —</div>
+      <div style="font-size:1.6rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
       <div style="font-size:0.85rem; color:var(--text-dim); margin-top:8px;" id="stabCurrentPaycheck"></div>
     </div>
     <div class="summary-grid">
@@ -11262,7 +11260,7 @@ function renderStabilization() {
   const currentMonthKey = mk(0);
   const pv = getPointValueForMonth(currentMonthKey);
   const decAdv = settings.decemberAdvance !== false;
-  const earningIcon = document.getElementById('stabEarningIcon');
+  const earningLabel = document.getElementById('stabEarningLabel');
   const curEl = document.getElementById('stabCurrentPaycheck');
 
   // Compute "earning for" paycheck label — the paycheck current work feeds into
@@ -11278,14 +11276,14 @@ function renderStabilization() {
 
   if (decAdv && now.getMonth() === 0) {
     // January: paycheck was already received in December
-    earningIcon.setAttribute('data-tip', 'Earning for: Feb 20');
+    earningLabel.textContent = 'Earning for Feb 20';
     document.getElementById('stabPaycheck').textContent = '$0.00';
   } else if (buildingCompOv != null) {
     // Comp total override for building paycheck
     if (decAdv && now.getMonth() === 11) {
-      earningIcon.setAttribute('data-tip', 'Earning for: Dec 20 (+ Jan) (override)');
+      earningLabel.textContent = 'Earning for Dec 20 (+ Jan advance) — override';
     } else {
-      earningIcon.setAttribute('data-tip', 'Earning for: ' + buildingMonthName + ' 20 (override)');
+      earningLabel.textContent = 'Earning for ' + buildingMonthName + ' 20 — override';
     }
     document.getElementById('stabPaycheck').textContent = '$' + buildingCompOv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   } else if (pv && pv > 0) {
@@ -11299,15 +11297,15 @@ function renderStabilization() {
       const decStipend = getMonthlyStipendTotal(mk(0));
       const janPv = getPointValueForMonth(mkFwd(0));
       paycheck += janWeighted * janPv + decStipend;
-      earningIcon.setAttribute('data-tip', 'Earning for: Dec 20 (+ Jan)');
+      earningLabel.textContent = 'Earning for Dec 20 (+ Jan advance)';
     } else {
-      earningIcon.setAttribute('data-tip', 'Earning for: ' + buildingMonthName + ' 20');
+      earningLabel.textContent = 'Earning for ' + buildingMonthName + ' 20';
     }
 
     document.getElementById('stabPaycheck').textContent = '$' + paycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   } else {
     document.getElementById('stabPaycheck').innerHTML = '&mdash;';
-    earningIcon.setAttribute('data-tip', 'Earning for: ' + buildingMonthName + ' 20');
+    earningLabel.textContent = 'Earning for ' + buildingMonthName + ' 20';
   }
 
   // "Receiving" paycheck — the paycheck arriving this month (blend shifted back 1 month)
@@ -11838,25 +11836,23 @@ function renderPipelineChart() {
     const isCurrentJan = decAdv && now.getMonth() === 0;
     const recvPrefix = now.getDate() >= 20 ? 'Received' : 'Receiving';
 
-    let earningTip = 'Earning for: ' + buildingMonth + ' 20 \u2014 points earned this month go toward this paycheck';
-    if (decAdv && now.getMonth() === 11) earningTip = 'Earning for: Dec 20 (+ Jan advance)';
-    let line1 = '<span class="info-icon" data-tip="' + earningTip + '">i</span> ';
+    const earningLabel = (decAdv && now.getMonth() === 11) ? 'Earning for Dec 20 (+ Jan advance)' : 'Earning for ' + buildingMonth + ' 20';
+    let line1 = '<span style="font-size:0.72rem;color:var(--text-dim);">' + earningLabel + ':</span> ';
     line1 += fmtDollar(buildingAmt);
     if (compOverrideFlags[1]) line1 += ' <span style="font-size:0.65rem;color:var(--text-dim);">(override)</span>';
 
     let line2;
     if (isCurrentJan) {
-      line2 = '<span class="info-icon" data-tip="Received in Dec advance">i</span> $0';
+      line2 = '<span style="font-size:0.72rem;color:var(--text-dim);">Received in Dec advance:</span> $0';
     } else {
-      let recvTip = recvPrefix + ': ' + receivingMonth + ' 20 \u2014 paycheck arriving this month';
-      line2 = '<span class="info-icon" data-tip="' + recvTip + '">i</span> ';
+      line2 = '<span style="font-size:0.72rem;color:var(--text-dim);">' + recvPrefix + ' ' + receivingMonth + ' 20:</span> ';
       line2 += fmtDollar(receivingAmt);
       if (compOverrideFlags[0]) line2 += ' <span style="font-size:0.65rem;color:var(--text-dim);">(override)</span>';
     }
 
     summaryEl.innerHTML = line1 + '<br>' + line2;
   } else {
-    summaryEl.innerHTML = '<span class="info-icon" data-tip="Earning for: ' + buildingMonth + ' 20">i</span> ' + buildingMonth + ' 20 &bull; <span class="info-icon" data-tip="Receiving: ' + receivingMonth + ' 20">i</span> ' + receivingMonth + ' 20';
+    summaryEl.innerHTML = '<span style="font-size:0.72rem;color:var(--text-dim);">Earning for:</span> ' + buildingMonth + ' 20 &bull; <span style="font-size:0.72rem;color:var(--text-dim);">' + (now.getDate() >= 20 ? 'Received' : 'Receiving') + ':</span> ' + receivingMonth + ' 20';
   }
 
   // Earnings not yet received
