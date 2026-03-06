@@ -7763,8 +7763,11 @@ let asaRefReturnPage = null;
     if (bu !== undefined) baseUnitsInput.value = bu;
     // Navigate back
     document.getElementById('asaCodesBackBtn').click();
-    // Trigger procedure suggestions after click event finishes bubbling
-    setTimeout(function() { handleAsaCodeInput(code); }, 0);
+    // Scroll ASA code field into view and trigger procedure suggestions
+    setTimeout(function() {
+      asaInput.scrollIntoView({ behavior: 'instant', block: 'center' });
+      handleAsaCodeInput(code);
+    }, 0);
   };
 })();
 
