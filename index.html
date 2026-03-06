@@ -2361,7 +2361,7 @@ input.mil-time.invalid {
   <div id="dtab-analytics" class="hidden">
     <!-- Top Producing Cases -->
     <div class="card">
-      <h2>Top Producing Cases</h2>
+      <h2 style="display:flex;justify-content:space-between;align-items:center;">Top Producing Cases<button class="tab-btn" id="caseMixDollarToggle" onclick="toggleCaseMixDollars()" style="font-size:0.7rem;padding:2px 10px;">Show $</button></h2>
       <div id="caseMixContent">
         <div class="empty-state"><p>No case data.</p></div>
       </div>
@@ -2369,7 +2369,7 @@ input.mil-time.invalid {
 
     <!-- Procedure Efficiency -->
     <div class="card">
-      <h2>Procedure Efficiency (pts/hr)</h2>
+      <h2 style="display:flex;justify-content:space-between;align-items:center;"><span id="procEffHeading">Procedure Efficiency (pts/hr)</span><button class="tab-btn" id="procEffDollarToggle" onclick="toggleCaseMixDollars()" style="font-size:0.7rem;padding:2px 10px;">Show $</button></h2>
       <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
         <button class="tab-btn active" id="peTabTop" onclick="switchProcTab('top')">Top Procedures</button>
         <button class="tab-btn" id="peTabGrow" onclick="switchProcTab('grow')">Room to Grow</button>
@@ -3129,6 +3129,23 @@ input.mil-time.invalid {
   <div class="card">
     <h2>Recent Updates</h2>
     <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:16px;">What's new in the Point Tracker.</p>
+
+    <div style="margin-bottom:20px;">
+      <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Mar 6, 2026</h3>
+      <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
+        <li><strong>Points &harr; dollars toggle</strong> &mdash; Top Producing Cases and Procedure Efficiency cards now have a &ldquo;Show $&rdquo; toggle to view values as dollar amounts using your set $/point rate.</li>
+        <li><strong>Labor epidural handoff</strong> &mdash; Labor epidurals can now be marked as shared/handoff cases. Enter the original placement time and your handoff time; points are calculated from handoff forward using tier billing rates.</li>
+        <li><strong>Ticker rate fix</strong> &mdash; Live ticker production rates now match actual billing tiers (6/3/1.5 pts/hr). OB doubling only applies to UVH OB shifts.</li>
+        <li><strong>Contributor emails</strong> &mdash; Collective Cases card now shows contributor email addresses instead of anonymous &ldquo;Contributor 1, 2&hellip;&rdquo; labels.</li>
+        <li><strong>Collective Cases reliability</strong> &mdash; Fixed card hanging on &ldquo;Loading shared data&hellip;&rdquo; with proper error handling and a 15-second timeout fallback.</li>
+        <li><strong>SF1 ticker behavior</strong> &mdash; SF1 no longer has a 4-hr AR minimum. Ticker increments correctly from shift start. Default start time set to 07:00 for SF1, UVH OB, and ACS shifts.</li>
+        <li><strong>Post SF pager pay fix</strong> &mdash; Post assignments no longer incorrectly receive pager pay.</li>
+        <li><strong>Vacation tracker</strong> &mdash; New card on the Time page showing vacation days used, remaining, and scheduled.</li>
+        <li><strong>Shift log improvements</strong> &mdash; Only clocked-in shifts shown. Vacation and pager-eligible shifts displayed properly. Earned vs scheduled shifts differentiated on History page.</li>
+        <li><strong>Calendar as source of truth</strong> &mdash; Daily calendar is now the single source of truth for shift assignments. Vacation and forced-off shifts protected from being overwritten by calendar sync.</li>
+        <li><strong>Holiday Shift Valuation removed</strong> &mdash; Removed the Holiday Shift Valuation card from Analytics. Core holiday shift tracking and pay calculations are unchanged.</li>
+      </ul>
+    </div>
 
     <div style="margin-bottom:20px;">
       <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Mar 5, 2026</h3>
@@ -13377,17 +13394,34 @@ function renderCaseMix() {
     const shift = data.shifts[c.shiftDate] || {};
     const pts = calcCasePoints(c, shift);
     const procedure = c.procedure || c.notes || c.caseType;
-    return { procedure, pts, date: c.shiftDate || '' };
+    const monthKey = (c.shiftDate || '').slice(0, 7);
+    const pv = getPointValueForMonth(monthKey);
+    const dollars = pts * pv;
+    return { procedure, pts, dollars, date: c.shiftDate || '' };
   }).sort((a, b) => b.pts - a.pts).slice(0, 8);
   let html = '';
   ranked.forEach(item => {
-    html += `<div class="efficiency-item"><span class="eff-label">${escHtml(item.procedure)}</span><span class="eff-value"><span class="point-badge">${item.pts.toFixed(1)}</span><span style="font-size:0.7rem;color:var(--text-dim);margin-left:6px;">${escHtml(item.date)}</span></span></div>`;
+    const display = showDollars ? '$' + item.dollars.toFixed(2) : item.pts.toFixed(1);
+    html += `<div class="efficiency-item"><span class="eff-label">${escHtml(item.procedure)}</span><span class="eff-value"><span class="point-badge">${display}</span><span style="font-size:0.7rem;color:var(--text-dim);margin-left:6px;">${escHtml(item.date)}</span></span></div>`;
   });
   document.getElementById('caseMixContent').innerHTML = html;
 }
 
 let procEffData = { ranked: [], unranked: [] };
 let activeProcTab = 'top';
+let showDollars = false;
+
+function toggleCaseMixDollars() {
+  showDollars = !showDollars;
+  const label = showDollars ? 'Show Pts' : 'Show $';
+  document.getElementById('caseMixDollarToggle').textContent = label;
+  document.getElementById('caseMixDollarToggle').classList.toggle('active', showDollars);
+  document.getElementById('procEffDollarToggle').textContent = label;
+  document.getElementById('procEffDollarToggle').classList.toggle('active', showDollars);
+  document.getElementById('procEffHeading').textContent = showDollars ? 'Procedure Efficiency ($/hr)' : 'Procedure Efficiency (pts/hr)';
+  renderCaseMix();
+  renderProcTabContent();
+}
 
 function switchProcTab(tab) {
   activeProcTab = tab;
@@ -13413,9 +13447,10 @@ function renderTopProcedures() {
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType, c);
     const shift = data.shifts[c.shiftDate];
     const pts = calcCasePoints(c, shift, true);
-    if (!procData[name]) procData[name] = { totalPts: 0, totalHrs: 0, count: 0 };
+    if (!procData[name]) procData[name] = { totalPts: 0, totalHrs: 0, totalDollars: 0, count: 0 };
     procData[name].totalPts += pts;
     procData[name].totalHrs += hrs;
+    procData[name].totalDollars += pts * getPointValueForMonth((c.shiftDate || '').slice(0, 7));
     procData[name].count++;
     seen.add((myUid || 'local') + '|' + c.shiftDate + '|' + c.startTime);
   });
@@ -13435,14 +13470,15 @@ function renderTopProcedures() {
       if (hrs <= 0) return;
       const name = sc.caseType === 'standard' ? (sc.procedure || 'Standard') : getCaseTypeName(sc.caseType);
       const pts = approxSharedCasePoints(sc);
-      if (!procData[name]) procData[name] = { totalPts: 0, totalHrs: 0, count: 0 };
+      if (!procData[name]) procData[name] = { totalPts: 0, totalHrs: 0, totalDollars: 0, count: 0 };
       procData[name].totalPts += pts;
       procData[name].totalHrs += hrs;
+      procData[name].totalDollars += pts * getPointValueForMonth((sc.shiftDate || '').slice(0, 7));
       procData[name].count++;
     });
   }
 
-  const all = Object.entries(procData).map(([name, d]) => ({ name, ptsPerHr: d.totalPts / d.totalHrs, count: d.count }));
+  const all = Object.entries(procData).map(([name, d]) => ({ name, ptsPerHr: d.totalPts / d.totalHrs, dollarsPerHr: d.totalDollars / d.totalHrs, count: d.count }));
   procEffData.ranked = all.filter(p => p.count >= 4).sort((a, b) => b.ptsPerHr - a.ptsPerHr);
   procEffData.unranked = all.filter(p => p.count < 4).sort((a, b) => a.name.localeCompare(b.name));
   renderProcTabContent();
@@ -13478,7 +13514,8 @@ function renderProcTabContent() {
 
 function procRow(rank, p, color) {
   const c = color ? ` style="color:${color}"` : '';
-  return `<div class="efficiency-item"><span class="eff-label">${rank}. ${escHtml(p.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${p.count} cases)</span></span><span class="eff-value"${c}>${p.ptsPerHr.toFixed(1)} pts/hr</span></div>`;
+  const display = showDollars ? '$' + p.dollarsPerHr.toFixed(2) + '/hr' : p.ptsPerHr.toFixed(1) + ' pts/hr';
+  return `<div class="efficiency-item"><span class="eff-label">${rank}. ${escHtml(p.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${p.count} cases)</span></span><span class="eff-value"${c}>${display}</span></div>`;
 }
 
 let surgeonEffData = { ranked: [], unranked: [] };
