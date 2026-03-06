@@ -278,6 +278,9 @@ textarea { resize: vertical; min-height: 60px; }
 .btn-sm { padding: 8px 14px; font-size: 0.85rem; }
 .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
 .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+.dollar-toggle { background: rgba(71,85,105,0.3); border: 1px solid var(--border); color: var(--text-dim); border-radius: 6px; padding: 4px 12px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.dollar-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.dollar-toggle.active { background: var(--accent); color: white; border-color: var(--accent); }
 .hist-range-btn { padding: 4px 10px; font-size: 0.72rem; border-radius: 14px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; transition: all 0.15s; }
 .hist-range-btn:hover, .hist-range-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 .info-icon { display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:var(--border);color:var(--text-dim);font-size:0.55rem;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:3px;flex-shrink:0; }
@@ -2360,16 +2363,18 @@ input.mil-time.invalid {
   <!-- Analytics Tab -->
   <div id="dtab-analytics" class="hidden">
     <!-- Top Producing Cases -->
-    <div class="card">
-      <h2 style="display:flex;justify-content:space-between;align-items:center;">Top Producing Cases<button class="tab-btn" id="caseMixDollarToggle" onclick="toggleCaseMixDollars()" style="font-size:0.7rem;padding:2px 10px;">Show $</button></h2>
+    <div class="card" style="position:relative;">
+      <button class="dollar-toggle" id="caseMixDollarToggle" onclick="toggleCaseMixDollars()" style="position:absolute;top:16px;right:16px;">Show $</button>
+      <h2>Top Producing Cases</h2>
       <div id="caseMixContent">
         <div class="empty-state"><p>No case data.</p></div>
       </div>
     </div>
 
     <!-- Procedure Efficiency -->
-    <div class="card">
-      <h2 style="display:flex;justify-content:space-between;align-items:center;"><span id="procEffHeading">Procedure Efficiency (pts/hr)</span><button class="tab-btn" id="procEffDollarToggle" onclick="toggleCaseMixDollars()" style="font-size:0.7rem;padding:2px 10px;">Show $</button></h2>
+    <div class="card" style="position:relative;">
+      <button class="dollar-toggle" id="procEffDollarToggle" onclick="toggleCaseMixDollars()" style="position:absolute;top:16px;right:16px;">Show $</button>
+      <h2 id="procEffHeading">Procedure Efficiency (pts/hr)</h2>
       <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
         <button class="tab-btn active" id="peTabTop" onclick="switchProcTab('top')">Top Procedures</button>
         <button class="tab-btn" id="peTabGrow" onclick="switchProcTab('grow')">Room to Grow</button>
@@ -13385,6 +13390,21 @@ function closeSurgeonCaseEditor() {
   document.getElementById('surgeonCaseEditorModal').classList.add('hidden');
 }
 
+function calcCaseARContribution(c, shift) {
+  if (!c.startTime || !c.endTime || !shift || !shift.assignmentType) return 0;
+  if (shift.assignmentType === 'vacation' || shift.forcedOff || shift.assignmentType === 'forced_off') return 0;
+  const isHol = shift.isHoliday;
+  const isWknd = isWeekend(shift.date || c.shiftDate);
+  let s = timeToMinutes(c.startTime);
+  let e = timeToMinutes(c.endTime);
+  if (e <= s) e += 1440;
+  let ar = 0;
+  for (let m = s; m < e; m++) {
+    ar += getARRate(shift.assignmentType, isHol, isWknd, m % 1440) / 60;
+  }
+  return round2(ar);
+}
+
 function renderCaseMix() {
   if (data.cases.length === 0) {
     document.getElementById('caseMixContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No cases logged yet.</p>';
@@ -13392,17 +13412,22 @@ function renderCaseMix() {
   }
   const ranked = data.cases.map(c => {
     const shift = data.shifts[c.shiftDate] || {};
-    const pts = calcCasePoints(c, shift);
+    const prodPts = calcCasePoints(c, shift);
+    const arPts = calcCaseARContribution(c, shift);
+    const totalPts = prodPts + arPts;
     const procedure = c.procedure || c.notes || c.caseType;
     const monthKey = (c.shiftDate || '').slice(0, 7);
     const pv = getPointValueForMonth(monthKey);
-    const dollars = pts * pv;
-    return { procedure, pts, dollars, date: c.shiftDate || '' };
-  }).sort((a, b) => b.pts - a.pts).slice(0, 8);
+    const totalDollars = totalPts * pv;
+    return { procedure, prodPts, arPts, totalPts, totalDollars, pv, date: c.shiftDate || '' };
+  }).sort((a, b) => b.totalPts - a.totalPts).slice(0, 8);
   let html = '';
   ranked.forEach(item => {
-    const display = showDollars ? '$' + item.dollars.toFixed(2) : item.pts.toFixed(1);
-    html += `<div class="efficiency-item"><span class="eff-label">${escHtml(item.procedure)}</span><span class="eff-value"><span class="point-badge">${display}</span><span style="font-size:0.7rem;color:var(--text-dim);margin-left:6px;">${escHtml(item.date)}</span></span></div>`;
+    const display = showDollars ? '$' + item.totalDollars.toFixed(2) : item.totalPts.toFixed(1);
+    const detail = showDollars
+      ? 'AR $' + (item.arPts * item.pv).toFixed(0) + ' + Prod $' + (item.prodPts * item.pv).toFixed(0)
+      : 'AR ' + item.arPts.toFixed(1) + ' + Prod ' + item.prodPts.toFixed(1);
+    html += `<div class="efficiency-item"><span class="eff-label">${escHtml(item.procedure)}<br><span style="font-size:0.7rem;color:var(--text-dim);">${detail} &middot; ${escHtml(item.date)}</span></span><span class="eff-value"><span class="point-badge">${display}</span></span></div>`;
   });
   document.getElementById('caseMixContent').innerHTML = html;
 }
