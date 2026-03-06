@@ -4286,6 +4286,7 @@ async function loadSharedCases() {
     return sharedCasesCache;
   } catch (err) {
     console.error('Failed to load shared cases:', err);
+    sharedCasesLoaded = true; // mark loaded so card doesn't hang on "Loading..."
     return [];
   }
 }
