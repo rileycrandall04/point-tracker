@@ -6733,7 +6733,8 @@ function loadShiftForDate() {
     if (calType === 'forced_off') {
       populateTimeEntries([{ start: '', end: '' }]);
     } else {
-      populateTimeEntries([{ start: '07:10', end: '' }]);
+      const earlyStart = ['SF1', 'OB_restricted', 'ACS'].includes(calType);
+      populateTimeEntries([{ start: earlyStart ? '07:00' : '07:10', end: '' }]);
     }
     document.getElementById('shiftHoliday').checked = false;
     document.getElementById('cardiacLiverOptions').classList.add('hidden');
