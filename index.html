@@ -7907,7 +7907,19 @@ function renderWeeklyChart() {
     // Skip future pager-only shifts — don't show pager pay on chart before it's earned
     const futPager = shift && isFuturePagerOnly(shift);
     const result = futPager ? { total: 0, isInProgress: false, ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0 } : getShiftPointsForDate(d, true);
-    const hrs = shift ? calcShiftHours(shift) : 0;
+    let hrs = shift ? calcShiftHours(shift) : 0;
+    // If shift is in progress (has open time entry today), add elapsed hours using current time
+    if (shift && result.isInProgress) {
+      const entries = shift.timeEntries || [];
+      const lastEntry = entries.length > 0 ? entries[entries.length - 1] : null;
+      if (lastEntry && lastEntry.start && !lastEntry.end) {
+        const now = new Date();
+        const nowMin = now.getHours() * 60 + now.getMinutes();
+        const startMin = timeToMinutes(lastEntry.start);
+        const elapsed = nowMin >= startMin ? nowMin - startMin : (1440 - startMin + nowMin);
+        hrs += elapsed / 60;
+      }
+    }
     rawPts.push(result.total);
     hoursArr.push(hrs);
 
