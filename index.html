@@ -3231,6 +3231,11 @@ input.mil-time.invalid {
         <li><strong>Compensation Rules reference</strong> &mdash; New page under More tab with all point formulas, shift types, AR rates, pager pay, case points, add-ons, time multipliers, and blending weights.</li>
         <li><strong>Forced Off time entries hidden</strong> &mdash; Selecting Forced Off now hides and clears time entry fields since no time tracking is needed. Switching back to another shift type restores the fields.</li>
         <li><strong>Admin case name editing</strong> &mdash; Admin edits to other users' case surgeon/procedure names now persist across user re-syncs via a separate overrides collection.</li>
+        <li><strong>Smart current-month projection</strong> &mdash; Production Pipeline now projects the current month forward using scheduled shifts from calendar sync and historical per-shift-type averages, instead of showing only earned-so-far points.</li>
+        <li><strong>Pipeline &amp; paycheck labels</strong> &mdash; Earning-for and receiving labels on the Production Pipeline and Paycheck Projection cards are now inline text instead of tooltip icons.</li>
+        <li><strong>Weekly chart hours</strong> &mdash; This Week chart now shows total clocked hours in the summary, including elapsed time from in-progress shifts.</li>
+        <li><strong>Time page accuracy</strong> &mdash; Clocked hrs/wk now uses distinct worked weeks (ignoring vacation weeks). Production Trend, Weekend vs Weekday, and Day-of-Week heatmap now filter out vacation, forced off, and future pager-only shifts.</li>
+        <li><strong>Earnings estimator fixes</strong> &mdash; Avg pts/hr no longer inflated by future pager shifts. Hours/week defaults to your 3-month rolling average. Multi-digit typing in hrs/week input fixed.</li>
         <li><strong>Future pager pay excluded</strong> &mdash; Monthly totals, calendar grid, and weekly chart no longer count pager pay for upcoming shifts until the day the pager pay is actually earned.</li>
         <li><strong>Holiday auction data fix</strong> &mdash; Multi-day sign-up detection improved. Package vs single-day filter now correctly captures 2, 3, and 4-day sign-ups.</li>
       </ul>
