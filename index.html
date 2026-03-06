@@ -1358,6 +1358,19 @@ input.mil-time.invalid {
 .proc-suggestions .proc-item:hover .proc-units,
 .proc-suggestions .proc-item.active .proc-units { color: rgba(255,255,255,0.7); }
 
+/* ===== ASA CODE AUTOCOMPLETE ===== */
+.asa-autocomplete { position: relative; }
+
+/* ===== ASA CODE REFERENCE PAGE ===== */
+.asa-ref-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.asa-ref-table th { text-align: left; padding: 6px 8px; border-bottom: 2px solid var(--border); color: var(--text-dim); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+.asa-ref-table td { padding: 8px 8px; border-bottom: 1px solid var(--border); color: var(--text); }
+.asa-ref-table tr.asa-row { transition: background 0.15s; }
+.asa-select-mode .asa-row { cursor: pointer; }
+.asa-select-mode .asa-row:hover { background: rgba(99,102,241,0.15); }
+.asa-select-mode .asa-row:active { background: rgba(99,102,241,0.25); }
+.asa-select-banner { background: var(--primary); color: #fff; text-align: center; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 0.8rem; font-weight: 600; }
+
 /* ===== SURGEON / NOTES AUTOCOMPLETE ===== */
 .notes-autocomplete { position: relative; }
 .surgeon-suggestions {
@@ -2064,9 +2077,10 @@ input.mil-time.invalid {
           <input type="text" id="caseProcedure" placeholder="e.g., Lap Chole, Total Knee" autocomplete="off">
           <div class="proc-suggestions hidden" id="procSuggestions"></div>
         </div>
-        <div class="form-group">
-          <label>ASA Code</label>
-          <input type="text" id="caseASACode" placeholder="e.g., 00740">
+        <div class="form-group asa-autocomplete">
+          <label>ASA Code <a href="#" id="asaRefLink" style="font-size:0.7rem;color:var(--primary);margin-left:6px;">View all codes</a></label>
+          <input type="text" id="caseASACode" placeholder="e.g., 00740" autocomplete="off">
+          <div class="proc-suggestions hidden" id="asaSuggestions"></div>
         </div>
 
         <div class="form-row">
@@ -3165,6 +3179,9 @@ input.mil-time.invalid {
         <li><strong>Shift log improvements</strong> &mdash; Only clocked-in shifts shown. Vacation and pager-eligible shifts displayed properly. Earned vs scheduled shifts differentiated on History page.</li>
         <li><strong>Calendar as source of truth</strong> &mdash; Daily calendar is now the single source of truth for shift assignments. Vacation and forced-off shifts protected from being overwritten by calendar sync.</li>
         <li><strong>Holiday Shift Valuation removed</strong> &mdash; Removed the Holiday Shift Valuation card from Analytics. Core holiday shift tracking and pay calculations are unchanged.</li>
+        <li><strong>Case breakdown detail</strong> &mdash; Click any case in the Top Producing Cases list to see a full point breakdown (base units, time, add-ons, multipliers, AR contribution, grand total, dollar value).</li>
+        <li><strong>Session guard</strong> &mdash; App automatically refreshes your auth session when you return after being away. Persistent banner warns if your session has expired to prevent silent save failures.</li>
+        <li><strong>ASA code auto-fill</strong> &mdash; Enter an ASA code and startup points auto-fill instantly. A dropdown shows the most common procedures for that code. &ldquo;View all codes&rdquo; link opens a full ASA code reference page.</li>
       </ul>
     </div>
 
@@ -3447,6 +3464,479 @@ input.mil-time.invalid {
         <p style="margin-top:8px;"><strong>Formulas:</strong></p>
         <div class="cr-formula">Blended = &Sigma;(weight &times; month points)<br>Production = Blended &times; Point Value ($/pt)<br>Paycheck = Production + Stipends</div>
         <p class="cr-note">December Advance: January paycheck = $0, December paycheck = double (advance + month).</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ASA Code Reference Page -->
+<div class="page" id="page-asacodes">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <button id="asaCodesBackBtn" class="dollar-toggle" style="padding:4px 10px;font-size:0.75rem;">&#8592; Back</button>
+      <h2 style="margin:0;">ASA Code Reference</h2>
+    </div>
+    <div id="asaSelectBanner" class="asa-select-banner hidden">Tap a code to select it</div>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:14px;">All ASA anesthesia codes with base units and startup point values.</p>
+
+    <!-- Head -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Head</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('00100')"><td>00100</td><td>Salivary gland surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00102')"><td>00102</td><td>Cleft lip/palate repair</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00103')"><td>00103</td><td>Blepharoplasty</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00104')"><td>00104</td><td>Electroconvulsive therapy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00120')"><td>00120</td><td>External ear surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00124')"><td>00124</td><td>Middle ear surgery</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00126')"><td>00126</td><td>Tympanotomy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00140')"><td>00140</td><td>Intraoral surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00142')"><td>00142</td><td>Intraoral biopsy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00144')"><td>00144</td><td>Intraoral excision</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00145')"><td>00145</td><td>Oral surgery - tumor</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00147')"><td>00147</td><td>Oral surgery - other</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00148')"><td>00148</td><td>Pharyngeal surgery</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00160')"><td>00160</td><td>Nose/sinus surgery</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00162')"><td>00162</td><td>Rhinoplasty</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00164')"><td>00164</td><td>Nasal biopsy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00170')"><td>00170</td><td>Intraorbital surgery - not cataract</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00172')"><td>00172</td><td>Lens surgery (cataract)</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00174')"><td>00174</td><td>Retinal surgery</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00176')"><td>00176</td><td>Orbital surgery</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00190')"><td>00190</td><td>Intracranial - not otherwise spec.</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00192')"><td>00192</td><td>Intracranial - vascular</td><td>7</td><td>7</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Neck -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Neck</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('00210')"><td>00210</td><td>Intracranial - subdural taps</td><td>11</td><td>11</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00211')"><td>00211</td><td>Craniotomy - craniectomy</td><td>11</td><td>11</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00212')"><td>00212</td><td>Subdural taps</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00214')"><td>00214</td><td>Burr holes</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00215')"><td>00215</td><td>Cranioplasty</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00216')"><td>00216</td><td>Vascular intracranial</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00218')"><td>00218</td><td>Posterior fossa surgery</td><td>10</td><td>10</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00220')"><td>00220</td><td>Cervical spine surgery</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00222')"><td>00222</td><td>Needle biopsy - cervical spine</td><td>6</td><td>6</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Thorax -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Thorax</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('00300')"><td>00300</td><td>Chest wall surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00320')"><td>00320</td><td>Esophageal surgery - not open</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00322')"><td>00322</td><td>Esophagoscopy</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00326')"><td>00326</td><td>Bronchoscopy</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00350')"><td>00350</td><td>Chest/breast - pectus surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00352')"><td>00352</td><td>Breast surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00400')"><td>00400</td><td>Heart/great vessels - not bypass</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00402')"><td>00402</td><td>Cardiac catheterization</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00404')"><td>00404</td><td>Great vessel surgery</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00406')"><td>00406</td><td>Cardiac surgery w/ pump</td><td>8</td><td>8</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00410')"><td>00410</td><td>Cardiac surgery - w/ bypass</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00450')"><td>00450</td><td>Thoracotomy - not otherwise spec.</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00454')"><td>00454</td><td>Chest tube insertion</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00470')"><td>00470</td><td>Thoracotomy - w/ one lung vent</td><td>10</td><td>10</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00472')"><td>00472</td><td>Thoracotomy - w/ one lung vent (repair)</td><td>10</td><td>10</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00474')"><td>00474</td><td>Thoracotomy - major vessel</td><td>13</td><td>13</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Spine & Spinal Cord -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Spine &amp; Spinal Cord</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('00500')"><td>00500</td><td>Spinal cord/meninges - sitting</td><td>10</td><td>10</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00520')"><td>00520</td><td>Lumbar/thoracic - not cord</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00522')"><td>00522</td><td>Laminectomy - lumbar</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00524')"><td>00524</td><td>Thoracic spinal cord surgery</td><td>10</td><td>10</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00528')"><td>00528</td><td>Posterior lumbar fusion</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00530')"><td>00530</td><td>Posterior lumbar surgery</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00532')"><td>00532</td><td>Lumbar sympathectomy</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00534')"><td>00534</td><td>Spinal cord - thoracolumbar</td><td>13</td><td>13</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00537')"><td>00537</td><td>Lumbar spine - percutaneous</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00539')"><td>00539</td><td>Cervical spinal cord surgery</td><td>10</td><td>10</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00540')"><td>00540</td><td>Cervical spine surgery</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00541')"><td>00541</td><td>Cervical spine - anterior</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00542')"><td>00542</td><td>Cervical spine - posterior</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00546')"><td>00546</td><td>Cervical cordectomy</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00548')"><td>00548</td><td>Cervical/thoracic spinal cord</td><td>10</td><td>10</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00550')"><td>00550</td><td>Spinal instrumentation</td><td>7</td><td>7</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Upper Abdomen -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Upper Abdomen</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('00600')"><td>00600</td><td>Upper abdominal wall surgery</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00604')"><td>00604</td><td>Umbilical hernia - under 1 yr</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00620')"><td>00620</td><td>Intra-abdominal - upper</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00625')"><td>00625</td><td>Laparoscopy - upper GI</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00626')"><td>00626</td><td>Laparoscopy - cholecystectomy</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00630')"><td>00630</td><td>Upper GI endoscopy</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00632')"><td>00632</td><td>ERCP</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00634')"><td>00634</td><td>Foregut surgery - open</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00635')"><td>00635</td><td>Adrenal surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00640')"><td>00640</td><td>Liver/biliary/pancreatic</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00670')"><td>00670</td><td>Splenectomy</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00700')"><td>00700</td><td>Upper abdominal wall - other</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00702')"><td>00702</td><td>Inguinal hernia - under 1 yr</td><td>4</td><td>4</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Lower Abdomen -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Lower Abdomen</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('00730')"><td>00730</td><td>Inguinal hernia repair</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00731')"><td>00731</td><td>Femoral hernia repair</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00732')"><td>00732</td><td>Hernia repair - incisional</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00740')"><td>00740</td><td>Upper GI endoscopic procedures</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00750')"><td>00750</td><td>Intestinal endoscopy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00752')"><td>00752</td><td>Colonoscopy</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00754')"><td>00754</td><td>Colon surgery - open</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00756')"><td>00756</td><td>Intestinal surgery - open</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00770')"><td>00770</td><td>Major abdominal vascular</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00790')"><td>00790</td><td>Lower abdominal surgery</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00792')"><td>00792</td><td>Retroperitoneal surgery</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00794')"><td>00794</td><td>Aortic surgery - abdominal</td><td>8</td><td>8</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00796')"><td>00796</td><td>Liver transplant</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00797')"><td>00797</td><td>Gastric bypass / bariatric</td><td>9</td><td>9</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Perineum -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Perineum</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('00800')"><td>00800</td><td>Perineal surgery - minor</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00802')"><td>00802</td><td>Perineal surgery - major</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00810')"><td>00810</td><td>Lower intestinal endoscopy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00812')"><td>00812</td><td>Transurethral surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00820')"><td>00820</td><td>Cystoscopy - simple</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00830')"><td>00830</td><td>Kidney surgery - open</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00832')"><td>00832</td><td>Kidney/ureter - endoscopic</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00834')"><td>00834</td><td>Bladder surgery - suprapubic</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00836')"><td>00836</td><td>Bladder surgery - other</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00840')"><td>00840</td><td>Prostatectomy - perineal</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00842')"><td>00842</td><td>Prostatectomy - radical</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00844')"><td>00844</td><td>Pelvic exenteration</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00846')"><td>00846</td><td>Radical hysterectomy</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00848')"><td>00848</td><td>Brachytherapy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00851')"><td>00851</td><td>Tubal ligation</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00860')"><td>00860</td><td>Cesarean delivery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00862')"><td>00862</td><td>Cesarean hysterectomy</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00864')"><td>00864</td><td>Vaginal delivery</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00865')"><td>00865</td><td>Cesarean delivery - emergency</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00866')"><td>00866</td><td>Cesarean delivery - planned</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00868')"><td>00868</td><td>Vaginal surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00870')"><td>00870</td><td>Vulvar surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00872')"><td>00872</td><td>Rectal surgery - major</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00873')"><td>00873</td><td>Rectal - abdominal perineal</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00880')"><td>00880</td><td>Extraperitoneal - lower abd</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00882')"><td>00882</td><td>Extraperitoneal surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00902')"><td>00902</td><td>Renal surgery - complex</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00904')"><td>00904</td><td>Renal biopsy</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00906')"><td>00906</td><td>Lithotripsy</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00908')"><td>00908</td><td>Perineal prostatectomy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00910')"><td>00910</td><td>Adrenalectomy - transabdominal</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00912')"><td>00912</td><td>Kidney transplant</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00914')"><td>00914</td><td>Ureterolithotomy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00916')"><td>00916</td><td>Bladder/urethra surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00918')"><td>00918</td><td>Bladder surgery - open</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00920')"><td>00920</td><td>Genitalia - external (M)</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00921')"><td>00921</td><td>Vasectomy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00922')"><td>00922</td><td>Orchiectomy - simple</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00924')"><td>00924</td><td>Orchiectomy - radical</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00926')"><td>00926</td><td>Penile surgery</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00928')"><td>00928</td><td>Circumcision</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00930')"><td>00930</td><td>Testicular prosthesis</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00932')"><td>00932</td><td>Hypospadias repair - simple</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00934')"><td>00934</td><td>Hypospadias repair - complex</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00936')"><td>00936</td><td>Urethroplasty</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00938')"><td>00938</td><td>Insertion penile prosthesis</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00940')"><td>00940</td><td>Genitalia - external (F)</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00942')"><td>00942</td><td>Colposcopy/vulvar biopsy</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00944')"><td>00944</td><td>Vaginal hysterectomy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00948')"><td>00948</td><td>Cervical cerclage</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00950')"><td>00950</td><td>Vaginal endoscopy</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00952')"><td>00952</td><td>D&amp;C / hysteroscopy</td><td>5</td><td>5</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Upper Leg -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Upper Leg</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('01200')"><td>01200</td><td>Hip - external fixation</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01202')"><td>01202</td><td>Hip arthroplasty</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01210')"><td>01210</td><td>Hip - open biopsy</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01212')"><td>01212</td><td>Hip - total replacement</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01214')"><td>01214</td><td>Hip - closed reduction</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01215')"><td>01215</td><td>Hip - revision</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01220')"><td>01220</td><td>Upper femur surgery</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01230')"><td>01230</td><td>Femur - open reduction</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01232')"><td>01232</td><td>Femur - closed reduction</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01234')"><td>01234</td><td>Femur - amputation</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01250')"><td>01250</td><td>Femur - hardware removal</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01260')"><td>01260</td><td>Femur - major vascular</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01270')"><td>01270</td><td>Femur - biopsy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01272')"><td>01272</td><td>Femur - radical resection</td><td>8</td><td>8</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Knee & Popliteal -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Knee &amp; Popliteal</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('01320')"><td>01320</td><td>Knee - arthroscopy</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01340')"><td>01340</td><td>Knee - biopsy</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01360')"><td>01360</td><td>Knee - arthroplasty</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01380')"><td>01380</td><td>Knee - arthroscopy diagnostic</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01382')"><td>01382</td><td>Knee - total replacement</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01390')"><td>01390</td><td>Knee - closed procedures</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01392')"><td>01392</td><td>Knee - ligament repair</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01400')"><td>01400</td><td>Knee - arthroscopy (simple)</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01402')"><td>01402</td><td>Knee - arthroplasty/replacement</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01404')"><td>01404</td><td>Knee - amputation</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01420')"><td>01420</td><td>Knee - open reduction</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01430')"><td>01430</td><td>Popliteal - excision/biopsy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01432')"><td>01432</td><td>Knee - soft tissue</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01440')"><td>01440</td><td>Knee - hardware removal</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01442')"><td>01442</td><td>Popliteal artery surgery</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01444')"><td>01444</td><td>Knee - major vascular</td><td>6</td><td>6</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Lower Leg, Ankle & Foot -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Lower Leg, Ankle &amp; Foot</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('01462')"><td>01462</td><td>Lower leg - biopsy</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01464')"><td>01464</td><td>Lower leg - surgery</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01470')"><td>01470</td><td>Achilles tendon repair</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01472')"><td>01472</td><td>Ankle - open reduction</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01474')"><td>01474</td><td>Ankle arthroplasty</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01480')"><td>01480</td><td>Ankle/foot - open</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01482')"><td>01482</td><td>Ankle - arthroscopy</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01484')"><td>01484</td><td>Ankle - hardware removal</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01486')"><td>01486</td><td>Ankle - total replacement</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01490')"><td>01490</td><td>Lower leg - amputation</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01500')"><td>01500</td><td>Foot surgery</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01502')"><td>01502</td><td>Foot - open reduction</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01520')"><td>01520</td><td>Lower leg vascular</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01522')"><td>01522</td><td>Vascular - below knee</td><td>4</td><td>4</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Shoulder & Axilla -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Shoulder &amp; Axilla</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('01610')"><td>01610</td><td>Shoulder - biopsy</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01620')"><td>01620</td><td>Shoulder - open</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01622')"><td>01622</td><td>Shoulder - closed reduction</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01630')"><td>01630</td><td>Shoulder - arthroscopy</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01634')"><td>01634</td><td>Shoulder arthroplasty</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01636')"><td>01636</td><td>Axillary surgery</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01638')"><td>01638</td><td>Shoulder - major vascular</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01650')"><td>01650</td><td>Shoulder - total replacement</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01652')"><td>01652</td><td>Shoulder - major open</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01654')"><td>01654</td><td>Shoulder - rotator cuff</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01656')"><td>01656</td><td>Shoulder - hardware removal</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01670')"><td>01670</td><td>Shoulder - radical</td><td>4</td><td>4</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Upper Arm & Elbow -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Upper Arm &amp; Elbow</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('01710')"><td>01710</td><td>Elbow - biopsy</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01712')"><td>01712</td><td>Elbow - open</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01714')"><td>01714</td><td>Elbow - closed</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01716')"><td>01716</td><td>Elbow - tendon repair</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01730')"><td>01730</td><td>Humerus - open/closed</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01732')"><td>01732</td><td>Humerus - radical</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01740')"><td>01740</td><td>Elbow arthroplasty</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01742')"><td>01742</td><td>Elbow - total replacement</td><td>6</td><td>6</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01744')"><td>01744</td><td>Elbow - ligament repair</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01756')"><td>01756</td><td>Elbow - hardware removal</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01758')"><td>01758</td><td>Forearm - closed</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01760')"><td>01760</td><td>Forearm - open</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01770')"><td>01770</td><td>Humerus vascular</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01772')"><td>01772</td><td>Elbow vascular</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01780')"><td>01780</td><td>Upper arm vascular</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01782')"><td>01782</td><td>Arm vascular - major</td><td>7</td><td>7</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Forearm, Wrist & Hand -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Forearm, Wrist &amp; Hand</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('01810')"><td>01810</td><td>Forearm/wrist - biopsy</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01820')"><td>01820</td><td>Hand/finger surgery</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01829')"><td>01829</td><td>Diagnostic arthroscopy - wrist</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01830')"><td>01830</td><td>Wrist - open reduction</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01832')"><td>01832</td><td>Wrist arthroplasty</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01840')"><td>01840</td><td>Forearm - open reduction</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01842')"><td>01842</td><td>Forearm - radical</td><td>4</td><td>4</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01844')"><td>01844</td><td>Forearm - hardware removal</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01850')"><td>01850</td><td>Wrist/hand vascular</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01852')"><td>01852</td><td>Hand - microvascular</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01860')"><td>01860</td><td>Forearm/wrist vascular</td><td>3</td><td>3</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Radiological -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Radiological</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('01916')"><td>01916</td><td>Arterial catheterization</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01920')"><td>01920</td><td>Cardiac catheter - diagnostic</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01922')"><td>01922</td><td>Cardiac catheter - interventional</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01924')"><td>01924</td><td>Therapeutic embolization</td><td>10</td><td>10</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01925')"><td>01925</td><td>Neurointerventional - diagnostic</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01926')"><td>01926</td><td>Neurointerventional - therapeutic</td><td>8</td><td>8</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Other Procedures -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Other Procedures</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('01930')"><td>01930</td><td>Percutaneous liver biopsy</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01931')"><td>01931</td><td>Percutaneous biliary procedure</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01932')"><td>01932</td><td>Percutaneous renal procedure</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01933')"><td>01933</td><td>Percutaneous GI procedure</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01935')"><td>01935</td><td>Percutaneous spine procedure</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01936')"><td>01936</td><td>Percutaneous disc procedure</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01951')"><td>01951</td><td>Burn - trunk</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01952')"><td>01952</td><td>Burn - head</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01953')"><td>01953</td><td>Burn - extremity</td><td>5</td><td>5</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Obstetric -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Obstetric</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('01958')"><td>01958</td><td>Epidural - labor analgesia</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01960')"><td>01960</td><td>Vaginal delivery - anesthesia</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01961')"><td>01961</td><td>Cesarean - planned</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01962')"><td>01962</td><td>Cesarean - emergency</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01963')"><td>01963</td><td>Cesarean hysterectomy</td><td>8</td><td>8</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01965')"><td>01965</td><td>Incomplete/missed abortion</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01966')"><td>01966</td><td>Fetal procedures - external</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01967')"><td>01967</td><td>Neuraxial labor analgesia</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01968')"><td>01968</td><td>Cesarean after labor epidural</td><td>5</td><td>5</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01969')"><td>01969</td><td>Cesarean hysterectomy after labor</td><td>7</td><td>7</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Invasive / Cardiac -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Invasive / Cardiac</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('00560')"><td>00560</td><td>Cardiac - w/ pump oxygenator</td><td>15</td><td>15</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00561')"><td>00561</td><td>Cardiac - w/ hypothermia</td><td>15</td><td>15</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00562')"><td>00562</td><td>Cardiac - w/ pump &amp; hypothermia</td><td>15</td><td>15</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00563')"><td>00563</td><td>Cardiac - w/ bypass &amp; hypothermia</td><td>15</td><td>15</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00566')"><td>00566</td><td>CABG w/ pump</td><td>25</td><td>25</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00567')"><td>00567</td><td>Cardiac surgery - septal defect</td><td>15</td><td>15</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('00580')"><td>00580</td><td>Heart/lung transplant</td><td>10</td><td>10</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <!-- Miscellaneous -->
+    <div class="cr-section">
+      <div class="cr-section-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Miscellaneous</span><span class="cr-toggle">&#9654;</span>
+      </div>
+      <div class="cr-section-body">
+        <table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>
+          <tr class="asa-row" onclick="selectAsaCode('01990')"><td>01990</td><td>Physiologic support for organ harvest</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01991')"><td>01991</td><td>Postoperative ventilatory management</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01992')"><td>01992</td><td>Same-day - other procedure</td><td>7</td><td>7</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01996')"><td>01996</td><td>Daily management - ventilator</td><td>3</td><td>3</td></tr>
+          <tr class="asa-row" onclick="selectAsaCode('01999')"><td>01999</td><td>Unlisted anesthesia procedure</td><td>0</td><td>0</td></tr>
+        </tbody></table>
       </div>
     </div>
 
@@ -3909,6 +4399,10 @@ input.mil-time.invalid {
   <div class="drawer-item" data-page="comprules">
     <span class="drawer-icon">&#128214;</span>
     <span>Compensation Rules</span>
+  </div>
+  <div class="drawer-item" data-page="asacodes">
+    <span class="drawer-icon">&#128209;</span>
+    <span>ASA Code Reference</span>
   </div>
 </div>
 
@@ -7129,6 +7623,149 @@ document.getElementById('editLaborShared').addEventListener('change', function()
   document.addEventListener('click', function(e) {
     if (!e.target.closest('.proc-autocomplete')) hideSuggestions();
   });
+})();
+
+// ASA code autocomplete — auto-fill base units and suggest procedures
+let asaRefReturnPage = null;
+
+(function() {
+  const asaInput = document.getElementById('caseASACode');
+  const asaSugBox = document.getElementById('asaSuggestions');
+  const baseUnitsInput = document.getElementById('caseBaseUnits');
+  const procInput = document.getElementById('caseProcedure');
+  let asaActiveIdx = -1;
+
+  function getProcsForCode(code) {
+    const map = {};
+    data.cases.forEach(c => {
+      if (c.caseType !== 'standard' || !c.asaCode || !c.procedure) return;
+      if (c.asaCode.trim() === code) {
+        const name = c.procedure.trim();
+        if (!name) return;
+        map[name] = (map[name] || 0) + 1;
+      }
+    });
+    if (sharedCasesLoaded) {
+      const myUid = currentUser ? currentUser.uid : '';
+      sharedCasesCache.forEach(sc => {
+        if (sc.uid === myUid) return;
+        if (sc.caseType !== 'standard' || !sc.asaCode || !sc.procedure) return;
+        if (sc.asaCode.trim() === code) {
+          const name = sc.procedure.trim();
+          if (!name) return;
+          map[name] = (map[name] || 0) + 1;
+        }
+      });
+    }
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }
+
+  function showAsaSuggestions(code) {
+    const procs = getProcsForCode(code);
+    if (procs.length === 0) { hideAsaSuggestions(); return; }
+    asaActiveIdx = -1;
+    asaSugBox.innerHTML = procs.map(([name, count], i) =>
+      `<div class="proc-item" data-idx="${i}" data-name="${escHtml(name)}">${escHtml(name)}<span class="proc-units">(${count})</span></div>`
+    ).join('');
+    asaSugBox.classList.remove('hidden');
+  }
+
+  function hideAsaSuggestions() { asaSugBox.classList.add('hidden'); asaSugBox.innerHTML = ''; asaActiveIdx = -1; }
+
+  function selectAsaItem(el) {
+    procInput.value = el.dataset.name;
+    hideAsaSuggestions();
+    updatePointPreview();
+  }
+
+  window.handleAsaCodeInput = function(code) {
+    code = code.trim();
+    // Auto-fill base units from lookup table
+    if (typeof ASA_BASE_UNITS !== 'undefined' && ASA_BASE_UNITS[code] !== undefined) {
+      baseUnitsInput.value = ASA_BASE_UNITS[code];
+    }
+    // Show procedure suggestions
+    if (code.length >= 5) {
+      showAsaSuggestions(code);
+    } else {
+      hideAsaSuggestions();
+    }
+    updatePointPreview();
+  };
+
+  asaInput.addEventListener('input', function() {
+    handleAsaCodeInput(this.value);
+  });
+
+  asaInput.addEventListener('keydown', function(e) {
+    const items = asaSugBox.querySelectorAll('.proc-item');
+    if (items.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      asaActiveIdx = Math.min(asaActiveIdx + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('active', i === asaActiveIdx));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      asaActiveIdx = Math.max(asaActiveIdx - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('active', i === asaActiveIdx));
+    } else if (e.key === 'Enter' && asaActiveIdx >= 0) {
+      e.preventDefault();
+      selectAsaItem(items[asaActiveIdx]);
+    } else if (e.key === 'Escape') {
+      hideAsaSuggestions();
+    }
+  });
+
+  asaSugBox.addEventListener('click', function(e) {
+    const item = e.target.closest('.proc-item');
+    if (item) selectAsaItem(item);
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.asa-autocomplete')) hideAsaSuggestions();
+  });
+
+  // "View all codes" link
+  document.getElementById('asaRefLink').addEventListener('click', function(e) {
+    e.preventDefault();
+    const activePage = document.querySelector('.page.active');
+    asaRefReturnPage = activePage ? activePage.id : 'page-entry';
+    document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const asaPage = document.getElementById('page-asacodes');
+    asaPage.classList.add('active');
+    // Enable select mode
+    asaPage.classList.add('asa-select-mode');
+    document.getElementById('asaSelectBanner').classList.remove('hidden');
+    asaPage.scrollTop = 0;
+  });
+
+  // Back button on ASA codes page
+  document.getElementById('asaCodesBackBtn').addEventListener('click', function() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const returnId = asaRefReturnPage || 'page-dataentry';
+    document.getElementById(returnId).classList.add('active');
+    const pageName = returnId.replace('page-', '');
+    document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => {
+      b.classList.toggle('active', b.dataset.page === pageName);
+    });
+    // Clear select mode
+    document.getElementById('page-asacodes').classList.remove('asa-select-mode');
+    document.getElementById('asaSelectBanner').classList.add('hidden');
+    asaRefReturnPage = null;
+  });
+
+  // Select code from reference page
+  window.selectAsaCode = function(code) {
+    if (!asaRefReturnPage) return;
+    asaInput.value = code;
+    const bu = (typeof ASA_BASE_UNITS !== 'undefined') ? ASA_BASE_UNITS[code] : undefined;
+    if (bu !== undefined) baseUnitsInput.value = bu;
+    // Navigate back
+    document.getElementById('asaCodesBackBtn').click();
+    // Trigger procedure suggestions
+    handleAsaCodeInput(code);
+  };
 })();
 
 // Surgeon name autocomplete for Notes fields
@@ -16890,6 +17527,154 @@ const ASA_BASE_UNITS = {
   // Invasive / cardiac
   '00560': 15, '00561': 15, '00562': 15, '00563': 15, '00566': 25, '00567': 15,
   '00580': 10
+};
+
+const ASA_CODE_DESCRIPTIONS = {
+  // Head
+  '00100': 'Salivary gland surgery', '00102': 'Cleft lip/palate repair', '00103': 'Blepharoplasty',
+  '00104': 'Electroconvulsive therapy', '00120': 'External ear surgery', '00124': 'Middle ear surgery',
+  '00126': 'Tympanotomy', '00140': 'Intraoral surgery', '00142': 'Intraoral biopsy',
+  '00144': 'Intraoral excision', '00145': 'Oral surgery - tumor', '00147': 'Oral surgery - other',
+  '00148': 'Pharyngeal surgery', '00160': 'Nose/sinus surgery', '00162': 'Rhinoplasty',
+  '00164': 'Nasal biopsy', '00170': 'Intraorbital surgery - not cataract', '00172': 'Lens surgery (cataract)',
+  '00174': 'Retinal surgery', '00176': 'Orbital surgery', '00190': 'Intracranial - not otherwise spec.',
+  '00192': 'Intracranial - vascular',
+  // Neck
+  '00210': 'Intracranial - subdural taps', '00211': 'Craniotomy - craniectomy', '00212': 'Subdural taps',
+  '00214': 'Burr holes', '00215': 'Cranioplasty', '00216': 'Vascular intracranial',
+  '00218': 'Posterior fossa surgery', '00220': 'Cervical spine surgery', '00222': 'Needle biopsy - cervical spine',
+  // Thorax
+  '00300': 'Chest wall surgery', '00320': 'Esophageal surgery - not open', '00322': 'Esophagoscopy',
+  '00326': 'Bronchoscopy', '00350': 'Chest/breast - pectus surgery', '00352': 'Breast surgery',
+  '00400': 'Heart/great vessels - not bypass', '00402': 'Cardiac catheterization',
+  '00404': 'Great vessel surgery', '00406': 'Cardiac surgery w/ pump',
+  '00410': 'Cardiac surgery - w/ bypass', '00450': 'Thoracotomy - not otherwise spec.',
+  '00454': 'Chest tube insertion', '00470': 'Thoracotomy - w/ one lung vent',
+  '00472': 'Thoracotomy - w/ one lung vent (repair)', '00474': 'Thoracotomy - major vessel',
+  // Spine & spinal cord
+  '00500': 'Spinal cord/meninges - sitting', '00520': 'Lumbar/thoracic - not cord',
+  '00522': 'Laminectomy - lumbar', '00524': 'Thoracic spinal cord surgery',
+  '00528': 'Posterior lumbar fusion', '00530': 'Posterior lumbar surgery',
+  '00532': 'Lumbar sympathectomy', '00534': 'Spinal cord - thoracolumbar',
+  '00537': 'Lumbar spine - percutaneous', '00539': 'Cervical spinal cord surgery',
+  '00540': 'Cervical spine surgery', '00541': 'Cervical spine - anterior',
+  '00542': 'Cervical spine - posterior', '00546': 'Cervical cordectomy',
+  '00548': 'Cervical/thoracic spinal cord', '00550': 'Spinal instrumentation',
+  // Upper abdomen
+  '00600': 'Upper abdominal wall surgery', '00604': 'Umbilical hernia - under 1 yr',
+  '00620': 'Intra-abdominal - upper', '00625': 'Laparoscopy - upper GI',
+  '00626': 'Laparoscopy - cholecystectomy', '00630': 'Upper GI endoscopy',
+  '00632': 'ERCP', '00634': 'Foregut surgery - open',
+  '00635': 'Adrenal surgery', '00640': 'Liver/biliary/pancreatic',
+  '00670': 'Splenectomy', '00700': 'Upper abdominal wall - other',
+  '00702': 'Inguinal hernia - under 1 yr',
+  // Lower abdomen
+  '00730': 'Inguinal hernia repair', '00731': 'Femoral hernia repair',
+  '00732': 'Hernia repair - incisional', '00740': 'Upper GI endoscopic procedures',
+  '00750': 'Intestinal endoscopy', '00752': 'Colonoscopy',
+  '00754': 'Colon surgery - open', '00756': 'Intestinal surgery - open',
+  '00770': 'Major abdominal vascular', '00790': 'Lower abdominal surgery',
+  '00792': 'Retroperitoneal surgery', '00794': 'Aortic surgery - abdominal',
+  '00796': 'Liver transplant', '00797': 'Gastric bypass / bariatric',
+  // Perineum
+  '00800': 'Perineal surgery - minor', '00802': 'Perineal surgery - major',
+  '00810': 'Lower intestinal endoscopy', '00812': 'Transurethral surgery',
+  '00820': 'Cystoscopy - simple', '00830': 'Kidney surgery - open',
+  '00832': 'Kidney/ureter - endoscopic', '00834': 'Bladder surgery - suprapubic',
+  '00836': 'Bladder surgery - other', '00840': 'Prostatectomy - perineal',
+  '00842': 'Prostatectomy - radical', '00844': 'Pelvic exenteration',
+  '00846': 'Radical hysterectomy', '00848': 'Brachytherapy',
+  '00851': 'Tubal ligation', '00860': 'Cesarean delivery',
+  '00862': 'Cesarean hysterectomy', '00864': 'Vaginal delivery',
+  '00865': 'Cesarean delivery - emergency', '00866': 'Cesarean delivery - planned',
+  '00868': 'Vaginal surgery', '00870': 'Vulvar surgery',
+  '00872': 'Rectal surgery - major', '00873': 'Rectal - abdominal perineal',
+  '00880': 'Extraperitoneal - lower abd', '00882': 'Extraperitoneal surgery',
+  '00902': 'Renal surgery - complex', '00904': 'Renal biopsy',
+  '00906': 'Lithotripsy', '00908': 'Perineal prostatectomy',
+  '00910': 'Adrenalectomy - transabdominal', '00912': 'Kidney transplant',
+  '00914': 'Ureterolithotomy', '00916': 'Bladder/urethra surgery',
+  '00918': 'Bladder surgery - open', '00920': 'Genitalia - external (M)',
+  '00921': 'Vasectomy', '00922': 'Orchiectomy - simple',
+  '00924': 'Orchiectomy - radical', '00926': 'Penile surgery',
+  '00928': 'Circumcision', '00930': 'Testicular prosthesis',
+  '00932': 'Hypospadias repair - simple', '00934': 'Hypospadias repair - complex',
+  '00936': 'Urethroplasty', '00938': 'Insertion penile prosthesis',
+  '00940': 'Genitalia - external (F)', '00942': 'Colposcopy/vulvar biopsy',
+  '00944': 'Vaginal hysterectomy', '00948': 'Cervical cerclage',
+  '00950': 'Vaginal endoscopy', '00952': 'D&C / hysteroscopy',
+  // Upper leg
+  '01200': 'Hip - external fixation', '01202': 'Hip arthroplasty',
+  '01210': 'Hip - open biopsy', '01212': 'Hip - total replacement',
+  '01214': 'Hip - closed reduction', '01215': 'Hip - revision',
+  '01220': 'Upper femur surgery', '01230': 'Femur - open reduction',
+  '01232': 'Femur - closed reduction', '01234': 'Femur - amputation',
+  '01250': 'Femur - hardware removal', '01260': 'Femur - major vascular',
+  '01270': 'Femur - biopsy', '01272': 'Femur - radical resection',
+  // Knee & popliteal
+  '01320': 'Knee - arthroscopy', '01340': 'Knee - biopsy',
+  '01360': 'Knee - arthroplasty', '01380': 'Knee - arthroscopy diagnostic',
+  '01382': 'Knee - total replacement', '01390': 'Knee - closed procedures',
+  '01392': 'Knee - ligament repair', '01400': 'Knee - arthroscopy (simple)',
+  '01402': 'Knee - arthroplasty/replacement', '01404': 'Knee - amputation',
+  '01420': 'Knee - open reduction', '01430': 'Popliteal - excision/biopsy',
+  '01432': 'Knee - soft tissue', '01440': 'Knee - hardware removal',
+  '01442': 'Popliteal artery surgery', '01444': 'Knee - major vascular',
+  // Lower leg, ankle & foot
+  '01462': 'Lower leg - biopsy', '01464': 'Lower leg - surgery',
+  '01470': 'Achilles tendon repair', '01472': 'Ankle - open reduction',
+  '01474': 'Ankle arthroplasty', '01480': 'Ankle/foot - open',
+  '01482': 'Ankle - arthroscopy', '01484': 'Ankle - hardware removal',
+  '01486': 'Ankle - total replacement', '01490': 'Lower leg - amputation',
+  '01500': 'Foot surgery', '01502': 'Foot - open reduction',
+  '01520': 'Lower leg vascular', '01522': 'Vascular - below knee',
+  // Shoulder & axilla
+  '01610': 'Shoulder - biopsy', '01620': 'Shoulder - open',
+  '01622': 'Shoulder - closed reduction', '01630': 'Shoulder - arthroscopy',
+  '01634': 'Shoulder arthroplasty', '01636': 'Axillary surgery',
+  '01638': 'Shoulder - major vascular', '01650': 'Shoulder - total replacement',
+  '01652': 'Shoulder - major open', '01654': 'Shoulder - rotator cuff',
+  '01656': 'Shoulder - hardware removal', '01670': 'Shoulder - radical',
+  // Upper arm & elbow
+  '01710': 'Elbow - biopsy', '01712': 'Elbow - open',
+  '01714': 'Elbow - closed', '01716': 'Elbow - tendon repair',
+  '01730': 'Humerus - open/closed', '01732': 'Humerus - radical',
+  '01740': 'Elbow arthroplasty', '01742': 'Elbow - total replacement',
+  '01744': 'Elbow - ligament repair', '01756': 'Elbow - hardware removal',
+  '01758': 'Forearm - closed', '01760': 'Forearm - open',
+  '01770': 'Humerus vascular', '01772': 'Elbow vascular',
+  '01780': 'Upper arm vascular', '01782': 'Arm vascular - major',
+  // Forearm, wrist & hand
+  '01810': 'Forearm/wrist - biopsy', '01820': 'Hand/finger surgery',
+  '01829': 'Diagnostic arthroscopy - wrist', '01830': 'Wrist - open reduction',
+  '01832': 'Wrist arthroplasty', '01840': 'Forearm - open reduction',
+  '01842': 'Forearm - radical', '01844': 'Forearm - hardware removal',
+  '01850': 'Wrist/hand vascular', '01852': 'Hand - microvascular',
+  '01860': 'Forearm/wrist vascular',
+  // Radiological
+  '01916': 'Arterial catheterization', '01920': 'Cardiac catheter - diagnostic',
+  '01922': 'Cardiac catheter - interventional', '01924': 'Therapeutic embolization',
+  '01925': 'Neurointerventional - diagnostic', '01926': 'Neurointerventional - therapeutic',
+  // Other procedures
+  '01930': 'Percutaneous liver biopsy', '01931': 'Percutaneous biliary procedure',
+  '01932': 'Percutaneous renal procedure', '01933': 'Percutaneous GI procedure',
+  '01935': 'Percutaneous spine procedure', '01936': 'Percutaneous disc procedure',
+  '01951': 'Burn - trunk', '01952': 'Burn - head',
+  '01953': 'Burn - extremity', '01958': 'Epidural - labor analgesia',
+  '01960': 'Vaginal delivery - anesthesia', '01961': 'Cesarean - planned',
+  '01962': 'Cesarean - emergency', '01963': 'Cesarean hysterectomy',
+  '01965': 'Incomplete/missed abortion', '01966': 'Fetal procedures - external',
+  '01967': 'Neuraxial labor analgesia', '01968': 'Cesarean after labor epidural',
+  '01969': 'Cesarean hysterectomy after labor',
+  // Other / miscellaneous
+  '01990': 'Physiologic support for organ harvest', '01991': 'Postoperative ventilatory management',
+  '01992': 'Same-day - other procedure', '01996': 'Daily management - ventilator',
+  '01999': 'Unlisted anesthesia procedure',
+  // Invasive / cardiac
+  '00560': 'Cardiac - w/ pump oxygenator', '00561': 'Cardiac - w/ hypothermia',
+  '00562': 'Cardiac - w/ pump & hypothermia', '00563': 'Cardiac - w/ bypass & hypothermia',
+  '00566': 'CABG w/ pump', '00567': 'Cardiac surgery - septal defect',
+  '00580': 'Heart/lung transplant'
 };
 
 // ================================================================
