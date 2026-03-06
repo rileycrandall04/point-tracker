@@ -8036,20 +8036,9 @@ function tickLiveUpdate() {
     compEl.innerHTML = chipHtml;
   }
 
-  // Update live earning rate breakdown
+  // Clear old earning rate element (rate info now shown in Rate badge above)
   const ratesEl = document.getElementById('todayLiveRates');
-  if (ratesEl) {
-    const parts = [];
-    if (effectiveARRate > 0) parts.push('AR ' + effectiveARRate.toFixed(0));
-    if (pagerRate > 0) parts.push('Pager 3.5');
-    if (prodRate > 0) parts.push('Prod ' + prodRate.toFixed(1));
-
-    let rateHtml = '<div style="margin-top:8px;font-size:0.72rem;color:var(--text-dim);">';
-    rateHtml += `Earning: <span style="color:var(--primary);font-weight:600;">${parts.join(' + ')} = ${totalRate.toFixed(1)} pts/hr</span>`;
-    rateHtml += ` <span style="font-weight:400;">($${round2(totalRate * pv).toFixed(0)}/hr)</span>`;
-    rateHtml += '</div>';
-    ratesEl.innerHTML = rateHtml;
-  }
+  if (ratesEl) ratesEl.innerHTML = '';
 
   // Also update the rate chips
   updateTodayRateChips();
