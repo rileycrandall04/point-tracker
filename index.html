@@ -11607,6 +11607,70 @@ function editPaceTarget(monthKey, rollingAvg, currentGoal) {
   updateHeaderPoints();
 }
 
+// Build average points per shift type from historical data
+function getAvgPointsByShiftType() {
+  const groups = {};
+  let allTotal = 0, allCount = 0;
+  Object.values(data.shifts).forEach(shift => {
+    if (!shift.assignmentType) return;
+    if (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off') return;
+    if (shift.forcedOff) return;
+    if (isFuturePagerOnly(shift)) return;
+    const t = calcShiftTotal(shift).total;
+    const type = shift.assignmentType;
+    if (!groups[type]) groups[type] = { totalPts: 0, count: 0 };
+    groups[type].totalPts += t;
+    groups[type].count++;
+    allTotal += t;
+    allCount++;
+  });
+  const avgs = {};
+  Object.entries(groups).forEach(([type, g]) => {
+    avgs[type] = round2(g.totalPts / g.count);
+  });
+  avgs._overall = allCount > 0 ? round2(allTotal / allCount) : 0;
+  return avgs;
+}
+
+// Project current month points using scheduled shifts and historical averages
+function projectCurrentMonthPoints(mt) {
+  const today = effectiveWorkDate();
+  const now = new Date();
+  const currentMonthKey = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const actualPts = mt[currentMonthKey] || 0;
+
+  if (!data.calendarAssignments || Object.keys(data.calendarAssignments).length === 0) return null;
+
+  const avgsByType = getAvgPointsByShiftType();
+  if (avgsByType._overall === 0) return null;
+
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  let projectedRemainder = 0;
+  let projectedDayCount = 0;
+
+  for (let d = 1; d <= lastDay; d++) {
+    const dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    if (dateStr <= today) continue;
+    const cal = data.calendarAssignments[dateStr];
+    if (!cal || !cal.type) continue;
+    if (cal.type === 'vacation' || cal.type === 'forced_off') continue;
+    const avg = avgsByType[cal.type] !== undefined ? avgsByType[cal.type] : avgsByType._overall;
+    projectedRemainder += avg;
+    projectedDayCount++;
+  }
+
+  if (projectedDayCount === 0) return null;
+
+  return {
+    total: round2(actualPts + projectedRemainder),
+    actualPts: round2(actualPts),
+    projectedPts: round2(projectedRemainder),
+    projectedDays: projectedDayCount
+  };
+}
+
 function renderPipelineChart() {
   const now = new Date();
   const mt = getMonthlyTotals();
@@ -11632,6 +11696,10 @@ function renderPipelineChart() {
   }
   const avgProjection = includeProjections && recentKnown.length > 0
     ? recentKnown.reduce((a, b) => a + b, 0) / recentKnown.length : 0;
+
+  // Project current month using scheduled shifts when projections enabled
+  const currentMk = mkKey(now.getFullYear(), now.getMonth());
+  const currentMonthProjection = includeProjections ? projectCurrentMonthPoints(mt) : null;
 
   // For each of the next 5 months, compute the full stabilization-weighted paycheck
   // using real data where available; projected avg only when toggle is on
@@ -11659,8 +11727,13 @@ function renderPipelineChart() {
 
       const isCurrentOrPast = srcDate <= now || srcKey === mkKey(now.getFullYear(), now.getMonth());
       const isProjected = !mt[srcKey] && !isCurrentOrPast;
+      const isCurrentMonth = srcKey === currentMk;
       let srcPts;
-      if (mt[srcKey] !== undefined) {
+      let isPartialProjection = false;
+      if (isCurrentMonth && currentMonthProjection) {
+        srcPts = currentMonthProjection.total;
+        isPartialProjection = true;
+      } else if (mt[srcKey] !== undefined) {
         srcPts = mt[srcKey];
       } else if (isCurrentOrPast) {
         srcPts = 0;
@@ -11671,10 +11744,20 @@ function renderPipelineChart() {
       const contribution = round2(srcPts * weights[w]);
       if (isProjected) {
         projPts += contribution;
+      } else if (isPartialProjection && currentMonthProjection.total > 0) {
+        const actualFraction = currentMonthProjection.actualPts / currentMonthProjection.total;
+        realPts += round2(contribution * actualFraction);
+        projPts += round2(contribution * (1 - actualFraction));
+      } else if (isPartialProjection) {
+        projPts += contribution;
       } else {
         realPts += contribution;
       }
-      bd.push({ label: srcLabel, weight: weights[w], pts: round2(srcPts), contribution, isProjected });
+      bd.push({ label: srcLabel, weight: weights[w], pts: round2(srcPts), contribution, isProjected, isPartialProjection,
+        actualPts: isPartialProjection ? currentMonthProjection.actualPts : null,
+        projectedPts: isPartialProjection ? currentMonthProjection.projectedPts : null,
+        projectedDays: isPartialProjection ? currentMonthProjection.projectedDays : null
+      });
     }
 
     realValues.push(round2(realPts));
@@ -11711,9 +11794,27 @@ function renderPipelineChart() {
         const srcKey = mkKey(srcDate.getFullYear(), srcDate.getMonth());
         const isCurrentOrPast = srcDate <= now || srcKey === mkKey(now.getFullYear(), now.getMonth());
         const isProjected = !mt[srcKey] && !isCurrentOrPast;
-        const srcPts = mt[srcKey] !== undefined ? mt[srcKey] : (isCurrentOrPast ? 0 : avgProjection);
+        const isCurrentMonth = srcKey === currentMk;
+        let srcPts;
+        if (isCurrentMonth && currentMonthProjection) {
+          srcPts = currentMonthProjection.total;
+        } else if (mt[srcKey] !== undefined) {
+          srcPts = mt[srcKey];
+        } else if (isCurrentOrPast) {
+          srcPts = 0;
+        } else {
+          srcPts = avgProjection;
+        }
         const contribution = round2(srcPts * weights[w]);
-        if (isProjected) janProj += contribution; else janReal += contribution;
+        if (isProjected) {
+          janProj += contribution;
+        } else if (isCurrentMonth && currentMonthProjection && currentMonthProjection.total > 0) {
+          const af = currentMonthProjection.actualPts / currentMonthProjection.total;
+          janReal += round2(contribution * af);
+          janProj += round2(contribution * (1 - af));
+        } else {
+          janReal += contribution;
+        }
       }
       realValues[target] += round2(janReal);
       projectedValues[target] += round2(janProj);
@@ -11794,7 +11895,10 @@ function renderPipelineChart() {
               const bd = breakdowns[idx];
               const lines = bd.map(b => {
                 const pct = (b.weight * 100).toFixed(0);
-                const proj = b.isProjected ? ' (est)' : '';
+                let proj = b.isProjected ? ' (est)' : '';
+                if (b.isPartialProjection) {
+                  proj = ` (${b.actualPts.toFixed(0)} earned + ${b.projectedPts.toFixed(0)} est from ${b.projectedDays} sched.)`;
+                }
                 return `  ${pct}% \u00d7 ${b.pts.toFixed(0)} pts${proj} (${b.label}) = ${b.contribution.toFixed(1)}`;
               });
               const total = round2(realValues[idx] + projectedValues[idx]);
