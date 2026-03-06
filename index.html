@@ -7819,20 +7819,23 @@ function updateTodayRateChips() {
     // In-progress production rate (open cases without end time)
     let prodRate = 0;
     const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
+    const isOB = shift.assignmentType === 'OB_restricted';
     openCases.forEach(c => {
       const cs = timeToMinutes(c.startTime);
       let elapsed = currentMin - cs;
       if (elapsed < 0) elapsed += 1440;
       const elapsedHrs = elapsed / 60;
       if (c.caseType === 'labor_epidural') {
-        // Labor epidural tier rates (already OB doubled)
-        if (cs === 420) {
-          prodRate += 1.25 * 2;
-        } else {
-          if (elapsedHrs < 1) prodRate += 7.5 * 2;
-          else if (elapsedHrs < 2) prodRate += 2.5 * 2;
-          else prodRate += 1.25 * 2;
+        // Tier based on total time since placement (or initial start for shared)
+        let tierElapsed = elapsedHrs;
+        if (c.isSharedLabor && c.laborInitialStart) {
+          let initElapsed = currentMin - timeToMinutes(c.laborInitialStart);
+          if (initElapsed < 0) initElapsed += 1440;
+          tierElapsed = initElapsed / 60;
         }
+        let rate = tierElapsed < 1 ? 6 : tierElapsed < 2 ? 3 : 1.5;
+        if (isOB) rate *= 2;
+        prodRate += rate;
       } else if (c.caseType === 'standard') {
         // Standard/OR: flat 6 pts/hr (multiplier is in AR, no OB doubling)
         prodRate += 6;
@@ -7952,6 +7955,7 @@ function tickLiveUpdate() {
   }
   const pagerRate = inPagerWindow ? 3.5 : 0;
 
+  const isOB2 = shift.assignmentType === 'OB_restricted';
   let prodRate = 0;
   const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
   openCases.forEach(c => {
@@ -7967,9 +7971,9 @@ function tickLiveUpdate() {
         if (initElapsed < 0) initElapsed += 1440;
         tierElapsed = initElapsed / 60;
       }
-      if (tierElapsed < 1) prodRate += 5;
-      else if (tierElapsed < 2) prodRate += 2.5;
-      else prodRate += 1.25;
+      let rate = tierElapsed < 1 ? 6 : tierElapsed < 2 ? 3 : 1.5;
+      if (isOB2) rate *= 2;
+      prodRate += rate;
     } else if (c.caseType === 'standard') {
       prodRate += 6;
     }
