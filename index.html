@@ -7763,8 +7763,8 @@ let asaRefReturnPage = null;
     if (bu !== undefined) baseUnitsInput.value = bu;
     // Navigate back
     document.getElementById('asaCodesBackBtn').click();
-    // Trigger procedure suggestions
-    handleAsaCodeInput(code);
+    // Trigger procedure suggestions after click event finishes bubbling
+    setTimeout(function() { handleAsaCodeInput(code); }, 0);
   };
 })();
 
