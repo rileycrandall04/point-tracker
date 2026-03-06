@@ -4262,6 +4262,7 @@ let sharedCasesLoaded = false;
 let sharedCaseOverridesCache = {}; // { docId: { surgeon, procedure, updatedAt } }
 let surgeonMappingsCache = {};
 let surgeonMappingsLoaded = false;
+let userProfilesCache = {}; // { uid: { email, displayName } }
 
 async function loadSharedCases() {
   try {
@@ -4349,6 +4350,20 @@ async function loadSurgeonMappings() {
     console.error('Failed to load surgeon mappings:', err);
     surgeonMappingsCache = {};
     surgeonMappingsLoaded = true;
+  }
+}
+
+async function loadUserProfiles() {
+  try {
+    const snapshot = await db.collection('userProfiles').get();
+    userProfilesCache = {};
+    snapshot.forEach(doc => {
+      userProfilesCache[doc.id] = doc.data();
+    });
+    console.log('Loaded ' + Object.keys(userProfilesCache).length + ' user profiles');
+  } catch (err) {
+    console.error('Failed to load user profiles:', err);
+    userProfilesCache = {};
   }
 }
 
@@ -14640,7 +14655,9 @@ function renderCollectiveCases() {
   html += `<div class="proc-case-list" style="display:none;">`;
   let otherIdx = 1;
   contributors.forEach(([uid, count]) => {
-    const label = uid === myUid ? 'You' : 'Contributor ' + otherIdx++;
+    const label = uid === myUid ? 'You' :
+      userProfilesCache[uid] ? userProfilesCache[uid].email :
+      'Contributor ' + otherIdx++;
     html += `<div class="proc-case-item"><span>${escHtml(label)}</span><span>${count} case${count !== 1 ? 's' : ''}</span></div>`;
   });
   html += `</div>`;
@@ -14859,7 +14876,7 @@ function openSurgeonCaseEditor() {
   if (admin) {
     sharedCasesCache.forEach(sc => {
       if (sc.uid === myUid) return;
-      if (!uidLabels[sc.uid]) uidLabels[sc.uid] = 'Contributor ' + otherIdx++;
+      if (!uidLabels[sc.uid]) uidLabels[sc.uid] = userProfilesCache[sc.uid] ? userProfilesCache[sc.uid].email : 'Contributor ' + otherIdx++;
       sceAllCases.push({
         _key: 's_' + (sc._docId || sc.uid + '_' + sc.shiftDate + '_' + sc.startTime),
         source: 'shared',
@@ -19086,6 +19103,13 @@ auth.onAuthStateChanged(async (user) => {
     currentUser = user;
     document.getElementById('authLoading').classList.add('hidden');
 
+    // Write/update user profile (fire-and-forget)
+    db.collection('userProfiles').doc(user.uid).set({
+      email: user.email || '',
+      displayName: user.displayName || '',
+      lastSignIn: new Date().toISOString()
+    }, { merge: true }).catch(err => console.error('Profile write error:', err));
+
     // Load data from Firestore
     const result = await loadFromFirestore(user.uid);
     await loadSettingsFromFirestore(user.uid);
@@ -19128,11 +19152,11 @@ auth.onAuthStateChanged(async (user) => {
       saveSettings(settings);
     }
 
-    // Load shared cases, overrides, and surgeon mappings from community pool (non-blocking)
+    // Load shared cases, overrides, surgeon mappings, and user profiles from community pool (non-blocking)
     loadSharedCaseOverrides().then(() => {
       return loadSharedCases(); // applies overrides after loading
     }).then(() => {
-      return loadSurgeonMappings();
+      return Promise.all([loadSurgeonMappings(), loadUserProfiles()]);
     }).then(() => {
       renderCollectiveCases();
       // Re-render analytics if currently visible
