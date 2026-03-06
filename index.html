@@ -501,6 +501,8 @@ textarea { resize: vertical; min-height: 60px; }
 .unbilled-btn { background:none; border:none; cursor:pointer; font-size:0.9rem; padding:2px 4px; color:#888; font-weight:700; }
 .unbilled-btn.active { color:#f0b429; text-shadow:0 0 4px rgba(240,180,41,0.4); }
 .unbilled-row { border-left: 3px solid #f0b429 !important; }
+.sl-scheduled-row { opacity: 0.5; font-style: italic; }
+.sl-scheduled-badge { display:inline-block;font-size:0.58rem;font-weight:600;padding:1px 5px;border-radius:3px;background:rgba(245,158,11,0.15);color:#f59e0b;margin-left:4px;font-style:normal;vertical-align:middle; }
 .watching-box { background:rgba(240,180,41,0.1); border:1px solid rgba(240,180,41,0.3); border-radius:8px; padding:12px; margin-bottom:16px; }
 .watching-box h4 { color:#f0b429; margin:0 0 8px; font-size:0.9rem; }
 .watching-box .watch-item { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:0.85rem; }
@@ -9093,14 +9095,31 @@ function renderShiftLogTable() {
     allBreakdowns.push({ shift, rows });
   });
 
-  // Summary card: aggregate by payCode (with per-row overrides)
+  // Determine which shifts are scheduled (future, not yet earned) vs earned
+  const today = effectiveWorkDate();
+  const isScheduledShift = (shift) => {
+    if (!shift.date || shift.date <= today) return false;
+    const hasRealEntries = shift.timeEntries && shift.timeEntries.some(e => e.start);
+    return !hasRealEntries;
+  };
+
+  // Summary card: aggregate by payCode (with per-row overrides), split earned vs scheduled
   const payCodeTotals = {};
+  let scheduledHours = 0, scheduledAmount = 0;
   allBreakdowns.forEach(({ shift, rows }) => {
     const sma = shift.manualAmounts || {};
+    const scheduled = isScheduledShift(shift);
     rows.forEach((r, ri) => {
-      if (!payCodeTotals[r.payCode]) payCodeTotals[r.payCode] = { hours: 0, amount: 0 };
-      payCodeTotals[r.payCode].hours += r.durationMin / 60;
-      payCodeTotals[r.payCode].amount += (sma[ri] != null ? sma[ri] : r.amount);
+      const amt = sma[ri] != null ? sma[ri] : r.amount;
+      const hrs = r.durationMin / 60;
+      if (scheduled) {
+        scheduledHours += hrs;
+        scheduledAmount += amt;
+      } else {
+        if (!payCodeTotals[r.payCode]) payCodeTotals[r.payCode] = { hours: 0, amount: 0 };
+        payCodeTotals[r.payCode].hours += hrs;
+        payCodeTotals[r.payCode].amount += amt;
+      }
     });
   });
 
@@ -9114,7 +9133,11 @@ function renderShiftLogTable() {
     const cls = code === 'Pager Pay' ? ' class="sl-pager-row"' : '';
     summaryHtml += `<tr${cls}><td>${code}</td><td>${t.hours.toFixed(1)}</td><td>${t.amount.toFixed(1)}</td></tr>`;
   });
-  summaryHtml += `<tr><td><strong>Total</strong></td><td><strong>${totalHours.toFixed(1)}</strong></td><td><strong>${totalAmount.toFixed(1)}</strong></td></tr>`;
+  summaryHtml += `<tr><td><strong>Earned</strong></td><td><strong>${totalHours.toFixed(1)}</strong></td><td><strong>${totalAmount.toFixed(1)}</strong></td></tr>`;
+  if (scheduledAmount > 0) {
+    summaryHtml += `<tr style="opacity:0.55;font-style:italic;"><td>Scheduled</td><td>${scheduledHours.toFixed(1)}</td><td>${scheduledAmount.toFixed(1)}</td></tr>`;
+    summaryHtml += `<tr><td><strong>Total</strong></td><td><strong>${(totalHours + scheduledHours).toFixed(1)}</strong></td><td><strong>${(totalAmount + scheduledAmount).toFixed(1)}</strong></td></tr>`;
+  }
   summaryHtml += '</tbody></table>';
   summaryEl.innerHTML = summaryHtml;
 
@@ -9148,15 +9171,18 @@ function renderShiftLogTable() {
     grandTotal += shiftTotal;
     const checkboxCell = `<td class="sl-check"><input type="checkbox" class="sl-shift-cb" data-date="${shift.date}" onclick="event.stopPropagation();slUpdateDeleteBar()"></td>`;
     const deleteCell = `<td class="sl-del-cell"><button class="sl-del-btn" title="Delete shift" onclick="event.stopPropagation();deleteShiftFromLog('${shift.date}')">&times;</button></td>`;
+    const isScheduled = isScheduledShift(shift);
+    const schedClass = isScheduled ? ' sl-scheduled-row' : '';
+    const schedBadge = isScheduled ? '<span class="sl-scheduled-badge">SCHED</span>' : '';
 
     if (shift.assignmentType === 'vacation') {
       const altClass = shiftIdx % 2 === 1 ? ' sl-alt' : '';
       const fClass = shift.flagged ? ' flagged-row' : '';
       const uClass = shift.unbilled ? ' unbilled-row' : '';
       shiftIdx++;
-      html += `<tr class="${altClass}${fClass}${uClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      html += `<tr class="${altClass}${fClass}${uClass}${schedClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       html += checkboxCell;
-      html += `<td>${dateLabel}</td>`;
+      html += `<td>${dateLabel}${schedBadge}</td>`;
       html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
       html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>Vacation</td><td>-</td><td>-</td><td>0.0</td>`;
       html += `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>`;
@@ -9171,9 +9197,9 @@ function renderShiftLogTable() {
       const fClass = shift.flagged ? ' flagged-row' : '';
       const uClass = shift.unbilled ? ' unbilled-row' : '';
       shiftIdx++;
-      html += `<tr class="${altClass}${fClass}${uClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      html += `<tr class="${altClass}${fClass}${uClass}${schedClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       html += checkboxCell;
-      html += `<td>${dateLabel}</td>`;
+      html += `<td>${dateLabel}${schedBadge}</td>`;
       html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
       html += `<td>${timeStr}</td><td>${totalHrs.toFixed(1)}h</td>`;
       html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
@@ -9215,10 +9241,10 @@ function renderShiftLogTable() {
       if (preCallRows.length > 0) {
         preCallRows.forEach((r, i) => {
           const rowClass = i > 0 ? `sl-sub-row${pcAlt}` : pcAlt.trim();
-          html += `<tr class="${rowClass}${pcFClass}${pcUClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+          html += `<tr class="${rowClass}${pcFClass}${pcUClass}${schedClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
           if (i === 0) {
             html += checkboxCell;
-            html += `<td>${dateLabel}</td>`;
+            html += `<td>${dateLabel}${schedBadge}</td>`;
             html += `<td><span class="sl-badge sl-badge-or">Pre-Call</span></td>`;
             html += `<td>${pcTimeStr}</td>`;
             html += `<td>${pcHrs.toFixed(1)}h</td>`;
@@ -9253,7 +9279,7 @@ function renderShiftLogTable() {
       if (eveningRows.length > 0) {
         eveningRows.forEach((r, i) => {
           const rowClass = i > 0 ? `sl-sub-row${evAlt}` : evAlt.trim();
-          html += `<tr class="${rowClass}${pcFClass}${pcUClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+          html += `<tr class="${rowClass}${pcFClass}${pcUClass}${schedClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
           if (i === 0) {
             html += '<td data-blank></td>';
             html += `<td>${dateLabel}</td>`;
@@ -9273,9 +9299,9 @@ function renderShiftLogTable() {
           html += '</tr>';
         });
       } else {
-        html += `<tr class="${evAlt}${pcFClass}${pcUClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+        html += `<tr class="${evAlt}${pcFClass}${pcUClass}${schedClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
         html += '<td data-blank></td>';
-        html += `<td>${dateLabel}</td>`;
+        html += `<td>${dateLabel}${schedBadge}</td>`;
         html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
         html += `<td>${timeStr}</td><td>${eveningHrs.toFixed(1)}h</td>`;
         html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
@@ -9295,10 +9321,10 @@ function renderShiftLogTable() {
     shiftIdx++;
     rows.forEach((r, i) => {
       const rowClass = i > 0 ? `sl-sub-row${altClass}` : altClass.trim();
-      html += `<tr class="${rowClass}${fClass}${uClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
+      html += `<tr class="${rowClass}${fClass}${uClass}${schedClass}" data-shiftdate="${shift.date}" onclick="openShiftEdit('${shift.date}')">`;
       if (i === 0) {
         html += checkboxCell;
-        html += `<td>${dateLabel}</td>`;
+        html += `<td>${dateLabel}${schedBadge}</td>`;
         html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
         html += `<td>${timeStr}</td>`;
         html += `<td>${totalHrs.toFixed(1)}h</td>`;
