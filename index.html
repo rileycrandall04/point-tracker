@@ -9079,11 +9079,10 @@ function renderShiftLogTable() {
   const monthShifts = Object.values(data.shifts)
     .filter(s => {
       if (!s.date || !s.date.startsWith(prefix)) return false;
-      // Skip vacation (visible on daily calendar, no points)
-      if (s.assignmentType === 'vacation') return false;
-      // Always show forced off shifts
-      if (s.assignmentType === 'forced_off') return true;
-      // Only show shifts with real clock data (exclude future placeholders)
+      // Always show vacation, forced off, and pager-eligible shifts
+      if (s.assignmentType === 'vacation' || s.assignmentType === 'forced_off') return true;
+      if (getPagerPayWindow(s.assignmentType, isWeekend(s.date)) !== null) return true;
+      // Only show other shifts with real clock data (exclude future placeholders)
       const hasRealEntries = s.timeEntries && s.timeEntries.some(e => e.start);
       if (s.date > today && !hasRealEntries) return false;
       return true;
