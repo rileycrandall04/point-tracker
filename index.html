@@ -3709,6 +3709,16 @@ input.mil-time.invalid {
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="caseBreakdownModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal" style="max-width:420px;">
+    <h2 id="caseBreakdownTitle">Case Breakdown</h2>
+    <div id="caseBreakdownBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('caseBreakdownModal').classList.add('hidden')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Calendar Mapping Modal -->
 <div class="modal-overlay hidden" id="calMappingModal">
   <div class="modal" style="max-height:80vh;overflow-y:auto;max-width:440px;">
@@ -13419,7 +13429,7 @@ function renderCaseMix() {
     const monthKey = (c.shiftDate || '').slice(0, 7);
     const pv = getPointValueForMonth(monthKey);
     const totalDollars = totalPts * pv;
-    return { procedure, prodPts, arPts, totalPts, totalDollars, pv, date: c.shiftDate || '' };
+    return { id: c.id, procedure, prodPts, arPts, totalPts, totalDollars, pv, date: c.shiftDate || '' };
   }).sort((a, b) => b.totalPts - a.totalPts).slice(0, 8);
   let html = '';
   ranked.forEach(item => {
@@ -13427,9 +13437,68 @@ function renderCaseMix() {
     const detail = showDollars
       ? 'AR $' + (item.arPts * item.pv).toFixed(0) + ' + Prod $' + (item.prodPts * item.pv).toFixed(0)
       : 'AR ' + item.arPts.toFixed(1) + ' + Prod ' + item.prodPts.toFixed(1);
-    html += `<div class="efficiency-item"><span class="eff-label">${escHtml(item.procedure)}<br><span style="font-size:0.7rem;color:var(--text-dim);">${detail} &middot; ${escHtml(item.date)}</span></span><span class="eff-value"><span class="point-badge">${display}</span></span></div>`;
+    html += `<div class="efficiency-item" onclick="showCaseBreakdown('${item.id}')" style="cursor:pointer;"><span class="eff-label">${escHtml(item.procedure)}<br><span style="font-size:0.7rem;color:var(--text-dim);">${detail} &middot; ${escHtml(item.date)}</span></span><span class="eff-value"><span class="point-badge">${display}</span></span></div>`;
   });
   document.getElementById('caseMixContent').innerHTML = html;
+}
+
+function showCaseBreakdown(caseId) {
+  const c = data.cases.find(x => x.id === caseId);
+  if (!c) return;
+  const shift = data.shifts[c.shiftDate] || {};
+  const breakdown = getCaseBreakdown(c, shift);
+  const prodPts = calcCasePoints(c, shift);
+  const arPts = calcCaseARContribution(c, shift);
+  const totalPts = prodPts + arPts;
+  const monthKey = (c.shiftDate || '').slice(0, 7);
+  const pv = getPointValueForMonth(monthKey);
+
+  const procName = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType, c);
+  const timeStr = c.startTime && c.endTime ? c.startTime + ' – ' + c.endTime : (c.startTime || '');
+  const shiftType = shift.assignmentType ? shift.assignmentType.replace(/_/g, ' ') : 'Unknown';
+
+  document.getElementById('caseBreakdownTitle').textContent = procName;
+
+  let html = '<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:14px;">';
+  html += escHtml(c.shiftDate || '') + (timeStr ? ' &middot; ' + escHtml(timeStr) : '');
+  html += ' &middot; ' + escHtml(shiftType);
+  if (c.asaCode) html += ' &middot; ASA ' + escHtml(c.asaCode);
+  html += '</div>';
+
+  // Production breakdown
+  html += '<div style="font-size:0.78rem;font-weight:600;color:var(--primary);margin-bottom:6px;">Production Points</div>';
+  breakdown.forEach(row => {
+    html += `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.8rem;border-bottom:1px solid rgba(71,85,105,0.15);"><span style="color:var(--text);">${escHtml(row.label)}</span><span style="font-weight:600;color:var(--text);min-width:50px;text-align:right;">${row.pts.toFixed(1)}</span></div>`;
+  });
+  html += `<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:0.82rem;font-weight:700;border-top:1px solid var(--border);margin-top:2px;"><span>Production Subtotal</span><span>${prodPts.toFixed(1)}</span></div>`;
+
+  // AR contribution
+  html += '<div style="font-size:0.78rem;font-weight:600;color:var(--primary);margin:12px 0 6px;">AR Contribution</div>';
+  if (arPts > 0) {
+    let durMin = 0;
+    if (c.startTime && c.endTime) {
+      let s = timeToMinutes(c.startTime), e = timeToMinutes(c.endTime);
+      if (e <= s) e += 1440;
+      durMin = e - s;
+    }
+    const durHrs = round2(durMin / 60);
+    const avgRate = durHrs > 0 ? round2(arPts / durHrs) : 0;
+    html += `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.8rem;border-bottom:1px solid rgba(71,85,105,0.15);"><span style="color:var(--text);">AR for ${durHrs}h (avg ${avgRate} pts/hr)</span><span style="font-weight:600;color:var(--text);min-width:50px;text-align:right;">${arPts.toFixed(1)}</span></div>`;
+  } else {
+    html += '<div style="font-size:0.8rem;color:var(--text-dim);padding:3px 0;">No AR (missing times or shift data)</div>';
+  }
+
+  // Grand total
+  html += `<div style="display:flex;justify-content:space-between;padding:8px 0 4px;font-size:0.9rem;font-weight:700;border-top:2px solid var(--primary);margin-top:8px;"><span>Total Points</span><span class="point-badge large">${totalPts.toFixed(1)}</span></div>`;
+
+  // Dollar value
+  if (pv > 0) {
+    const totalDollars = totalPts * pv;
+    html += `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:0.82rem;color:var(--accent);"><span>Dollar Value (${pv.toFixed(2)}/pt)</span><span style="font-weight:700;">$${totalDollars.toFixed(2)}</span></div>`;
+  }
+
+  document.getElementById('caseBreakdownBody').innerHTML = html;
+  document.getElementById('caseBreakdownModal').classList.remove('hidden');
 }
 
 let procEffData = { ranked: [], unranked: [] };
