@@ -19157,6 +19157,9 @@ auth.onAuthStateChanged(async (user) => {
       return loadSharedCases(); // applies overrides after loading
     }).then(() => {
       return Promise.all([loadSurgeonMappings(), loadUserProfiles()]);
+    }).catch(err => {
+      console.error('Shared data loading error:', err);
+      sharedCasesLoaded = true; // mark loaded so card doesn't hang on "Loading..."
     }).then(() => {
       renderCollectiveCases();
       // Re-render analytics if currently visible
