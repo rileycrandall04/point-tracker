@@ -334,19 +334,18 @@ textarea { resize: vertical; min-height: 60px; }
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px;
+  padding: 8px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  margin-bottom: 8px;
+  border-radius: 6px;
+  margin-bottom: 5px;
   cursor: pointer;
   transition: border-color 0.2s;
-  min-height: 44px;
 }
 .day-list-item:hover { border-color: var(--primary); }
 .day-list-item:active { border-color: var(--primary); background: var(--surface2); }
-.day-list-item .date { font-weight: 600; font-size: 0.9rem; }
-.day-list-item .meta { font-size: 0.75rem; color: var(--text-dim); }
+.day-list-item .date { font-weight: 600; font-size: 0.82rem; }
+.day-list-item .meta { font-size: 0.7rem; color: var(--text-dim); }
 
 /* ===== POINT BREAKDOWN ===== */
 .point-breakdown {
@@ -8281,7 +8280,7 @@ function renderHistory() {
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   document.getElementById('historyMonth').textContent = `${monthNames[historyMonth]} ${historyYear}`;
   const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
-  const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix)).sort((a,b) => b.date.localeCompare(a.date));
+  const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix)).sort((a,b) => a.date.localeCompare(b.date));
   let monthTotalPts = 0;
   let listHtml = '';
   monthShifts.forEach(shift => {
