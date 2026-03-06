@@ -7828,40 +7828,31 @@ function tickLiveUpdate() {
   });
 
   // Determine if in guaranteed minimum period (first 4 hours of shift)
-  const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
-  const minApplies = !isHol && !isWknd && shift.assignmentType !== 'mole';
-  const minPoints = isOBRate ? 52 : 80;
-  const minRate = isOBRate ? 13 : 20; // pts/hr for minimum guarantee
+  // SF1: no minimum enforced on ticker — AR ticks at 13/hr from start
+  // SF2/others: flat minimum (80 pts) for AR during first 4 hrs, prod/supv still tick
+  const isSF1 = shift.assignmentType === 'SF1';
+  const minApplies = !isSF1 && !isHol && !isWknd && shift.assignmentType !== 'mole';
+  const minPoints = 80; // 20 pts/hr × 4 hrs (SF1 excluded above)
   let inMinPeriod = false;
-  let elapsedHrs = 0;
   if (minApplies) {
     const shiftEntries = shift.timeEntries || [];
     if (shiftEntries.length > 0 && shiftEntries[0].start) {
       let elapsedMin = currentMin - timeToMinutes(shiftEntries[0].start);
       if (elapsedMin < 0) elapsedMin += 1440;
-      elapsedHrs = elapsedMin / 60;
-      inMinPeriod = elapsedHrs < 4;
+      inMinPeriod = (elapsedMin / 60) < 4;
     }
   }
 
-  // During minimum period, AR ticks at guaranteed minimum rate (floor)
-  // so the ticker always visually increases. Actual AR may be higher.
-  const effectiveARRate = inMinPeriod ? Math.max(currentRate, minRate) : currentRate;
+  // SF1: AR always ticks at actual rate; others: AR paused during minimum
+  const effectiveARRate = inMinPeriod ? 0 : currentRate;
   const totalRate = effectiveARRate + pagerRate + prodRate;
 
   // Interpolate: add fractional seconds of accrual on top of minute-level base
   const secFraction = currentSec / 3600; // fraction of an hour
-  // During minimum period, show real AR accrued so far with minimum as floor
-  let liveTotal;
-  if (inMinPeriod) {
-    const elapsedWithSec = elapsedHrs + secFraction;
-    const actualAR = result.ar + (currentRate * secFraction);
-    const guaranteedAR = minRate * elapsedWithSec;
-    const arLive = Math.max(actualAR, guaranteedAR);
-    liveTotal = arLive + result.prod + result.call + result.subspec + result.supervision + ((pagerRate + prodRate) * secFraction);
-  } else {
-    liveTotal = result.total + (totalRate * secFraction);
-  }
+  // During minimum period: flat AR + ticking prod/supv; SF1 always ticks normally
+  const liveTotal = inMinPeriod
+    ? (minPoints + result.prod + result.call + result.subspec + result.supervision + ((pagerRate + prodRate) * secFraction))
+    : (result.total + (totalRate * secFraction));
   const dollarTotal = round2(liveTotal * pv);
 
   // Update point total (3 decimals so every second is visible)
@@ -7875,14 +7866,7 @@ function tickLiveUpdate() {
   // Update component breakdown chips
   const compEl = document.getElementById('todayCompChips');
   if (compEl) {
-    let arLive;
-    if (inMinPeriod) {
-      const elapsedWithSec = elapsedHrs + secFraction;
-      const actualAR = result.ar + (currentRate * secFraction);
-      arLive = Math.max(actualAR, minRate * elapsedWithSec);
-    } else {
-      arLive = result.ar + (effectiveARRate * secFraction);
-    }
+    const arLive = inMinPeriod ? minPoints : (result.ar + (effectiveARRate * secFraction));
     const callLive = result.call + (pagerRate * secFraction);
     const prodLive = result.prod + (prodRate * secFraction);
     const comps = [];
