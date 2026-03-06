@@ -346,6 +346,8 @@ textarea { resize: vertical; min-height: 60px; }
 .day-list-item:active { border-color: var(--primary); background: var(--surface2); }
 .day-list-item .date { font-weight: 600; font-size: 0.82rem; }
 .day-list-item .meta { font-size: 0.7rem; color: var(--text-dim); }
+.day-list-item.scheduled { opacity: 0.5; font-style: italic; }
+.day-list-item .sched-badge { display:inline-block;font-size:0.55rem;font-weight:600;padding:1px 5px;border-radius:3px;background:rgba(245,158,11,0.15);color:#f59e0b;margin-left:5px;font-style:normal;vertical-align:middle; }
 
 /* ===== POINT BREAKDOWN ===== */
 .point-breakdown {
@@ -8280,25 +8282,37 @@ function renderHistory() {
   document.getElementById('historyMonth').textContent = `${monthNames[historyMonth]} ${historyYear}`;
   const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
   const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix)).sort((a,b) => a.date.localeCompare(b.date));
-  let monthTotalPts = 0;
+  const today = effectiveWorkDate();
+  let earnedPts = 0, scheduledPts = 0, earnedDays = 0, scheduledDays = 0;
   let listHtml = '';
   monthShifts.forEach(shift => {
     const totals = calcShiftTotal(shift);
-    monthTotalPts += totals.total;
+    const hasRealEntries = shift.timeEntries && shift.timeEntries.some(e => e.start);
+    const isScheduled = shift.date > today && !hasRealEntries;
+    if (isScheduled) { scheduledPts += totals.total; scheduledDays++; }
+    else { earnedPts += totals.total; earnedDays++; }
+    const schedClass = isScheduled ? ' scheduled' : '';
+    const schedBadge = isScheduled ? '<span class="sched-badge">SCHED</span>' : '';
     const caseCount = data.cases.filter(c => c.shiftDate === shift.date).length;
     const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
     const timeStr = entries.map(e => `${e.start}-${e.end || '?'}`).join(', ');
     listHtml += `
-      <div class="day-list-item" onclick="showDayDetail('${shift.date}')">
+      <div class="day-list-item${schedClass}" onclick="showDayDetail('${shift.date}')">
         <div>
-          <div class="date">${formatDate(shift.date)}</div>
+          <div class="date">${formatDate(shift.date)}${schedBadge}</div>
           <div class="meta">${getAssignmentTypeName(shift.assignmentType)} | ${timeStr} | ${caseCount} cases</div>
         </div>
         <span class="point-badge large">${totals.total.toFixed(1)}</span>
       </div>`;
   });
-  document.getElementById('monthTotal').textContent = monthTotalPts.toFixed(1);
-  document.getElementById('monthDays').textContent = monthShifts.length;
+  const monthTotalPts = earnedPts + scheduledPts;
+  if (scheduledDays > 0) {
+    document.getElementById('monthTotal').innerHTML = `${earnedPts.toFixed(1)} <span style="font-size:0.7em;color:var(--text-dim);font-weight:400;">+ ${scheduledPts.toFixed(1)} sched</span>`;
+    document.getElementById('monthDays').innerHTML = `${earnedDays} <span style="font-size:0.7em;color:var(--text-dim);font-weight:400;">+ ${scheduledDays} sched</span>`;
+  } else {
+    document.getElementById('monthTotal').textContent = monthTotalPts.toFixed(1);
+    document.getElementById('monthDays').textContent = monthShifts.length;
+  }
   document.getElementById('historyList').innerHTML = monthShifts.length === 0
     ? '<div class="empty-state"><p>No shifts recorded for this month.</p></div>'
     : listHtml;
