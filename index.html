@@ -5011,7 +5011,12 @@ function isUnrestrictedCallEligible(assignmentType, minuteOfDay, isWeekendOrHoli
 
 // Returns the pager pay eligible window {start, end} in minutes for a shift type.
 // end can be >1440 for cross-midnight windows. Returns null if not eligible.
-function getPagerPayWindow(assignmentType, isWkndOrHol) {
+function getPagerPayWindow(assignmentType, isWkndOrHol, dateStr) {
+  // "Post" assignments (Post SF1, Post Call, Post Mole, etc.) never get pager pay
+  if (dateStr && data.calendarAssignments && data.calendarAssignments[dateStr]) {
+    const cal = data.calendarAssignments[dateStr];
+    if (cal.label && /^Post\s/i.test(cal.label)) return null;
+  }
   switch (assignmentType) {
     case 'SF1': case 'SF2':
     case '1st_call': case '2nd_call': case '3rd_call':
@@ -5351,7 +5356,7 @@ function calcARPoints(shift) {
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
 
   // Temp coverage (covering): pager + AR scoped entirely to coverage interval
   if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
@@ -5569,7 +5574,7 @@ function calcARBreakdown(shift) {
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
 
   // Temp coverage (covering): pager + AR scoped entirely to coverage interval
   if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
@@ -6408,7 +6413,7 @@ function updatePreCallOverlayVisibility() {
 function updateTempCoverageVisibility() {
   const type = getSelectedAssignmentType();
   const isWkndOrHol = document.getElementById('shiftHoliday').checked || isWeekend(workingDate);
-  const eligible = getPagerPayWindow(type, isWkndOrHol) !== null;
+  const eligible = getPagerPayWindow(type, isWkndOrHol, workingDate) !== null;
   document.getElementById('tempCoverageSection').classList.toggle('hidden', !eligible);
   if (!eligible) {
     document.getElementById('tempCoverageCheck').checked = false;
@@ -6959,7 +6964,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
   const isForcedOff = assignmentType === 'forced_off';
   const timeEntries = isVacation || isForcedOff ? [{ start: '', end: '' }] : collectTimeEntries();
   const effectiveType = eveningAssignment || assignmentType;
-  const hasPagerWindow = getPagerPayWindow(effectiveType, isWeekend(date) || document.getElementById('holidayCheck')?.checked) !== null;
+  const hasPagerWindow = getPagerPayWindow(effectiveType, isWeekend(date) || document.getElementById('holidayCheck')?.checked, date) !== null;
   if (!isVacation && !isForcedOff && (timeEntries.length === 0 || !timeEntries[0].start) && !hasPagerWindow) {
     showToast('Please enter at least one start time');
     return;
@@ -7672,7 +7677,7 @@ function updateTodayRateChips() {
   if (date === effectiveWorkDate() && result.isInProgress) {
     const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
     const isWkndOrHol = isWknd || isHol;
-    const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+    const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
     let inPagerWindow = false;
     if (pagerWin) {
       const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
@@ -7798,7 +7803,7 @@ function tickLiveUpdate() {
   const isWkndOrHol = isWknd || isHol;
 
   const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
-  const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+  const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
   let inPagerWindow = false;
   if (pagerWin) {
     const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
@@ -8715,7 +8720,7 @@ function getShiftPayBreakdown(shift) {
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
-  const pagerWindowEarly = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+  const pagerWindowEarly = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
 
   // Temp coverage (covering): only coverage-scoped rows
   if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
@@ -8900,7 +8905,7 @@ function getShiftPayBreakdown(shift) {
   });
 
   // Pager pay: guaranteed full window duration (does not stop when clocked in)
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol);
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
   if (pagerWindow) {
     const durMin = pagerWindow.end - pagerWindow.start;
     if (durMin > 0) {
@@ -16120,7 +16125,7 @@ function applyQgendaToShift(d) {
       if (e.clockOutTime && e.clockOutTime > latest) latest = e.clockOutTime;
     });
     const reconAssignType = d.qgendaAssignmentType || 'OR';
-    const reconHasPager = getPagerPayWindow(reconAssignType, isWeekend(d.date)) !== null;
+    const reconHasPager = getPagerPayWindow(reconAssignType, isWeekend(d.date), d.date) !== null;
     const reconTimeEntries = timeEntries.length > 0 ? timeEntries : reconHasPager ? [] : [{ start: earliest, end: latest }];
     data.shifts[d.date] = {
       date: d.date, assignmentType: reconAssignType,
@@ -16867,7 +16872,7 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
     }
 
     // If no clock punches but shift type has pager pay, allow with empty time entries
-    const hasPager = getPagerPayWindow(assignmentType, isWeekend(date)) !== null;
+    const hasPager = getPagerPayWindow(assignmentType, isWeekend(date), date) !== null;
     const finalTimeEntries = timeEntries.length > 0
       ? timeEntries
       : hasPager ? [] : [{ start: earliest, end: latest }];
@@ -19012,27 +19017,15 @@ function initApp() {
   updateSupervisionOverlayVisibility();
   checkEndTimeNotification();
 
-  // One-time migration: fix Post SF types and sync all calendar assignments to shifts
+  // One-time migration: create missing shifts for calendar assignments
   if (data.calendarAssignments && !data._syncedAllTypes4) {
     let changed = false;
     Object.entries(data.calendarAssignments).forEach(([dateStr, cal]) => {
       if (!cal || !cal.type) return;
-      // Fix all "Post" assignments: label says "Post ..." but type was incorrectly pager-eligible
-      if (cal.label && /^Post\s/i.test(cal.label) && getPagerPayWindow(cal.type, false) !== null) {
-        cal.type = 'OR';
-        changed = true;
-      }
-      // Create missing shifts and sync assignmentType
+      // Create missing shifts only — don't modify existing user data
       if (!data.shifts[dateStr]) {
         syncPagerShift(dateStr, cal.type);
         changed = true;
-      } else {
-        const shift = data.shifts[dateStr];
-        const hasRealEntries = shift.timeEntries && shift.timeEntries.some(e => e.start);
-        if (!hasRealEntries && shift.assignmentType !== cal.type) {
-          shift.assignmentType = cal.type;
-          changed = true;
-        }
       }
     });
     data._syncedAllTypes4 = true;
