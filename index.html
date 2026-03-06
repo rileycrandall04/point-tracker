@@ -19154,13 +19154,22 @@ auth.onAuthStateChanged(async (user) => {
     }
 
     // Load shared cases, overrides, surgeon mappings, and user profiles from community pool (non-blocking)
-    loadSharedCaseOverrides().then(() => {
+    // Timeout ensures card renders even if Firestore hangs on flaky connections
+    const sharedLoadPromise = loadSharedCaseOverrides().then(() => {
       return loadSharedCases(); // applies overrides after loading
     }).then(() => {
       return Promise.all([loadSurgeonMappings(), loadUserProfiles()]);
-    }).catch(err => {
+    });
+    const sharedLoadTimeout = new Promise(resolve => setTimeout(() => {
+      if (!sharedCasesLoaded) {
+        console.warn('Shared data loading timed out after 15s');
+        sharedCasesLoaded = true;
+      }
+      resolve();
+    }, 15000));
+    Promise.race([sharedLoadPromise, sharedLoadTimeout]).catch(err => {
       console.error('Shared data loading error:', err);
-      sharedCasesLoaded = true; // mark loaded so card doesn't hang on "Loading..."
+      sharedCasesLoaded = true;
     }).then(() => {
       renderCollectiveCases();
       // Re-render analytics if currently visible
