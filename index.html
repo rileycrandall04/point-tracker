@@ -9075,18 +9075,8 @@ function minutesToTimeStr(m) {
 function renderShiftLogTable() {
   updateSLMonthLabel();
   const prefix = `${slYear}-${String(slMonth + 1).padStart(2, '0')}`;
-  const today = effectiveWorkDate();
   const monthShifts = Object.values(data.shifts)
-    .filter(s => {
-      if (!s.date || !s.date.startsWith(prefix)) return false;
-      // Always show vacation, forced off, and pager-eligible shifts
-      if (s.assignmentType === 'vacation' || s.assignmentType === 'forced_off') return true;
-      if (getPagerPayWindow(s.assignmentType, isWeekend(s.date)) !== null) return true;
-      // Only show other shifts with real clock data (exclude future placeholders)
-      const hasRealEntries = s.timeEntries && s.timeEntries.some(e => e.start);
-      if (s.date > today && !hasRealEntries) return false;
-      return true;
-    })
+    .filter(s => s.date && s.date.startsWith(prefix))
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const container = document.getElementById('shiftLogTableContainer');
@@ -19022,15 +19012,31 @@ function initApp() {
   updateSupervisionOverlayVisibility();
   checkEndTimeNotification();
 
-  // One-time re-sync: create placeholder shifts for calendarAssignments that are missing shifts
-  if (data.calendarAssignments && !data._syncedAllTypes2) {
+  // One-time migration: fix Post SF types and sync all calendar assignments to shifts
+  if (data.calendarAssignments && !data._syncedAllTypes3) {
+    let changed = false;
     Object.entries(data.calendarAssignments).forEach(([dateStr, cal]) => {
-      if (cal && cal.type && !data.shifts[dateStr]) {
+      if (!cal || !cal.type) return;
+      // Fix Post SF1/SF2: label says "Post" but type was incorrectly SF1/SF2
+      if (cal.label && /^Post\s/i.test(cal.label) && (cal.type === 'SF1' || cal.type === 'SF2')) {
+        cal.type = 'OR';
+        changed = true;
+      }
+      // Create missing shifts and sync assignmentType
+      if (!data.shifts[dateStr]) {
         syncPagerShift(dateStr, cal.type);
+        changed = true;
+      } else {
+        const shift = data.shifts[dateStr];
+        const hasRealEntries = shift.timeEntries && shift.timeEntries.some(e => e.start);
+        if (!hasRealEntries && shift.assignmentType !== cal.type) {
+          shift.assignmentType = cal.type;
+          changed = true;
+        }
       }
     });
-    data._syncedAllTypes2 = true;
-    saveData(data);
+    data._syncedAllTypes3 = true;
+    if (changed) saveData(data);
   }
 }
 
