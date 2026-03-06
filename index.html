@@ -5484,9 +5484,9 @@ function calcARPoints(shift) {
     if (!isHol && !isWknd) {
       preCallAR = Math.max(preCallAR, 20 * 4);
     }
-    // Evening minimum: based on evening assignment type (mole: no minimum)
-    if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
-      const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
+    // Evening minimum: based on evening assignment type (mole/SF1: no minimum)
+    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1') {
+      const isOBRate = shift.assignmentType === 'OB_restricted';
       const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
       eveningAR = Math.max(eveningAR, eveningMin);
     }
@@ -5540,9 +5540,9 @@ function calcARPoints(shift) {
   callPoints += tcPts.pagerAdj;
   arPoints += tcPts.ar;
 
-  // Guaranteed minimums for clocked-in time (weekday, non-mole)
-  if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
-    const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
+  // Guaranteed minimums for clocked-in time (weekday, non-mole, non-SF1)
+  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1') {
+    const isOBRate = shift.assignmentType === 'OB_restricted';
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     arPoints = Math.max(arPoints, minPoints);
   }
@@ -5716,9 +5716,9 @@ function calcARBreakdown(shift) {
     if (!isHol && !isWknd) {
       preCallAR = Math.max(preCallAR, 20 * 4);
     }
-    // Evening minimum: based on evening assignment type (mole: no minimum)
-    if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
-      const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
+    // Evening minimum: based on evening assignment type (mole/SF1: no minimum)
+    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1') {
+      const isOBRate = shift.assignmentType === 'OB_restricted';
       const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
       eveningAR = Math.max(eveningAR, eveningMin);
     }
@@ -5767,8 +5767,9 @@ function calcARBreakdown(shift) {
   callPoints += tcPtsBd.pagerAdj;
   arPoints += tcPtsBd.ar;
 
-  if (!isHol && !isWknd && shift.assignmentType !== 'mole') {
-    const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
+  // SF1: no AR minimum — accrues at 13/hr from start. All others get 4-hr minimum.
+  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1') {
+    const isOBRate = shift.assignmentType === 'OB_restricted';
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     arPoints = Math.max(arPoints, minPoints);
   }
@@ -9023,9 +9024,9 @@ function getShiftPayBreakdown(shift) {
       }
 
       let eveningResult = eveningRows;
-      if (shift.assignmentType !== 'mole') {
+      if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1') {
         const eveningTotal = eveningRows.reduce((sum, r) => sum + r.amount, 0);
-        const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
+        const isOBRate = shift.assignmentType === 'OB_restricted';
         const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
         if (eveningTotal > 0 && eveningTotal < eveningMin) {
           eveningResult = [{
@@ -9041,9 +9042,9 @@ function getShiftPayBreakdown(shift) {
       preCallResult.forEach(r => consolidated.push(r));
       eveningResult.forEach(r => consolidated.push(r));
       pagerRows.forEach(r => consolidated.push(r));
-    } else if (shift.assignmentType !== 'mole') {
-      // Non-pre-call: single 4hr minimum
-      const isOBRate = ['OB_restricted','SF1'].includes(shift.assignmentType);
+    } else if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1') {
+      // Non-pre-call: single 4hr minimum (SF1 excluded — no minimum)
+      const isOBRate = shift.assignmentType === 'OB_restricted';
       const minPoints = isOBRate ? 13 * 4 : 20 * 4;
       const arRows = consolidated.filter(r => !r.isPager);
       const arTotal = arRows.reduce((sum, r) => sum + r.amount, 0);
