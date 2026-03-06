@@ -2627,6 +2627,14 @@ input.mil-time.invalid {
     <div id="procLookupResults"></div>
   </div>
 
+  <!-- Vacation Tracker -->
+  <div class="card">
+    <h2>Vacation Tracker</h2>
+    <div id="vacationTrackerContent">
+      <div class="empty-state"><p>No vacation data.</p></div>
+    </div>
+  </div>
+
   <!-- Collapsible: Weekend vs Weekday -->
   <div class="card collapse-section">
     <div class="collapse-header" onclick="toggleCollapse('timeWknd')">
@@ -12125,6 +12133,7 @@ function renderTimeTab() {
   renderWeekendVsWeekday();
   renderAssignData();
   renderNightCallFreq();
+  renderVacationTracker();
 }
 
 function getRecentShifts(months) {
@@ -12188,6 +12197,64 @@ function renderTimeSummary() {
     document.getElementById('timeAvgStart').textContent = String(Math.floor(avgSM/60)).padStart(2,'0') + ':' + String(avgSM%60).padStart(2,'0');
     document.getElementById('timeAvgEnd').textContent = String(Math.floor(avgEM/60)).padStart(2,'0') + ':' + String(avgEM%60).padStart(2,'0');
   }
+}
+
+function renderVacationTracker() {
+  const container = document.getElementById('vacationTrackerContent');
+  const today = effectiveWorkDate();
+
+  // Collect vacation days from shifts AND future calendarAssignments
+  const vacDates = new Set();
+  Object.values(data.shifts).forEach(s => {
+    if (s.assignmentType === 'vacation' && s.date) vacDates.add(s.date);
+  });
+  // Include future calendar-assigned vacation that may not have shifts yet
+  if (data.calendarAssignments) {
+    Object.entries(data.calendarAssignments).forEach(([dateStr, cal]) => {
+      if (cal && cal.type === 'vacation') vacDates.add(dateStr);
+    });
+  }
+
+  if (vacDates.size === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No vacation data.</p></div>';
+    return;
+  }
+
+  // Group by year, split into taken vs scheduled
+  const byYear = {};
+  vacDates.forEach(dateStr => {
+    const year = dateStr.substring(0, 4);
+    if (!byYear[year]) byYear[year] = { taken: 0, scheduled: 0, dates: [] };
+    if (dateStr <= today) {
+      byYear[year].taken++;
+    } else {
+      byYear[year].scheduled++;
+    }
+    byYear[year].dates.push(dateStr);
+  });
+
+  const years = Object.keys(byYear).sort().reverse();
+  let html = '';
+
+  years.forEach(year => {
+    const y = byYear[year];
+    const totalDays = y.taken + y.scheduled;
+    const totalWeeks = (totalDays / 5).toFixed(1);
+
+    html += `<div style="margin-bottom:14px;">`;
+    html += `<div style="font-weight:600;font-size:0.85rem;margin-bottom:6px;">${year}</div>`;
+    html += `<div class="summary-grid" style="margin-bottom:4px;">`;
+    html += `<div class="summary-item"><div class="label">Days</div><div class="value blue">${totalDays}</div></div>`;
+    html += `<div class="summary-item"><div class="label">Weeks</div><div class="value green">${totalWeeks}</div></div>`;
+    html += `</div>`;
+
+    if (y.scheduled > 0) {
+      html += `<div style="font-size:0.7rem;color:var(--text-dim);text-align:center;">${y.taken} taken &middot; ${y.scheduled} scheduled</div>`;
+    }
+    html += `</div>`;
+  });
+
+  container.innerHTML = html;
 }
 
 function renderProductionTrend() {
