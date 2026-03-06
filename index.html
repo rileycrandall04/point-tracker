@@ -12712,12 +12712,13 @@ function closeAssignPicker() {
 
 // Sync pager-only shift records with assignment changes.
 // If type is pager-eligible and no shift (or empty shift) exists, create one.
-// If type is NOT pager-eligible and an empty shift exists, delete it.
-// Never touches shifts that have real time entries.
+// Creates or updates placeholder shifts from calendar assignments.
+// Never overwrites shifts with real time entries or existing vacation/forced_off.
 function syncPagerShift(dateStr, type) {
   const shift = data.shifts[dateStr];
   const hasRealEntries = shift && shift.timeEntries && shift.timeEntries.some(e => e.start);
   const isVacOrOff = type === 'vacation' || type === 'forced_off';
+  const existingIsVacOrOff = shift && (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off');
 
   if (hasRealEntries) {
     // Never overwrite shifts with real clock data, but sync assignmentType from calendar
@@ -12726,6 +12727,10 @@ function syncPagerShift(dateStr, type) {
     }
     return;
   }
+
+  // Never overwrite an existing vacation/forced_off shift with a different type
+  // (these are explicit user decisions, not auto-created placeholders)
+  if (existingIsVacOrOff && !isVacOrOff) return;
 
   // Create or update placeholder shift for any assignment type
   data.shifts[dateStr] = {
@@ -18949,12 +18954,14 @@ function initApp() {
   updateSupervisionOverlayVisibility();
   checkEndTimeNotification();
 
-  // One-time re-sync: ensure all calendarAssignments have corresponding shifts
-  if (data.calendarAssignments && !data._syncedAllTypes) {
+  // One-time re-sync: create placeholder shifts for calendarAssignments that are missing shifts
+  if (data.calendarAssignments && !data._syncedAllTypes2) {
     Object.entries(data.calendarAssignments).forEach(([dateStr, cal]) => {
-      if (cal && cal.type) syncPagerShift(dateStr, cal.type);
+      if (cal && cal.type && !data.shifts[dateStr]) {
+        syncPagerShift(dateStr, cal.type);
+      }
     });
-    data._syncedAllTypes = true;
+    data._syncedAllTypes2 = true;
     saveData(data);
   }
 }
