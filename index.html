@@ -7469,7 +7469,8 @@ function renderToday() {
   const monthKey = date.substring(0, 7);
   const pv = getPointValueForMonth(monthKey);
   const dollarTotal = round2(result.total * pv);
-  const typeName = getAssignmentTypeName(shift.assignmentType);
+  const dCalLabel = data.calendarAssignments[date];
+  const typeName = dCalLabel ? dCalLabel.label : getAssignmentTypeName(shift.assignmentType);
 
   let bdHtml = '<div style="margin-top:6px;">';
 
@@ -8300,7 +8301,7 @@ function renderHistory() {
       <div class="day-list-item${schedClass}" onclick="showDayDetail('${shift.date}')">
         <div>
           <div class="date">${formatDate(shift.date)}${schedBadge}</div>
-          <div class="meta">${getAssignmentTypeName(shift.assignmentType)} | ${timeStr} | ${caseCount} cases</div>
+          <div class="meta">${data.calendarAssignments[shift.date] ? escHtml(data.calendarAssignments[shift.date].label) : getAssignmentTypeName(shift.assignmentType)} | ${timeStr} | ${caseCount} cases</div>
         </div>
         <span class="point-badge large">${totals.total.toFixed(1)}</span>
       </div>`;
@@ -8339,7 +8340,7 @@ function showDayDetail(dateStr) {
   const detailEntries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
   const detailTimeStr = detailEntries.map(e => `${e.start}-${e.end || '?'}`).join(', ');
   let html = `
-    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">${getAssignmentTypeName(shift.assignmentType)} | ${detailTimeStr}${detailEntries.length > 1 ? ' (' + detailEntries.length + ' entries)' : ''}</p>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">${data.calendarAssignments[dateStr] ? escHtml(data.calendarAssignments[dateStr].label) : getAssignmentTypeName(shift.assignmentType)} | ${detailTimeStr}${detailEntries.length > 1 ? ' (' + detailEntries.length + ' entries)' : ''}</p>
     <div class="summary-grid" style="margin-bottom:12px;">
       <div class="summary-item"><div class="label">AR</div><div class="value blue">${totals.ar.toFixed(1)}</div></div>
       <div class="summary-item"><div class="label">Prod</div><div class="value green">${totals.prod.toFixed(1)}</div></div>
@@ -9084,7 +9085,8 @@ function renderShiftLogTable() {
     const curMonthName = mn[slMonth] + ' ' + slYear;
     slWatchHtml += '<div class="watching-box"><h4>&#x1f4b2; Watching for Billing (' + watchShifts.length + ')</h4>';
     watchShifts.sort((a,b) => a.date.localeCompare(b.date)).forEach(s => {
-      const typeName = getAssignmentTypeName(s.assignmentType);
+      const wCalLabel = data.calendarAssignments[s.date];
+      const typeName = wCalLabel ? wCalLabel.label : getAssignmentTypeName(s.assignmentType);
       const entries = s.timeEntries || [];
       const timeStr = entries.length > 0 && entries[0].start
         ? entries[0].start + (entries[entries.length-1].end ? ' - ' + entries[entries.length-1].end : '')
@@ -9170,7 +9172,8 @@ function renderShiftLogTable() {
     const month = d.getMonth() + 1;
     const day = d.getDate();
     const dateLabel = `${dayName} ${month}/${day}`;
-    const typeName = getAssignmentTypeName(shift.assignmentType);
+    const calLabel = data.calendarAssignments[shift.date];
+    const typeName = calLabel ? calLabel.label : getAssignmentTypeName(shift.assignmentType);
     const badgeClass = getShiftBadgeClass(shift.assignmentType);
     const hasPreCall = shift.preCallStart && shift.preCallEnd;
     const totalHrs = calcShiftHours(shift);
@@ -9651,7 +9654,8 @@ function renderFlaggedPage() {
   flaggedShifts.forEach(s => {
     const d = new Date(s.date + 'T12:00:00');
     const dateStr = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
-    const typeName = getAssignmentTypeName(s.assignmentType);
+    const fCalLabel = data.calendarAssignments[s.date];
+    const typeName = fCalLabel ? fCalLabel.label : getAssignmentTypeName(s.assignmentType);
     const entries = s.timeEntries || [];
     const times = entries.length > 0 && entries[0].start
       ? entries[0].start + (entries[entries.length-1].end ? ' \u2013 ' + entries[entries.length-1].end : '')
@@ -12727,28 +12731,28 @@ function closeAssignPicker() {
 function syncPagerShift(dateStr, type) {
   const shift = data.shifts[dateStr];
   const hasRealEntries = shift && shift.timeEntries && shift.timeEntries.some(e => e.start);
-  const isPagerEligible = getPagerPayWindow(type, isWeekend(dateStr)) !== null;
   const isVacOrOff = type === 'vacation' || type === 'forced_off';
 
-  if (hasRealEntries) return; // never touch shifts with real clock data
-
-  if (isPagerEligible || isVacOrOff) {
-    // Create or update shift (pager-eligible, vacation, or forced off)
-    data.shifts[dateStr] = {
-      date: dateStr, assignmentType: type,
-      startTime: '', endTime: '',
-      timeEntries: isVacOrOff ? [{ start: '', end: '' }] : [],
-      isHoliday: shift ? shift.isHoliday : false,
-      forcedOff: type === 'forced_off',
-      subspecCoverage: false, teeCount: 0,
-      supervisionStart: '', supervisionEnd: '',
-      preCallStart: '', preCallEnd: '',
-      tempCoverage: []
-    };
-  } else if (shift && !hasRealEntries) {
-    // Non-pager type — remove the empty auto-created shift
-    delete data.shifts[dateStr];
+  if (hasRealEntries) {
+    // Never overwrite shifts with real clock data, but sync assignmentType from calendar
+    if (shift.assignmentType !== type) {
+      shift.assignmentType = type;
+    }
+    return;
   }
+
+  // Create or update placeholder shift for any assignment type
+  data.shifts[dateStr] = {
+    date: dateStr, assignmentType: type,
+    startTime: '', endTime: '',
+    timeEntries: isVacOrOff ? [{ start: '', end: '' }] : [],
+    isHoliday: shift ? shift.isHoliday : false,
+    forcedOff: type === 'forced_off',
+    subspecCoverage: false, teeCount: 0,
+    supervisionStart: '', supervisionEnd: '',
+    preCallStart: '', preCallEnd: '',
+    tempCoverage: []
+  };
 }
 
 function applyAssignment(type, label) {
