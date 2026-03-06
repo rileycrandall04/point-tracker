@@ -2229,12 +2229,22 @@ input.mil-time.invalid {
       <div id="laborEpiduralFields" class="hidden">
         <div class="form-row">
           <div class="form-group">
-            <label>Epidural Start</label>
+            <label id="laborStartLabel">Epidural Start</label>
             <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="laborStart">
           </div>
           <div class="form-group">
             <label>Epidural End</label>
             <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="laborEnd">
+          </div>
+        </div>
+        <div class="checkbox-group" style="margin-top:8px;">
+          <input type="checkbox" id="laborShared">
+          <label for="laborShared">Shared / Handoff Epidural</label>
+        </div>
+        <div id="laborSharedFields" class="hidden" style="margin-top:6px;">
+          <div class="form-group">
+            <label>Original Placement Time</label>
+            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="laborInitialStart">
           </div>
         </div>
       </div>
@@ -3673,12 +3683,22 @@ input.mil-time.invalid {
     <div id="editLaborEpiduralFields" class="hidden">
       <div class="form-row">
         <div class="form-group">
-          <label>Epidural Start</label>
+          <label id="editLaborStartLabel">Epidural Start</label>
           <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="editLaborStart">
         </div>
         <div class="form-group">
           <label>Epidural End</label>
           <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="editLaborEnd">
+        </div>
+      </div>
+      <div class="checkbox-group" style="margin-top:8px;">
+        <input type="checkbox" id="editLaborShared">
+        <label for="editLaborShared">Shared / Handoff Epidural</label>
+      </div>
+      <div id="editLaborSharedFields" class="hidden" style="margin-top:6px;">
+        <div class="form-group">
+          <label>Original Placement Time</label>
+          <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time" id="editLaborInitialStart">
         </div>
       </div>
     </div>
@@ -5805,6 +5825,16 @@ function calcAddOnPoints(caseData) {
   return pts;
 }
 
+// Labor epidural tiered billing: calculates points for a time range within the tier schedule
+// fromHrs/toHrs are hours since original placement. Tier 1: 0-1hr=6pts/hr, Tier 2: 1-2hr=3pts/hr, Tier 3: 2+hr=1.5pts/hr
+function laborEpiduralTierPoints(fromHrs, toHrs) {
+  let pts = 0;
+  if (fromHrs < 1 && toHrs > 0) pts += (Math.min(toHrs, 1) - Math.max(fromHrs, 0)) * 6;
+  if (fromHrs < 2 && toHrs > 1) pts += (Math.min(toHrs, 2) - Math.max(fromHrs, 1)) * 3;
+  if (toHrs > 2) pts += (toHrs - Math.max(fromHrs, 2)) * 1.5;
+  return pts;
+}
+
 function calcCasePoints(caseData, shift, ignoreManual) {
   if (!ignoreManual && caseData.manualPoints != null) return round2(Number(caseData.manualPoints));
   const ct = caseData.caseType;
@@ -5832,22 +5862,33 @@ function calcCasePoints(caseData, shift, ignoreManual) {
     if (caseData.endTime) {
       ce = timeToMinutes(caseData.endTime);
     } else {
-      // No end time: estimate with current time if case is today
       const caseDate = caseData.shiftDate || (shift && shift.date);
       if (caseDate === effectiveWorkDate()) {
         const now = new Date();
         ce = now.getHours() * 60 + now.getMinutes();
       } else {
-        return 0; // past date with no end time — can't estimate
+        return 0;
       }
     }
     if (ce <= cs) ce += 1440;
+
+    if (caseData.isSharedLabor && caseData.laborInitialStart) {
+      // Shared/handoff epidural: tier based on total time since original placement
+      let initStart = timeToMinutes(caseData.laborInitialStart);
+      if (cs < initStart) initStart -= 1440;
+      const handoffOffsetHrs = Math.min((cs - initStart) / 60, 24);
+      const totalElapsedHrs = Math.min((ce - initStart) / 60, 24);
+      let pts = laborEpiduralTierPoints(handoffOffsetHrs, totalElapsedHrs);
+      if (shift && shift.assignmentType === 'OB_restricted') pts *= 2;
+      return round2(pts);
+    }
+
+    // Normal epidural
     const durationHrs = Math.min((ce - cs) / 60, 24);
     let pts = 2.5; // 5 startup units × 50%
     if (durationHrs > 0) pts += Math.min(durationHrs, 1) * 6;
     if (durationHrs > 1) pts += Math.min(durationHrs - 1, 1) * 3;
     if (durationHrs > 2) pts += (durationHrs - 2) * 1.5;
-    // Double for UVH OB only (not SF1/SF2)
     if (shift && shift.assignmentType === 'OB_restricted') pts *= 2;
     return round2(pts);
   }
@@ -5923,8 +5964,35 @@ function getCaseBreakdown(caseData, shift) {
       }
     }
     if (ce <= cs) ce += 1440;
-    const durationHrs = Math.min((ce - cs) / 60, 24);
     const estLabel = isEst ? ' (est.)' : '';
+
+    if (caseData.isSharedLabor && caseData.laborInitialStart) {
+      let initStart = timeToMinutes(caseData.laborInitialStart);
+      if (cs < initStart) initStart -= 1440;
+      const handoffOffsetHrs = Math.min((cs - initStart) / 60, 24);
+      const totalElapsedHrs = Math.min((ce - initStart) / 60, 24);
+      bd.push({label: `Handoff (running ${round2(handoffOffsetHrs)}h at takeover)`, pts: 0});
+      let subtotal = 0;
+      if (handoffOffsetHrs < 1 && totalElapsedHrs > 0) {
+        const hrs = round2(Math.min(totalElapsedHrs, 1) - Math.max(handoffOffsetHrs, 0));
+        if (hrs > 0) { const p = round2(hrs * 6); bd.push({label: `1st Hour tier (${hrs}h x 6)`, pts: p}); subtotal += p; }
+      }
+      if (handoffOffsetHrs < 2 && totalElapsedHrs > 1) {
+        const hrs = round2(Math.min(totalElapsedHrs, 2) - Math.max(handoffOffsetHrs, 1));
+        if (hrs > 0) { const p = round2(hrs * 3); bd.push({label: `2nd Hour tier (${hrs}h x 3)`, pts: p}); subtotal += p; }
+      }
+      if (totalElapsedHrs > 2) {
+        const hrs = round2(totalElapsedHrs - Math.max(handoffOffsetHrs, 2));
+        if (hrs > 0) { const p = round2(hrs * 1.5); bd.push({label: `3rd+ Hour tier (${hrs}h x 1.5)${estLabel}`, pts: p}); subtotal += p; }
+      }
+      if (shift && shift.assignmentType === 'OB_restricted') {
+        bd.push({label: 'UVH OB Doubled (x2)', pts: round2(subtotal)});
+      }
+      return bd;
+    }
+
+    // Normal epidural
+    const durationHrs = Math.min((ce - cs) / 60, 24);
     bd.push({label: 'Startup (5 units x 50%)', pts: 2.5});
     let subtotal = 2.5;
     if (durationHrs > 0) {
@@ -6130,7 +6198,8 @@ function getShiftPointsForDate(dateStr, estimate) {
   return { total: totals.total, isInProgress: isInProgress, ar: totals.ar, prod: totals.prod, call: totals.call, subspec: totals.subspec, supervision: totals.supervision };
 }
 
-function getCaseTypeName(type) {
+function getCaseTypeName(type, caseData) {
+  if (type === 'labor_epidural' && caseData && caseData.isSharedLabor) return 'Labor Epidural (Handoff)';
   const names = {
     standard: 'Standard Case', labor_epidural: 'Labor Epidural',
     acute_pain_procedure: 'Acute Pain Procedure',
@@ -6866,7 +6935,7 @@ function renderDECaseList() {
   let html = '';
   shiftCases.forEach(c => {
     const pts = shift ? calcCasePoints(c, shift) : 0;
-    const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType, c);
     const isOpenLabor = c.caseType === 'labor_epidural' && c.startTime && !c.endTime;
     const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` :
                     (isOpenLabor ? `${c.startTime} - now` : '');
@@ -7047,6 +7116,13 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     };
   });
   saveData(data);
+  // Auto-fill open epidural end times when shift end time is set
+  if (datesToSave.length === 1 && !isVacation && !isForcedOff) {
+    const savedShift = data.shifts[date];
+    if (savedShift && savedShift.endTime) {
+      checkShiftEndEpiduralAutoFill(date, savedShift.endTime);
+    }
+  }
   updateHeaderPoints();
   updateEndTimeWarning();
   updateORCaseVisibility();
@@ -7102,6 +7178,17 @@ function applyCaseTypeVisibility(ct) {
 document.getElementById('caseShared').addEventListener('change', function() {
   document.getElementById('sharedPctRow').classList.toggle('hidden', !this.checked);
   updatePointPreview();
+});
+
+document.getElementById('laborShared').addEventListener('change', function() {
+  document.getElementById('laborSharedFields').classList.toggle('hidden', !this.checked);
+  document.getElementById('laborStartLabel').textContent = this.checked ? 'Handoff Time' : 'Epidural Start';
+  updatePointPreview();
+});
+
+document.getElementById('editLaborShared').addEventListener('change', function() {
+  document.getElementById('editLaborSharedFields').classList.toggle('hidden', !this.checked);
+  document.getElementById('editLaborStartLabel').textContent = this.checked ? 'Handoff Time' : 'Epidural Start';
 });
 
 // Procedure autocomplete
@@ -7371,6 +7458,8 @@ function buildCaseFromForm() {
     hasITMorphine: document.getElementById('caseITMorphine')?.checked || false,
     epiduralRounds: document.getElementById('apsEpiduralCount')?.value || 0,
     painRounds: document.getElementById('apsPainCount')?.value || 0,
+    isSharedLabor: isLabor && (document.getElementById('laborShared')?.checked || false),
+    laborInitialStart: isLabor ? (document.getElementById('laborInitialStart')?.value || '') : '',
     notes: document.getElementById('caseNotes')?.value || '',
     caseNotes: document.getElementById('caseCaseNotes')?.value || '',
     shiftDate: workingDate
@@ -7388,6 +7477,9 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   caseData.timestamp = new Date().toISOString();
   if (caseData.caseType === 'labor_epidural') {
     if (!caseData.startTime) { showToast('Please enter a start time'); return; }
+    if (caseData.isSharedLabor && !caseData.laborInitialStart) {
+      showToast('Please enter the original placement time'); return;
+    }
   }
   if (caseData.caseType === 'standard') {
     if (!caseData.startTime) { showToast('Please enter a start time'); return; }
@@ -7429,6 +7521,10 @@ function resetCaseForm() {
   document.getElementById('caseITMorphine').checked = false;
   document.getElementById('laborStart').value = '';
   document.getElementById('laborEnd').value = '';
+  document.getElementById('laborShared').checked = false;
+  document.getElementById('laborSharedFields').classList.add('hidden');
+  document.getElementById('laborInitialStart').value = '';
+  document.getElementById('laborStartLabel').textContent = 'Epidural Start';
   document.getElementById('apsEpiduralCount').value = '0';
   document.getElementById('apsPainCount').value = '0';
   document.getElementById('caseNotes').value = '';
@@ -7554,7 +7650,7 @@ function renderToday() {
   let listHtml = '';
   shiftCases.forEach(c => {
     const pts = calcCasePoints(c, shift);
-    const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType, c);
     const orTag = c.isORCase ? ' <span style="color:var(--accent2);font-size:0.75rem;">[OR]</span>' : '';
     const sharedTag = c.isSharedCase ? ` <span style="color:var(--purple);font-size:0.75rem;">[Shared ${c.sharedStartupPct || 50}%]</span>` : '';
     const isOpenLabor = c.caseType === 'labor_epidural' && c.startTime && !c.endTime;
@@ -7608,7 +7704,7 @@ function shiftSignOut() {
   const el = document.getElementById('signOutWarningCases');
   let html = '';
   openCases.forEach(c => {
-    const name = c.procedure || c.notes || getCaseTypeName(c.caseType) || 'Case';
+    const name = c.procedure || c.notes || getCaseTypeName(c.caseType, c) || 'Case';
     html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;" onclick="goToOpenCase('${c.id}')">`;
     html += `<div style="display:flex;justify-content:space-between;align-items:center;">`;
     html += `<span style="font-weight:600;font-size:0.85rem;">${escHtml(name)}</span>`;
@@ -7628,6 +7724,39 @@ function closeSignOutWarning() {
 function goToOpenCase(caseId) {
   closeSignOutWarning();
   openCaseEdit(caseId);
+}
+
+// Auto-fill open epidural end times when shift ends
+let pendingEpiduralAutoFill = null;
+
+function autoFillOpenEpiduralEnds(date, endTimeStr) {
+  const openEpidurals = data.cases.filter(c =>
+    c.shiftDate === date &&
+    c.caseType === 'labor_epidural' &&
+    c.startTime &&
+    !c.endTime
+  );
+  if (openEpidurals.length === 0) return;
+  openEpidurals.forEach(c => {
+    c.endTime = endTimeStr;
+    writeSharedCase(c, data.shifts[c.shiftDate]);
+  });
+  saveData(data);
+  if (typeof renderDECaseList === 'function') renderDECaseList();
+  if (typeof updateDETally === 'function') updateDETally();
+}
+
+function checkShiftEndEpiduralAutoFill(date, shiftEndTime) {
+  if (!shiftEndTime) return;
+  const shiftEndMin = timeToMinutes(shiftEndTime);
+  const now = new Date();
+  const currentMin = now.getHours() * 60 + now.getMinutes();
+  if (shiftEndMin <= currentMin) {
+    autoFillOpenEpiduralEnds(date, shiftEndTime);
+    pendingEpiduralAutoFill = null;
+  } else {
+    pendingEpiduralAutoFill = { date: date, endTime: shiftEndTime, endMin: shiftEndMin };
+  }
 }
 
 function forceShiftSignOut() {
@@ -7780,6 +7909,16 @@ function stopLiveTicker() {
 
 function tickLiveUpdate() {
   try {
+  // Check pending epidural auto-fill
+  if (pendingEpiduralAutoFill) {
+    const now2 = new Date();
+    const curMin2 = now2.getHours() * 60 + now2.getMinutes();
+    if (curMin2 >= pendingEpiduralAutoFill.endMin) {
+      autoFillOpenEpiduralEnds(pendingEpiduralAutoFill.date, pendingEpiduralAutoFill.endTime);
+      pendingEpiduralAutoFill = null;
+    }
+  }
+
   const todayPage = document.getElementById('page-today');
   if (!todayPage || !todayPage.classList.contains('active')) { stopLiveTicker(); return; }
 
@@ -7821,8 +7960,15 @@ function tickLiveUpdate() {
     if (elapsed < 0) elapsed += 1440;
     const elapsedHrs = elapsed / 60;
     if (c.caseType === 'labor_epidural') {
-      if (elapsedHrs < 1) prodRate += 5;
-      else if (elapsedHrs < 2) prodRate += 2.5;
+      // For shared epidurals, tier is based on total time since original placement
+      let tierElapsed = elapsedHrs;
+      if (c.isSharedLabor && c.laborInitialStart) {
+        let initElapsed = currentMin - timeToMinutes(c.laborInitialStart);
+        if (initElapsed < 0) initElapsed += 1440;
+        tierElapsed = initElapsed / 60;
+      }
+      if (tierElapsed < 1) prodRate += 5;
+      else if (tierElapsed < 2) prodRate += 2.5;
       else prodRate += 1.25;
     } else if (c.caseType === 'standard') {
       prodRate += 6;
@@ -8367,7 +8513,7 @@ function showDayDetail(dateStr) {
     <h3 style="margin-bottom:8px;">Cases (${shiftCases.length})</h3>`;
   shiftCases.forEach(c => {
     const pts = calcCasePoints(c, shift);
-    const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType, c);
     const breakdown = getCaseBreakdown(c, shift);
     html += `<div style="padding:8px 0;border-bottom:1px solid var(--surface2);">
       <div style="display:flex;justify-content:space-between;"><strong>${escHtml(name)}</strong><span class="point-badge">${pts.toFixed(1)}</span></div>`;
@@ -8565,7 +8711,7 @@ function renderCaseLogTable() {
     });
     watchHtml += '<div class="watching-box"><h4>&#x1f4b2; Watching for Billing (' + watchCases.length + ') &mdash; ' + watchTotal.toFixed(1) + ' pts pending</h4>';
     watchCases.forEach(c => {
-      const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
+      const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType, c);
       const shift = data.shifts[c.shiftDate];
       const pts = calcCasePoints(c, shift);
       watchHtml += '<div class="watch-item"><span>' + formatDateShort(c.shiftDate) + ' &mdash; ' + escHtml(name) + ' (' + pts.toFixed(1) + ' pts)</span>';
@@ -8600,7 +8746,7 @@ function renderCaseLogTable() {
     totalPts += pts;
     dayPts += pts;
     dayCaseCount++;
-    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType, c);
     const sharedMark = c.isSharedCase ? ' [S]' : '';
     const claimedTag = (c.billingMonth && c.billingMonth !== c.shiftDate.substring(0,7)) ? ` <span class="claimed-tag">(from ${formatDateShort(c.shiftDate)})</span>` : '';
     const flaggedClass = c.flagged ? ' flagged-row' : '';
@@ -9659,7 +9805,7 @@ function renderFlaggedPage() {
   flaggedCases.forEach(c => {
     const d = new Date(c.shiftDate + 'T12:00:00');
     const dateStr = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
-    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType, c);
     const times = (c.startTime || '?') + ' \u2013 ' + (c.endTime || '?');
     items.push({ date: c.shiftDate, dateStr, type: 'case', label: name, detail: times, id: c.id });
   });
@@ -12414,7 +12560,7 @@ function renderProcLookup() {
   // Pass 1: Local cases
   data.cases.forEach(c => {
     if (!c.startTime || !c.endTime || c.isSharedCase) return;
-    const name = c.caseType === 'standard' ? (c.procedure || '') : getCaseTypeName(c.caseType);
+    const name = c.caseType === 'standard' ? (c.procedure || '') : getCaseTypeName(c.caseType, c);
     if (!name || !name.toLowerCase().includes(query)) return;
     if (!procNames[name]) procNames[name] = [];
     const surgeon = normalizeSurgeonName((c.notes || '').trim());
@@ -12921,7 +13067,7 @@ function renderDDCaseList(cases, shift) {
   let html = '';
   cases.forEach(c => {
     const pts = shift ? calcCasePoints(c, shift) : 0;
-    const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType);
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType, c);
     const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : (c.startTime ? c.startTime : '');
     html += `<div class="dd-case-item">
       <div class="dd-case-info">
@@ -14758,7 +14904,7 @@ function getSCESorted() {
       c.date.includes(filterText) ||
       c.contributor.toLowerCase().includes(filterText) ||
       (c.asaCode || '').toLowerCase().includes(filterText) ||
-      getCaseTypeName(c.caseType).toLowerCase().includes(filterText)
+      getCaseTypeName(c.caseType, c).toLowerCase().includes(filterText)
     );
   }
   const cmp = (a, b, key, dir) => {
@@ -14787,7 +14933,7 @@ function renderSCEList() {
   list.forEach(c => {
     const checked = sceSelected.has(c._key) ? 'checked' : '';
     const selectedCls = sceSelected.has(c._key) ? ' selected' : '';
-    const typeLabel = c.caseType === 'standard' ? (c.asaCode ? 'ASA ' + c.asaCode : '') : getCaseTypeName(c.caseType);
+    const typeLabel = c.caseType === 'standard' ? (c.asaCode ? 'ASA ' + c.asaCode : '') : getCaseTypeName(c.caseType, c);
     const timeStr = c.startTime ? (c.startTime + (c.endTime ? ' - ' + c.endTime : ' - ?')) : '';
     const surgeonDirty = sceDirty.has(c._key + '_surgeon') ? ' sce-dirty' : '';
     const procDirty = sceDirty.has(c._key + '_procedure') ? ' sce-dirty' : '';
@@ -14998,7 +15144,7 @@ function renderTopProcedures() {
     if (e <= s) e += 1440;
     const hrs = (e - s) / 60;
     if (hrs <= 0) return;
-    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
+    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType, c);
     const shift = data.shifts[c.shiftDate];
     const pts = calcCasePoints(c, shift, true);
     if (!procData[name]) procData[name] = { totalPts: 0, totalHrs: 0, count: 0 };
@@ -15266,6 +15412,10 @@ function openCaseEdit(caseId) {
   if (editCaseType === 'labor_epidural') {
     document.getElementById('editLaborStart').value = c.startTime || '';
     document.getElementById('editLaborEnd').value = c.endTime || '';
+    document.getElementById('editLaborShared').checked = c.isSharedLabor || false;
+    document.getElementById('editLaborSharedFields').classList.toggle('hidden', !c.isSharedLabor);
+    document.getElementById('editLaborInitialStart').value = c.laborInitialStart || '';
+    document.getElementById('editLaborStartLabel').textContent = c.isSharedLabor ? 'Handoff Time' : 'Epidural Start';
   }
 
   // APS rounding fields
@@ -15320,6 +15470,11 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
     c.procedure = 'Labor Epidural';
     c.startTime = document.getElementById('editLaborStart').value;
     c.endTime = document.getElementById('editLaborEnd').value;
+    c.isSharedLabor = document.getElementById('editLaborShared').checked;
+    c.laborInitialStart = c.isSharedLabor ? (document.getElementById('editLaborInitialStart').value || '') : '';
+    if (c.isSharedLabor && !c.laborInitialStart) {
+      showToast('Please enter the original placement time'); return;
+    }
     c.notes = document.getElementById('editCaseNotes').value;
   } else if (editCaseType === 'aps_rounding') {
     c.procedure = 'APS Rounding';
@@ -15399,7 +15554,7 @@ document.getElementById('exportCSVBtn').addEventListener('click', () => {
       csv += `${shift.date},${csvEsc(assign)},,,,,,,,${totals.total.toFixed(2)}\n`;
     } else {
       shiftCases.forEach((c, i) => {
-        const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType);
+        const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType, c);
         const pts = calcCasePoints(c, shift);
         csv += `${shift.date},${csvEsc(assign)},${csvEsc(name)},${c.asaCode || ''},${c.baseUnits || ''},${c.physicalStatus || ''},${c.startTime || ''},${c.endTime || ''},${pts.toFixed(2)},${i === 0 ? totals.total.toFixed(2) : ''}\n`;
       });
