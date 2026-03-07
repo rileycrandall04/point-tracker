@@ -1370,10 +1370,18 @@ input.mil-time.invalid {
 .asa-select-mode .asa-row:hover { background: rgba(99,102,241,0.15); }
 .asa-select-mode .asa-row:active { background: rgba(99,102,241,0.25); }
 .asa-select-banner { background: var(--primary); color: #fff; text-align: center; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 0.8rem; font-weight: 600; }
-.asa-compact-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 0.78rem; }
+.asa-compact-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 0.78rem; cursor: pointer; }
+.asa-compact-row:hover { background: var(--surface2); }
 .asa-compact-code { font-weight: 600; min-width: 48px; color: var(--primary); }
-.asa-compact-desc { flex: 1; color: var(--text); }
+.asa-compact-desc { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asa-compact-units { color: var(--text-dim); font-size: 0.72rem; min-width: 28px; text-align: right; }
+.asa-compact-plus { color: var(--accent); font-size: 0.85rem; font-weight: 700; padding: 0 4px; cursor: pointer; line-height: 1; }
+.asa-compact-plus:hover { opacity: 0.7; }
+.asa-code-detail { background: var(--surface2); border-bottom: 1px solid var(--border); padding: 8px 12px 8px 56px; display: none; }
+.asa-code-detail.open { display: block; }
+.asa-code-detail .asa-proc-tag { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 2px 8px; font-size: 0.68rem; color: var(--text-dim); margin: 2px 2px; }
+.asa-code-detail .asa-proc-add-row { display: flex; gap: 4px; align-items: center; margin-top: 6px; }
+.asa-code-detail .asa-no-procs { font-size: 0.7rem; color: var(--text-dim); font-style: italic; }
 .asa-save-bar { position: sticky; bottom: 0; background: var(--surface); padding: 10px; border-top: 2px solid var(--accent); text-align: center; z-index: 50; }
 .asa-section-editor { margin-bottom: 16px; }
 .asa-section-editor .cr-section-body.open { padding: 10px 14px; }
@@ -1405,7 +1413,6 @@ input.mil-time.invalid {
 .asa-section-empty { color: var(--text-dim); font-size: 0.75rem; font-style: italic; padding: 4px 0; }
 .asa-section-count { font-size: 0.72rem; color: var(--text-dim); margin-left: 4px; }
 .asa-unassigned-summary { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.78rem; color: var(--text-dim); }
-.asa-procs-list { margin-top: 2px; padding: 0 8px 6px 56px; }
 .asa-proc-tag { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 2px 8px; font-size: 0.68rem; color: var(--text-dim); margin: 2px 2px; }
 .asa-proc-add-row { display: inline-flex; gap: 4px; align-items: center; margin: 2px 0; }
 .asa-proc-input { padding: 3px 8px; font-size: 0.7rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; width: 140px; }
@@ -7793,19 +7800,33 @@ function renderAsaCodesPage() {
   const isAdminUser = (typeof isAdmin === 'function' && isAdmin());
   const isLoggedIn = !!currentUser;
 
-  // Helper to render code row + procedures
+  // Helper to render code row with expandable detail
   function renderCodeRow(code, clickable, section) {
     var desc = getAsaDesc(code, section);
     var bu = getAsaBU(code);
-    var rowHtml = '<div class="asa-compact-row' + (clickable ? ' asa-row' : '') + '" onclick="selectAsaCode(\'' + code + '\')" style="' + (clickable ? 'cursor:pointer' : '') + '">';
-    rowHtml += '<span class="asa-compact-code">' + code + '</span>';
-    rowHtml += '<span class="asa-compact-desc">' + escHtml(desc) + '</span>';
-    rowHtml += '<span class="asa-compact-units">' + bu + 'u</span></div>';
-    // Show procedures (not in select mode)
-    if (!inSelectMode) {
+    var detailId = 'asaDetail_' + code + '_' + (section || 'all').replace(/[^a-zA-Z0-9]/g, '_');
+    var rowHtml = '';
+
+    if (clickable) {
+      // Select mode: just the code row, clickable to select
+      rowHtml += '<div class="asa-compact-row asa-row" onclick="selectAsaCode(\'' + code + '\')">';
+      rowHtml += '<span class="asa-compact-code">' + code + '</span>';
+      rowHtml += '<span class="asa-compact-desc">' + escHtml(desc) + '</span>';
+      rowHtml += '<span class="asa-compact-units">' + bu + 'u</span></div>';
+    } else {
+      // Normal mode: concise row with + button, click to expand
+      rowHtml += '<div class="asa-compact-row" onclick="toggleAsaCodeDetail(\'' + detailId + '\')">';
+      rowHtml += '<span class="asa-compact-code">' + code + '</span>';
+      rowHtml += '<span class="asa-compact-desc">' + escHtml(desc) + '</span>';
+      rowHtml += '<span class="asa-compact-units">' + bu + 'u</span>';
+      if (isLoggedIn) {
+        rowHtml += '<span class="asa-compact-plus" onclick="event.stopPropagation();toggleAsaCodeDetail(\'' + detailId + '\',true)" title="Add procedure">+</span>';
+      }
+      rowHtml += '</div>';
+      // Expandable detail panel
+      rowHtml += '<div class="asa-code-detail" id="' + detailId + '">';
       var procs = asaCodeProcedures[code] || [];
-      if (procs.length > 0 || isLoggedIn) {
-        rowHtml += '<div class="asa-procs-list">';
+      if (procs.length > 0) {
         procs.forEach(function(proc) {
           rowHtml += '<span class="asa-proc-tag">' + escHtml(proc);
           if (isAdminUser) {
@@ -7813,14 +7834,16 @@ function renderAsaCodesPage() {
           }
           rowHtml += '</span>';
         });
-        if (isLoggedIn) {
-          rowHtml += '<div class="asa-proc-add-row" onclick="event.stopPropagation()">';
-          rowHtml += '<input class="asa-proc-input" type="text" placeholder="Add procedure..." onkeydown="if(event.key===\'Enter\'){event.stopPropagation();saveAsaCodeProcedure(\'' + code + '\',this.value);this.value=\'\';}">';
-          rowHtml += '<button class="asa-proc-add-btn" onclick="event.stopPropagation();var inp=this.previousElementSibling;saveAsaCodeProcedure(\'' + code + '\',inp.value);inp.value=\'\';">+</button>';
-          rowHtml += '</div>';
-        }
+      } else {
+        rowHtml += '<div class="asa-no-procs">No procedures added yet</div>';
+      }
+      if (isLoggedIn) {
+        rowHtml += '<div class="asa-proc-add-row" onclick="event.stopPropagation()">';
+        rowHtml += '<input class="asa-proc-input" type="text" placeholder="Add procedure name..." onkeydown="if(event.key===\'Enter\'){event.stopPropagation();saveAsaCodeProcedure(\'' + code + '\',this.value);this.value=\'\';}">';
+        rowHtml += '<button class="asa-proc-add-btn" onclick="event.stopPropagation();var inp=this.previousElementSibling;saveAsaCodeProcedure(\'' + code + '\',inp.value);inp.value=\'\';">+</button>';
         rowHtml += '</div>';
       }
+      rowHtml += '</div>';
     }
     return rowHtml;
   }
@@ -7847,6 +7870,25 @@ function renderAsaCodesPage() {
   html += '</div></div>';
 
   container.innerHTML = html;
+}
+
+function toggleAsaCodeDetail(detailId, focusInput) {
+  var el = document.getElementById(detailId);
+  if (!el) return;
+  var isOpen = el.classList.contains('open');
+  // Close all other open details in the same section
+  var parent = el.closest('.cr-section-body') || el.closest('#asaCodesContent');
+  if (parent) {
+    parent.querySelectorAll('.asa-code-detail.open').forEach(function(d) {
+      if (d.id !== detailId) d.classList.remove('open');
+    });
+  }
+  el.classList.toggle('open');
+  // Focus the input when opening via + button
+  if (!isOpen && (focusInput || false)) {
+    var inp = el.querySelector('.asa-proc-input');
+    if (inp) setTimeout(function() { inp.focus(); }, 50);
+  }
 }
 
 function asaEditorAutocomplete(inputEl, sectionName) {
