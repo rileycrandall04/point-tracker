@@ -2333,9 +2333,9 @@ input.mil-time.invalid {
     <span style="font-size:0.85rem; font-weight:600;"><span id="paycheckEntryReminderText"></span> <a href="#" onclick="goToPaycheckEntry(); return false;" style="color:#fff; text-decoration:underline; font-weight:400;">Enter now</a></span>
     <button onclick="dismissPaycheckReminder()" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
-  <div class="card hidden" id="openLaborReminder" style="background:var(--danger); color:#fff; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+  <div class="card hidden" id="openLaborReminder" style="background:var(--danger); color:#fff; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; cursor:pointer;" onclick="goToOpenLaborCases()">
     <span style="font-size:0.85rem; font-weight:600;" id="openLaborReminderText"></span>
-    <button onclick="document.getElementById('openLaborReminder').classList.add('hidden')" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
+    <span style="font-size:0.75rem; opacity:0.8;">Tap to fix &rarr;</span>
   </div>
   <div id="todayBackBar" class="hidden" style="display:none;align-items:center;gap:8px;margin-bottom:8px;">
     <button class="btn btn-outline btn-sm" id="todayBackBtn" style="padding:4px 12px;font-size:0.8rem;">&larr; Daily</button>
@@ -7447,7 +7447,9 @@ function renderAsaCodesPage() {
       html += '<div class="cr-section-body open">';
       html += '<div class="asa-section-input-row" id="' + sectionId + '_inputRow">';
       html += '<input class="asa-section-input" type="text" placeholder="Type ASA code or keyword..." ';
-      html += 'oninput="asaEditorAutocomplete(this,\'' + escHtml(sectionName) + '\')" autocomplete="off">';
+      html += 'oninput="asaEditorAutocomplete(this,\'' + escHtml(sectionName) + '\')" ';
+      html += 'onkeydown="if(event.key===\'Enter\'){event.preventDefault();asaEditorAddFromInput(this,\'' + escHtml(sectionName) + '\');}" autocomplete="off">';
+      html += '<button class="asa-proc-add-btn" onclick="asaEditorAddFromInput(this.previousElementSibling,\'' + escHtml(sectionName) + '\')">Add</button>';
       html += '</div>';
       html += '<div class="asa-code-chips" id="' + sectionId + '_chips">';
       if (sectionCodes.length === 0) {
@@ -7564,6 +7566,29 @@ function asaEditorAutocomplete(inputEl, sectionName) {
       }
     });
   }, 0);
+}
+
+function asaEditorAddFromInput(inputEl, sectionName) {
+  var query = inputEl.value.trim();
+  if (!query) return;
+  // Direct code match first
+  if (ASA_BASE_UNITS[query] && !asaCodeAssignments[query]) {
+    addAsaCodeToSection(query, sectionName);
+    return;
+  }
+  // Try first autocomplete match
+  var lq = query.toLowerCase();
+  var allCodes = Object.keys(ASA_BASE_UNITS).sort();
+  var match = allCodes.find(function(code) {
+    if (asaCodeAssignments[code]) return false;
+    var desc = (ASA_CODE_DESCRIPTIONS && ASA_CODE_DESCRIPTIONS[code]) || '';
+    return code.startsWith(lq) || desc.toLowerCase().indexOf(lq) !== -1;
+  });
+  if (match) {
+    addAsaCodeToSection(match, sectionName);
+  } else {
+    showToast('No matching unassigned code found');
+  }
 }
 
 function addAsaCodeToSection(code, sectionName) {
@@ -10736,6 +10761,8 @@ function checkPaycheckReminder() {
   }
 }
 
+let openLaborCaseIds = [];
+
 function checkOpenLaborReminder() {
   const banner = document.getElementById('openLaborReminder');
   if (!banner) return;
@@ -10746,6 +10773,7 @@ function checkOpenLaborReminder() {
     const caseDate = new Date(c.shiftDate + 'T' + c.startTime + ':00');
     return (now - caseDate) > 24 * 60 * 60 * 1000;
   });
+  openLaborCaseIds = openCases.map(c => c.id);
   if (openCases.length > 0) {
     const dates = [...new Set(openCases.map(c => formatDate(c.shiftDate)))];
     const textEl = document.getElementById('openLaborReminderText');
@@ -10756,6 +10784,22 @@ function checkOpenLaborReminder() {
     banner.style.display = 'flex';
   } else {
     banner.classList.add('hidden');
+  }
+}
+
+function goToOpenLaborCases() {
+  if (openLaborCaseIds.length === 0) return;
+  if (openLaborCaseIds.length === 1) {
+    openCaseEdit(openLaborCaseIds[0]);
+  } else {
+    // Navigate to the first open case's date so user can see all of them
+    const c = data.cases.find(x => x.id === openLaborCaseIds[0]);
+    if (c) {
+      workingDate = c.shiftDate;
+      renderToday();
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-today').classList.add('active');
+    }
   }
 }
 
