@@ -7283,8 +7283,8 @@ let asaRefReturnPage = null;
     if (typeof ASA_BASE_UNITS !== 'undefined' && ASA_BASE_UNITS[code] !== undefined) {
       baseUnitsInput.value = getAsaBU(code);
     }
-    // Show procedure suggestions
-    if (code.length >= 5) {
+    // Show procedure suggestions only if procedure name is not already filled in
+    if (code.length >= 5 && !procInput.value.trim()) {
       showAsaSuggestions(code);
     } else {
       hideAsaSuggestions();
@@ -7363,7 +7363,7 @@ let asaRefReturnPage = null;
     if (bu !== undefined) baseUnitsInput.value = bu;
     // Navigate back
     document.getElementById('asaCodesBackBtn').click();
-    // Scroll ASA code field into view and trigger procedure suggestions
+    // Scroll ASA code field into view, show suggestions only if no procedure name yet
     setTimeout(function() {
       asaInput.scrollIntoView({ behavior: 'instant', block: 'center' });
       handleAsaCodeInput(code);
