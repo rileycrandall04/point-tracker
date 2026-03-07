@@ -7459,7 +7459,7 @@ function renderAsaCodesPage() {
       html += '<span class="cr-toggle">&#9654;</span></div>';
       html += '<div class="cr-section-body open">';
       html += '<div class="asa-section-input-row" id="' + sectionId + '_inputRow">';
-      html += '<input class="asa-section-input" type="text" placeholder="Type ASA code or keyword..." ';
+      html += '<input class="asa-section-input" type="text" placeholder="Enter codes (e.g. 00100 00740 00300)..." ';
       html += 'oninput="asaEditorAutocomplete(this,\'' + escHtml(sectionName) + '\')" ';
       html += 'onkeydown="if(event.key===\'Enter\'){event.preventDefault();asaEditorAddFromInput(this,\'' + escHtml(sectionName) + '\');}" autocomplete="off">';
       html += '<button class="asa-proc-add-btn" onclick="asaEditorAddFromInput(this.previousElementSibling,\'' + escHtml(sectionName) + '\')">Add</button>';
@@ -7581,25 +7581,40 @@ function asaEditorAutocomplete(inputEl, sectionName) {
 }
 
 function asaEditorAddFromInput(inputEl, sectionName) {
-  var query = inputEl.value.trim();
-  if (!query) return;
-  // Direct code match first
-  if (ASA_BASE_UNITS[query] && !asaCodeAssignments[query]) {
-    addAsaCodeToSection(query, sectionName);
-    return;
-  }
-  // Try first autocomplete match
-  var lq = query.toLowerCase();
-  var allCodes = Object.keys(ASA_BASE_UNITS).sort();
-  var match = allCodes.find(function(code) {
-    if (asaCodeAssignments[code]) return false;
-    var desc = getAsaDesc(code);
-    return code.startsWith(lq) || desc.toLowerCase().indexOf(lq) !== -1;
+  var raw = inputEl.value.trim();
+  if (!raw) return;
+  // Split on commas, spaces, or newlines to support multiple codes at once
+  var tokens = raw.split(/[\s,]+/).filter(function(t) { return t.length > 0; });
+  var added = 0;
+  var notFound = [];
+  tokens.forEach(function(token) {
+    // Direct code match
+    if (ASA_BASE_UNITS[token] && !asaCodeAssignments[token]) {
+      asaCodeAssignments[token] = sectionName;
+      added++;
+      return;
+    }
+    // Try prefix/description match for non-numeric tokens
+    var lq = token.toLowerCase();
+    var allCodes = Object.keys(ASA_BASE_UNITS).sort();
+    var match = allCodes.find(function(code) {
+      if (asaCodeAssignments[code]) return false;
+      var desc = getAsaDesc(code);
+      return code.startsWith(lq) || desc.toLowerCase().indexOf(lq) !== -1;
+    });
+    if (match) {
+      asaCodeAssignments[match] = sectionName;
+      added++;
+    } else {
+      notFound.push(token);
+    }
   });
-  if (match) {
-    addAsaCodeToSection(match, sectionName);
-  } else {
-    showToast('No matching unassigned code found');
+  if (added > 0) {
+    renderAsaCodesPage();
+    showToast(added + ' code' + (added > 1 ? 's' : '') + ' added to ' + sectionName);
+  }
+  if (notFound.length > 0) {
+    showToast('Not found: ' + notFound.join(', '));
   }
 }
 
