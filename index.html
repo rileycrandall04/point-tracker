@@ -7368,7 +7368,7 @@ let asaRefReturnPage = null;
 const ASA_SECTION_ORDER = [
   'General Surgery', 'Endoscopy', 'ENT', 'Eye', 'Ortho', 'Gyn', 'Neuro',
   'Urology', 'Cardiac/Thoracic/Vascular', 'Cath Lab - EP',
-  'Cardioversion - TEE', 'Transplant', 'OB', 'IR', 'All Codes'
+  'Cardioversion - TEE', 'Transplant', 'OB', 'Other', 'IR', 'All Codes'
 ];
 
 // Default section assignments: code → [sections] (supports multi-section)
@@ -7414,21 +7414,21 @@ var DEFAULT_ASA_ASSIGNMENTS = {
   '00567': ['Cardiac/Thoracic/Vascular'], '00562': ['Cardiac/Thoracic/Vascular'],
   '00563': ['Cardiac/Thoracic/Vascular'], '00550': ['Cardiac/Thoracic/Vascular'],
   '00528': ['Cardiac/Thoracic/Vascular'], '00350': ['Cardiac/Thoracic/Vascular'],
-  '00532': ['Cardiac/Thoracic/Vascular','OB'], '01270': ['Cardiac/Thoracic/Vascular'],
+  '00532': ['Cardiac/Thoracic/Vascular','OB','Other'], '01270': ['Cardiac/Thoracic/Vascular'],
   '01844': ['Cardiac/Thoracic/Vascular'], '01916': ['Cardiac/Thoracic/Vascular'],
   '00520': ['Cardiac/Thoracic/Vascular'], '00542': ['Cardiac/Thoracic/Vascular'],
   // Cath Lab - EP
   '00530': ['Cath Lab - EP'], '00534': ['Cath Lab - EP'], '00537': ['Cath Lab - EP'],
   '00560': ['Cath Lab - EP'],
   // Cardioversion - TEE
-  '00410': ['Cardioversion - TEE','Cath Lab - EP'], '01922': ['Cardioversion - TEE','Cath Lab - EP','OB'],
+  '00410': ['Cardioversion - TEE','Cath Lab - EP'], '01922': ['Cardioversion - TEE','Cath Lab - EP','OB','Other'],
   // Transplant
   '00580': ['Transplant'], '00794': ['Transplant'], '00796': ['Transplant'],
   '00868': ['Transplant'], '01990': ['Transplant'],
   // OB
   '01967': ['OB'], '01968': ['OB'], '01961': ['OB'], '01965': ['OB'],
   '01958': ['OB'], '01962': ['OB'],
-  '01112': ['OB'], '01924': ['OB'], '01926': ['OB']
+  '01112': ['OB','Other'], '01924': ['OB','Other'], '01926': ['OB','Other']
 };
 
 // Default section-specific descriptions: code__section → description
@@ -7581,7 +7581,13 @@ var DEFAULT_ASA_DESCRIPTIONS = {
   '01112__OB': 'Bone Marrow Biopsy',
   '01922__OB': 'Non-Invasive Imaging',
   '01924__OB': 'IR Arterial Proc',
-  '01926__OB': 'IR (Intracranial, Intracardiac, Aortic)'
+  '01926__OB': 'IR (Intracranial, Intracardiac, Aortic)',
+  // Other
+  '00532__Other': 'Anesthesia for Central Line',
+  '01112__Other': 'Bone Marrow Biopsy',
+  '01922__Other': 'Non-Invasive Imaging',
+  '01924__Other': 'IR Arterial Proc',
+  '01926__Other': 'IR (Intracranial, Intracardiac, Aortic)'
 };
 
 let asaCodeAssignments = {};   // code → [section1, section2, ...]
