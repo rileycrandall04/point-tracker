@@ -1374,14 +1374,35 @@ input.mil-time.invalid {
 .asa-compact-code { font-weight: 600; min-width: 48px; color: var(--primary); }
 .asa-compact-desc { flex: 1; color: var(--text); }
 .asa-compact-units { color: var(--text-dim); font-size: 0.72rem; min-width: 28px; text-align: right; }
-.asa-edit-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 0.78rem; }
-.asa-edit-row .asa-compact-code { min-width: 44px; }
-.asa-edit-row .asa-compact-desc { font-size: 0.72rem; }
-.asa-edit-select { font-size: 0.7rem; padding: 2px 4px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 4px; min-width: 90px; }
 .asa-save-bar { position: sticky; bottom: 0; background: var(--surface); padding: 10px; border-top: 2px solid var(--accent); text-align: center; z-index: 50; }
-.asa-filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-.asa-filter-btn { font-size: 0.68rem; padding: 3px 8px; border-radius: 12px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; }
-.asa-filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.asa-section-editor { margin-bottom: 16px; }
+.asa-section-editor .cr-section-body.open { padding: 10px 14px; }
+.asa-section-input-row { display: flex; gap: 6px; margin-bottom: 8px; position: relative; }
+.asa-section-input { flex: 1; padding: 6px 10px; font-size: 0.8rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; outline: none; }
+.asa-section-input:focus { border-color: var(--primary); }
+.asa-code-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.asa-code-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 3px 8px; font-size: 0.75rem; color: var(--text); }
+.asa-code-chip .chip-code { font-weight: 600; color: var(--primary); }
+.asa-code-chip .chip-desc { color: var(--text-dim); font-size: 0.68rem; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asa-code-chip .chip-remove { color: var(--text-dim); cursor: pointer; font-size: 0.85rem; line-height: 1; margin-left: 2px; }
+.asa-code-chip .chip-remove:hover { color: #ef4444; }
+.asa-code-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 100; background: var(--surface); border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; max-height: 180px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+.asa-code-dropdown-item { padding: 6px 10px; cursor: pointer; font-size: 0.78rem; display: flex; gap: 8px; align-items: center; }
+.asa-code-dropdown-item:hover, .asa-code-dropdown-item.active { background: var(--primary); color: #fff; }
+.asa-code-dropdown-item .dd-code { font-weight: 600; min-width: 44px; }
+.asa-code-dropdown-item .dd-desc { flex: 1; color: var(--text-dim); font-size: 0.72rem; }
+.asa-code-dropdown-item:hover .dd-desc, .asa-code-dropdown-item.active .dd-desc { color: rgba(255,255,255,0.7); }
+.asa-code-dropdown-item .dd-units { font-size: 0.68rem; color: var(--text-dim); }
+.asa-code-dropdown-item:hover .dd-units, .asa-code-dropdown-item.active .dd-units { color: rgba(255,255,255,0.7); }
+.asa-section-empty { color: var(--text-dim); font-size: 0.75rem; font-style: italic; padding: 4px 0; }
+.asa-section-count { font-size: 0.72rem; color: var(--text-dim); margin-left: 4px; }
+.asa-unassigned-summary { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.78rem; color: var(--text-dim); }
+.asa-procs-list { margin-top: 2px; padding: 0 8px 6px 56px; }
+.asa-proc-tag { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 2px 8px; font-size: 0.68rem; color: var(--text-dim); margin: 2px 2px; }
+.asa-proc-add-row { display: inline-flex; gap: 4px; align-items: center; margin: 2px 0; }
+.asa-proc-input { padding: 3px 8px; font-size: 0.7rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; width: 140px; }
+.asa-proc-add-btn { padding: 3px 8px; font-size: 0.7rem; background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+.asa-proc-add-btn:hover { opacity: 0.85; }
 
 /* ===== SURGEON / NOTES AUTOCOMPLETE ===== */
 .notes-autocomplete { position: relative; }
@@ -7214,6 +7235,12 @@ let asaRefReturnPage = null;
         }
       });
     }
+    // Source 3: Community procedure mappings
+    if (asaCodeProceduresLoaded && asaCodeProcedures[code]) {
+      asaCodeProcedures[code].forEach(function(procName) {
+        if (!map[procName]) map[procName] = 0;
+      });
+    }
     return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
   }
 
@@ -7341,6 +7368,8 @@ const ASA_SECTION_ORDER = [
 let asaCodeAssignments = {};
 let asaEditMode = false;
 let asaSectionsLoaded = false;
+let asaCodeProcedures = {};
+let asaCodeProceduresLoaded = false;
 
 function loadAsaCodeSections() {
   if (!db) return Promise.resolve();
@@ -7352,6 +7381,19 @@ function loadAsaCodeSections() {
   }).catch(function(err) {
     console.warn('Failed to load ASA sections:', err);
     asaSectionsLoaded = true;
+  });
+}
+
+function loadAsaCodeProcedures() {
+  if (!db) return Promise.resolve();
+  return db.collection('asaCodeProcedures').doc('config').get().then(function(doc) {
+    if (doc.exists && doc.data().procedures) {
+      asaCodeProcedures = doc.data().procedures;
+    }
+    asaCodeProceduresLoaded = true;
+  }).catch(function(err) {
+    console.warn('Failed to load ASA procedures:', err);
+    asaCodeProceduresLoaded = true;
   });
 }
 
@@ -7388,61 +7430,95 @@ function renderAsaCodesPage() {
   if (saveBar) saveBar.classList.toggle('hidden', !asaEditMode);
 
   if (asaEditMode) {
-    // EDIT MODE: flat list with section dropdowns
-    let html = '<div class="asa-filter-bar">';
-    html += '<button class="asa-filter-btn active" onclick="filterAsaEdit(\'all\')">All</button>';
-    html += '<button class="asa-filter-btn" onclick="filterAsaEdit(\'unassigned\')">Unassigned</button>';
-    ASA_SECTION_ORDER.forEach(function(s) {
-      if (s === 'All Codes') return;
-      html += '<button class="asa-filter-btn" onclick="filterAsaEdit(\'' + escHtml(s) + '\')">' + escHtml(s) + '</button>';
-    });
-    html += '</div>';
-    html += '<div id="asaEditList">';
-    allCodes.forEach(function(code) {
-      const desc = (typeof ASA_CODE_DESCRIPTIONS !== 'undefined' && ASA_CODE_DESCRIPTIONS[code]) || '';
-      const bu = ASA_BASE_UNITS[code];
-      const current = asaCodeAssignments[code] || '';
-      html += '<div class="asa-edit-row" data-section="' + escHtml(current || 'unassigned') + '">';
-      html += '<span class="asa-compact-code">' + code + '</span>';
-      html += '<span class="asa-compact-desc">' + escHtml(desc) + '</span>';
-      html += '<span class="asa-compact-units">' + bu + 'u</span>';
-      html += '<select class="asa-edit-select" onchange="asaCodeAssignments[\'' + code + '\']=this.value;this.closest(\'.asa-edit-row\').dataset.section=this.value||\'unassigned\'">';
-      html += '<option value="">Unassigned</option>';
-      ASA_SECTION_ORDER.forEach(function(s) {
-        if (s === 'All Codes') return;
-        html += '<option value="' + escHtml(s) + '"' + (current === s ? ' selected' : '') + '>' + escHtml(s) + '</option>';
+    // EDIT MODE: section-based editor with text inputs and code chips
+    let html = '';
+    var unassignedCodes = allCodes.filter(function(c) { return !asaCodeAssignments[c]; });
+    if (unassignedCodes.length > 0) {
+      html += '<div class="asa-unassigned-summary"><strong>' + unassignedCodes.length + '</strong> codes unassigned. Type a code or keyword in any section below to assign it.</div>';
+    }
+    ASA_SECTION_ORDER.forEach(function(sectionName) {
+      if (sectionName === 'All Codes') return;
+      var sectionCodes = allCodes.filter(function(c) { return asaCodeAssignments[c] === sectionName; }).sort();
+      var sectionId = 'asaEditSection_' + sectionName.replace(/[^a-zA-Z0-9]/g, '_');
+      html += '<div class="cr-section asa-section-editor">';
+      html += '<div class="cr-section-header open" onclick="this.classList.toggle(\'open\');this.nextElementSibling.classList.toggle(\'open\')">';
+      html += '<span>' + escHtml(sectionName) + ' <span class="asa-section-count">(' + sectionCodes.length + ')</span></span>';
+      html += '<span class="cr-toggle">&#9654;</span></div>';
+      html += '<div class="cr-section-body open">';
+      html += '<div class="asa-section-input-row" id="' + sectionId + '_inputRow">';
+      html += '<input class="asa-section-input" type="text" placeholder="Type ASA code or keyword..." ';
+      html += 'oninput="asaEditorAutocomplete(this,\'' + escHtml(sectionName) + '\')" autocomplete="off">';
+      html += '</div>';
+      html += '<div class="asa-code-chips" id="' + sectionId + '_chips">';
+      if (sectionCodes.length === 0) {
+        html += '<div class="asa-section-empty">No codes assigned</div>';
+      }
+      sectionCodes.forEach(function(code) {
+        var desc = (ASA_CODE_DESCRIPTIONS && ASA_CODE_DESCRIPTIONS[code]) || '';
+        var shortDesc = desc.length > 25 ? desc.substring(0, 25) + '...' : desc;
+        html += '<span class="asa-code-chip" data-code="' + code + '">';
+        html += '<span class="chip-code">' + code + '</span>';
+        html += '<span class="chip-desc" title="' + escHtml(desc) + '">' + escHtml(shortDesc) + '</span>';
+        html += '<span class="chip-remove" onclick="removeAsaCodeFromSection(\'' + code + '\',\'' + escHtml(sectionName) + '\')" title="Remove">&times;</span>';
+        html += '</span>';
       });
-      html += '</select></div>';
+      html += '</div></div></div>';
     });
-    html += '</div>';
     container.innerHTML = html;
     if (editBtn) { editBtn.textContent = 'Done Editing'; editBtn.classList.add('active'); }
     return;
   }
 
-  // NORMAL MODE: grouped sections
+  // NORMAL MODE: grouped sections with procedure mapping
   if (editBtn) { editBtn.textContent = 'Edit Sections'; editBtn.classList.remove('active'); }
   let html = '';
   const inSelectMode = !!asaRefReturnPage;
+  const isAdminUser = (typeof isAdmin === 'function' && isAdmin());
+  const isLoggedIn = !!currentUser;
+
+  // Helper to render code row + procedures
+  function renderCodeRow(code, clickable) {
+    var desc = (ASA_CODE_DESCRIPTIONS && ASA_CODE_DESCRIPTIONS[code]) || '';
+    var bu = ASA_BASE_UNITS[code];
+    var rowHtml = '<div class="asa-compact-row' + (clickable ? ' asa-row' : '') + '" onclick="selectAsaCode(\'' + code + '\')" style="' + (clickable ? 'cursor:pointer' : '') + '">';
+    rowHtml += '<span class="asa-compact-code">' + code + '</span>';
+    rowHtml += '<span class="asa-compact-desc">' + escHtml(desc) + '</span>';
+    rowHtml += '<span class="asa-compact-units">' + bu + 'u</span></div>';
+    // Show procedures (not in select mode)
+    if (!inSelectMode) {
+      var procs = asaCodeProcedures[code] || [];
+      if (procs.length > 0 || isLoggedIn) {
+        rowHtml += '<div class="asa-procs-list">';
+        procs.forEach(function(proc) {
+          rowHtml += '<span class="asa-proc-tag">' + escHtml(proc);
+          if (isAdminUser) {
+            rowHtml += ' <span style="cursor:pointer;color:var(--text-dim);font-size:0.6rem;" onclick="event.stopPropagation();removeAsaCodeProcedure(\'' + code + '\',\'' + escHtml(proc).replace(/'/g, "\\'") + '\')">&times;</span>';
+          }
+          rowHtml += '</span>';
+        });
+        if (isLoggedIn) {
+          rowHtml += '<div class="asa-proc-add-row" onclick="event.stopPropagation()">';
+          rowHtml += '<input class="asa-proc-input" type="text" placeholder="Add procedure..." onkeydown="if(event.key===\'Enter\'){event.stopPropagation();saveAsaCodeProcedure(\'' + code + '\',this.value);this.value=\'\';}">';
+          rowHtml += '<button class="asa-proc-add-btn" onclick="event.stopPropagation();var inp=this.previousElementSibling;saveAsaCodeProcedure(\'' + code + '\',inp.value);inp.value=\'\';">+</button>';
+          rowHtml += '</div>';
+        }
+        rowHtml += '</div>';
+      }
+    }
+    return rowHtml;
+  }
 
   // Build sections (excluding "All Codes")
   ASA_SECTION_ORDER.forEach(function(sectionName) {
     if (sectionName === 'All Codes') return;
     const sectionCodes = allCodes.filter(function(c) { return asaCodeAssignments[c] === sectionName; });
-    if (sectionCodes.length === 0) return; // skip empty sections
-
+    if (sectionCodes.length === 0) return;
     html += '<div class="cr-section">';
     html += '<div class="cr-section-header" onclick="this.classList.toggle(\'open\');this.nextElementSibling.classList.toggle(\'open\')">';
     html += '<span>' + escHtml(sectionName) + ' (' + sectionCodes.length + ')</span><span class="cr-toggle">&#9654;</span></div>';
     html += '<div class="cr-section-body">';
-    html += '<table class="asa-ref-table"><thead><tr><th>Code</th><th>Description</th><th>Base Units</th><th>Startup Pts</th></tr></thead><tbody>';
-    sectionCodes.forEach(function(code) {
-      const desc = (typeof ASA_CODE_DESCRIPTIONS !== 'undefined' && ASA_CODE_DESCRIPTIONS[code]) || '';
-      const bu = ASA_BASE_UNITS[code];
-      html += '<tr class="asa-row" onclick="selectAsaCode(\'' + code + '\')">';
-      html += '<td>' + code + '</td><td>' + escHtml(desc) + '</td><td>' + bu + '</td><td>' + bu + '</td></tr>';
-    });
-    html += '</tbody></table></div></div>';
+    sectionCodes.forEach(function(code) { html += renderCodeRow(code, inSelectMode); });
+    html += '</div></div>';
   });
 
   // "All Codes" section — always last, always all codes, compact format
@@ -7450,27 +7526,93 @@ function renderAsaCodesPage() {
   html += '<div class="cr-section-header" onclick="this.classList.toggle(\'open\');this.nextElementSibling.classList.toggle(\'open\')">';
   html += '<span>All Codes (' + allCodes.length + ')</span><span class="cr-toggle">&#9654;</span></div>';
   html += '<div class="cr-section-body">';
-  allCodes.forEach(function(code) {
-    const desc = (typeof ASA_CODE_DESCRIPTIONS !== 'undefined' && ASA_CODE_DESCRIPTIONS[code]) || '';
-    const bu = ASA_BASE_UNITS[code];
-    html += '<div class="asa-compact-row' + (inSelectMode ? ' asa-row' : '') + '" onclick="selectAsaCode(\'' + code + '\')" style="' + (inSelectMode ? 'cursor:pointer' : '') + '">';
-    html += '<span class="asa-compact-code">' + code + '</span>';
-    html += '<span class="asa-compact-desc">' + escHtml(desc) + '</span>';
-    html += '<span class="asa-compact-units">' + bu + 'u</span></div>';
-  });
+  allCodes.forEach(function(code) { html += renderCodeRow(code, inSelectMode); });
   html += '</div></div>';
 
   container.innerHTML = html;
 }
 
-function filterAsaEdit(filter) {
-  document.querySelectorAll('.asa-filter-btn').forEach(function(btn) {
-    btn.classList.toggle('active', btn.textContent === filter || (filter === 'all' && btn.textContent === 'All') || (filter === 'unassigned' && btn.textContent === 'Unassigned'));
+function asaEditorAutocomplete(inputEl, sectionName) {
+  var query = inputEl.value.trim().toLowerCase();
+  var existing = inputEl.parentElement.querySelector('.asa-code-dropdown');
+  if (existing) existing.remove();
+  if (query.length < 2) return;
+  var allCodes = Object.keys(ASA_BASE_UNITS).sort();
+  var matches = allCodes.filter(function(code) {
+    if (asaCodeAssignments[code]) return false;
+    var desc = (ASA_CODE_DESCRIPTIONS && ASA_CODE_DESCRIPTIONS[code]) || '';
+    return code.startsWith(query) || desc.toLowerCase().indexOf(query) !== -1;
+  }).slice(0, 8);
+  if (matches.length === 0) return;
+  var ddHtml = '';
+  matches.forEach(function(code) {
+    var desc = (ASA_CODE_DESCRIPTIONS && ASA_CODE_DESCRIPTIONS[code]) || '';
+    ddHtml += '<div class="asa-code-dropdown-item" onclick="addAsaCodeToSection(\'' + code + '\',\'' + escHtml(sectionName) + '\')">';
+    ddHtml += '<span class="dd-code">' + code + '</span>';
+    ddHtml += '<span class="dd-desc">' + escHtml(desc) + '</span>';
+    ddHtml += '<span class="dd-units">' + ASA_BASE_UNITS[code] + 'u</span></div>';
   });
-  document.querySelectorAll('#asaEditList .asa-edit-row').forEach(function(row) {
-    if (filter === 'all') { row.style.display = ''; return; }
-    if (filter === 'unassigned') { row.style.display = (!row.dataset.section || row.dataset.section === 'unassigned') ? '' : 'none'; return; }
-    row.style.display = row.dataset.section === filter ? '' : 'none';
+  var dd = document.createElement('div');
+  dd.className = 'asa-code-dropdown';
+  dd.innerHTML = ddHtml;
+  inputEl.parentElement.appendChild(dd);
+  setTimeout(function() {
+    document.addEventListener('click', function closeDD(e) {
+      if (!e.target.closest('.asa-section-input-row')) {
+        if (dd.parentElement) dd.remove();
+        document.removeEventListener('click', closeDD);
+      }
+    });
+  }, 0);
+}
+
+function addAsaCodeToSection(code, sectionName) {
+  asaCodeAssignments[code] = sectionName;
+  renderAsaCodesPage();
+}
+
+function removeAsaCodeFromSection(code, sectionName) {
+  if (asaCodeAssignments[code] === sectionName) delete asaCodeAssignments[code];
+  renderAsaCodesPage();
+}
+
+function saveAsaCodeProcedure(code, procedureName) {
+  if (!db || !currentUser) { showToast('Sign in to add procedures'); return; }
+  procedureName = procedureName.trim();
+  if (!procedureName) return;
+  if (!asaCodeProcedures[code]) asaCodeProcedures[code] = [];
+  var exists = asaCodeProcedures[code].some(function(p) {
+    return p.toLowerCase() === procedureName.toLowerCase();
+  });
+  if (exists) { showToast('Procedure already listed'); return; }
+  asaCodeProcedures[code].push(procedureName);
+  var updateObj = { updatedAt: new Date().toISOString(), updatedBy: currentUser.uid };
+  updateObj['procedures.' + code] = firebase.firestore.FieldValue.arrayUnion(procedureName);
+  db.collection('asaCodeProcedures').doc('config').update(updateObj).catch(function() {
+    return db.collection('asaCodeProcedures').doc('config').set({ procedures: asaCodeProcedures, updatedAt: new Date().toISOString(), updatedBy: currentUser.uid });
+  }).then(function() {
+    showToast('Procedure added');
+    renderAsaCodesPage();
+  }).catch(function(err) {
+    console.error('Failed to save procedure:', err);
+    asaCodeProcedures[code] = asaCodeProcedures[code].filter(function(p) { return p.toLowerCase() !== procedureName.toLowerCase(); });
+    showToast('Save failed');
+  });
+}
+
+function removeAsaCodeProcedure(code, procedureName) {
+  if (!db || !currentUser || !(typeof isAdmin === 'function' && isAdmin())) return;
+  if (!asaCodeProcedures[code]) return;
+  asaCodeProcedures[code] = asaCodeProcedures[code].filter(function(p) { return p !== procedureName; });
+  if (asaCodeProcedures[code].length === 0) delete asaCodeProcedures[code];
+  db.collection('asaCodeProcedures').doc('config').set({
+    procedures: asaCodeProcedures, updatedAt: new Date().toISOString(), updatedBy: currentUser.uid
+  }).then(function() {
+    showToast('Procedure removed');
+    renderAsaCodesPage();
+  }).catch(function(err) {
+    console.error('Failed to remove procedure:', err);
+    showToast('Remove failed');
   });
 }
 
@@ -18066,7 +18208,7 @@ auth.onAuthStateChanged(async (user) => {
     const sharedLoadPromise = loadSharedCaseOverrides().then(() => {
       return loadSharedCases(); // applies overrides after loading
     }).then(() => {
-      return Promise.all([loadSurgeonMappings(), loadUserProfiles(), loadAsaCodeSections()]);
+      return Promise.all([loadSurgeonMappings(), loadUserProfiles(), loadAsaCodeSections(), loadAsaCodeProcedures()]);
     });
     const sharedLoadTimeout = new Promise(resolve => setTimeout(() => {
       if (!sharedCasesLoaded) {
