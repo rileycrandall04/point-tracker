@@ -1390,6 +1390,8 @@ input.mil-time.invalid {
 .asa-edit-code-row .chip-code { font-weight: 600; color: var(--primary); min-width: 48px; font-size: 0.78rem; }
 .asa-edit-code-row .chip-remove { color: var(--text-dim); cursor: pointer; font-size: 0.85rem; line-height: 1; padding: 0 4px; }
 .asa-edit-code-row .chip-remove:hover { color: #ef4444; }
+.asa-bu-input { width: 40px; padding: 4px 4px; font-size: 0.75rem; text-align: center; background: var(--surface); color: var(--accent); border: 1px solid var(--border); border-radius: 4px; font-weight: 600; }
+.asa-bu-input:focus { border-color: var(--primary); outline: none; }
 .asa-desc-input { flex: 1; padding: 4px 8px; font-size: 0.75rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
 .asa-desc-input:focus { border-color: var(--primary); outline: none; }
 .asa-code-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 100; background: var(--surface); border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; max-height: 180px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
@@ -7272,7 +7274,7 @@ let asaRefReturnPage = null;
     code = code.trim();
     // Auto-fill base units from lookup table
     if (typeof ASA_BASE_UNITS !== 'undefined' && ASA_BASE_UNITS[code] !== undefined) {
-      baseUnitsInput.value = ASA_BASE_UNITS[code];
+      baseUnitsInput.value = getAsaBU(code);
     }
     // Show procedure suggestions
     if (code.length >= 5) {
@@ -7350,7 +7352,7 @@ let asaRefReturnPage = null;
   window.selectAsaCode = function(code) {
     if (!asaRefReturnPage) return;
     asaInput.value = code;
-    const bu = (typeof ASA_BASE_UNITS !== 'undefined') ? ASA_BASE_UNITS[code] : undefined;
+    const bu = (typeof ASA_BASE_UNITS !== 'undefined') ? getAsaBU(code) : undefined;
     if (bu !== undefined) baseUnitsInput.value = bu;
     // Navigate back
     document.getElementById('asaCodesBackBtn').click();
@@ -7592,6 +7594,7 @@ var DEFAULT_ASA_DESCRIPTIONS = {
 
 let asaCodeAssignments = {};   // code → [section1, section2, ...]
 let asaCustomDescriptions = {}; // code__section → description
+let asaCustomBaseUnits = {};   // code → custom base unit value
 let asaEditMode = false;
 let asaSectionsLoaded = false;
 let asaCodeProcedures = {};
@@ -7643,6 +7646,11 @@ function getAsaDesc(code, section) {
   return asaCustomDescriptions[code] || '';
 }
 
+function getAsaBU(code) {
+  if (asaCustomBaseUnits[code] !== undefined) return asaCustomBaseUnits[code];
+  return ASA_BASE_UNITS[code];
+}
+
 function applyAsaDefaults() {
   // Merge defaults: defaults are base, Firestore overrides
   Object.keys(DEFAULT_ASA_ASSIGNMENTS).forEach(function(code) {
@@ -7677,6 +7685,7 @@ function loadAsaCodeSections() {
     if (doc.exists) {
       if (doc.data().assignments) asaCodeAssignments = doc.data().assignments;
       if (doc.data().descriptions) asaCustomDescriptions = doc.data().descriptions;
+      if (doc.data().baseUnits) asaCustomBaseUnits = doc.data().baseUnits;
     }
     applyAsaDefaults();
     asaSectionsLoaded = true;
@@ -7705,6 +7714,7 @@ function saveAsaCodeSections() {
   db.collection('asaCodeSections').doc('config').set({
     assignments: asaCodeAssignments,
     descriptions: asaCustomDescriptions,
+    baseUnits: asaCustomBaseUnits,
     updatedAt: new Date().toISOString(),
     updatedBy: currentUser.uid
   }).then(function() {
@@ -7761,8 +7771,10 @@ function renderAsaCodesPage() {
       }
       sectionCodes.forEach(function(code) {
         var desc = getAsaDesc(code, sectionName);
+        var bu = getAsaBU(code);
         html += '<div class="asa-edit-code-row">';
         html += '<span class="chip-code">' + code + '</span>';
+        html += '<input class="asa-bu-input" type="number" value="' + (bu !== undefined ? bu : '') + '" placeholder="BU" min="0" max="99" step="1" onchange="asaCustomBaseUnits[\'' + code + '\']=Number(this.value)" title="Base Units">';
         html += '<input class="asa-desc-input" type="text" value="' + escHtml(desc) + '" placeholder="Description..." onchange="asaCustomDescriptions[\'' + code + '__' + escHtml(sectionName) + '\']=this.value">';
         html += '<span class="chip-remove" onclick="removeAsaCodeFromSection(\'' + code + '\',\'' + escHtml(sectionName) + '\')" title="Remove">&times;</span>';
         html += '</div>';
@@ -7784,7 +7796,7 @@ function renderAsaCodesPage() {
   // Helper to render code row + procedures
   function renderCodeRow(code, clickable, section) {
     var desc = getAsaDesc(code, section);
-    var bu = ASA_BASE_UNITS[code];
+    var bu = getAsaBU(code);
     var rowHtml = '<div class="asa-compact-row' + (clickable ? ' asa-row' : '') + '" onclick="selectAsaCode(\'' + code + '\')" style="' + (clickable ? 'cursor:pointer' : '') + '">';
     rowHtml += '<span class="asa-compact-code">' + code + '</span>';
     rowHtml += '<span class="asa-compact-desc">' + escHtml(desc) + '</span>';
@@ -7855,7 +7867,7 @@ function asaEditorAutocomplete(inputEl, sectionName) {
     ddHtml += '<div class="asa-code-dropdown-item" onclick="addAsaCodeToSection(\'' + code + '\',\'' + escHtml(sectionName) + '\')">';
     ddHtml += '<span class="dd-code">' + code + '</span>';
     ddHtml += '<span class="dd-desc">' + escHtml(desc) + '</span>';
-    ddHtml += '<span class="dd-units">' + ASA_BASE_UNITS[code] + 'u</span></div>';
+    ddHtml += '<span class="dd-units">' + getAsaBU(code) + 'u</span></div>';
   });
   var dd = document.createElement('div');
   dd.className = 'asa-code-dropdown';
@@ -17795,7 +17807,7 @@ function parseBillingSheetText(text) {
     const blockTextUpper = blockText.toUpperCase();
 
     const asaCode = asaMatches[i].code;
-    const baseUnits = ASA_BASE_UNITS[asaCode] || 0;
+    const baseUnits = getAsaBU(asaCode) || 0;
 
     // Find valid times in this block (ASA codes and years already filtered above)
     const validTimes = allTimes.filter(t => t.index > blockStart && t.index < blockEnd);
@@ -18104,7 +18116,7 @@ function renderScanCaseCards() {
 
   container.innerHTML = '';
   scanParsedCases.forEach((c, idx) => {
-    const unitLabel = ASA_BASE_UNITS[c.asaCode] ? c.asaCode : 'Unknown';
+    const unitLabel = (ASA_BASE_UNITS[c.asaCode] !== undefined || asaCustomBaseUnits[c.asaCode] !== undefined) ? c.asaCode : 'Unknown';
     const tags = [];
     if (c.isEmergency) tags.push('<span class="scc-tag emergency">Emergency</span>');
     if (c.isShared) tags.push('<span class="scc-tag shared">Shared</span>');
@@ -18211,7 +18223,7 @@ function renderScanCaseCards() {
       }
       // Auto-lookup base units when ASA code changes
       if (field === 'asaCode' && el.value.length === 5) {
-        const units = ASA_BASE_UNITS[el.value];
+        const units = getAsaBU(el.value);
         if (units !== undefined) {
           scanParsedCases[idx].baseUnits = units;
           const unitsInput = container.querySelector(`input[data-idx="${idx}"][data-field="baseUnits"]`);
