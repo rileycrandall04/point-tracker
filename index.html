@@ -7371,27 +7371,312 @@ const ASA_SECTION_ORDER = [
   'Cardioversion - TEE', 'Transplant', 'OB', 'IR', 'All Codes'
 ];
 
-let asaCodeAssignments = {};
-let asaCustomDescriptions = {};
+// Default section assignments: code → [sections] (supports multi-section)
+var DEFAULT_ASA_ASSIGNMENTS = {
+  // General Surgery
+  '00400': ['General Surgery','Urology'], '00404': ['General Surgery'], '00402': ['General Surgery'],
+  '00790': ['General Surgery'], '00802': ['General Surgery'], '00840': ['General Surgery','Gyn','OB'],
+  '00830': ['General Surgery'], '00752': ['General Surgery'], '00832': ['General Surgery'],
+  '00750': ['General Surgery'], '00792': ['General Surgery'], '00797': ['General Surgery'],
+  '00902': ['General Surgery'], '00300': ['General Surgery','Urology'],
+  '01610': ['General Surgery'],
+  // Endoscopy
+  '00700': ['Endoscopy'], '00731': ['Endoscopy'], '00732': ['Endoscopy'],
+  '00811': ['Endoscopy'], '00812': ['Endoscopy'], '00813': ['Endoscopy'],
+  // ENT
+  '00126': ['ENT'], '00120': ['ENT'], '00170': ['ENT'], '00160': ['ENT'],
+  '00190': ['ENT'], '00320': ['ENT'],
+  // Eye
+  '00142': ['Eye'], '00145': ['Eye'], '00144': ['Eye'], '00140': ['Eye'], '00103': ['Eye'],
+  // Ortho
+  '01620': ['Ortho'], '01630': ['Ortho'], '01638': ['Ortho'], '00450': ['Ortho'],
+  '01744': ['Ortho'], '01730': ['Ortho'], '01740': ['Ortho'], '01810': ['Ortho'],
+  '01820': ['Ortho'], '01830': ['Ortho'], '00540': ['Ortho','Cardiac/Thoracic/Vascular'],
+  '00541': ['Ortho','Cardiac/Thoracic/Vascular'], '01170': ['Ortho'], '01173': ['Ortho'],
+  '01202': ['Ortho'], '01214': ['Ortho'], '01215': ['Ortho'], '01210': ['Ortho'],
+  '01220': ['Ortho'], '01230': ['Ortho'], '01232': ['Ortho'], '01380': ['Ortho'],
+  '01400': ['Ortho'], '01402': ['Ortho'], '01392': ['Ortho'], '01482': ['Ortho'],
+  '01462': ['Ortho'], '01464': ['Ortho'], '01470': ['Ortho'], '01472': ['Ortho'],
+  '01480': ['Ortho'], '01486': ['Ortho'],
+  // Gyn
+  '00851': ['Gyn','OB'], '00944': ['Gyn'], '00942': ['Gyn'],
+  '00860': ['Gyn','Urology'], '00940': ['Gyn','OB'], '00948': ['Gyn','OB'],
+  '00952': ['Gyn'],
+  // Neuro
+  '00104': ['Neuro'], '00600': ['Neuro'], '00620': ['Neuro'], '00630': ['Neuro'],
+  '00670': ['Neuro'], '00220': ['Neuro'], '00216': ['Neuro'], '00211': ['Neuro'],
+  '00210': ['Neuro'], '01941': ['Neuro'], '01942': ['Neuro'],
+  // Urology
+  '00865': ['Urology'], '00862': ['Urology'], '00873': ['Urology'],
+  '00910': ['Urology'], '00918': ['Urology'], '00912': ['Urology'],
+  '00914': ['Urology'], '00920': ['Urology'],
+  // Cardiac/Thoracic/Vascular
+  '00567': ['Cardiac/Thoracic/Vascular'], '00562': ['Cardiac/Thoracic/Vascular'],
+  '00563': ['Cardiac/Thoracic/Vascular'], '00550': ['Cardiac/Thoracic/Vascular'],
+  '00528': ['Cardiac/Thoracic/Vascular'], '00350': ['Cardiac/Thoracic/Vascular'],
+  '00532': ['Cardiac/Thoracic/Vascular','OB'], '01270': ['Cardiac/Thoracic/Vascular'],
+  '01844': ['Cardiac/Thoracic/Vascular'], '01916': ['Cardiac/Thoracic/Vascular'],
+  '00520': ['Cardiac/Thoracic/Vascular'], '00542': ['Cardiac/Thoracic/Vascular'],
+  // Cath Lab - EP
+  '00530': ['Cath Lab - EP'], '00534': ['Cath Lab - EP'], '00537': ['Cath Lab - EP'],
+  '00560': ['Cath Lab - EP'],
+  // Cardioversion - TEE
+  '00410': ['Cardioversion - TEE','Cath Lab - EP'], '01922': ['Cardioversion - TEE','Cath Lab - EP','OB'],
+  // Transplant
+  '00580': ['Transplant'], '00794': ['Transplant'], '00796': ['Transplant'],
+  '00868': ['Transplant'], '01990': ['Transplant'],
+  // OB
+  '01967': ['OB'], '01968': ['OB'], '01961': ['OB'], '01965': ['OB'],
+  '01958': ['OB'], '01962': ['OB'],
+  '01112': ['OB'], '01924': ['OB'], '01926': ['OB']
+};
+
+// Default section-specific descriptions: code__section → description
+var DEFAULT_ASA_DESCRIPTIONS = {
+  // General Surgery
+  '00400__General Surgery': 'Soft Tissue (Limbs, Ant Trunk, Perineum)',
+  '00404__General Surgery': 'Mastectomy (Complete/Radical)',
+  '00402__General Surgery': 'Breast Reconstruction/Mammoplasty',
+  '00790__General Surgery': 'Upper Abdominal / Nissen Fundoplication',
+  '00802__General Surgery': 'Panniculectomy',
+  '00840__General Surgery': 'Lower Abdominal (Appy, Lap Ing. Hernia, etc)',
+  '00830__General Surgery': 'Non-Lap Inguinal Hernia Repair (1yr-adult)',
+  '00752__General Surgery': 'Ventral Hernia (Upper)',
+  '00832__General Surgery': 'Ventral Hernia (Lower)',
+  '00750__General Surgery': 'Umbilical Hernia (1yr-adult)',
+  '00792__General Surgery': 'Liver Resection',
+  '00797__General Surgery': 'Gastric Bypass',
+  '00902__General Surgery': 'Hemorrhoidectomy/Anorectal',
+  '00300__General Surgery': 'Soft Tissue (Head, Neck, Posterior Trunk)',
+  '01610__General Surgery': 'Axillary Node Dissection/Sentinel Biopsy',
+  // Endoscopy
+  '00700__Endoscopy': 'Percutaneous G Tube',
+  '00731__Endoscopy': 'EGD',
+  '00732__Endoscopy': 'ERCP',
+  '00811__Endoscopy': 'Interventional Colon Procedure',
+  '00812__Endoscopy': 'Screening Colonoscopy',
+  '00813__Endoscopy': 'Combined EGD/Colonoscopy',
+  // ENT
+  '00126__ENT': 'BMT',
+  '00120__ENT': 'Ear- External, Middle, Internal',
+  '00170__ENT': 'Oral- Other (T&A)',
+  '00160__ENT': 'Nasal/Sinus',
+  '00190__ENT': 'Facial Bone',
+  '00320__ENT': 'Esophagus/Neck (Thyroid, Larynx)',
+  // Eye
+  '00142__Eye': 'Lens',
+  '00145__Eye': 'Vitreoretinal',
+  '00144__Eye': 'Corneal Tx',
+  '00140__Eye': 'Eye-Other',
+  '00103__Eye': 'Blepharoplasty',
+  // Ortho
+  '01620__Ortho': 'Shoulder Manipulation',
+  '01630__Ortho': 'Shoulder Arthroscopy',
+  '01638__Ortho': 'Total Shoulder or Revision',
+  '00450__Ortho': 'Clavicle ORIF',
+  '01744__Ortho': 'Humeral Shaft',
+  '01730__Ortho': 'Closed Elbow/Supracondylar',
+  '01740__Ortho': 'Open Elbow/Supracondylar',
+  '01810__Ortho': 'Hand (Soft Tissue)',
+  '01820__Ortho': 'Wrist/Hand (Closed)',
+  '01830__Ortho': 'Wrist/Hand (Open or Scope)',
+  '00540__Ortho': 'Rib Plating',
+  '00541__Ortho': 'Rib Plating (One Lung Ventilation)',
+  '01170__Ortho': 'Pubic Symphysis ORIF',
+  '01173__Ortho': 'Pelvis or Acetabulum FX Open',
+  '01202__Ortho': 'Hip Arthroscopy',
+  '01214__Ortho': 'Total Hip',
+  '01215__Ortho': 'Total Hip Revision',
+  '01210__Ortho': 'Hip Joint (Open)',
+  '01220__Ortho': 'Upper 2/3 Femur (Closed)',
+  '01230__Ortho': 'Upper 2/3 Femur (Open)',
+  '01232__Ortho': 'Above Knee Amputation',
+  '01380__Ortho': 'Knee Manipulation',
+  '01400__Ortho': 'Knee (Scope or Open)',
+  '01402__Ortho': 'Total Knee',
+  '01392__Ortho': 'Upper Tib/Fib/Patella Open',
+  '01482__Ortho': 'Below Knee Amputation',
+  '01462__Ortho': 'Lower Leg/Ankle/Foot (Closed)',
+  '01464__Ortho': 'Ankle, Foot (Arthroscopic)',
+  '01470__Ortho': 'Lower Leg, Ankle, Foot (Soft Tissue)',
+  '01472__Ortho': 'Achilles',
+  '01480__Ortho': 'Lower Leg, Ankle, Foot (Open)',
+  '01486__Ortho': 'Total Ankle',
+  // Gyn
+  '00840__Gyn': 'Abd. Hysterectomy',
+  '00851__Gyn': 'Tubal Ligation',
+  '00944__Gyn': 'Vaginal Hysterectomy',
+  '00942__Gyn': 'Ant. & Post. Repairs',
+  '00860__Gyn': 'Extraperitoneal Lower ABD/Urinary tract',
+  '00940__Gyn': 'Vaginal Procedure (Biopsy, repair)',
+  '00948__Gyn': 'Cerclage',
+  '00952__Gyn': 'Hysteroscopy/Hysterosalpingography',
+  // Neuro
+  '00104__Neuro': 'ECT',
+  '00600__Neuro': 'Cervical Spine',
+  '00620__Neuro': 'Thoracic Spine',
+  '00630__Neuro': 'Lumbar Lam/Discectomy',
+  '00670__Neuro': 'Extensive Spine',
+  '00220__Neuro': 'VP Shunt',
+  '00216__Neuro': 'Intracranial Vascular',
+  '00211__Neuro': 'Craniotomy - Evac of Hematoma',
+  '00210__Neuro': 'Intracranial (incl. Deep Brain Stim)',
+  '01941__Neuro': 'Stim Cervical/Thoracic w/o Laminectomy',
+  '01942__Neuro': 'Stim Lumbar/Sacral w/o Laminectomy',
+  // Urology
+  '00300__Urology': 'Interstim for Incontinence',
+  '00400__Urology': 'Brachytherapy',
+  '00860__Urology': 'Varicocele/Stress Incontinence',
+  '00865__Urology': 'Radical Prostatectomy (Incl. Robotic)',
+  '00862__Urology': 'Nephrectomy (incl. Donor)',
+  '00873__Urology': 'ESWL',
+  '00910__Urology': 'Cysto (Bladder)',
+  '00918__Urology': 'Cysto (Ureter)',
+  '00912__Urology': 'TURBT',
+  '00914__Urology': 'TURP',
+  '00920__Urology': 'Male Genitalia (Urethroplasty, Hydrocele)',
+  // Cardiac/Thoracic/Vascular
+  '00567__Cardiac/Thoracic/Vascular': 'CABG with Pump Oxygenator',
+  '00562__Cardiac/Thoracic/Vascular': 'Cardiac Valve',
+  '00563__Cardiac/Thoracic/Vascular': 'Cardiac with Circ Arrest',
+  '00550__Cardiac/Thoracic/Vascular': 'Sternal Debridement',
+  '00528__Cardiac/Thoracic/Vascular': 'Mediastinoscopy',
+  '00350__Cardiac/Thoracic/Vascular': 'Carotid Endarterectomy',
+  '00532__Cardiac/Thoracic/Vascular': 'CVC/Dialysis Access (DLTC)',
+  '01270__Cardiac/Thoracic/Vascular': 'Fem/Pop Bypass (Upper Leg)',
+  '01844__Cardiac/Thoracic/Vascular': 'AV Fistula Creation',
+  '01916__Cardiac/Thoracic/Vascular': 'Diagnostic Angio/Venogram',
+  '00520__Cardiac/Thoracic/Vascular': 'Bronchoscopy/EBUS',
+  '00540__Cardiac/Thoracic/Vascular': 'Thoracotomy (NOT 1 Lung Ventilation)',
+  '00541__Cardiac/Thoracic/Vascular': 'VATS/Thoracotomy (1 Lung Ventilation)',
+  '00542__Cardiac/Thoracic/Vascular': 'Lung Decortication',
+  // Cath Lab - EP
+  '00530__Cath Lab - EP': 'Pacemaker',
+  '00534__Cath Lab - EP': 'AICD',
+  '00537__Cath Lab - EP': 'Cardiac EP',
+  '00560__Cath Lab - EP': 'Cardiac Surg w/o CPB (TAVR, Mitral Clip)',
+  '00410__Cath Lab - EP': 'Sedation for Cardioversion',
+  '01922__Cath Lab - EP': 'Sedation for TEE',
+  // Cardioversion - TEE
+  '00410__Cardioversion - TEE': 'Sedation for Cardioversion',
+  '01922__Cardioversion - TEE': 'Sedation for TEE',
+  // Transplant
+  '00580__Transplant': 'Heart Transplant',
+  '00794__Transplant': 'Pancreas Transplant',
+  '00796__Transplant': 'Liver Transplant',
+  '00868__Transplant': 'Kidney Transplant',
+  '01990__Transplant': 'Physiologic Support for Organ Procurement',
+  // OB
+  '01967__OB': 'Labor Epidural',
+  '01968__OB': 'Cesarean Delivery following Labor',
+  '01961__OB': 'Cesarean Delivery Only',
+  '01965__OB': 'Incomplete/Missed Abortion',
+  '00940__OB': 'Labor Epidural to Vaginal Procedure / D&C for Post Part Hemorrhage',
+  '00851__OB': 'Tubal Ligation',
+  '00948__OB': 'Cerclage',
+  '01958__OB': 'External Cephalic Version',
+  '01962__OB': 'Hysterectomy following Delivery',
+  '00840__OB': 'Fetal Transfusion',
+  '00532__OB': 'Anesthesia for Central Line',
+  '01112__OB': 'Bone Marrow Biopsy',
+  '01922__OB': 'Non-Invasive Imaging',
+  '01924__OB': 'IR Arterial Proc',
+  '01926__OB': 'IR (Intracranial, Intracardiac, Aortic)'
+};
+
+let asaCodeAssignments = {};   // code → [section1, section2, ...]
+let asaCustomDescriptions = {}; // code__section → description
 let asaEditMode = false;
 let asaSectionsLoaded = false;
 let asaCodeProcedures = {};
 let asaCodeProceduresLoaded = false;
 
-function getAsaDesc(code) {
+// Helper: check if code is in a given section
+function codeInSection(code, sectionName) {
+  var a = asaCodeAssignments[code];
+  if (!a) return false;
+  if (Array.isArray(a)) return a.indexOf(sectionName) !== -1;
+  return a === sectionName; // backward compat with string
+}
+
+// Helper: check if code is assigned to any section
+function codeIsAssigned(code) {
+  var a = asaCodeAssignments[code];
+  if (!a) return false;
+  if (Array.isArray(a)) return a.length > 0;
+  return true;
+}
+
+// Helper: add code to section (array-based)
+function assignCodeToSection(code, sectionName) {
+  if (!asaCodeAssignments[code]) asaCodeAssignments[code] = [];
+  if (!Array.isArray(asaCodeAssignments[code])) {
+    asaCodeAssignments[code] = [asaCodeAssignments[code]]; // migrate string
+  }
+  if (asaCodeAssignments[code].indexOf(sectionName) === -1) {
+    asaCodeAssignments[code].push(sectionName);
+  }
+}
+
+// Helper: remove code from section
+function unassignCodeFromSection(code, sectionName) {
+  if (!asaCodeAssignments[code]) return;
+  if (!Array.isArray(asaCodeAssignments[code])) {
+    if (asaCodeAssignments[code] === sectionName) delete asaCodeAssignments[code];
+    return;
+  }
+  var idx = asaCodeAssignments[code].indexOf(sectionName);
+  if (idx !== -1) asaCodeAssignments[code].splice(idx, 1);
+  if (asaCodeAssignments[code].length === 0) delete asaCodeAssignments[code];
+}
+
+function getAsaDesc(code, section) {
+  if (section && asaCustomDescriptions[code + '__' + section]) {
+    return asaCustomDescriptions[code + '__' + section];
+  }
   return asaCustomDescriptions[code] || '';
 }
 
+function applyAsaDefaults() {
+  // Merge defaults: defaults are base, Firestore overrides
+  Object.keys(DEFAULT_ASA_ASSIGNMENTS).forEach(function(code) {
+    if (!asaCodeAssignments[code]) {
+      asaCodeAssignments[code] = DEFAULT_ASA_ASSIGNMENTS[code].slice(); // copy array
+    } else if (!Array.isArray(asaCodeAssignments[code])) {
+      // Migrate old string format to array
+      asaCodeAssignments[code] = [asaCodeAssignments[code]];
+    }
+  });
+  // Migrate any remaining string values from Firestore
+  Object.keys(asaCodeAssignments).forEach(function(code) {
+    if (!Array.isArray(asaCodeAssignments[code])) {
+      asaCodeAssignments[code] = [asaCodeAssignments[code]];
+    }
+  });
+  // Merge default descriptions (don't overwrite Firestore values)
+  Object.keys(DEFAULT_ASA_DESCRIPTIONS).forEach(function(key) {
+    if (!asaCustomDescriptions[key]) {
+      asaCustomDescriptions[key] = DEFAULT_ASA_DESCRIPTIONS[key];
+    }
+  });
+}
+
 function loadAsaCodeSections() {
-  if (!db) return Promise.resolve();
+  if (!db) {
+    applyAsaDefaults();
+    asaSectionsLoaded = true;
+    return Promise.resolve();
+  }
   return db.collection('asaCodeSections').doc('config').get().then(function(doc) {
     if (doc.exists) {
       if (doc.data().assignments) asaCodeAssignments = doc.data().assignments;
       if (doc.data().descriptions) asaCustomDescriptions = doc.data().descriptions;
     }
+    applyAsaDefaults();
     asaSectionsLoaded = true;
   }).catch(function(err) {
     console.warn('Failed to load ASA sections:', err);
+    applyAsaDefaults();
     asaSectionsLoaded = true;
   });
 }
@@ -7445,13 +7730,13 @@ function renderAsaCodesPage() {
   if (asaEditMode) {
     // EDIT MODE: section-based editor with text inputs and code chips
     let html = '';
-    var unassignedCodes = allCodes.filter(function(c) { return !asaCodeAssignments[c]; });
+    var unassignedCodes = allCodes.filter(function(c) { return !codeIsAssigned(c); });
     if (unassignedCodes.length > 0) {
       html += '<div class="asa-unassigned-summary"><strong>' + unassignedCodes.length + '</strong> codes unassigned. Type a code or keyword in any section below to assign it.</div>';
     }
     ASA_SECTION_ORDER.forEach(function(sectionName) {
       if (sectionName === 'All Codes') return;
-      var sectionCodes = allCodes.filter(function(c) { return asaCodeAssignments[c] === sectionName; }).sort();
+      var sectionCodes = allCodes.filter(function(c) { return codeInSection(c, sectionName); }).sort();
       var sectionId = 'asaEditSection_' + sectionName.replace(/[^a-zA-Z0-9]/g, '_');
       html += '<div class="cr-section asa-section-editor">';
       html += '<div class="cr-section-header open" onclick="this.classList.toggle(\'open\');this.nextElementSibling.classList.toggle(\'open\')">';
@@ -7469,10 +7754,10 @@ function renderAsaCodesPage() {
         html += '<div class="asa-section-empty">No codes assigned</div>';
       }
       sectionCodes.forEach(function(code) {
-        var desc = getAsaDesc(code);
+        var desc = getAsaDesc(code, sectionName);
         html += '<div class="asa-edit-code-row">';
         html += '<span class="chip-code">' + code + '</span>';
-        html += '<input class="asa-desc-input" type="text" value="' + escHtml(desc) + '" placeholder="Description..." onchange="asaCustomDescriptions[\'' + code + '\']=this.value">';
+        html += '<input class="asa-desc-input" type="text" value="' + escHtml(desc) + '" placeholder="Description..." onchange="asaCustomDescriptions[\'' + code + '__' + escHtml(sectionName) + '\']=this.value">';
         html += '<span class="chip-remove" onclick="removeAsaCodeFromSection(\'' + code + '\',\'' + escHtml(sectionName) + '\')" title="Remove">&times;</span>';
         html += '</div>';
       });
@@ -7491,8 +7776,8 @@ function renderAsaCodesPage() {
   const isLoggedIn = !!currentUser;
 
   // Helper to render code row + procedures
-  function renderCodeRow(code, clickable) {
-    var desc = getAsaDesc(code);
+  function renderCodeRow(code, clickable, section) {
+    var desc = getAsaDesc(code, section);
     var bu = ASA_BASE_UNITS[code];
     var rowHtml = '<div class="asa-compact-row' + (clickable ? ' asa-row' : '') + '" onclick="selectAsaCode(\'' + code + '\')" style="' + (clickable ? 'cursor:pointer' : '') + '">';
     rowHtml += '<span class="asa-compact-code">' + code + '</span>';
@@ -7525,13 +7810,13 @@ function renderAsaCodesPage() {
   // Build sections (excluding "All Codes")
   ASA_SECTION_ORDER.forEach(function(sectionName) {
     if (sectionName === 'All Codes') return;
-    const sectionCodes = allCodes.filter(function(c) { return asaCodeAssignments[c] === sectionName; });
+    const sectionCodes = allCodes.filter(function(c) { return codeInSection(c, sectionName); });
     if (sectionCodes.length === 0) return;
     html += '<div class="cr-section">';
     html += '<div class="cr-section-header" onclick="this.classList.toggle(\'open\');this.nextElementSibling.classList.toggle(\'open\')">';
     html += '<span>' + escHtml(sectionName) + ' (' + sectionCodes.length + ')</span><span class="cr-toggle">&#9654;</span></div>';
     html += '<div class="cr-section-body">';
-    sectionCodes.forEach(function(code) { html += renderCodeRow(code, inSelectMode); });
+    sectionCodes.forEach(function(code) { html += renderCodeRow(code, inSelectMode, sectionName); });
     html += '</div></div>';
   });
 
@@ -7540,7 +7825,7 @@ function renderAsaCodesPage() {
   html += '<div class="cr-section-header" onclick="this.classList.toggle(\'open\');this.nextElementSibling.classList.toggle(\'open\')">';
   html += '<span>All Codes (' + allCodes.length + ')</span><span class="cr-toggle">&#9654;</span></div>';
   html += '<div class="cr-section-body">';
-  allCodes.forEach(function(code) { html += renderCodeRow(code, inSelectMode); });
+  allCodes.forEach(function(code) { html += renderCodeRow(code, inSelectMode, null); });
   html += '</div></div>';
 
   container.innerHTML = html;
@@ -7553,14 +7838,14 @@ function asaEditorAutocomplete(inputEl, sectionName) {
   if (query.length < 2) return;
   var allCodes = Object.keys(ASA_BASE_UNITS).sort();
   var matches = allCodes.filter(function(code) {
-    if (asaCodeAssignments[code]) return false;
-    var desc = getAsaDesc(code);
+    if (codeInSection(code, sectionName)) return false;
+    var desc = getAsaDesc(code, sectionName);
     return code.startsWith(query) || desc.toLowerCase().indexOf(query) !== -1;
   }).slice(0, 8);
   if (matches.length === 0) return;
   var ddHtml = '';
   matches.forEach(function(code) {
-    var desc = getAsaDesc(code);
+    var desc = getAsaDesc(code, sectionName);
     ddHtml += '<div class="asa-code-dropdown-item" onclick="addAsaCodeToSection(\'' + code + '\',\'' + escHtml(sectionName) + '\')">';
     ddHtml += '<span class="dd-code">' + code + '</span>';
     ddHtml += '<span class="dd-desc">' + escHtml(desc) + '</span>';
@@ -7588,9 +7873,9 @@ function asaEditorAddFromInput(inputEl, sectionName) {
   var added = 0;
   var notFound = [];
   tokens.forEach(function(token) {
-    // Direct code match
-    if (ASA_BASE_UNITS[token] && !asaCodeAssignments[token]) {
-      asaCodeAssignments[token] = sectionName;
+    // Direct code match — allow adding to this section even if in other sections
+    if (ASA_BASE_UNITS[token] && !codeInSection(token, sectionName)) {
+      assignCodeToSection(token, sectionName);
       added++;
       return;
     }
@@ -7598,12 +7883,12 @@ function asaEditorAddFromInput(inputEl, sectionName) {
     var lq = token.toLowerCase();
     var allCodes = Object.keys(ASA_BASE_UNITS).sort();
     var match = allCodes.find(function(code) {
-      if (asaCodeAssignments[code]) return false;
-      var desc = getAsaDesc(code);
+      if (codeInSection(code, sectionName)) return false;
+      var desc = getAsaDesc(code, sectionName);
       return code.startsWith(lq) || desc.toLowerCase().indexOf(lq) !== -1;
     });
     if (match) {
-      asaCodeAssignments[match] = sectionName;
+      assignCodeToSection(match, sectionName);
       added++;
     } else {
       notFound.push(token);
@@ -7619,12 +7904,12 @@ function asaEditorAddFromInput(inputEl, sectionName) {
 }
 
 function addAsaCodeToSection(code, sectionName) {
-  asaCodeAssignments[code] = sectionName;
+  assignCodeToSection(code, sectionName);
   renderAsaCodesPage();
 }
 
 function removeAsaCodeFromSection(code, sectionName) {
-  if (asaCodeAssignments[code] === sectionName) delete asaCodeAssignments[code];
+  unassignCodeFromSection(code, sectionName);
   renderAsaCodesPage();
 }
 
@@ -17399,7 +17684,7 @@ const ASA_BASE_UNITS = {
   '00754': 7, '00756': 7, '00770': 7, '00790': 7, '00792': 7, '00794': 8,
   '00796': 7, '00797': 9,
   // Perineum
-  '00800': 3, '00802': 5, '00810': 4, '00812': 5, '00820': 3, '00830': 5,
+  '00800': 3, '00802': 5, '00810': 4, '00811': 5, '00812': 5, '00813': 5, '00820': 3, '00830': 5,
   '00832': 5, '00834': 4, '00836': 4, '00840': 6, '00842': 7, '00844': 7,
   '00846': 7, '00848': 4, '00851': 7, '00860': 5, '00862': 7, '00864': 4,
   '00865': 6, '00866': 6, '00868': 5, '00870': 5, '00872': 5, '00873': 7,
@@ -17408,6 +17693,8 @@ const ASA_BASE_UNITS = {
   '00921': 4, '00922': 4, '00924': 4, '00926': 4, '00928': 3, '00930': 5,
   '00932': 3, '00934': 5, '00936': 5, '00938': 3, '00940': 5, '00942': 5,
   '00944': 4, '00948': 4, '00950': 5, '00952': 5,
+  // Pelvis
+  '01112': 4, '01170': 4, '01173': 8,
   // Upper leg
   '01200': 4, '01202': 7, '01210': 3, '01212': 5, '01214': 4, '01215': 5,
   '01220': 5, '01230': 3, '01232': 4, '01234': 4, '01250': 5, '01260': 7,
@@ -17431,7 +17718,7 @@ const ASA_BASE_UNITS = {
   '01810': 3, '01820': 3, '01829': 3, '01830': 3, '01832': 4, '01840': 3,
   '01842': 4, '01844': 3, '01850': 3, '01852': 3, '01860': 3, '01916': 5,
   '01920': 7, '01922': 7, '01924': 10, '01925': 7, '01926': 8, '01930': 5,
-  '01931': 5, '01932': 5, '01933': 7, '01935': 5, '01936': 5, '01951': 3,
+  '01931': 5, '01932': 5, '01933': 7, '01935': 5, '01936': 5, '01941': 5, '01942': 5, '01951': 3,
   '01952': 3, '01953': 5, '01958': 3, '01960': 3, '01961': 3, '01962': 5,
   '01963': 8, '01965': 5, '01966': 3, '01967': 5, '01968': 5, '01969': 7,
   '01990': 7, '01991': 7, '01992': 7, '01996': 3, '01999': 0,
