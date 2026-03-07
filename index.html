@@ -1386,6 +1386,12 @@ input.mil-time.invalid {
 .asa-code-chip .chip-desc { color: var(--text-dim); font-size: 0.68rem; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asa-code-chip .chip-remove { color: var(--text-dim); cursor: pointer; font-size: 0.85rem; line-height: 1; margin-left: 2px; }
 .asa-code-chip .chip-remove:hover { color: #ef4444; }
+.asa-edit-code-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.asa-edit-code-row .chip-code { font-weight: 600; color: var(--primary); min-width: 48px; font-size: 0.78rem; }
+.asa-edit-code-row .chip-remove { color: var(--text-dim); cursor: pointer; font-size: 0.85rem; line-height: 1; padding: 0 4px; }
+.asa-edit-code-row .chip-remove:hover { color: #ef4444; }
+.asa-desc-input { flex: 1; padding: 4px 8px; font-size: 0.75rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
+.asa-desc-input:focus { border-color: var(--primary); outline: none; }
 .asa-code-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 100; background: var(--surface); border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; max-height: 180px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
 .asa-code-dropdown-item { padding: 6px 10px; cursor: pointer; font-size: 0.78rem; display: flex; gap: 8px; align-items: center; }
 .asa-code-dropdown-item:hover, .asa-code-dropdown-item.active { background: var(--primary); color: #fff; }
@@ -7366,16 +7372,22 @@ const ASA_SECTION_ORDER = [
 ];
 
 let asaCodeAssignments = {};
+let asaCustomDescriptions = {};
 let asaEditMode = false;
 let asaSectionsLoaded = false;
 let asaCodeProcedures = {};
 let asaCodeProceduresLoaded = false;
 
+function getAsaDesc(code) {
+  return asaCustomDescriptions[code] || (ASA_CODE_DESCRIPTIONS && ASA_CODE_DESCRIPTIONS[code]) || '';
+}
+
 function loadAsaCodeSections() {
   if (!db) return Promise.resolve();
   return db.collection('asaCodeSections').doc('config').get().then(function(doc) {
-    if (doc.exists && doc.data().assignments) {
-      asaCodeAssignments = doc.data().assignments;
+    if (doc.exists) {
+      if (doc.data().assignments) asaCodeAssignments = doc.data().assignments;
+      if (doc.data().descriptions) asaCustomDescriptions = doc.data().descriptions;
     }
     asaSectionsLoaded = true;
   }).catch(function(err) {
@@ -7401,6 +7413,7 @@ function saveAsaCodeSections() {
   if (!db || !currentUser) return;
   db.collection('asaCodeSections').doc('config').set({
     assignments: asaCodeAssignments,
+    descriptions: asaCustomDescriptions,
     updatedAt: new Date().toISOString(),
     updatedBy: currentUser.uid
   }).then(function() {
@@ -7456,13 +7469,12 @@ function renderAsaCodesPage() {
         html += '<div class="asa-section-empty">No codes assigned</div>';
       }
       sectionCodes.forEach(function(code) {
-        var desc = (ASA_CODE_DESCRIPTIONS && ASA_CODE_DESCRIPTIONS[code]) || '';
-        var shortDesc = desc.length > 25 ? desc.substring(0, 25) + '...' : desc;
-        html += '<span class="asa-code-chip" data-code="' + code + '">';
+        var desc = getAsaDesc(code);
+        html += '<div class="asa-edit-code-row">';
         html += '<span class="chip-code">' + code + '</span>';
-        html += '<span class="chip-desc" title="' + escHtml(desc) + '">' + escHtml(shortDesc) + '</span>';
+        html += '<input class="asa-desc-input" type="text" value="' + escHtml(desc) + '" placeholder="Description..." onchange="asaCustomDescriptions[\'' + code + '\']=this.value">';
         html += '<span class="chip-remove" onclick="removeAsaCodeFromSection(\'' + code + '\',\'' + escHtml(sectionName) + '\')" title="Remove">&times;</span>';
-        html += '</span>';
+        html += '</div>';
       });
       html += '</div></div></div>';
     });
@@ -7480,7 +7492,7 @@ function renderAsaCodesPage() {
 
   // Helper to render code row + procedures
   function renderCodeRow(code, clickable) {
-    var desc = (ASA_CODE_DESCRIPTIONS && ASA_CODE_DESCRIPTIONS[code]) || '';
+    var desc = getAsaDesc(code);
     var bu = ASA_BASE_UNITS[code];
     var rowHtml = '<div class="asa-compact-row' + (clickable ? ' asa-row' : '') + '" onclick="selectAsaCode(\'' + code + '\')" style="' + (clickable ? 'cursor:pointer' : '') + '">';
     rowHtml += '<span class="asa-compact-code">' + code + '</span>';
@@ -7542,13 +7554,13 @@ function asaEditorAutocomplete(inputEl, sectionName) {
   var allCodes = Object.keys(ASA_BASE_UNITS).sort();
   var matches = allCodes.filter(function(code) {
     if (asaCodeAssignments[code]) return false;
-    var desc = (ASA_CODE_DESCRIPTIONS && ASA_CODE_DESCRIPTIONS[code]) || '';
+    var desc = getAsaDesc(code);
     return code.startsWith(query) || desc.toLowerCase().indexOf(query) !== -1;
   }).slice(0, 8);
   if (matches.length === 0) return;
   var ddHtml = '';
   matches.forEach(function(code) {
-    var desc = (ASA_CODE_DESCRIPTIONS && ASA_CODE_DESCRIPTIONS[code]) || '';
+    var desc = getAsaDesc(code);
     ddHtml += '<div class="asa-code-dropdown-item" onclick="addAsaCodeToSection(\'' + code + '\',\'' + escHtml(sectionName) + '\')">';
     ddHtml += '<span class="dd-code">' + code + '</span>';
     ddHtml += '<span class="dd-desc">' + escHtml(desc) + '</span>';
@@ -7581,7 +7593,7 @@ function asaEditorAddFromInput(inputEl, sectionName) {
   var allCodes = Object.keys(ASA_BASE_UNITS).sort();
   var match = allCodes.find(function(code) {
     if (asaCodeAssignments[code]) return false;
-    var desc = (ASA_CODE_DESCRIPTIONS && ASA_CODE_DESCRIPTIONS[code]) || '';
+    var desc = getAsaDesc(code);
     return code.startsWith(lq) || desc.toLowerCase().indexOf(lq) !== -1;
   });
   if (match) {
