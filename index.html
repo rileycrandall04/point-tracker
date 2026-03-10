@@ -1377,47 +1377,6 @@ input.mil-time.invalid {
 .asa-compact-units { color: var(--text-dim); font-size: 0.72rem; min-width: 28px; text-align: right; }
 .asa-compact-plus { color: var(--accent); font-size: 0.85rem; font-weight: 700; padding: 0 4px; cursor: pointer; line-height: 1; }
 .asa-compact-plus:hover { opacity: 0.7; }
-.asa-code-detail { background: var(--surface2); border-bottom: 1px solid var(--border); padding: 8px 12px 8px 56px; display: none; }
-.asa-code-detail.open { display: block; }
-.asa-code-detail .asa-proc-tag { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 2px 8px; font-size: 0.68rem; color: var(--text-dim); margin: 2px 2px; }
-.asa-code-detail .asa-proc-add-row { display: flex; gap: 4px; align-items: center; margin-top: 6px; }
-.asa-code-detail .asa-no-procs { font-size: 0.7rem; color: var(--text-dim); font-style: italic; }
-.asa-save-bar { position: sticky; bottom: 0; background: var(--surface); padding: 10px; border-top: 2px solid var(--accent); text-align: center; z-index: 50; }
-.asa-section-editor { margin-bottom: 16px; }
-.asa-section-editor .cr-section-body.open { padding: 10px 14px; }
-.asa-section-input-row { display: flex; gap: 6px; margin-bottom: 8px; position: relative; }
-.asa-section-input { flex: 1; padding: 6px 10px; font-size: 0.8rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; outline: none; }
-.asa-section-input:focus { border-color: var(--primary); }
-.asa-code-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.asa-code-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 3px 8px; font-size: 0.75rem; color: var(--text); }
-.asa-code-chip .chip-code { font-weight: 600; color: var(--primary); }
-.asa-code-chip .chip-desc { color: var(--text-dim); font-size: 0.68rem; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.asa-code-chip .chip-remove { color: var(--text-dim); cursor: pointer; font-size: 0.85rem; line-height: 1; margin-left: 2px; }
-.asa-code-chip .chip-remove:hover { color: #ef4444; }
-.asa-edit-code-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--border); }
-.asa-edit-code-row .chip-code { font-weight: 600; color: var(--primary); min-width: 48px; font-size: 0.78rem; }
-.asa-edit-code-row .chip-remove { color: var(--text-dim); cursor: pointer; font-size: 0.85rem; line-height: 1; padding: 0 4px; }
-.asa-edit-code-row .chip-remove:hover { color: #ef4444; }
-.asa-bu-input { width: 40px; padding: 4px 4px; font-size: 0.75rem; text-align: center; background: var(--surface); color: var(--accent); border: 1px solid var(--border); border-radius: 4px; font-weight: 600; }
-.asa-bu-input:focus { border-color: var(--primary); outline: none; }
-.asa-desc-input { flex: 1; padding: 4px 8px; font-size: 0.75rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
-.asa-desc-input:focus { border-color: var(--primary); outline: none; }
-.asa-code-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 100; background: var(--surface); border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; max-height: 180px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-.asa-code-dropdown-item { padding: 6px 10px; cursor: pointer; font-size: 0.78rem; display: flex; gap: 8px; align-items: center; }
-.asa-code-dropdown-item:hover, .asa-code-dropdown-item.active { background: var(--primary); color: #fff; }
-.asa-code-dropdown-item .dd-code { font-weight: 600; min-width: 44px; }
-.asa-code-dropdown-item .dd-desc { flex: 1; color: var(--text-dim); font-size: 0.72rem; }
-.asa-code-dropdown-item:hover .dd-desc, .asa-code-dropdown-item.active .dd-desc { color: rgba(255,255,255,0.7); }
-.asa-code-dropdown-item .dd-units { font-size: 0.68rem; color: var(--text-dim); }
-.asa-code-dropdown-item:hover .dd-units, .asa-code-dropdown-item.active .dd-units { color: rgba(255,255,255,0.7); }
-.asa-section-empty { color: var(--text-dim); font-size: 0.75rem; font-style: italic; padding: 4px 0; }
-.asa-section-count { font-size: 0.72rem; color: var(--text-dim); margin-left: 4px; }
-.asa-unassigned-summary { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.78rem; color: var(--text-dim); }
-.asa-proc-tag { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 2px 8px; font-size: 0.68rem; color: var(--text-dim); margin: 2px 2px; }
-.asa-proc-add-row { display: inline-flex; gap: 4px; align-items: center; margin: 2px 0; }
-.asa-proc-input { padding: 3px 8px; font-size: 0.7rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; width: 140px; }
-.asa-proc-add-btn { padding: 3px 8px; font-size: 0.7rem; background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; }
-.asa-proc-add-btn:hover { opacity: 0.85; }
 
 /* ===== SURGEON / NOTES AUTOCOMPLETE ===== */
 .notes-autocomplete { position: relative; }
@@ -3513,14 +3472,17 @@ input.mil-time.invalid {
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
       <button id="asaCodesBackBtn" class="dollar-toggle" style="padding:4px 10px;font-size:0.75rem;">&#8592; Back</button>
       <h2 style="margin:0;flex:1;">ASA Code Reference</h2>
-      <button id="asaEditSectionsBtn" class="dollar-toggle hidden" style="padding:4px 10px;font-size:0.72rem;" onclick="toggleAsaEditMode()">Edit Sections</button>
     </div>
-    <div id="asaSelectBanner" class="asa-select-banner hidden">Tap a code to select it</div>
+    <div id="asaSelectBanner" class="asa-select-banner hidden" style="background:#fef3c7;color:#92400e;padding:8px 12px;border-radius:6px;font-size:0.8rem;text-align:center;margin-bottom:10px;">Tap a code to select it</div>
+    <!-- Search bar -->
+    <input type="text" id="asaSearchInput" placeholder="Search by code or description..." autocomplete="off" style="width:100%;padding:8px 12px;font-size:0.85rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;outline:none;margin-bottom:10px;box-sizing:border-box;">
+    <!-- Anatomic / Specialty tabs -->
+    <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:12px;">
+      <button class="asa-tab-btn active" data-asa-tab="anatomic" onclick="asaBrowseMode='anatomic';asaSelectedCategory=null;document.querySelectorAll('.asa-tab-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');renderAsaCodesPage();" style="flex:1;padding:6px 10px;font-size:0.78rem;border:none;cursor:pointer;background:var(--primary);color:#fff;">Anatomic</button>
+      <button class="asa-tab-btn" data-asa-tab="specialty" onclick="asaBrowseMode='specialty';asaSelectedCategory=null;document.querySelectorAll('.asa-tab-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');renderAsaCodesPage();" style="flex:1;padding:6px 10px;font-size:0.78rem;border:none;cursor:pointer;background:var(--surface2);color:var(--text-dim);">Specialty</button>
+    </div>
+    <!-- Dynamic content -->
     <div id="asaCodesContent"></div>
-    <div id="asaSaveBar" class="asa-save-bar hidden">
-      <button class="btn btn-primary btn-sm" onclick="saveAsaCodeSections()">Save Section Assignments</button>
-      <button class="btn btn-outline btn-sm" onclick="toggleAsaEditMode()" style="margin-left:8px;">Cancel</button>
-    </div>
   </div>
 </div>
 
@@ -7218,10 +7180,22 @@ document.getElementById('editLaborShared').addEventListener('change', function()
 
   function selectItem(el) {
     procInput.value = el.dataset.name;
-    const units = el.dataset.units;
-    if (units) { baseUnitsInput.value = units; baseUnitsAutoFilled = true; }
     const asa = el.dataset.asa;
-    if (asa) { document.getElementById('caseASACode').value = asa; }
+    if (asa) {
+      document.getElementById('caseASACode').value = asa;
+      // Prefer authoritative base units from master database
+      const masterBU = getAsaBU(asa);
+      if (masterBU !== undefined) {
+        baseUnitsInput.value = masterBU;
+        baseUnitsAutoFilled = true;
+      } else {
+        const units = el.dataset.units;
+        if (units) { baseUnitsInput.value = units; baseUnitsAutoFilled = true; }
+      }
+    } else {
+      const units = el.dataset.units;
+      if (units) { baseUnitsInput.value = units; baseUnitsAutoFilled = true; }
+    }
     hideSuggestions();
     updatePointPreview();
   }
@@ -7322,9 +7296,10 @@ let asaRefReturnPage = null;
 
   window.handleAsaCodeInput = function(code) {
     code = code.trim();
-    // Auto-fill base units from lookup table
-    if (typeof ASA_BASE_UNITS !== 'undefined' && ASA_BASE_UNITS[code] !== undefined) {
-      baseUnitsInput.value = getAsaBU(code);
+    // Auto-fill base units from master database
+    const codeBU = getAsaBU(code);
+    if (codeBU !== undefined) {
+      baseUnitsInput.value = codeBU;
     }
     // Show procedure suggestions only if procedure name is not already filled in
     if (code.length >= 5 && !procInput.value.trim()) {
@@ -7402,7 +7377,7 @@ let asaRefReturnPage = null;
   window.selectAsaCode = function(code) {
     if (!asaRefReturnPage) return;
     asaInput.value = code;
-    const bu = (typeof ASA_BASE_UNITS !== 'undefined') ? getAsaBU(code) : undefined;
+    const bu = getAsaBU(code);
     if (bu !== undefined) baseUnitsInput.value = bu;
     // Navigate back
     document.getElementById('asaCodesBackBtn').click();
@@ -7415,335 +7390,67 @@ let asaRefReturnPage = null;
 })();
 
 // ================================================================
-// ASA CODE REFERENCE — DYNAMIC SECTIONS
+// ASA CODE REFERENCE — MASTER DATABASE
 // ================================================================
-const ASA_SECTION_ORDER = [
-  'General Surgery', 'Endoscopy', 'ENT', 'Eye', 'Ortho', 'Gyn', 'Neuro',
-  'Urology', 'Cardiac/Thoracic/Vascular', 'Cath Lab - EP',
-  'Cardioversion - TEE', 'Transplant', 'OB', 'Other', 'IR', 'All Codes'
-];
 
-// Default section assignments: code → [sections] (supports multi-section)
-var DEFAULT_ASA_ASSIGNMENTS = {
-  // General Surgery
-  '00400': ['General Surgery','Urology'], '00404': ['General Surgery'], '00402': ['General Surgery'],
-  '00790': ['General Surgery'], '00802': ['General Surgery'], '00840': ['General Surgery','Gyn','OB'],
-  '00830': ['General Surgery'], '00752': ['General Surgery'], '00832': ['General Surgery'],
-  '00750': ['General Surgery'], '00792': ['General Surgery'], '00797': ['General Surgery'],
-  '00902': ['General Surgery'], '00300': ['General Surgery','Urology'],
-  '01610': ['General Surgery'],
-  // Endoscopy
-  '00700': ['Endoscopy'], '00731': ['Endoscopy'], '00732': ['Endoscopy'],
-  '00811': ['Endoscopy'], '00812': ['Endoscopy'], '00813': ['Endoscopy'],
-  // ENT
-  '00126': ['ENT'], '00120': ['ENT'], '00170': ['ENT'], '00160': ['ENT'],
-  '00190': ['ENT'], '00320': ['ENT'],
-  // Eye
-  '00142': ['Eye'], '00145': ['Eye'], '00144': ['Eye'], '00140': ['Eye'], '00103': ['Eye'],
-  // Ortho
-  '01620': ['Ortho'], '01630': ['Ortho'], '01638': ['Ortho'], '00450': ['Ortho'],
-  '01744': ['Ortho'], '01730': ['Ortho'], '01740': ['Ortho'], '01810': ['Ortho'],
-  '01820': ['Ortho'], '01830': ['Ortho'], '00540': ['Ortho','Cardiac/Thoracic/Vascular'],
-  '00541': ['Ortho','Cardiac/Thoracic/Vascular'], '01170': ['Ortho'], '01173': ['Ortho'],
-  '01202': ['Ortho'], '01214': ['Ortho'], '01215': ['Ortho'], '01210': ['Ortho'],
-  '01220': ['Ortho'], '01230': ['Ortho'], '01232': ['Ortho'], '01380': ['Ortho'],
-  '01400': ['Ortho'], '01402': ['Ortho'], '01392': ['Ortho'], '01482': ['Ortho'],
-  '01462': ['Ortho'], '01464': ['Ortho'], '01470': ['Ortho'], '01472': ['Ortho'],
-  '01480': ['Ortho'], '01486': ['Ortho'],
-  // Gyn
-  '00851': ['Gyn','OB'], '00944': ['Gyn'], '00942': ['Gyn'],
-  '00860': ['Gyn','Urology'], '00940': ['Gyn','OB'], '00948': ['Gyn','OB'],
-  '00952': ['Gyn'],
-  // Neuro
-  '00104': ['Neuro'], '00600': ['Neuro'], '00620': ['Neuro'], '00630': ['Neuro'],
-  '00670': ['Neuro'], '00220': ['Neuro'], '00216': ['Neuro'], '00211': ['Neuro'],
-  '00210': ['Neuro'], '01941': ['Neuro'], '01942': ['Neuro'],
-  // Urology
-  '00865': ['Urology'], '00862': ['Urology'], '00873': ['Urology'],
-  '00910': ['Urology'], '00918': ['Urology'], '00912': ['Urology'],
-  '00914': ['Urology'], '00920': ['Urology'],
-  // Cardiac/Thoracic/Vascular
-  '00567': ['Cardiac/Thoracic/Vascular'], '00562': ['Cardiac/Thoracic/Vascular'],
-  '00563': ['Cardiac/Thoracic/Vascular'], '00550': ['Cardiac/Thoracic/Vascular'],
-  '00528': ['Cardiac/Thoracic/Vascular'], '00350': ['Cardiac/Thoracic/Vascular'],
-  '00532': ['Cardiac/Thoracic/Vascular','OB','Other'], '01270': ['Cardiac/Thoracic/Vascular'],
-  '01844': ['Cardiac/Thoracic/Vascular'], '01916': ['Cardiac/Thoracic/Vascular'],
-  '00520': ['Cardiac/Thoracic/Vascular'], '00542': ['Cardiac/Thoracic/Vascular'],
-  // Cath Lab - EP
-  '00530': ['Cath Lab - EP'], '00534': ['Cath Lab - EP'], '00537': ['Cath Lab - EP'],
-  '00560': ['Cath Lab - EP'],
-  // Cardioversion - TEE
-  '00410': ['Cardioversion - TEE','Cath Lab - EP'], '01922': ['Cardioversion - TEE','Cath Lab - EP','OB','Other'],
-  // Transplant
-  '00580': ['Transplant'], '00794': ['Transplant'], '00796': ['Transplant'],
-  '00868': ['Transplant'], '01990': ['Transplant'],
-  // OB
-  '01967': ['OB'], '01968': ['OB'], '01961': ['OB'], '01965': ['OB'],
-  '01958': ['OB'], '01962': ['OB'],
-  '01112': ['OB','Other'], '01924': ['OB','Other'], '01926': ['OB','Other']
-};
-
-// Default section-specific descriptions: code__section → description
-var DEFAULT_ASA_DESCRIPTIONS = {
-  // General Surgery
-  '00400__General Surgery': 'Soft Tissue (Limbs, Ant Trunk, Perineum)',
-  '00404__General Surgery': 'Mastectomy (Complete/Radical)',
-  '00402__General Surgery': 'Breast Reconstruction/Mammoplasty',
-  '00790__General Surgery': 'Upper Abdominal / Nissen Fundoplication',
-  '00802__General Surgery': 'Panniculectomy',
-  '00840__General Surgery': 'Lower Abdominal (Appy, Lap Ing. Hernia, etc)',
-  '00830__General Surgery': 'Non-Lap Inguinal Hernia Repair (1yr-adult)',
-  '00752__General Surgery': 'Ventral Hernia (Upper)',
-  '00832__General Surgery': 'Ventral Hernia (Lower)',
-  '00750__General Surgery': 'Umbilical Hernia (1yr-adult)',
-  '00792__General Surgery': 'Liver Resection',
-  '00797__General Surgery': 'Gastric Bypass',
-  '00902__General Surgery': 'Hemorrhoidectomy/Anorectal',
-  '00300__General Surgery': 'Soft Tissue (Head, Neck, Posterior Trunk)',
-  '01610__General Surgery': 'Axillary Node Dissection/Sentinel Biopsy',
-  // Endoscopy
-  '00700__Endoscopy': 'Percutaneous G Tube',
-  '00731__Endoscopy': 'EGD',
-  '00732__Endoscopy': 'ERCP',
-  '00811__Endoscopy': 'Interventional Colon Procedure',
-  '00812__Endoscopy': 'Screening Colonoscopy',
-  '00813__Endoscopy': 'Combined EGD/Colonoscopy',
-  // ENT
-  '00126__ENT': 'BMT',
-  '00120__ENT': 'Ear- External, Middle, Internal',
-  '00170__ENT': 'Oral- Other (T&A)',
-  '00160__ENT': 'Nasal/Sinus',
-  '00190__ENT': 'Facial Bone',
-  '00320__ENT': 'Esophagus/Neck (Thyroid, Larynx)',
-  // Eye
-  '00142__Eye': 'Lens',
-  '00145__Eye': 'Vitreoretinal',
-  '00144__Eye': 'Corneal Tx',
-  '00140__Eye': 'Eye-Other',
-  '00103__Eye': 'Blepharoplasty',
-  // Ortho
-  '01620__Ortho': 'Shoulder Manipulation',
-  '01630__Ortho': 'Shoulder Arthroscopy',
-  '01638__Ortho': 'Total Shoulder or Revision',
-  '00450__Ortho': 'Clavicle ORIF',
-  '01744__Ortho': 'Humeral Shaft',
-  '01730__Ortho': 'Closed Elbow/Supracondylar',
-  '01740__Ortho': 'Open Elbow/Supracondylar',
-  '01810__Ortho': 'Hand (Soft Tissue)',
-  '01820__Ortho': 'Wrist/Hand (Closed)',
-  '01830__Ortho': 'Wrist/Hand (Open or Scope)',
-  '00540__Ortho': 'Rib Plating',
-  '00541__Ortho': 'Rib Plating (One Lung Ventilation)',
-  '01170__Ortho': 'Pubic Symphysis ORIF',
-  '01173__Ortho': 'Pelvis or Acetabulum FX Open',
-  '01202__Ortho': 'Hip Arthroscopy',
-  '01214__Ortho': 'Total Hip',
-  '01215__Ortho': 'Total Hip Revision',
-  '01210__Ortho': 'Hip Joint (Open)',
-  '01220__Ortho': 'Upper 2/3 Femur (Closed)',
-  '01230__Ortho': 'Upper 2/3 Femur (Open)',
-  '01232__Ortho': 'Above Knee Amputation',
-  '01380__Ortho': 'Knee Manipulation',
-  '01400__Ortho': 'Knee (Scope or Open)',
-  '01402__Ortho': 'Total Knee',
-  '01392__Ortho': 'Upper Tib/Fib/Patella Open',
-  '01482__Ortho': 'Below Knee Amputation',
-  '01462__Ortho': 'Lower Leg/Ankle/Foot (Closed)',
-  '01464__Ortho': 'Ankle, Foot (Arthroscopic)',
-  '01470__Ortho': 'Lower Leg, Ankle, Foot (Soft Tissue)',
-  '01472__Ortho': 'Achilles',
-  '01480__Ortho': 'Lower Leg, Ankle, Foot (Open)',
-  '01486__Ortho': 'Total Ankle',
-  // Gyn
-  '00840__Gyn': 'Abd. Hysterectomy',
-  '00851__Gyn': 'Tubal Ligation',
-  '00944__Gyn': 'Vaginal Hysterectomy',
-  '00942__Gyn': 'Ant. & Post. Repairs',
-  '00860__Gyn': 'Extraperitoneal Lower ABD/Urinary tract',
-  '00940__Gyn': 'Vaginal Procedure (Biopsy, repair)',
-  '00948__Gyn': 'Cerclage',
-  '00952__Gyn': 'Hysteroscopy/Hysterosalpingography',
-  // Neuro
-  '00104__Neuro': 'ECT',
-  '00600__Neuro': 'Cervical Spine',
-  '00620__Neuro': 'Thoracic Spine',
-  '00630__Neuro': 'Lumbar Lam/Discectomy',
-  '00670__Neuro': 'Extensive Spine',
-  '00220__Neuro': 'VP Shunt',
-  '00216__Neuro': 'Intracranial Vascular',
-  '00211__Neuro': 'Craniotomy - Evac of Hematoma',
-  '00210__Neuro': 'Intracranial (incl. Deep Brain Stim)',
-  '01941__Neuro': 'Stim Cervical/Thoracic w/o Laminectomy',
-  '01942__Neuro': 'Stim Lumbar/Sacral w/o Laminectomy',
-  // Urology
-  '00300__Urology': 'Interstim for Incontinence',
-  '00400__Urology': 'Brachytherapy',
-  '00860__Urology': 'Varicocele/Stress Incontinence',
-  '00865__Urology': 'Radical Prostatectomy (Incl. Robotic)',
-  '00862__Urology': 'Nephrectomy (incl. Donor)',
-  '00873__Urology': 'ESWL',
-  '00910__Urology': 'Cysto (Bladder)',
-  '00918__Urology': 'Cysto (Ureter)',
-  '00912__Urology': 'TURBT',
-  '00914__Urology': 'TURP',
-  '00920__Urology': 'Male Genitalia (Urethroplasty, Hydrocele)',
-  // Cardiac/Thoracic/Vascular
-  '00567__Cardiac/Thoracic/Vascular': 'CABG with Pump Oxygenator',
-  '00562__Cardiac/Thoracic/Vascular': 'Cardiac Valve',
-  '00563__Cardiac/Thoracic/Vascular': 'Cardiac with Circ Arrest',
-  '00550__Cardiac/Thoracic/Vascular': 'Sternal Debridement',
-  '00528__Cardiac/Thoracic/Vascular': 'Mediastinoscopy',
-  '00350__Cardiac/Thoracic/Vascular': 'Carotid Endarterectomy',
-  '00532__Cardiac/Thoracic/Vascular': 'CVC/Dialysis Access (DLTC)',
-  '01270__Cardiac/Thoracic/Vascular': 'Fem/Pop Bypass (Upper Leg)',
-  '01844__Cardiac/Thoracic/Vascular': 'AV Fistula Creation',
-  '01916__Cardiac/Thoracic/Vascular': 'Diagnostic Angio/Venogram',
-  '00520__Cardiac/Thoracic/Vascular': 'Bronchoscopy/EBUS',
-  '00540__Cardiac/Thoracic/Vascular': 'Thoracotomy (NOT 1 Lung Ventilation)',
-  '00541__Cardiac/Thoracic/Vascular': 'VATS/Thoracotomy (1 Lung Ventilation)',
-  '00542__Cardiac/Thoracic/Vascular': 'Lung Decortication',
-  // Cath Lab - EP
-  '00530__Cath Lab - EP': 'Pacemaker',
-  '00534__Cath Lab - EP': 'AICD',
-  '00537__Cath Lab - EP': 'Cardiac EP',
-  '00560__Cath Lab - EP': 'Cardiac Surg w/o CPB (TAVR, Mitral Clip)',
-  '00410__Cath Lab - EP': 'Sedation for Cardioversion',
-  '01922__Cath Lab - EP': 'Sedation for TEE',
-  // Cardioversion - TEE
-  '00410__Cardioversion - TEE': 'Sedation for Cardioversion',
-  '01922__Cardioversion - TEE': 'Sedation for TEE',
-  // Transplant
-  '00580__Transplant': 'Heart Transplant',
-  '00794__Transplant': 'Pancreas Transplant',
-  '00796__Transplant': 'Liver Transplant',
-  '00868__Transplant': 'Kidney Transplant',
-  '01990__Transplant': 'Physiologic Support for Organ Procurement',
-  // OB
-  '01967__OB': 'Labor Epidural',
-  '01968__OB': 'Cesarean Delivery following Labor',
-  '01961__OB': 'Cesarean Delivery Only',
-  '01965__OB': 'Incomplete/Missed Abortion',
-  '00940__OB': 'Labor Epidural to Vaginal Procedure / D&C for Post Part Hemorrhage',
-  '00851__OB': 'Tubal Ligation',
-  '00948__OB': 'Cerclage',
-  '01958__OB': 'External Cephalic Version',
-  '01962__OB': 'Hysterectomy following Delivery',
-  '00840__OB': 'Fetal Transfusion',
-  '00532__OB': 'Anesthesia for Central Line',
-  '01112__OB': 'Bone Marrow Biopsy',
-  '01922__OB': 'Non-Invasive Imaging',
-  '01924__OB': 'IR Arterial Proc',
-  '01926__OB': 'IR (Intracranial, Intracardiac, Aortic)',
-  // Other
-  '00532__Other': 'Anesthesia for Central Line',
-  '01112__Other': 'Bone Marrow Biopsy',
-  '01922__Other': 'Non-Invasive Imaging',
-  '01924__Other': 'IR Arterial Proc',
-  '01926__Other': 'IR (Intracranial, Intracardiac, Aortic)'
-};
-
-let asaCodeAssignments = {};   // code → [section1, section2, ...]
-let asaCustomDescriptions = {}; // code__section → description
-let asaCustomBaseUnits = {};   // code → custom base unit value
-let asaEditMode = false;
-let asaSectionsLoaded = false;
+// Runtime ASA code data — loaded from Firestore, falls back to ASA_MASTER_DATA
+let asaMasterCodes = {};       // code → {bu, desc, anatomic, sp1, sp2}
+let asaMasterLoaded = false;
 let asaCodeProcedures = {};
 let asaCodeProceduresLoaded = false;
 
-// Helper: check if code is in a given section
-function codeInSection(code, sectionName) {
-  var a = asaCodeAssignments[code];
-  if (!a) return false;
-  if (Array.isArray(a)) return a.indexOf(sectionName) !== -1;
-  return a === sectionName; // backward compat with string
+// Browse state for reference page
+let asaBrowseMode = 'anatomic';   // 'anatomic' or 'specialty'
+let asaSelectedCategory = null;    // currently expanded category name
+
+function loadAsaMasterCodes() {
+  // Always start with hardcoded defaults
+  asaMasterCodes = JSON.parse(JSON.stringify(ASA_MASTER_DATA));
+  if (!db) {
+    asaMasterLoaded = true;
+    return Promise.resolve();
+  }
+  return db.collection('asaCodes').doc('master').get().then(function(doc) {
+    if (doc.exists && doc.data().codes) {
+      asaMasterCodes = doc.data().codes;
+    }
+    asaMasterLoaded = true;
+  }).catch(function(err) {
+    console.warn('Failed to load ASA master codes:', err);
+    asaMasterLoaded = true;
+  });
 }
 
-// Helper: check if code is assigned to any section
-function codeIsAssigned(code) {
-  var a = asaCodeAssignments[code];
-  if (!a) return false;
-  if (Array.isArray(a)) return a.length > 0;
-  return true;
-}
-
-// Helper: add code to section (array-based)
-function assignCodeToSection(code, sectionName) {
-  if (!asaCodeAssignments[code]) asaCodeAssignments[code] = [];
-  if (!Array.isArray(asaCodeAssignments[code])) {
-    asaCodeAssignments[code] = [asaCodeAssignments[code]]; // migrate string
+// One-time admin upload of master data to Firestore
+function uploadAsaMasterToFirestore() {
+  if (!db || !currentUser || typeof isAdmin !== 'function' || !isAdmin()) {
+    showToast('Admin access required'); return;
   }
-  if (asaCodeAssignments[code].indexOf(sectionName) === -1) {
-    asaCodeAssignments[code].push(sectionName);
-  }
-}
-
-// Helper: remove code from section
-function unassignCodeFromSection(code, sectionName) {
-  if (!asaCodeAssignments[code]) return;
-  if (!Array.isArray(asaCodeAssignments[code])) {
-    if (asaCodeAssignments[code] === sectionName) delete asaCodeAssignments[code];
-    return;
-  }
-  var idx = asaCodeAssignments[code].indexOf(sectionName);
-  if (idx !== -1) asaCodeAssignments[code].splice(idx, 1);
-  if (asaCodeAssignments[code].length === 0) delete asaCodeAssignments[code];
-}
-
-function getAsaDesc(code, section) {
-  if (section && asaCustomDescriptions[code + '__' + section]) {
-    return asaCustomDescriptions[code + '__' + section];
-  }
-  return asaCustomDescriptions[code] || '';
+  db.collection('asaCodes').doc('master').set({
+    codes: ASA_MASTER_DATA,
+    anatomicRegions: ASA_ANATOMIC_REGIONS,
+    specialties: ASA_SPECIALTIES,
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    updatedBy: currentUser.uid
+  }).then(function() {
+    showToast('ASA master data uploaded successfully');
+  }).catch(function(err) {
+    console.error('Upload failed:', err);
+    showToast('Upload failed');
+  });
 }
 
 function getAsaBU(code) {
-  if (asaCustomBaseUnits[code] !== undefined) return asaCustomBaseUnits[code];
-  return ASA_BASE_UNITS[code];
+  if (asaMasterCodes[code]) return asaMasterCodes[code].bu;
+  if (ASA_MASTER_DATA[code]) return ASA_MASTER_DATA[code].bu;
+  return undefined;
 }
 
-function applyAsaDefaults() {
-  // Merge defaults: defaults are base, Firestore overrides
-  Object.keys(DEFAULT_ASA_ASSIGNMENTS).forEach(function(code) {
-    if (!asaCodeAssignments[code]) {
-      asaCodeAssignments[code] = DEFAULT_ASA_ASSIGNMENTS[code].slice(); // copy array
-    } else if (!Array.isArray(asaCodeAssignments[code])) {
-      // Migrate old string format to array
-      asaCodeAssignments[code] = [asaCodeAssignments[code]];
-    }
-  });
-  // Migrate any remaining string values from Firestore
-  Object.keys(asaCodeAssignments).forEach(function(code) {
-    if (!Array.isArray(asaCodeAssignments[code])) {
-      asaCodeAssignments[code] = [asaCodeAssignments[code]];
-    }
-  });
-  // Merge default descriptions (don't overwrite Firestore values)
-  Object.keys(DEFAULT_ASA_DESCRIPTIONS).forEach(function(key) {
-    if (!asaCustomDescriptions[key]) {
-      asaCustomDescriptions[key] = DEFAULT_ASA_DESCRIPTIONS[key];
-    }
-  });
-}
-
-function loadAsaCodeSections() {
-  if (!db) {
-    applyAsaDefaults();
-    asaSectionsLoaded = true;
-    return Promise.resolve();
-  }
-  return db.collection('asaCodeSections').doc('config').get().then(function(doc) {
-    if (doc.exists) {
-      if (doc.data().assignments) asaCodeAssignments = doc.data().assignments;
-      if (doc.data().descriptions) asaCustomDescriptions = doc.data().descriptions;
-      if (doc.data().baseUnits) asaCustomBaseUnits = doc.data().baseUnits;
-    }
-    applyAsaDefaults();
-    asaSectionsLoaded = true;
-  }).catch(function(err) {
-    console.warn('Failed to load ASA sections:', err);
-    applyAsaDefaults();
-    asaSectionsLoaded = true;
-  });
+function getAsaDesc(code) {
+  if (asaMasterCodes[code]) return asaMasterCodes[code].desc || '';
+  if (ASA_MASTER_DATA[code]) return ASA_MASTER_DATA[code].desc || '';
+  return '';
 }
 
 function loadAsaCodeProcedures() {
@@ -7759,262 +7466,90 @@ function loadAsaCodeProcedures() {
   });
 }
 
-function saveAsaCodeSections() {
-  if (!db || !currentUser) return;
-  db.collection('asaCodeSections').doc('config').set({
-    assignments: asaCodeAssignments,
-    descriptions: asaCustomDescriptions,
-    baseUnits: asaCustomBaseUnits,
-    updatedAt: new Date().toISOString(),
-    updatedBy: currentUser.uid
-  }).then(function() {
-    showToast('ASA code sections saved');
-    asaEditMode = false;
-    renderAsaCodesPage();
-  }).catch(function(err) {
-    console.error('Failed to save ASA sections:', err);
-    showToast('Save failed — check connection');
-  });
-}
-
-function toggleAsaEditMode() {
-  asaEditMode = !asaEditMode;
-  renderAsaCodesPage();
-}
+// ================================================================
+// ASA CODE REFERENCE PAGE — RENDERING
+// ================================================================
 
 function renderAsaCodesPage() {
   const container = document.getElementById('asaCodesContent');
   if (!container) return;
-  const allCodes = Object.keys(ASA_BASE_UNITS).sort();
-  const editBtn = document.getElementById('asaEditSectionsBtn');
-  const saveBar = document.getElementById('asaSaveBar');
+  const codes = asaMasterLoaded ? asaMasterCodes : ASA_MASTER_DATA;
+  const inSelectMode = !!asaRefReturnPage;
+  const searchQuery = (document.getElementById('asaSearchInput')?.value || '').trim().toLowerCase();
 
-  // Show/hide admin controls
-  if (editBtn) editBtn.classList.toggle('hidden', !(typeof isAdmin === 'function' && isAdmin()));
-  if (saveBar) saveBar.classList.toggle('hidden', !asaEditMode);
+  // Update tab button styles
+  document.querySelectorAll('.asa-tab-btn').forEach(function(btn) {
+    const isActive = btn.dataset.asaTab === asaBrowseMode;
+    btn.style.background = isActive ? 'var(--primary)' : 'var(--surface2)';
+    btn.style.color = isActive ? '#fff' : 'var(--text-dim)';
+  });
 
-  if (asaEditMode) {
-    // EDIT MODE: section-based editor with text inputs and code chips
-    let html = '';
-    var unassignedCodes = allCodes.filter(function(c) { return !codeIsAssigned(c); });
-    if (unassignedCodes.length > 0) {
-      html += '<div class="asa-unassigned-summary"><strong>' + unassignedCodes.length + '</strong> codes unassigned. Type a code or keyword in any section below to assign it.</div>';
-    }
-    ASA_SECTION_ORDER.forEach(function(sectionName) {
-      if (sectionName === 'All Codes') return;
-      var sectionCodes = allCodes.filter(function(c) { return codeInSection(c, sectionName); }).sort();
-      var sectionId = 'asaEditSection_' + sectionName.replace(/[^a-zA-Z0-9]/g, '_');
-      html += '<div class="cr-section asa-section-editor">';
-      html += '<div class="cr-section-header open" onclick="this.classList.toggle(\'open\');this.nextElementSibling.classList.toggle(\'open\')">';
-      html += '<span>' + escHtml(sectionName) + ' <span class="asa-section-count">(' + sectionCodes.length + ')</span></span>';
-      html += '<span class="cr-toggle">&#9654;</span></div>';
-      html += '<div class="cr-section-body open">';
-      html += '<div class="asa-section-input-row" id="' + sectionId + '_inputRow">';
-      html += '<input class="asa-section-input" type="text" placeholder="Enter codes (e.g. 00100 00740 00300)..." ';
-      html += 'oninput="asaEditorAutocomplete(this,\'' + escHtml(sectionName) + '\')" ';
-      html += 'onkeydown="if(event.key===\'Enter\'){event.preventDefault();asaEditorAddFromInput(this,\'' + escHtml(sectionName) + '\');}" autocomplete="off">';
-      html += '<button class="asa-proc-add-btn" onclick="asaEditorAddFromInput(this.previousElementSibling,\'' + escHtml(sectionName) + '\')">Add</button>';
-      html += '</div>';
-      html += '<div class="asa-code-chips" id="' + sectionId + '_chips">';
-      if (sectionCodes.length === 0) {
-        html += '<div class="asa-section-empty">No codes assigned</div>';
-      }
-      sectionCodes.forEach(function(code) {
-        var desc = getAsaDesc(code, sectionName);
-        var bu = getAsaBU(code);
-        html += '<div class="asa-edit-code-row">';
-        html += '<span class="chip-code">' + code + '</span>';
-        html += '<input class="asa-bu-input" type="number" value="' + (bu !== undefined ? bu : '') + '" placeholder="BU" min="0" max="99" step="1" onchange="asaCustomBaseUnits[\'' + code + '\']=Number(this.value)" title="Base Units">';
-        html += '<input class="asa-desc-input" type="text" value="' + escHtml(desc) + '" placeholder="Description..." onchange="asaCustomDescriptions[\'' + code + '__' + escHtml(sectionName) + '\']=this.value">';
-        html += '<span class="chip-remove" onclick="removeAsaCodeFromSection(\'' + code + '\',\'' + escHtml(sectionName) + '\')" title="Remove">&times;</span>';
-        html += '</div>';
-      });
-      html += '</div></div></div>';
+  // Search mode
+  if (searchQuery.length >= 2) {
+    const allCodes = Object.keys(codes).sort();
+    const matches = allCodes.filter(function(code) {
+      const entry = codes[code];
+      return code.includes(searchQuery) || (entry.desc && entry.desc.toLowerCase().includes(searchQuery));
     });
+    let html = '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">' + matches.length + ' result' + (matches.length !== 1 ? 's' : '') + '</div>';
+    matches.forEach(function(code) { html += renderAsaCodeRow(code, codes[code], inSelectMode); });
+    if (matches.length === 0) html += '<div style="text-align:center;color:var(--text-dim);font-size:0.85rem;padding:16px 0;">No codes found</div>';
     container.innerHTML = html;
-    if (editBtn) { editBtn.textContent = 'Done Editing'; editBtn.classList.add('active'); }
     return;
   }
 
-  // NORMAL MODE: grouped sections with procedure mapping
-  if (editBtn) { editBtn.textContent = 'Edit Sections'; editBtn.classList.remove('active'); }
-  let html = '';
-  const inSelectMode = !!asaRefReturnPage;
-  const isAdminUser = (typeof isAdmin === 'function' && isAdmin());
-  const isLoggedIn = !!currentUser;
-
-  // Helper to render code row with expandable detail
-  function renderCodeRow(code, clickable, section) {
-    var desc = getAsaDesc(code, section);
-    var bu = getAsaBU(code);
-    var detailId = 'asaDetail_' + code + '_' + (section || 'all').replace(/[^a-zA-Z0-9]/g, '_');
-    var rowHtml = '';
-
-    if (clickable) {
-      // Select mode: just the code row, clickable to select
-      rowHtml += '<div class="asa-compact-row asa-row" onclick="selectAsaCode(\'' + code + '\')">';
-      rowHtml += '<span class="asa-compact-code">' + code + '</span>';
-      rowHtml += '<span class="asa-compact-desc">' + escHtml(desc) + '</span>';
-      rowHtml += '<span class="asa-compact-units">' + bu + 'u</span></div>';
-    } else {
-      // Normal mode: concise row with + button, click to expand
-      rowHtml += '<div class="asa-compact-row" onclick="toggleAsaCodeDetail(\'' + detailId + '\')">';
-      rowHtml += '<span class="asa-compact-code">' + code + '</span>';
-      rowHtml += '<span class="asa-compact-desc">' + escHtml(desc) + '</span>';
-      rowHtml += '<span class="asa-compact-units">' + bu + 'u</span>';
-      if (isLoggedIn) {
-        rowHtml += '<span class="asa-compact-plus" onclick="event.stopPropagation();toggleAsaCodeDetail(\'' + detailId + '\',true)" title="Add procedure">+</span>';
-      }
-      rowHtml += '</div>';
-      // Expandable detail panel
-      rowHtml += '<div class="asa-code-detail" id="' + detailId + '">';
-      var procs = asaCodeProcedures[code] || [];
-      if (procs.length > 0) {
-        procs.forEach(function(proc) {
-          rowHtml += '<span class="asa-proc-tag">' + escHtml(proc);
-          if (isAdminUser) {
-            rowHtml += ' <span style="cursor:pointer;color:var(--text-dim);font-size:0.6rem;" onclick="event.stopPropagation();removeAsaCodeProcedure(\'' + code + '\',\'' + escHtml(proc).replace(/'/g, "\\'") + '\')">&times;</span>';
-          }
-          rowHtml += '</span>';
-        });
-      } else {
-        rowHtml += '<div class="asa-no-procs">No procedures added yet</div>';
-      }
-      if (isLoggedIn) {
-        rowHtml += '<div class="asa-proc-add-row" onclick="event.stopPropagation()">';
-        rowHtml += '<input class="asa-proc-input" type="text" placeholder="Add procedure name..." onkeydown="if(event.key===\'Enter\'){event.stopPropagation();saveAsaCodeProcedure(\'' + code + '\',this.value);this.value=\'\';}">';
-        rowHtml += '<button class="asa-proc-add-btn" onclick="event.stopPropagation();var inp=this.previousElementSibling;saveAsaCodeProcedure(\'' + code + '\',inp.value);inp.value=\'\';">+</button>';
-        rowHtml += '</div>';
-      }
-      rowHtml += '</div>';
-    }
-    return rowHtml;
+  // Category detail mode
+  if (asaSelectedCategory) {
+    const catCodes = Object.keys(codes).filter(function(code) {
+      const entry = codes[code];
+      if (asaBrowseMode === 'anatomic') return entry.anatomic === asaSelectedCategory;
+      return entry.sp1 === asaSelectedCategory || entry.sp2 === asaSelectedCategory;
+    }).sort();
+    let html = '<div style="margin-bottom:10px;">';
+    html += '<a href="#" onclick="event.preventDefault();asaSelectedCategory=null;renderAsaCodesPage();" style="font-size:0.78rem;color:var(--primary);">&larr; All ' + (asaBrowseMode === 'anatomic' ? 'Regions' : 'Specialties') + '</a>';
+    html += ' <span style="font-size:0.85rem;font-weight:600;margin-left:8px;">' + escHtml(asaSelectedCategory) + ' (' + catCodes.length + ')</span></div>';
+    catCodes.forEach(function(code) { html += renderAsaCodeRow(code, codes[code], inSelectMode); });
+    container.innerHTML = html;
+    return;
   }
 
-  // Build sections (excluding "All Codes")
-  ASA_SECTION_ORDER.forEach(function(sectionName) {
-    if (sectionName === 'All Codes') return;
-    const sectionCodes = allCodes.filter(function(c) { return codeInSection(c, sectionName); });
-    if (sectionCodes.length === 0) return;
-    html += '<div class="cr-section">';
-    html += '<div class="cr-section-header" onclick="this.classList.toggle(\'open\');this.nextElementSibling.classList.toggle(\'open\')">';
-    html += '<span>' + escHtml(sectionName) + ' (' + sectionCodes.length + ')</span><span class="cr-toggle">&#9654;</span></div>';
-    html += '<div class="cr-section-body">';
-    sectionCodes.forEach(function(code) { html += renderCodeRow(code, inSelectMode, sectionName); });
-    html += '</div></div>';
+  // Category list mode (default)
+  const categories = asaBrowseMode === 'anatomic' ? ASA_ANATOMIC_REGIONS : ASA_SPECIALTIES;
+  let html = '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+  categories.forEach(function(cat) {
+    const count = Object.keys(codes).filter(function(code) {
+      const entry = codes[code];
+      if (asaBrowseMode === 'anatomic') return entry.anatomic === cat;
+      return entry.sp1 === cat || entry.sp2 === cat;
+    }).length;
+    if (count === 0) return;
+    html += '<div onclick="asaSelectedCategory=\'' + escHtml(cat).replace(/'/g, "\\'") + '\';renderAsaCodesPage();" style="padding:8px 14px;border-radius:16px;font-size:0.78rem;background:var(--surface);border:1px solid var(--border);color:var(--text);cursor:pointer;user-select:none;">';
+    html += escHtml(cat) + ' <span style="color:var(--text-dim);font-size:0.7rem;">(' + count + ')</span></div>';
   });
-
-  // "All Codes" section — always last, always all codes, compact format
-  html += '<div class="cr-section">';
-  html += '<div class="cr-section-header" onclick="this.classList.toggle(\'open\');this.nextElementSibling.classList.toggle(\'open\')">';
-  html += '<span>All Codes (' + allCodes.length + ')</span><span class="cr-toggle">&#9654;</span></div>';
-  html += '<div class="cr-section-body">';
-  allCodes.forEach(function(code) { html += renderCodeRow(code, inSelectMode, null); });
-  html += '</div></div>';
-
+  html += '</div>';
   container.innerHTML = html;
 }
 
-function toggleAsaCodeDetail(detailId, focusInput) {
-  var el = document.getElementById(detailId);
-  if (!el) return;
-  var isOpen = el.classList.contains('open');
-  // Close all other open details in the same section
-  var parent = el.closest('.cr-section-body') || el.closest('#asaCodesContent');
-  if (parent) {
-    parent.querySelectorAll('.asa-code-detail.open').forEach(function(d) {
-      if (d.id !== detailId) d.classList.remove('open');
-    });
+function renderAsaCodeRow(code, entry, clickable) {
+  const desc = entry.desc || '';
+  const bu = entry.bu || 0;
+  if (clickable) {
+    return '<div style="display:flex;align-items:baseline;gap:8px;padding:6px 4px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="selectAsaCode(\'' + code + '\')">' +
+      '<span style="font-family:monospace;font-size:0.78rem;font-weight:600;color:var(--primary);white-space:nowrap;min-width:48px;">' + code + '</span>' +
+      '<span style="flex:1;font-size:0.75rem;color:var(--text);line-height:1.3;">' + escHtml(desc) + '</span>' +
+      '<span style="font-size:0.7rem;color:var(--text-dim);white-space:nowrap;font-weight:600;">' + bu + 'u</span></div>';
   }
-  el.classList.toggle('open');
-  // Focus the input when opening via + button
-  if (!isOpen && (focusInput || false)) {
-    var inp = el.querySelector('.asa-proc-input');
-    if (inp) setTimeout(function() { inp.focus(); }, 50);
-  }
+  return '<div style="display:flex;align-items:baseline;gap:8px;padding:6px 4px;border-bottom:1px solid var(--border);">' +
+    '<span style="font-family:monospace;font-size:0.78rem;font-weight:600;color:var(--primary);white-space:nowrap;min-width:48px;">' + code + '</span>' +
+    '<span style="flex:1;font-size:0.75rem;color:var(--text);line-height:1.3;">' + escHtml(desc) + '</span>' +
+    '<span style="font-size:0.7rem;color:var(--text-dim);white-space:nowrap;font-weight:600;">' + bu + 'u</span></div>';
 }
 
-function asaEditorAutocomplete(inputEl, sectionName) {
-  var query = inputEl.value.trim().toLowerCase();
-  var existing = inputEl.parentElement.querySelector('.asa-code-dropdown');
-  if (existing) existing.remove();
-  if (query.length < 2) return;
-  var allCodes = Object.keys(ASA_BASE_UNITS).sort();
-  var matches = allCodes.filter(function(code) {
-    if (codeInSection(code, sectionName)) return false;
-    var desc = getAsaDesc(code, sectionName);
-    return code.startsWith(query) || desc.toLowerCase().indexOf(query) !== -1;
-  }).slice(0, 8);
-  if (matches.length === 0) return;
-  var ddHtml = '';
-  matches.forEach(function(code) {
-    var desc = getAsaDesc(code, sectionName);
-    ddHtml += '<div class="asa-code-dropdown-item" onclick="addAsaCodeToSection(\'' + code + '\',\'' + escHtml(sectionName) + '\')">';
-    ddHtml += '<span class="dd-code">' + code + '</span>';
-    ddHtml += '<span class="dd-desc">' + escHtml(desc) + '</span>';
-    ddHtml += '<span class="dd-units">' + getAsaBU(code) + 'u</span></div>';
-  });
-  var dd = document.createElement('div');
-  dd.className = 'asa-code-dropdown';
-  dd.innerHTML = ddHtml;
-  inputEl.parentElement.appendChild(dd);
-  setTimeout(function() {
-    document.addEventListener('click', function closeDD(e) {
-      if (!e.target.closest('.asa-section-input-row')) {
-        if (dd.parentElement) dd.remove();
-        document.removeEventListener('click', closeDD);
-      }
-    });
-  }, 0);
-}
-
-function asaEditorAddFromInput(inputEl, sectionName) {
-  var raw = inputEl.value.trim();
-  if (!raw) return;
-  // Split on commas, spaces, or newlines to support multiple codes at once
-  var tokens = raw.split(/[\s,]+/).filter(function(t) { return t.length > 0; });
-  var added = 0;
-  var notFound = [];
-  tokens.forEach(function(token) {
-    // Direct code match — allow adding to this section even if in other sections
-    if (ASA_BASE_UNITS[token] && !codeInSection(token, sectionName)) {
-      assignCodeToSection(token, sectionName);
-      added++;
-      return;
-    }
-    // Try prefix/description match for non-numeric tokens
-    var lq = token.toLowerCase();
-    var allCodes = Object.keys(ASA_BASE_UNITS).sort();
-    var match = allCodes.find(function(code) {
-      if (codeInSection(code, sectionName)) return false;
-      var desc = getAsaDesc(code, sectionName);
-      return code.startsWith(lq) || desc.toLowerCase().indexOf(lq) !== -1;
-    });
-    if (match) {
-      assignCodeToSection(match, sectionName);
-      added++;
-    } else {
-      notFound.push(token);
-    }
-  });
-  if (added > 0) {
-    renderAsaCodesPage();
-    showToast(added + ' code' + (added > 1 ? 's' : '') + ' added to ' + sectionName);
-  }
-  if (notFound.length > 0) {
-    showToast('Not found: ' + notFound.join(', '));
-  }
-}
-
-function addAsaCodeToSection(code, sectionName) {
-  assignCodeToSection(code, sectionName);
-  renderAsaCodesPage();
-}
-
-function removeAsaCodeFromSection(code, sectionName) {
-  unassignCodeFromSection(code, sectionName);
-  renderAsaCodesPage();
-}
+// Search input listener
+document.getElementById('asaSearchInput')?.addEventListener('input', function() {
+  clearTimeout(this._debounce);
+  this._debounce = setTimeout(function() { renderAsaCodesPage(); }, 150);
+});
 
 function saveAsaCodeProcedure(code, procedureName) {
   if (!db || !currentUser) { showToast('Sign in to add procedures'); return; }
@@ -8054,6 +7589,29 @@ function removeAsaCodeProcedure(code, procedureName) {
     console.error('Failed to remove procedure:', err);
     showToast('Remove failed');
   });
+}
+
+// Auto-learn procedure↔ASA code associations when cases are saved
+function autoLearnProcedureMapping(procedure, asaCode) {
+  if (!procedure || !asaCode || !currentUser) return;
+  procedure = procedure.trim();
+  asaCode = asaCode.trim();
+  if (!procedure || asaCode.length < 5) return;
+  if (!asaCodeProcedures[asaCode]) asaCodeProcedures[asaCode] = [];
+  var exists = asaCodeProcedures[asaCode].some(function(p) { return p.toLowerCase() === procedure.toLowerCase(); });
+  if (exists) return;
+  // Add locally
+  asaCodeProcedures[asaCode].push(procedure);
+  // Persist to Firestore (fire-and-forget)
+  if (db) {
+    var updateObj = { updatedAt: new Date().toISOString(), updatedBy: currentUser.uid };
+    updateObj['procedures.' + asaCode] = firebase.firestore.FieldValue.arrayUnion(procedure);
+    db.collection('asaCodeProcedures').doc('config').update(updateObj).catch(function() {
+      return db.collection('asaCodeProcedures').doc('config').set({
+        procedures: asaCodeProcedures, updatedAt: new Date().toISOString(), updatedBy: currentUser.uid
+      });
+    }).catch(function(err) { console.warn('Auto-learn procedure failed:', err); });
+  }
 }
 
 // Surgeon name autocomplete for Notes fields
@@ -8256,6 +7814,7 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   data.cases.push(caseData);
   saveData(data);
   writeSharedCase(caseData, data.shifts[date]);
+  autoLearnProcedureMapping(caseData.procedure, caseData.asaCode);
   updateHeaderPoints();
   showToast('Case saved! (' + calcCasePoints(caseData, data.shifts[date]).toFixed(2) + ' pts)');
   resetCaseForm();
@@ -17808,64 +17367,295 @@ function copyReconEmail() {
 }
 
 // ================================================================
-// BILLING SHEET SCAN — ASA CODE LOOKUP
+// ASA MASTER CODE DATABASE — All 213 official codes with base units, descriptions, anatomic & specialty
 // ================================================================
-// ASA code registry — keys define valid codes, values are 0 (admin sets real BU via editor)
-const ASA_BASE_UNITS = {
-  '00100': 0, '00102': 0, '00103': 0, '00104': 0, '00120': 0, '00124': 0,
-  '00126': 0, '00140': 0, '00142': 0, '00144': 0, '00145': 0, '00147': 0,
-  '00148': 0, '00160': 0, '00162': 0, '00164': 0, '00170': 0, '00172': 0,
-  '00174': 0, '00176': 0, '00190': 0, '00192': 0,
-  '00210': 0, '00211': 0, '00212': 0, '00214': 0, '00215': 0, '00216': 0,
-  '00218': 0, '00220': 0, '00222': 0,
-  '00300': 0, '00320': 0, '00322': 0, '00326': 0, '00350': 0, '00352': 0,
-  '00400': 0, '00402': 0, '00404': 0, '00406': 0, '00410': 0, '00450': 0,
-  '00454': 0, '00470': 0, '00472': 0, '00474': 0,
-  '00500': 0, '00520': 0, '00522': 0, '00524': 0, '00528': 0, '00530': 0,
-  '00532': 0, '00534': 0, '00537': 0, '00539': 0, '00540': 0, '00541': 0,
-  '00542': 0, '00546': 0, '00548': 0, '00550': 0, '00560': 0, '00561': 0,
-  '00562': 0, '00563': 0, '00566': 0, '00567': 0, '00580': 0,
-  '00600': 0, '00604': 0, '00620': 0, '00625': 0, '00626': 0, '00630': 0,
-  '00632': 0, '00634': 0, '00635': 0, '00640': 0, '00670': 0, '00700': 0,
-  '00702': 0,
-  '00730': 0, '00731': 0, '00732': 0, '00740': 0, '00750': 0, '00752': 0,
-  '00754': 0, '00756': 0, '00770': 0, '00790': 0, '00792': 0, '00794': 0,
-  '00796': 0, '00797': 0,
-  '00800': 0, '00802': 0, '00810': 0, '00811': 0, '00812': 0, '00813': 0,
-  '00820': 0, '00830': 0, '00832': 0, '00834': 0, '00836': 0, '00840': 0,
-  '00842': 0, '00844': 0, '00846': 0, '00848': 0, '00851': 0, '00860': 0,
-  '00862': 0, '00864': 0, '00865': 0, '00866': 0, '00868': 0, '00870': 0,
-  '00872': 0, '00873': 0, '00880': 0, '00882': 0, '00902': 0, '00904': 0,
-  '00906': 0, '00908': 0, '00910': 0, '00912': 0, '00914': 0, '00916': 0,
-  '00918': 0, '00920': 0, '00921': 0, '00922': 0, '00924': 0, '00926': 0,
-  '00928': 0, '00930': 0, '00932': 0, '00934': 0, '00936': 0, '00938': 0,
-  '00940': 0, '00942': 0, '00944': 0, '00948': 0, '00950': 0, '00952': 0,
-  '01112': 0, '01170': 0, '01173': 0,
-  '01200': 0, '01202': 0, '01210': 0, '01212': 0, '01214': 0, '01215': 0,
-  '01220': 0, '01230': 0, '01232': 0, '01234': 0, '01250': 0, '01260': 0,
-  '01270': 0, '01272': 0,
-  '01320': 0, '01340': 0, '01360': 0, '01380': 0, '01382': 0, '01390': 0,
-  '01392': 0, '01400': 0, '01402': 0, '01404': 0, '01420': 0, '01430': 0,
-  '01432': 0, '01440': 0, '01442': 0, '01444': 0,
-  '01462': 0, '01464': 0, '01470': 0, '01472': 0, '01474': 0, '01480': 0,
-  '01482': 0, '01484': 0, '01486': 0, '01490': 0, '01500': 0, '01502': 0,
-  '01520': 0, '01522': 0,
-  '01610': 0, '01620': 0, '01622': 0, '01630': 0, '01634': 0, '01636': 0,
-  '01638': 0, '01650': 0, '01652': 0, '01654': 0, '01656': 0, '01670': 0,
-  '01710': 0, '01712': 0, '01714': 0, '01716': 0, '01730': 0, '01732': 0,
-  '01740': 0, '01742': 0, '01744': 0, '01756': 0, '01758': 0, '01760': 0,
-  '01770': 0, '01772': 0, '01780': 0, '01782': 0,
-  '01810': 0, '01820': 0, '01829': 0, '01830': 0, '01832': 0, '01840': 0,
-  '01842': 0, '01844': 0, '01850': 0, '01852': 0, '01860': 0, '01916': 0,
-  '01920': 0, '01922': 0, '01924': 0, '01925': 0, '01926': 0, '01930': 0,
-  '01931': 0, '01932': 0, '01933': 0, '01935': 0, '01936': 0, '01941': 0,
-  '01942': 0, '01951': 0, '01952': 0, '01953': 0, '01958': 0, '01960': 0,
-  '01961': 0, '01962': 0, '01963': 0, '01965': 0, '01966': 0, '01967': 0,
-  '01968': 0, '01969': 0, '01990': 0, '01991': 0, '01992': 0, '01996': 0,
-  '01999': 0
+const ASA_MASTER_DATA = {
+  // — Head —
+  '00100':{bu:5,desc:'Salivary Gland',anatomic:'Head',sp1:'ENT',sp2:''},
+  '00102':{bu:6,desc:'Cleft Lip',anatomic:'Head',sp1:'ENT',sp2:''},
+  '00103':{bu:5,desc:'Eyelid (Blepharoplasty)',anatomic:'Head',sp1:'Eyes',sp2:''},
+  '00104':{bu:4,desc:'ECT',anatomic:'Head',sp1:'',sp2:''},
+  '00120':{bu:5,desc:'Ear, Not otherwise specified',anatomic:'Head',sp1:'ENT',sp2:''},
+  '00124':{bu:4,desc:'Ear, Otoscopy',anatomic:'Head',sp1:'ENT',sp2:''},
+  '00126':{bu:4,desc:'BMT',anatomic:'Head',sp1:'ENT',sp2:''},
+  '00140':{bu:5,desc:'Eye, Not otherwise specified',anatomic:'Head',sp1:'Eyes',sp2:''},
+  '00142':{bu:4,desc:'Eye (Lens)',anatomic:'Head',sp1:'Eyes',sp2:''},
+  '00144':{bu:6,desc:'Eye (Corneal Transplant)',anatomic:'Head',sp1:'Eyes',sp2:''},
+  '00145':{bu:6,desc:'Eye (Vitreoretinal)',anatomic:'Head',sp1:'Eyes',sp2:''},
+  '00147':{bu:6,desc:'Eye (Iridectomy)',anatomic:'Head',sp1:'',sp2:''},
+  '00148':{bu:4,desc:'Eye (Ophthalmoscopy)',anatomic:'Head',sp1:'',sp2:''},
+  '00160':{bu:5,desc:'Nose (Accessory Sinuses, NOS)',anatomic:'Head',sp1:'ENT',sp2:''},
+  '00162':{bu:7,desc:'Nose (Radical Sinus)',anatomic:'Head',sp1:'',sp2:''},
+  '00164':{bu:4,desc:'Nose (Soft Tissue, Biopsy)',anatomic:'Head',sp1:'ENT',sp2:''},
+  '00170':{bu:5,desc:'Intraoral, NOS',anatomic:'Head',sp1:'ENT',sp2:'Oral/Maxillofacial'},
+  '00172':{bu:6,desc:'Intraoral, Cleft Palate',anatomic:'Head',sp1:'',sp2:'Plastic Surgery'},
+  '00174':{bu:6,desc:'Intraoral, Biopsy/Retropharyngeal Tumor',anatomic:'Head',sp1:'ENT',sp2:'Oral/Maxillofacial'},
+  '00176':{bu:7,desc:'Intraoral, Radical Surgery',anatomic:'Head',sp1:'',sp2:'Oral/Maxillofacial'},
+  '00190':{bu:5,desc:'Facial Bones, NOS',anatomic:'Head',sp1:'ENT',sp2:'Oral/Maxillofacial'},
+  '00192':{bu:7,desc:'Facial Bones, Radical Surgery',anatomic:'Head',sp1:'',sp2:'Oral/Maxillofacial'},
+  '00210':{bu:11,desc:'Intracranial, NOS',anatomic:'Head',sp1:'Neuro',sp2:''},
+  '00211':{bu:10,desc:'Intracranial, Craniectomy for Hematoma Evacuation',anatomic:'Head',sp1:'Neuro',sp2:''},
+  '00212':{bu:5,desc:'Intracranial, Subdural Taps',anatomic:'Head',sp1:'',sp2:''},
+  '00214':{bu:9,desc:'Intracranial, Burr Hole',anatomic:'Head',sp1:'Neuro',sp2:''},
+  '00215':{bu:9,desc:'Intracranial, Cranioplasty',anatomic:'Head',sp1:'Neuro',sp2:''},
+  '00216':{bu:15,desc:'Intracranial, Vascular',anatomic:'Head',sp1:'Neuro',sp2:'Other'},
+  '00218':{bu:13,desc:'Intracranial, Sitting Position',anatomic:'Head',sp1:'Neuro',sp2:''},
+  '00220':{bu:10,desc:'Intracranial, VP Shunt/Other CSF Shunt',anatomic:'Head',sp1:'Neuro',sp2:''},
+  '00222':{bu:6,desc:'Intracranial, Electrocoagulation of Intracranial Nerve',anatomic:'Head',sp1:'Neuro',sp2:''},
+  // — Neck —
+  '00300':{bu:5,desc:'Soft Tissue, Head/Neck/Posterior Trunk, NOS',anatomic:'Neck',sp1:'ENT',sp2:'General Surgery'},
+  '00320':{bu:6,desc:'Thyroid, Larynx, Trachea, Lymph System of Neck; NOS',anatomic:'Neck',sp1:'ENT',sp2:'General Surgery'},
+  '00322':{bu:3,desc:'Thyroid; Needle Biopsy',anatomic:'Neck',sp1:'ENT',sp2:''},
+  '00326':{bu:8,desc:'Larynx, Trachea, Children < 1',anatomic:'Neck',sp1:'',sp2:''},
+  '00350':{bu:10,desc:'Major Vessels of Neck, NOS',anatomic:'Neck',sp1:'Vascular',sp2:'Neuro'},
+  '00352':{bu:5,desc:'Major Vessels of Neck, Simple Ligation; Temporal Artery Biopsy',anatomic:'Neck',sp1:'Vascular',sp2:''},
+  // — Thorax —
+  '00400':{bu:3,desc:'Soft Tissue, Anterior Trunk, Perineum; NOS, Simple Mastectomy',anatomic:'Thorax',sp1:'General Surgery',sp2:''},
+  '00402':{bu:5,desc:'Reconstructive Procedures on the Breast',anatomic:'Thorax',sp1:'Plastic Surgery',sp2:''},
+  '00404':{bu:5,desc:'Radical Mastectomy',anatomic:'Thorax',sp1:'Plastic Surgery',sp2:'General Surgery'},
+  '00406':{bu:13,desc:'Breast Procedures with Internal Mammary Node Dissection',anatomic:'Thorax',sp1:'Plastic Surgery',sp2:'General Surgery'},
+  '00410':{bu:4,desc:'Cardioversion',anatomic:'Thorax',sp1:'Cardiology',sp2:''},
+  '00450':{bu:5,desc:'Clavicle/Scapula ORIF',anatomic:'Thorax',sp1:'Ortho',sp2:''},
+  '00454':{bu:3,desc:'Clavicle Biopsy',anatomic:'Thorax',sp1:'Ortho',sp2:''},
+  '00470':{bu:6,desc:'Partial Rib Resection, NOS, Sternal Wires',anatomic:'Thorax',sp1:'CT Surgery',sp2:'General Surgery'},
+  '00472':{bu:10,desc:'Partial Rib Resection, Thoracoplasty',anatomic:'Thorax',sp1:'CT Surgery',sp2:'General Surgery'},
+  '00474':{bu:13,desc:'Pectus Excavatum',anatomic:'Thorax',sp1:'CT Surgery',sp2:''},
+  '00500':{bu:15,desc:'Esophageal Procedures (Open)',anatomic:'Thorax',sp1:'CT Surgery',sp2:'General Surgery'},
+  '00520':{bu:6,desc:'Closed Chest Procedures (Bronchoscopy)',anatomic:'Thorax',sp1:'Pulmonology',sp2:'CT Surgery'},
+  '00522':{bu:4,desc:'Pleural Biopsy',anatomic:'Thorax',sp1:'Pulmonology',sp2:'IR'},
+  '00524':{bu:4,desc:'Pneumocentesis',anatomic:'Thorax',sp1:'Pulmonology',sp2:'IR'},
+  '00528':{bu:8,desc:'Thoracoscopy (2 Lung Ventilation)',anatomic:'Thorax',sp1:'CT Surgery',sp2:'General Surgery'},
+  '00529':{bu:11,desc:'Thoracoscopy (1 Lung), Mediastinoscopy',anatomic:'Thorax',sp1:'CT Surgery',sp2:'General Surgery'},
+  '00530':{bu:4,desc:'Pacemaker',anatomic:'Thorax',sp1:'EP',sp2:''},
+  '00532':{bu:4,desc:'Central Venous Access, DLTC',anatomic:'Thorax',sp1:'Vascular',sp2:'IR'},
+  '00534':{bu:7,desc:'AICD Placement',anatomic:'Thorax',sp1:'EP',sp2:''},
+  '00537':{bu:10,desc:'Cardiac Ablation',anatomic:'Thorax',sp1:'EP',sp2:''},
+  '00539':{bu:18,desc:'Tracheobroncheal Reconstruction',anatomic:'Thorax',sp1:'',sp2:''},
+  '00540':{bu:12,desc:'Thoracotomy, NOS',anatomic:'Thorax',sp1:'CT Surgery',sp2:'General Surgery'},
+  '00541':{bu:15,desc:'Thoracotomy, 1 Lung Ventilation',anatomic:'Thorax',sp1:'CT Surgery',sp2:'General Surgery'},
+  '00542':{bu:15,desc:'Thoracotomy, Decortication',anatomic:'Thorax',sp1:'CT Surgery',sp2:''},
+  '00546':{bu:15,desc:'Thoracotomy, Pulmonary Resection',anatomic:'Thorax',sp1:'CT Surgery',sp2:''},
+  '00548':{bu:17,desc:'Intrathoracic, Bronchial or Tracheal Procedures',anatomic:'Thorax',sp1:'',sp2:''},
+  '00550':{bu:10,desc:'Sternal Debridement',anatomic:'Thorax',sp1:'CT Surgery',sp2:''},
+  '00560':{bu:15,desc:'Heart, Pericardium, Great Vessels, Off Pump',anatomic:'Thorax',sp1:'CT Surgery',sp2:''},
+  '00561':{bu:25,desc:'Heart, Pericardium, Great Vessels, <1 yo, On Pump',anatomic:'Thorax',sp1:'',sp2:''},
+  '00562':{bu:20,desc:'Heart, Pericardium, Great Vessels, >1 yo; Noncoronary Bypass',anatomic:'Thorax',sp1:'CT Surgery',sp2:''},
+  '00563':{bu:25,desc:'Heart, Pericardium, Great Vessels; Circulatory Arrest',anatomic:'Thorax',sp1:'CT Surgery',sp2:''},
+  '00566':{bu:25,desc:'CABG, Off Pump',anatomic:'Thorax',sp1:'CT Surgery',sp2:''},
+  '00567':{bu:18,desc:'CABG, On Pump',anatomic:'Thorax',sp1:'CT Surgery',sp2:''},
+  '00580':{bu:20,desc:'Heart/Lung Transplant',anatomic:'Thorax',sp1:'CT Surgery',sp2:'Transplant'},
+  // — Spine —
+  '00600':{bu:10,desc:'Cervical Spine',anatomic:'Spine',sp1:'Neuro',sp2:''},
+  '00604':{bu:13,desc:'Cervical Spine, Seated Position',anatomic:'Spine',sp1:'',sp2:''},
+  '00620':{bu:10,desc:'Thoracic Spine',anatomic:'Spine',sp1:'Neuro',sp2:''},
+  '00625':{bu:13,desc:'Thoracic Spine, Anterior Approach, Not 1 Lung',anatomic:'Spine',sp1:'',sp2:''},
+  '00626':{bu:15,desc:'Thoracic Spine, Anterior Approach, 1 Lung',anatomic:'Spine',sp1:'',sp2:''},
+  '00630':{bu:8,desc:'Lumbar Spine',anatomic:'Spine',sp1:'Neuro',sp2:''},
+  '00632':{bu:7,desc:'Lumbar Sympathectomy',anatomic:'Spine',sp1:'',sp2:''},
+  '00635':{bu:4,desc:'Lumbar Puncture, Dx or Therapeutic',anatomic:'Spine',sp1:'IR',sp2:''},
+  '00640':{bu:3,desc:'Closed Spine Manipulation',anatomic:'Spine',sp1:'',sp2:''},
+  '00670':{bu:13,desc:'Extensive Spine',anatomic:'Spine',sp1:'Neuro',sp2:''},
+  // — Upper Abdomen —
+  '00700':{bu:4,desc:'Upper Abdominal Wall',anatomic:'Upper Abdomen',sp1:'General Surgery',sp2:''},
+  '00702':{bu:4,desc:'Percutaneous Liver Biopsy',anatomic:'Upper Abdomen',sp1:'IR',sp2:''},
+  '00730':{bu:5,desc:'Upper Posterior Abdominal Wall',anatomic:'Upper Abdomen',sp1:'Urology',sp2:''},
+  '00731':{bu:5,desc:'EGD',anatomic:'Upper Abdomen',sp1:'Endo',sp2:'General Surgery'},
+  '00732':{bu:6,desc:'ERCP',anatomic:'Upper Abdomen',sp1:'Endo',sp2:''},
+  '00750':{bu:4,desc:'Hernia, Upper Abdomen',anatomic:'Upper Abdomen',sp1:'General Surgery',sp2:''},
+  '00752':{bu:6,desc:'Ventral Hernia, Upper Abdomen',anatomic:'Upper Abdomen',sp1:'General Surgery',sp2:''},
+  '00754':{bu:7,desc:'Omphalocele',anatomic:'Upper Abdomen',sp1:'',sp2:''},
+  '00756':{bu:7,desc:'Diaphragmatic Hernia, Transabdominal',anatomic:'Upper Abdomen',sp1:'General Surgery',sp2:''},
+  '00770':{bu:15,desc:'Major Abdominal Blood Vessel',anatomic:'Upper Abdomen',sp1:'Vascular',sp2:''},
+  '00790':{bu:7,desc:'Laparoscopy, Upper Abd (Chole)',anatomic:'Upper Abdomen',sp1:'General Surgery',sp2:''},
+  '00792':{bu:13,desc:'Partial Hepatectomy or Liver Lac Repair',anatomic:'Upper Abdomen',sp1:'General Surgery',sp2:''},
+  '00794':{bu:8,desc:'Pancreatectomy (Whipple)',anatomic:'Upper Abdomen',sp1:'General Surgery',sp2:''},
+  '00796':{bu:30,desc:'Liver Transplant',anatomic:'Upper Abdomen',sp1:'Transplant',sp2:''},
+  '00797':{bu:11,desc:'Gastric Bypass',anatomic:'Upper Abdomen',sp1:'General Surgery',sp2:''},
+  // — Lower Abdomen —
+  '00800':{bu:4,desc:'Lower Anterior Abdominal Wall',anatomic:'Lower Abdomen',sp1:'General Surgery',sp2:''},
+  '00802':{bu:5,desc:'Panniculectomy',anatomic:'Lower Abdomen',sp1:'General Surgery',sp2:''},
+  '00811':{bu:4,desc:'Interventional Colon Procedure',anatomic:'Lower Abdomen',sp1:'Endo',sp2:'General Surgery'},
+  '00812':{bu:4,desc:'Screening Colonoscopy',anatomic:'Lower Abdomen',sp1:'Endo',sp2:''},
+  '00813':{bu:5,desc:'Combined Upper/Lower Endoscopy',anatomic:'Lower Abdomen',sp1:'Endo',sp2:''},
+  '00820':{bu:5,desc:'Lower Posterior Abdominal Wall Procedures',anatomic:'Lower Abdomen',sp1:'General Surgery',sp2:''},
+  '00830':{bu:4,desc:'Lower Abdominal Hernia',anatomic:'Lower Abdomen',sp1:'General Surgery',sp2:''},
+  '00832':{bu:6,desc:'Lower Abdominal, Ventral Hernia',anatomic:'Lower Abdomen',sp1:'General Surgery',sp2:''},
+  '00834':{bu:5,desc:'Lower Abdominal Hernia, < 1 yo',anatomic:'Lower Abdomen',sp1:'',sp2:''},
+  '00836':{bu:6,desc:'Lower Abdominal Hernia, Infants < 37 wks GA',anatomic:'Lower Abdomen',sp1:'',sp2:''},
+  '00840':{bu:6,desc:'Lower Abdomen (Laparoscopy, Appy, Hyst, etc)',anatomic:'Lower Abdomen',sp1:'General Surgery',sp2:'Gyn'},
+  '00842':{bu:4,desc:'Amniocentesis',anatomic:'Lower Abdomen',sp1:'Gyn',sp2:''},
+  '00844':{bu:7,desc:'Abdominoperineal Resection',anatomic:'Lower Abdomen',sp1:'General Surgery',sp2:'Gyn'},
+  '00846':{bu:8,desc:'Radical Hysterectomy',anatomic:'Lower Abdomen',sp1:'Gyn',sp2:''},
+  '00848':{bu:8,desc:'Pelvic Exenteration',anatomic:'Lower Abdomen',sp1:'',sp2:''},
+  '00851':{bu:6,desc:'Tubal Ligation',anatomic:'Lower Abdomen',sp1:'Gyn',sp2:''},
+  '00860':{bu:6,desc:'Extraperitoneal, Lower Abdomen (Not Cystoscopic) NOS',anatomic:'Lower Abdomen',sp1:'Urology',sp2:''},
+  '00862':{bu:7,desc:'Extraperitoneal, Donor Nephrectomy',anatomic:'Lower Abdomen',sp1:'Urology',sp2:'Transplant'},
+  '00864':{bu:8,desc:'Total Cystectomy',anatomic:'Lower Abdomen',sp1:'Urology',sp2:''},
+  '00865':{bu:7,desc:'Extraperitoneal, Radical Prostatectomy',anatomic:'Lower Abdomen',sp1:'Urology',sp2:''},
+  '00866':{bu:10,desc:'Adrenalectomy',anatomic:'Lower Abdomen',sp1:'Urology',sp2:''},
+  '00868':{bu:10,desc:'Renal Transplant (Recipient)',anatomic:'Lower Abdomen',sp1:'Transplant',sp2:''},
+  '00870':{bu:5,desc:'Cystolithotomy',anatomic:'Lower Abdomen',sp1:'',sp2:''},
+  '00873':{bu:5,desc:'ESWL (No Water Bath)',anatomic:'Lower Abdomen',sp1:'Urology',sp2:''},
+  '00880':{bu:15,desc:'Major Lower Abdominal Vessels; NOS',anatomic:'Lower Abdomen',sp1:'Vascular',sp2:''},
+  '00882':{bu:10,desc:'IVC Ligation',anatomic:'Lower Abdomen',sp1:'Vascular',sp2:''},
+  // — Perineum —
+  '00902':{bu:5,desc:'Anorectal Procedure',anatomic:'Perineum',sp1:'General Surgery',sp2:''},
+  '00904':{bu:7,desc:'Radical Perineal Procedure',anatomic:'Perineum',sp1:'',sp2:''},
+  '00906':{bu:4,desc:'Vulvectomy',anatomic:'Perineum',sp1:'Gyn',sp2:''},
+  '00908':{bu:6,desc:'Prostatectomy',anatomic:'Perineum',sp1:'Urology',sp2:''},
+  '00910':{bu:3,desc:'Cysto (Bladder)',anatomic:'Perineum',sp1:'Urology',sp2:''},
+  '00912':{bu:5,desc:'TURBT',anatomic:'Perineum',sp1:'Urology',sp2:''},
+  '00914':{bu:5,desc:'TURP',anatomic:'Perineum',sp1:'Urology',sp2:''},
+  '00916':{bu:5,desc:'Post TURP Bleeding',anatomic:'Perineum',sp1:'',sp2:''},
+  '00918':{bu:5,desc:'Cysto (Ureter)',anatomic:'Perineum',sp1:'Urology',sp2:''},
+  '00920':{bu:3,desc:'Male Genitalia (Urethroplasty, Hydrocele)',anatomic:'Perineum',sp1:'Urology',sp2:''},
+  '00921':{bu:3,desc:'Vasectomy',anatomic:'Perineum',sp1:'Urology',sp2:''},
+  '00922':{bu:6,desc:'Seminal Vesicles',anatomic:'Perineum',sp1:'',sp2:''},
+  '00924':{bu:4,desc:'Undescended Testis',anatomic:'Perineum',sp1:'',sp2:''},
+  '00926':{bu:4,desc:'Orchiectomy, Inguinal',anatomic:'Perineum',sp1:'Urology',sp2:''},
+  '00928':{bu:6,desc:'Orchiectomy, Abdominal',anatomic:'Perineum',sp1:'',sp2:''},
+  '00930':{bu:4,desc:'Orchiopexy',anatomic:'Perineum',sp1:'Urology',sp2:''},
+  '00932':{bu:4,desc:'Penis Amputation',anatomic:'Perineum',sp1:'',sp2:''},
+  '00934':{bu:6,desc:'Penis Amputation with Inguinal Lymphadenectomy',anatomic:'Perineum',sp1:'',sp2:''},
+  '00936':{bu:8,desc:'Penis Amputation with Inguinal and Iliac Lymphadenectomy',anatomic:'Perineum',sp1:'',sp2:''},
+  '00938':{bu:4,desc:'Penile Prosthesis',anatomic:'Perineum',sp1:'Urology',sp2:''},
+  '00940':{bu:3,desc:'Vaginal, NOS',anatomic:'Perineum',sp1:'Gyn',sp2:''},
+  '00942':{bu:4,desc:'Colpotomy, Vaginectomy, Colporrhaphy, Open Urethral Procedures',anatomic:'Perineum',sp1:'',sp2:''},
+  '00944':{bu:6,desc:'Vaginal Hysterectomy',anatomic:'Perineum',sp1:'',sp2:''},
+  '00948':{bu:4,desc:'Cervical Cerclage',anatomic:'Perineum',sp1:'OB',sp2:''},
+  '00950':{bu:5,desc:'Culdoscopy',anatomic:'Perineum',sp1:'Gyn',sp2:''},
+  '00952':{bu:4,desc:'Hysteroscopy',anatomic:'Perineum',sp1:'Gyn',sp2:''},
+  // — Pelvis —
+  '01112':{bu:5,desc:'Bone Marrow Aspiration',anatomic:'Pelvis',sp1:'IR',sp2:''},
+  '01120':{bu:6,desc:'Procedures on Bony Pelvis',anatomic:'Pelvis',sp1:'Ortho',sp2:''},
+  '01130':{bu:3,desc:'Body Cast Application',anatomic:'Pelvis',sp1:'',sp2:''},
+  '01140':{bu:15,desc:'Interpelviadominal (Hindquarter) Amputation',anatomic:'Pelvis',sp1:'',sp2:''},
+  '01150':{bu:10,desc:'Radical Procedures for Tumor of Pelvis',anatomic:'Pelvis',sp1:'',sp2:''},
+  '01160':{bu:4,desc:'Closed Procedures, Pubic Symphysis or SI Joint',anatomic:'Pelvis',sp1:'',sp2:''},
+  '01170':{bu:8,desc:'Open SI Joint, Open Pubic Symphysis',anatomic:'Pelvis',sp1:'Ortho',sp2:''},
+  '01173':{bu:12,desc:'ORIF Pelvic Fracture',anatomic:'Pelvis',sp1:'Ortho',sp2:''},
+  // — Upper Leg —
+  '01200':{bu:4,desc:'Closed Hip Procedure',anatomic:'Upper Leg',sp1:'',sp2:''},
+  '01202':{bu:4,desc:'Hip Scope',anatomic:'Upper Leg',sp1:'Ortho',sp2:''},
+  '01210':{bu:6,desc:'Open Hip Procedure, NOS',anatomic:'Upper Leg',sp1:'Ortho',sp2:''},
+  '01212':{bu:10,desc:'Hip Disarticulation',anatomic:'Upper Leg',sp1:'',sp2:''},
+  '01214':{bu:8,desc:'Total Hip',anatomic:'Upper Leg',sp1:'Ortho',sp2:''},
+  '01215':{bu:10,desc:'Total Hip, Revision',anatomic:'Upper Leg',sp1:'Ortho',sp2:''},
+  '01220':{bu:4,desc:'Closed Femur, Upper 2/3',anatomic:'Upper Leg',sp1:'Ortho',sp2:''},
+  '01230':{bu:6,desc:'Open Femur, Upper 2/3',anatomic:'Upper Leg',sp1:'Ortho',sp2:''},
+  '01232':{bu:5,desc:'Above Knee Amputation (Upper 2/3 Femur)',anatomic:'Upper Leg',sp1:'Vascular',sp2:''},
+  '01234':{bu:8,desc:'Upper 2/3 Femur, Radical Resection',anatomic:'Upper Leg',sp1:'',sp2:''},
+  '01250':{bu:4,desc:'Nerves, Muscles, Tendons, Fascia, Bursae of Upper Leg',anatomic:'Upper Leg',sp1:'',sp2:''},
+  '01260':{bu:3,desc:'Veins of Upper Leg',anatomic:'Upper Leg',sp1:'Vascular',sp2:''},
+  '01270':{bu:8,desc:'Femoral Artery Bypass',anatomic:'Upper Leg',sp1:'Vascular',sp2:''},
+  '01272':{bu:4,desc:'Femoral Artery Ligation',anatomic:'Upper Leg',sp1:'',sp2:''},
+  '01274':{bu:6,desc:'Femoral Artery Embolectomy',anatomic:'Upper Leg',sp1:'Vascular',sp2:''},
+  // — Knee —
+  '01320':{bu:4,desc:'Soft Tissue Knee (Nerves, Bursae, Tendons, Muscles, Fascia)',anatomic:'Knee',sp1:'',sp2:''},
+  '01340':{bu:4,desc:'Closed Femur, Lower 2/3',anatomic:'Knee',sp1:'Ortho',sp2:''},
+  '01360':{bu:5,desc:'Open Femur, Lower 2/3',anatomic:'Knee',sp1:'Ortho',sp2:''},
+  '01380':{bu:3,desc:'Knee Manipulation',anatomic:'Knee',sp1:'',sp2:''},
+  '01382':{bu:3,desc:'Diagnostic Arthroscopic Procedure of Knee Joint',anatomic:'Knee',sp1:'',sp2:''},
+  '01390':{bu:3,desc:'Closed Procedure on Upper Tibia, Fibula, Patella',anatomic:'Knee',sp1:'',sp2:''},
+  '01392':{bu:4,desc:'Open Procedure on Upper Tibia, Fibula, Patella',anatomic:'Knee',sp1:'',sp2:''},
+  '01400':{bu:4,desc:'Knee Scope or Open',anatomic:'Knee',sp1:'Ortho',sp2:''},
+  '01402':{bu:7,desc:'Total Knee',anatomic:'Knee',sp1:'Ortho',sp2:''},
+  '01404':{bu:5,desc:'Disarticulation at Knee',anatomic:'Knee',sp1:'',sp2:''},
+  '01420':{bu:3,desc:'Cast Application or Repair Involving Knee Joint',anatomic:'Knee',sp1:'',sp2:''},
+  '01430':{bu:3,desc:'Veins of Knee and Popliteal Area',anatomic:'Knee',sp1:'',sp2:''},
+  '01432':{bu:6,desc:'Knee AV Fistula',anatomic:'Knee',sp1:'',sp2:''},
+  '01440':{bu:8,desc:'Procedure on Arteries of Knee/Popliteal Area',anatomic:'Knee',sp1:'Vascular',sp2:''},
+  '01442':{bu:8,desc:'Popliteal Thromboendarterectomy',anatomic:'Knee',sp1:'Vascular',sp2:''},
+  '01444':{bu:8,desc:'Popliteal Aneurysm',anatomic:'Knee',sp1:'Vascular',sp2:''},
+  // — Lower Leg —
+  '01462':{bu:3,desc:'Lower Leg, Ankle, Foot (Closed)',anatomic:'Lower Leg',sp1:'Ortho',sp2:''},
+  '01464':{bu:3,desc:'Ankle/Foot (Scope)',anatomic:'Lower Leg',sp1:'Ortho',sp2:''},
+  '01470':{bu:3,desc:'Lower Leg, Foot (Soft Tissue)',anatomic:'Lower Leg',sp1:'Ortho',sp2:''},
+  '01472':{bu:5,desc:'Achilles',anatomic:'Lower Leg',sp1:'Ortho',sp2:''},
+  '01474':{bu:5,desc:'Gastrocnemius Resection',anatomic:'Lower Leg',sp1:'',sp2:''},
+  '01480':{bu:3,desc:'Lower Leg, Ankle, Foot (Open)',anatomic:'Lower Leg',sp1:'Ortho',sp2:''},
+  '01482':{bu:4,desc:'BKA',anatomic:'Lower Leg',sp1:'Vascular',sp2:''},
+  '01484':{bu:4,desc:'Osteotomy Tibia/Fibula',anatomic:'Lower Leg',sp1:'',sp2:''},
+  '01486':{bu:7,desc:'Total Ankle Replacement',anatomic:'Lower Leg',sp1:'',sp2:''},
+  '01490':{bu:3,desc:'Lower Leg Cast',anatomic:'Lower Leg',sp1:'',sp2:''},
+  '01500':{bu:8,desc:'Arteries of Lower Leg, Bypass Grafting',anatomic:'Lower Leg',sp1:'Vascular',sp2:''},
+  '01502':{bu:6,desc:'Arteries of Lower Leg, Embolectomy',anatomic:'Lower Leg',sp1:'Vascular',sp2:''},
+  '01520':{bu:3,desc:'Veins of Lower Leg',anatomic:'Lower Leg',sp1:'Vascular',sp2:''},
+  '01522':{bu:5,desc:'Veins of Lower Leg, Venous Thrombectomy',anatomic:'Lower Leg',sp1:'',sp2:''},
+  // — Shoulder/Axilla —
+  '01610':{bu:5,desc:'Nerves, Muscles, Tendons, Fascia, Bursae of Shoulder/Axilla',anatomic:'Shoulder/Axilla',sp1:'',sp2:''},
+  '01620':{bu:4,desc:'Shoulder Manipulation',anatomic:'Shoulder/Axilla',sp1:'Ortho',sp2:''},
+  '01622':{bu:4,desc:'Diagnostic Arthroscopic Procedure of Shoulder Joint',anatomic:'Shoulder/Axilla',sp1:'',sp2:''},
+  '01630':{bu:5,desc:'Shoulder Scope',anatomic:'Shoulder/Axilla',sp1:'Ortho',sp2:''},
+  '01634':{bu:9,desc:'Shoulder Disarticulation',anatomic:'Shoulder/Axilla',sp1:'',sp2:''},
+  '01636':{bu:15,desc:'Forequarter Amputation',anatomic:'Shoulder/Axilla',sp1:'',sp2:''},
+  '01638':{bu:10,desc:'Total Shoulder',anatomic:'Shoulder/Axilla',sp1:'Ortho',sp2:''},
+  '01650':{bu:6,desc:'Arteries of Shoulder/Axilla, NOS',anatomic:'Shoulder/Axilla',sp1:'Vascular',sp2:''},
+  '01652':{bu:10,desc:'Axillary/Brachial Artery Aneurysm',anatomic:'Shoulder/Axilla',sp1:'',sp2:''},
+  '01654':{bu:8,desc:'Axillary/Brachial Artery Bypass',anatomic:'Shoulder/Axilla',sp1:'',sp2:''},
+  '01656':{bu:10,desc:'Axillary Femoral Bypass',anatomic:'Shoulder/Axilla',sp1:'',sp2:''},
+  '01670':{bu:4,desc:'Veins of Shoulder or Axilla',anatomic:'Shoulder/Axilla',sp1:'',sp2:''},
+  '01680':{bu:3,desc:'Shoulder Cast Application or Removal',anatomic:'Shoulder/Axilla',sp1:'',sp2:''},
+  // — Upper Arm/Elbow —
+  '01710':{bu:3,desc:'Nerves, Muscles, Tendons, Fascia, Bursae of Upper Arm/Elbow, NOS',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  '01712':{bu:5,desc:'Tenotomy, Elbow to Shoulder, Open',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  '01714':{bu:5,desc:'Tenoplasty, Elbow to Shoulder',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  '01716':{bu:5,desc:'Tenodesis, Rupture of Long Tendon of Biceps',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  '01730':{bu:3,desc:'Closed Humerus/Elbow Surgery',anatomic:'Upper Arm/Elbow',sp1:'Ortho',sp2:''},
+  '01732':{bu:3,desc:'Diagnostic Arthroscopic Procedures of Elbow Joint',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  '01740':{bu:4,desc:'Open Elbow, NOS',anatomic:'Upper Arm/Elbow',sp1:'Ortho',sp2:''},
+  '01742':{bu:5,desc:'Osteotomy Humerus',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  '01744':{bu:5,desc:'Repair of Non-union or Malunion of Humerus',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  '01756':{bu:6,desc:'Radical Elbow Procedures',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  '01758':{bu:5,desc:'Cyst or Tumor of Humerus',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  '01760':{bu:7,desc:'Total Elbow Replacement',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  '01770':{bu:6,desc:'Arteries of Upper Arm and Elbow, NOS',anatomic:'Upper Arm/Elbow',sp1:'Vascular',sp2:''},
+  '01772':{bu:6,desc:'Arteries of Upper Arm and Elbow, Embolectomy',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  '01780':{bu:3,desc:'Veins of Upper Arm and Elbow; NOS',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  '01782':{bu:4,desc:'Phleborrhaphy (Upper Arm)',anatomic:'Upper Arm/Elbow',sp1:'',sp2:''},
+  // — Forearm/Wrist/Hand —
+  '01810':{bu:3,desc:'Hand (Soft Tissue)',anatomic:'Forearm/Wrist/Hand',sp1:'Ortho',sp2:''},
+  '01820':{bu:3,desc:'Closed Procedures on Radius, Ulna, Wrist, or Hand Bones',anatomic:'Forearm/Wrist/Hand',sp1:'Ortho',sp2:''},
+  '01829':{bu:3,desc:'Arthroscopic Procedure on Wrist',anatomic:'Forearm/Wrist/Hand',sp1:'',sp2:''},
+  '01830':{bu:3,desc:'Wrist/Hand Open or Scope',anatomic:'Forearm/Wrist/Hand',sp1:'Ortho',sp2:''},
+  '01832':{bu:6,desc:'Total Wrist Replacement',anatomic:'Forearm/Wrist/Hand',sp1:'',sp2:''},
+  '01840':{bu:6,desc:'Arteries of Wrist/Hand, NOS',anatomic:'Forearm/Wrist/Hand',sp1:'',sp2:''},
+  '01842':{bu:6,desc:'Arteries Wrist/Hand, Embolectomy',anatomic:'Forearm/Wrist/Hand',sp1:'',sp2:''},
+  '01844':{bu:6,desc:'AV Fistula Creation',anatomic:'Forearm/Wrist/Hand',sp1:'Vascular',sp2:''},
+  '01850':{bu:3,desc:'Veins of Wrist and Hand, NOS',anatomic:'Forearm/Wrist/Hand',sp1:'',sp2:''},
+  '01852':{bu:4,desc:'Phleborrhaphy (Forearm)',anatomic:'Forearm/Wrist/Hand',sp1:'',sp2:''},
+  '01860':{bu:3,desc:'Lower Arm, Casting Procedures',anatomic:'Forearm/Wrist/Hand',sp1:'',sp2:''},
+  // — Radiological Procedures —
+  '01916':{bu:5,desc:'Arteriogram/Venogram',anatomic:'Radiological Procedures',sp1:'Vascular',sp2:'IR'},
+  '01920':{bu:7,desc:'Coronary Angiography',anatomic:'Radiological Procedures',sp1:'',sp2:''},
+  '01922':{bu:7,desc:'Non-invasive Imaging (TEE, MRI, etc)',anatomic:'Radiological Procedures',sp1:'Cardiology',sp2:'MRI'},
+  '01924':{bu:6,desc:'Interventional Radiological, Arterial System; NOS',anatomic:'Radiological Procedures',sp1:'IR',sp2:''},
+  '01925':{bu:8,desc:'Interventional Radiological, Arterial; Carotid or Coronary',anatomic:'Radiological Procedures',sp1:'IR',sp2:'Vascular'},
+  '01926':{bu:10,desc:'Interventional Radiological, Arterial; Intracranial/Intracardiac/Aortic',anatomic:'Radiological Procedures',sp1:'IR',sp2:''},
+  '01930':{bu:5,desc:'Interventional Radiological, Venous/Lymphatic; NOS',anatomic:'Radiological Procedures',sp1:'IR',sp2:'Vascular'},
+  '01931':{bu:7,desc:'TIPS',anatomic:'Radiological Procedures',sp1:'IR',sp2:''},
+  '01932':{bu:7,desc:'Interventional Radiological, Venous/Lymphatic; Intrathoracic or Jugular',anatomic:'Radiological Procedures',sp1:'',sp2:''},
+  '01933':{bu:8,desc:'Interventional Radiological, Venous/Lymphatic; Intracranial',anatomic:'Radiological Procedures',sp1:'IR',sp2:''},
+  '01937':{bu:4,desc:'Percutaneous Image Guided Injection/Drainage, Spine; Cervical/Thoracic',anatomic:'Radiological Procedures',sp1:'',sp2:''},
+  '01938':{bu:4,desc:'Percutaneous Image Guided Injection/Drainage, Spine; Lumbar/Sacral',anatomic:'Radiological Procedures',sp1:'',sp2:''},
+  '01939':{bu:4,desc:'Percutaneous Image Guided Destruction, Spine; Cervical/Thoracic',anatomic:'Radiological Procedures',sp1:'',sp2:''},
+  '01940':{bu:4,desc:'Percutaneous Image Guided Destruction, Spine; Lumbar/Sacral',anatomic:'Radiological Procedures',sp1:'',sp2:''},
+  '01941':{bu:5,desc:'Kyphoplasty/Vertebroplasty',anatomic:'Radiological Procedures',sp1:'Neuro',sp2:''},
+  // — OB —
+  '01958':{bu:5,desc:'Cephalic Version',anatomic:'OB',sp1:'OB',sp2:''},
+  '01961':{bu:7,desc:'Cesarean Delivery Only',anatomic:'OB',sp1:'OB',sp2:''},
+  '01962':{bu:8,desc:'Urgent Hysterectomy Following Delivery',anatomic:'OB',sp1:'OB',sp2:''},
+  '01963':{bu:10,desc:'Cesarean Hysterectomy Without Labor Analgesia',anatomic:'OB',sp1:'OB',sp2:''},
+  '01965':{bu:4,desc:'Incomplete or Missed Abortion',anatomic:'OB',sp1:'OB',sp2:'Gyn'},
+  '01967':{bu:5,desc:'Labor Epidural',anatomic:'OB',sp1:'OB',sp2:''},
+  '01968':{bu:3,desc:'Cesarean Delivery Following Labor Epidural',anatomic:'OB',sp1:'OB',sp2:''},
+  '01969':{bu:5,desc:'Cesarean Hysterectomy Following Labor Epidural',anatomic:'OB',sp1:'OB',sp2:''},
+  // — Other —
+  '01990':{bu:7,desc:'Organ Harvesting',anatomic:'Other',sp1:'',sp2:''}
 };
 
-const ASA_CODE_DESCRIPTIONS = {};
+const ASA_ANATOMIC_REGIONS = ['Head','Neck','Thorax','Spine','Upper Abdomen','Lower Abdomen','Perineum','Pelvis','Upper Leg','Knee','Lower Leg','Shoulder/Axilla','Upper Arm/Elbow','Forearm/Wrist/Hand','Radiological Procedures','OB','Other'];
+const ASA_SPECIALTIES = ['General Surgery','ENT','Eyes','Ortho','Gyn','Neuro','Urology','CT Surgery','Vascular','IR','EP','Cardiology','Endo','Transplant','OB','Plastic Surgery','Oral/Maxillofacial','Pulmonology','MRI','Other'];
 
 // ================================================================
 // BILLING SHEET SCAN — PARSER
@@ -18228,7 +18018,7 @@ function renderScanCaseCards() {
 
   container.innerHTML = '';
   scanParsedCases.forEach((c, idx) => {
-    const unitLabel = (ASA_BASE_UNITS[c.asaCode] !== undefined || asaCustomBaseUnits[c.asaCode] !== undefined) ? c.asaCode : 'Unknown';
+    const unitLabel = (ASA_MASTER_DATA[c.asaCode] || asaMasterCodes[c.asaCode]) ? c.asaCode : 'Unknown';
     const tags = [];
     if (c.isEmergency) tags.push('<span class="scc-tag emergency">Emergency</span>');
     if (c.isShared) tags.push('<span class="scc-tag shared">Shared</span>');
@@ -18550,7 +18340,7 @@ auth.onAuthStateChanged(async (user) => {
     const sharedLoadPromise = loadSharedCaseOverrides().then(() => {
       return loadSharedCases(); // applies overrides after loading
     }).then(() => {
-      return Promise.all([loadSurgeonMappings(), loadUserProfiles(), loadAsaCodeSections(), loadAsaCodeProcedures()]);
+      return Promise.all([loadSurgeonMappings(), loadUserProfiles(), loadAsaMasterCodes(), loadAsaCodeProcedures()]);
     });
     const sharedLoadTimeout = new Promise(resolve => setTimeout(() => {
       if (!sharedCasesLoaded) {
