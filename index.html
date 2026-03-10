@@ -5156,8 +5156,72 @@ function isValidMilTime(val) {
 }
 
 function bindMilTimeInput(input) {
+  // Handle Backspace/Delete through the colon as if it weren't there
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Backspace') {
+      const pos = this.selectionStart;
+      const selEnd = this.selectionEnd;
+      // No text selection and cursor is right after the colon — skip colon, delete digit before it
+      if (pos === selEnd && pos > 0 && this.value[pos - 1] === ':') {
+        e.preventDefault();
+        const digits = this.value.replace(/[^0-9]/g, '');
+        let digitsBefore = 0;
+        for (let i = 0; i < pos - 1; i++) {
+          if (/[0-9]/.test(this.value[i])) digitsBefore++;
+        }
+        if (digitsBefore > 0) {
+          const newDigits = digits.substring(0, digitsBefore - 1) + digits.substring(digitsBefore);
+          this.value = newDigits.length >= 3 ? formatMilTimeInput(newDigits) : newDigits;
+          const targetPos = digitsBefore - 1;
+          let newPos = 0, dc = 0;
+          while (newPos < this.value.length && dc < targetPos) {
+            if (/[0-9]/.test(this.value[newPos])) dc++;
+            newPos++;
+          }
+          this.setSelectionRange(newPos, newPos);
+        } else {
+          this.value = this.value.substring(pos);
+          this.setSelectionRange(0, 0);
+        }
+        return;
+      }
+    }
+    if (e.key === 'Delete') {
+      const pos = this.selectionStart;
+      const selEnd = this.selectionEnd;
+      // No text selection and cursor is right before the colon — skip colon, delete digit after it
+      if (pos === selEnd && pos < this.value.length && this.value[pos] === ':') {
+        e.preventDefault();
+        const digits = this.value.replace(/[^0-9]/g, '');
+        let digitsBefore = 0;
+        for (let i = 0; i < pos; i++) {
+          if (/[0-9]/.test(this.value[i])) digitsBefore++;
+        }
+        if (digitsBefore < digits.length) {
+          const newDigits = digits.substring(0, digitsBefore) + digits.substring(digitsBefore + 1);
+          this.value = newDigits.length >= 3 ? formatMilTimeInput(newDigits) : newDigits;
+          let newPos = 0, dc = 0;
+          while (newPos < this.value.length && dc < digitsBefore) {
+            if (/[0-9]/.test(this.value[newPos])) dc++;
+            newPos++;
+          }
+          this.setSelectionRange(newPos, newPos);
+        }
+        return;
+      }
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (this.value) this.value = formatMilTimeInput(this.value);
+      this.classList.toggle('invalid', this.value && !isValidMilTime(this.value));
+      this.blur();
+    }
+  });
+
   input.addEventListener('input', function() {
     const digits = this.value.replace(/[^0-9]/g, '');
+    // Clean up stale formatting (trailing/leading colon with no useful digits)
+    if (digits.length === 0) { this.value = ''; return; }
     // When 4+ digits entered (e.g. "1900"), format immediately to "19:00"
     if (digits.length >= 4 && !this.value.includes(':')) {
       this.value = formatMilTimeInput(this.value);
@@ -5177,16 +5241,6 @@ function bindMilTimeInput(input) {
       this.value = formatMilTimeInput(this.value);
     }
     this.classList.toggle('invalid', this.value && !isValidMilTime(this.value));
-  });
-
-  // Format and blur on Enter
-  input.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (this.value) this.value = formatMilTimeInput(this.value);
-      this.classList.toggle('invalid', this.value && !isValidMilTime(this.value));
-      this.blur();
-    }
   });
 
   // Allow typing only digits and colon
@@ -13516,14 +13570,26 @@ function renderDailyTab() {
 
   let monthTotal = 0;
   let shiftCount = 0;
+  // For avg pts/shift, only count shifts up to today (not future scheduled shifts)
+  let pastMonthTotal = 0;
+  let pastShiftCount = 0;
+  const isCurrentOrPastMonth = (dailyYear < today.getFullYear()) ||
+    (dailyYear === today.getFullYear() && dailyMonth <= today.getMonth());
+  const isPastMonth = (dailyYear < today.getFullYear()) ||
+    (dailyYear === today.getFullYear() && dailyMonth < today.getMonth());
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = prefix + '-' + String(d).padStart(2, '0');
     const pts = round2(dailyPts[d] || 0);
     const shiftType = dailyTypes[d];
     const isToday = dateStr === todayStr;
     const isVac = shiftType === 'vacation';
+    const isPastOrToday = isPastMonth || dateStr <= todayStr;
     monthTotal += pts;
     if (shiftType) shiftCount++;
+    if (isPastOrToday) {
+      pastMonthTotal += pts;
+      if (shiftType) pastShiftCount++;
+    }
 
     let classes = 'daily-cal-cell';
     if (isToday) classes += ' today';
@@ -13544,8 +13610,8 @@ function renderDailyTab() {
 
   document.getElementById('dailyCalendarContainer').innerHTML = html;
 
-  // Summary
-  const avgPerShift = shiftCount > 0 ? (monthTotal / shiftCount).toFixed(1) : '—';
+  // Summary — avg pts/shift uses only past/today shifts to avoid dilution by future dates
+  const avgPerShift = pastShiftCount > 0 ? (pastMonthTotal / pastShiftCount).toFixed(1) : '—';
   document.getElementById('dailyMonthSummary').innerHTML =
     `<span style="font-size:1.3rem;font-weight:700;color:var(--accent);">${round2(monthTotal).toFixed(1)}</span> <span style="color:var(--text-dim);">total pts</span> &bull; <strong>${shiftCount}</strong> shifts &bull; <strong>${avgPerShift}</strong> avg pts/shift`;
 }
