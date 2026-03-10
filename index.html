@@ -7513,9 +7513,9 @@ function renderAsaCodesPage() {
     return;
   }
 
-  // Category list mode (default)
+  // Category list mode (default) — two-column grid, Excel order
   const categories = asaBrowseMode === 'anatomic' ? ASA_ANATOMIC_REGIONS : ASA_SPECIALTIES;
-  let html = '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+  let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
   categories.forEach(function(cat) {
     const count = Object.keys(codes).filter(function(code) {
       const entry = codes[code];
@@ -7523,7 +7523,7 @@ function renderAsaCodesPage() {
       return entry.sp1 === cat || entry.sp2 === cat;
     }).length;
     if (count === 0) return;
-    html += '<div onclick="asaSelectedCategory=\'' + escHtml(cat).replace(/'/g, "\\'") + '\';renderAsaCodesPage();" style="padding:8px 14px;border-radius:16px;font-size:0.78rem;background:var(--surface);border:1px solid var(--border);color:var(--text);cursor:pointer;user-select:none;">';
+    html += '<div onclick="asaSelectedCategory=\'' + escHtml(cat).replace(/'/g, "\\'") + '\';renderAsaCodesPage();" style="padding:8px 14px;border-radius:16px;font-size:0.78rem;background:var(--surface);border:1px solid var(--border);color:var(--text);cursor:pointer;user-select:none;text-align:center;">';
     html += escHtml(cat) + ' <span style="color:var(--text-dim);font-size:0.7rem;">(' + count + ')</span></div>';
   });
   html += '</div>';
@@ -17655,7 +17655,7 @@ const ASA_MASTER_DATA = {
 };
 
 const ASA_ANATOMIC_REGIONS = ['Head','Neck','Thorax','Spine','Upper Abdomen','Lower Abdomen','Perineum','Pelvis','Upper Leg','Knee','Lower Leg','Shoulder/Axilla','Upper Arm/Elbow','Forearm/Wrist/Hand','Radiological Procedures','OB','Other'];
-const ASA_SPECIALTIES = ['General Surgery','ENT','Eyes','Ortho','Gyn','Neuro','Urology','CT Surgery','Vascular','IR','EP','Cardiology','Endo','Transplant','OB','Plastic Surgery','Oral/Maxillofacial','Pulmonology','MRI','Other'];
+const ASA_SPECIALTIES = ['ENT','Plastic Surgery','Oral/Maxillofacial','Eyes','Neuro','Vascular','CT Surgery','Pulmonology','General Surgery','IR','EP','Cardiology','Endo','Gyn','OB','Urology','Ortho','Transplant','MRI','Other'];
 
 // ================================================================
 // BILLING SHEET SCAN — PARSER
