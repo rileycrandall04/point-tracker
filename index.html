@@ -3196,6 +3196,18 @@ input.mil-time.invalid {
     <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:16px;">What's new in the Point Tracker.</p>
 
     <div style="margin-bottom:20px;">
+      <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Mar 9, 2026</h3>
+      <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
+        <li><strong>Earnings Estimator redesign</strong> &mdash; Replaced the old avg-pts/hr &times; hrs/week model with a per-shift-type projection. The estimator now shows a table of each shift type you&rsquo;ve worked, with auto-calculated avg points per shift and shifts per week. Edit any value to explore what-if scenarios; overrides are highlighted and resettable. Annual estimate uses total weekly points &times; 52 &times; $/pt, with vacation naturally baked in.</li>
+        <li><strong>Daily avg pts/shift fix</strong> &mdash; Points per shift on the daily screen now ignores future scheduled dates in the current month, giving an accurate running average through today.</li>
+        <li><strong>Time input editing</strong> &mdash; Military time inputs now allow smooth backspacing and deleting through the colon. Editing feels natural&mdash;type or delete as if the colon isn&rsquo;t there and it reformats automatically.</li>
+        <li><strong>ASA reference redesign</strong> &mdash; The ASA code reference page now uses concise single-line rows with expandable details. Codes are organized by section with a search bar and collapsible categories.</li>
+        <li><strong>Admin ASA editor</strong> &mdash; Admins can add, edit, and remove ASA codes with editable base unit values. Supports adding multiple codes at once, per-section organization, and an &ldquo;Other&rdquo; section for shared codes.</li>
+        <li><strong>Procedure &harr; ASA mapping</strong> &mdash; User-specific procedure-to-ASA-code mappings are now maintained. Procedure suggestions skip when the procedure name is already filled in.</li>
+      </ul>
+    </div>
+
+    <div style="margin-bottom:20px;">
       <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Mar 6, 2026</h3>
       <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
         <li><strong>Points &harr; dollars toggle</strong> &mdash; Top Producing Cases and Procedure Efficiency cards now have a &ldquo;Show $&rdquo; toggle to view values as dollar amounts using your set $/point rate.</li>
