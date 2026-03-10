@@ -7137,7 +7137,7 @@ document.getElementById('editLaborShared').addEventListener('change', function()
     data.cases.forEach(c => {
       if (c.caseType !== 'standard' || !c.procedure) return;
       const name = c.procedure.trim();
-      if (!name) return;
+      if (!name || name.toLowerCase() === 'standard') return;
       if (!map[name]) map[name] = { count: 0, lastUnits: '', lastASACode: '' };
       map[name].count++;
       if (c.baseUnits) map[name].lastUnits = c.baseUnits;
@@ -7150,7 +7150,7 @@ document.getElementById('editLaborShared').addEventListener('change', function()
         if (sc.uid === myUid) return;
         if (sc.caseType !== 'standard' || !sc.procedure) return;
         const name = sc.procedure.trim();
-        if (!name) return;
+        if (!name || name.toLowerCase() === 'standard') return;
         if (!map[name]) map[name] = { count: 0, lastUnits: '', lastASACode: '' };
         map[name].count++;
         if (sc.baseUnits) map[name].lastUnits = sc.baseUnits;
@@ -7251,7 +7251,7 @@ let asaRefReturnPage = null;
       if (c.caseType !== 'standard' || !c.asaCode || !c.procedure) return;
       if (c.asaCode.trim() === code) {
         const name = c.procedure.trim();
-        if (!name) return;
+        if (!name || name.toLowerCase() === 'standard') return;
         map[name] = (map[name] || 0) + 1;
       }
     });
@@ -7262,7 +7262,7 @@ let asaRefReturnPage = null;
         if (sc.caseType !== 'standard' || !sc.asaCode || !sc.procedure) return;
         if (sc.asaCode.trim() === code) {
           const name = sc.procedure.trim();
-          if (!name) return;
+          if (!name || name.toLowerCase() === 'standard') return;
           map[name] = (map[name] || 0) + 1;
         }
       });
@@ -7596,7 +7596,7 @@ function autoLearnProcedureMapping(procedure, asaCode) {
   if (!procedure || !asaCode || !currentUser) return;
   procedure = procedure.trim();
   asaCode = asaCode.trim();
-  if (!procedure || asaCode.length < 5) return;
+  if (!procedure || procedure.toLowerCase() === 'standard' || asaCode.length < 5) return;
   if (!asaCodeProcedures[asaCode]) asaCodeProcedures[asaCode] = [];
   var exists = asaCodeProcedures[asaCode].some(function(p) { return p.toLowerCase() === procedure.toLowerCase(); });
   if (exists) return;
