@@ -4119,40 +4119,63 @@ let surgeonMappingsCache = {};
 let surgeonMappingsLoaded = false;
 let userProfilesCache = {}; // { uid: { email, displayName } }
 
+function parseSharedCasesSnapshot(snapshot) {
+  const cases = [];
+  snapshot.forEach(doc => {
+    const d = doc.data();
+    if (d.hasNerveBlock === undefined && d.nerveBlock !== undefined) {
+      d.hasNerveBlock = !!(d.nerveBlock && d.nerveBlock !== 'none');
+    }
+    if (!d.surgeon && d.surgeon !== '') d.surgeon = '';
+    d._docId = doc.id;
+    cases.push(d);
+  });
+  return cases;
+}
+
 async function loadSharedCases() {
+  // Load from Firestore cache first for instant display, then refresh from server.
+  // On slow/flaky connections, get() can hang waiting for the server — cache-first avoids this.
   try {
-    const snapshot = await db.collection('sharedCases').get();
-    sharedCasesCache = [];
-    snapshot.forEach(doc => {
-      const d = doc.data();
-      // Normalize: old docs have nerveBlock string, new have hasNerveBlock boolean
-      if (d.hasNerveBlock === undefined && d.nerveBlock !== undefined) {
-        d.hasNerveBlock = !!(d.nerveBlock && d.nerveBlock !== 'none');
+    try {
+      const cacheSnap = await db.collection('sharedCases').get({ source: 'cache' });
+      sharedCasesCache = parseSharedCasesSnapshot(cacheSnap);
+      applySharedCaseOverrides();
+      if (sharedCasesCache.length > 0) {
+        sharedCasesLoaded = true;
+        renderCollectiveCases();
+        console.log('Loaded ' + sharedCasesCache.length + ' shared cases (cache)');
       }
-      // Old docs may not have surgeon field
-      if (!d.surgeon && d.surgeon !== '') d.surgeon = '';
-      d._docId = doc.id;
-      sharedCasesCache.push(d);
-    });
-    // Apply admin overrides on top of raw shared data
+    } catch (cacheErr) {
+      // No cache available — first load or cleared; fall through to server
+    }
+    // Fetch fresh data from server
+    const serverSnap = await db.collection('sharedCases').get({ source: 'server' });
+    sharedCasesCache = parseSharedCasesSnapshot(serverSnap);
     applySharedCaseOverrides();
     sharedCasesLoaded = true;
-    console.log('Loaded ' + sharedCasesCache.length + ' shared cases');
+    renderCollectiveCases();
+    console.log('Loaded ' + sharedCasesCache.length + ' shared cases (server)');
     return sharedCasesCache;
   } catch (err) {
     console.error('Failed to load shared cases:', err);
-    sharedCasesLoaded = true; // mark loaded so card doesn't hang on "Loading..."
+    sharedCasesLoaded = true;
+    renderCollectiveCases();
     return [];
   }
 }
 
 async function loadSharedCaseOverrides() {
   try {
-    const snapshot = await db.collection('sharedCaseOverrides').get();
+    // Cache first, then server — same pattern as loadSharedCases
+    try {
+      const cacheSnap = await db.collection('sharedCaseOverrides').get({ source: 'cache' });
+      sharedCaseOverridesCache = {};
+      cacheSnap.forEach(doc => { sharedCaseOverridesCache[doc.id] = doc.data(); });
+    } catch (e) { /* no cache */ }
+    const snapshot = await db.collection('sharedCaseOverrides').get({ source: 'server' });
     sharedCaseOverridesCache = {};
-    snapshot.forEach(doc => {
-      sharedCaseOverridesCache[doc.id] = doc.data();
-    });
+    snapshot.forEach(doc => { sharedCaseOverridesCache[doc.id] = doc.data(); });
     console.log('Loaded ' + Object.keys(sharedCaseOverridesCache).length + ' shared case overrides');
   } catch (err) {
     console.error('Failed to load shared case overrides:', err);
@@ -18344,11 +18367,12 @@ auth.onAuthStateChanged(async (user) => {
     });
     const sharedLoadTimeout = new Promise(resolve => setTimeout(() => {
       if (!sharedCasesLoaded) {
-        console.warn('Shared data loading timed out after 15s');
+        console.warn('Shared data loading timed out after 8s');
         sharedCasesLoaded = true;
+        renderCollectiveCases();
       }
       resolve();
-    }, 15000));
+    }, 8000));
     Promise.race([sharedLoadPromise, sharedLoadTimeout]).catch(err => {
       console.error('Shared data loading error:', err);
       sharedCasesLoaded = true;
