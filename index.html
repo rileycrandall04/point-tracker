@@ -2834,37 +2834,19 @@ input.mil-time.invalid {
     </div>
     <div class="collapse-body" id="earningsEstBody">
       <div style="padding-top:12px;">
-        <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:10px;">
-          <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
-            <button class="btn btn-sm" id="eeToggleClocked" onclick="setEarningsMode('clocked')" style="border:none;border-radius:0;padding:3px 10px;font-size:0.7rem;background:var(--primary);color:#fff;">Clocked In</button>
-            <button class="btn btn-sm" id="eeToggleAvail" onclick="setEarningsMode('availability')" style="border:none;border-radius:0;padding:3px 10px;font-size:0.7rem;background:var(--surface2);color:var(--text-dim);">Availability</button>
-          </div>
+        <!-- Per-shift-type table (dynamically rendered) -->
+        <div id="eeShiftTypeTable"></div>
+        <!-- Total weekly points -->
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;margin:8px 0 10px;background:var(--surface2);border-radius:6px;font-size:0.8rem;">
+          <span style="color:var(--text-dim);font-weight:600;">Total Weekly Points</span>
+          <span style="font-weight:700;color:var(--primary);" id="eeTotalWeeklyPts">0</span>
         </div>
-        <div id="earningsEstimatorBody">
-          <div style="text-align:center;margin-bottom:10px;">
-            <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Avg Points / Hour</div>
-            <div style="display:flex;align-items:center;justify-content:center;gap:4px;">
-              <input type="number" id="eeAvgPtsHr" class="text-input" step="0.01" min="0" style="width:90px;font-size:1.4rem;font-weight:700;color:var(--accent2);text-align:center;padding:2px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;" oninput="onEEAvgOverride()">
-              <button class="btn btn-outline btn-sm" id="eeResetAvgBtn" onclick="resetEEAvg()" style="font-size:0.65rem;padding:2px 6px;display:none;" title="Reset to calculated average">&#x21bb;</button>
-            </div>
-            <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;" id="eeAvgDetail"></div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-            <div>
-              <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:2px;">Hours / Week</label>
-              <input type="number" id="eeHrsPerWeek" class="text-input" value="40" min="1" max="168" step="1" style="width:100%;font-size:0.85rem;" oninput="updateEEResult()">
-            </div>
-            <div>
-              <label style="font-size:0.7rem;color:var(--text-dim);display:block;margin-bottom:2px;">Weeks / Year</label>
-              <input type="number" id="eeWeeksPerYear" class="text-input" value="48" min="1" max="52" step="1" style="width:100%;font-size:0.85rem;" oninput="updateEEResult()">
-            </div>
-          </div>
-          <div style="text-align:center;margin-bottom:6px;">
-            <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Estimated Annual Earnings</div>
-            <div style="font-size:1.5rem;font-weight:700;color:#facc15;" id="eeAnnualEst">&mdash;</div>
-          </div>
-          <div style="text-align:center;font-size:0.7rem;color:var(--text-dim);" id="eeBreakdown"></div>
+        <!-- Annual estimate -->
+        <div style="text-align:center;margin-bottom:6px;">
+          <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Estimated Annual Production</div>
+          <div style="font-size:1.5rem;font-weight:700;color:#facc15;" id="eeAnnualEst">&mdash;</div>
         </div>
+        <div style="text-align:center;font-size:0.7rem;color:var(--text-dim);" id="eeBreakdown"></div>
       </div>
     </div>
   </div>
@@ -11703,195 +11685,183 @@ function renderHistoricalComp() {
 // PAYCHECK TRACKING
 // ================================================================
 // ================================================================
-// EARNINGS ESTIMATOR
+// EARNINGS ESTIMATOR — Per-Shift-Type Projection
 // ================================================================
-let earningsEstimatorMode = 'clocked';
-let eeCalcAvgClocked = 0;
-let eeCalcAvgAvail = 0;
-let eeManualOverride = false;
+// Formula: SUM(avgPtsPerShift[type] × shiftsPerWeek[type]) × 52 × $/pt
+// Avg pts/shift uses all historical data; shifts/week uses last 3 months
+// divided by total calendar weeks (vacation naturally dilutes the rate).
 
-function setEarningsMode(mode) {
-  earningsEstimatorMode = mode;
-  const cBtn = document.getElementById('eeToggleClocked');
-  const aBtn = document.getElementById('eeToggleAvail');
-  if (mode === 'clocked') {
-    cBtn.style.background = 'var(--primary)'; cBtn.style.color = '#fff';
-    aBtn.style.background = 'var(--surface2)'; aBtn.style.color = 'var(--text-dim)';
-  } else {
-    aBtn.style.background = 'var(--primary)'; aBtn.style.color = '#fff';
-    cBtn.style.background = 'var(--surface2)'; cBtn.style.color = 'var(--text-dim)';
-  }
-  eeManualOverride = false;
-  renderEarningsEstimator();
-}
-
-function onEEAvgOverride() {
-  eeManualOverride = true;
-  document.getElementById('eeResetAvgBtn').style.display = '';
-  updateEEResult();
-}
-
-function resetEEAvg() {
-  eeManualOverride = false;
-  document.getElementById('eeResetAvgBtn').style.display = 'none';
-  renderEarningsEstimator();
-}
+const EE_TYPE_ORDER = ['OR','OB_restricted','cardiac_liver','mole','1st_call','2nd_call','3rd_call','4th_call','endo','SF1','SF2','ACS','NORA','pre_call','CRNA_supervision'];
 
 function updateEEResult() {
-  const pv = settings.pointValue || 0;
-  if (!pv) return;
-  const avgInput = document.getElementById('eeAvgPtsHr');
-  const activeAvg = parseFloat(avgInput.value) || 0;
-  const hrsPerWeek = parseFloat(document.getElementById('eeHrsPerWeek').value) || 40;
-  const weeksPerYear = parseFloat(document.getElementById('eeWeeksPerYear').value) || 48;
+  recalcEETotals();
+}
 
-  if (activeAvg > 0) {
-    const annual = round2(activeAvg * hrsPerWeek * weeksPerYear * pv);
-    document.getElementById('eeAnnualEst').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
-    document.getElementById('eeBreakdown').textContent =
-      activeAvg.toFixed(2) + ' pts/hr \u00D7 ' + hrsPerWeek + ' hrs \u00D7 ' + weeksPerYear + ' wks \u00D7 $' + pv.toFixed(2) + '/pt';
+function onEETypeInput(inputEl) {
+  const type = inputEl.dataset.type;
+  const field = inputEl.dataset.field;
+  const calcValue = parseFloat(inputEl.dataset.calc);
+  const newValue = parseFloat(inputEl.value);
+
+  if (!settings.eeShiftTypeOverrides) settings.eeShiftTypeOverrides = {};
+  if (!settings.eeShiftTypeOverrides[type]) settings.eeShiftTypeOverrides[type] = {};
+
+  // If user changed back to calculated value, remove override
+  if (!isNaN(newValue) && !isNaN(calcValue) && Math.abs(newValue - calcValue) < 0.05) {
+    delete settings.eeShiftTypeOverrides[type][field];
+    if (Object.keys(settings.eeShiftTypeOverrides[type]).length === 0) {
+      delete settings.eeShiftTypeOverrides[type];
+    }
+    inputEl.style.color = '';
   } else {
-    document.getElementById('eeAnnualEst').innerHTML = '&mdash;';
-    document.getElementById('eeBreakdown').textContent = '';
+    settings.eeShiftTypeOverrides[type][field] = newValue;
+    inputEl.style.color = 'var(--accent2)';
   }
 
-  // Debounce save (only weeks/year — hrs/week auto-computes from shift data each session)
   clearTimeout(window._eeSaveTimer);
-  window._eeSaveTimer = setTimeout(() => {
-    settings.eeWeeksPerYear = weeksPerYear;
-    saveSettings(settings);
-  }, 1000);
+  window._eeSaveTimer = setTimeout(() => saveSettings(settings), 1000);
+  recalcEETotals();
+}
+
+function resetEETypeField(btnEl, type, field) {
+  if (settings.eeShiftTypeOverrides && settings.eeShiftTypeOverrides[type]) {
+    delete settings.eeShiftTypeOverrides[type][field];
+    if (Object.keys(settings.eeShiftTypeOverrides[type]).length === 0) {
+      delete settings.eeShiftTypeOverrides[type];
+    }
+  }
+  clearTimeout(window._eeSaveTimer);
+  window._eeSaveTimer = setTimeout(() => saveSettings(settings), 1000);
+  renderEarningsEstimator();
+  // Fix collapse height after re-render
+  const body = document.getElementById('earningsEstBody');
+  if (body && body.style.maxHeight && body.style.maxHeight !== '0px') {
+    body.style.maxHeight = body.scrollHeight + 'px';
+  }
+}
+
+function recalcEETotals() {
+  const inputs = document.querySelectorAll('.ee-type-input');
+  const typeData = {};
+  inputs.forEach(inp => {
+    const type = inp.dataset.type;
+    const field = inp.dataset.field;
+    if (!typeData[type]) typeData[type] = {};
+    typeData[type][field] = parseFloat(inp.value) || 0;
+  });
+
+  let totalWeeklyPts = 0;
+  Object.entries(typeData).forEach(([type, td]) => {
+    const wkPts = round2((td.avgPts || 0) * (td.shiftsWk || 0));
+    totalWeeklyPts += wkPts;
+    // Update per-row weekly pts cell
+    const cell = document.querySelector('[data-weekly-type="' + type + '"]');
+    if (cell) cell.textContent = wkPts.toFixed(1);
+  });
+  totalWeeklyPts = round2(totalWeeklyPts);
+
+  const totalEl = document.getElementById('eeTotalWeeklyPts');
+  if (totalEl) totalEl.textContent = totalWeeklyPts.toFixed(1);
+
+  const pv = settings.pointValue || 0;
+  if (totalWeeklyPts > 0 && pv > 0) {
+    const annual = round2(totalWeeklyPts * 52 * pv);
+    document.getElementById('eeAnnualEst').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    document.getElementById('eeBreakdown').textContent =
+      totalWeeklyPts.toFixed(1) + ' pts/wk \u00D7 52 wks \u00D7 $' + pv.toFixed(2) + '/pt';
+  } else {
+    document.getElementById('eeAnnualEst').innerHTML = '&mdash;';
+    document.getElementById('eeBreakdown').textContent = pv ? '' : '';
+  }
 }
 
 function renderEarningsEstimator() {
   const pv = settings.pointValue || 0;
-  const body = document.getElementById('earningsEstimatorBody');
-  if (!body) return;
+  const tableEl = document.getElementById('eeShiftTypeTable');
+  if (!tableEl) return;
 
-  // Default hrs/week to 3-month rolling average from shift data
-  const hrsInput = document.getElementById('eeHrsPerWeek');
-  const wksInput = document.getElementById('eeWeeksPerYear');
-  if (!hrsInput.dataset.loaded) {
-    const recent = getRecentShifts(3);
-    let recentHrs = 0;
-    const recentWeeks = new Set();
-    recent.forEach(s => {
-      if (!s.assignmentType || s.assignmentType === 'vacation' || s.assignmentType === 'forced_off' || s.forcedOff) return;
-      if (isFuturePagerOnly(s)) return;
-      recentHrs += calcShiftHours(s);
-      const d = new Date(s.date + 'T12:00:00');
-      const jan1 = new Date(d.getFullYear(), 0, 1);
-      const weekNum = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
-      recentWeeks.add(d.getFullYear() + '-W' + weekNum);
-    });
-    const numWeeks = Math.max(recentWeeks.size, 1);
-    const calcHrsWk = recentHrs > 0 ? Math.round(recentHrs / numWeeks) : 40;
-    hrsInput.value = calcHrsWk;
-    hrsInput.dataset.loaded = '1';
-  }
-  if (!wksInput.dataset.loaded) {
-    if (settings.eeWeeksPerYear) {
-      wksInput.value = settings.eeWeeksPerYear;
-    }
-    wksInput.dataset.loaded = '1';
-  }
-
-  // Check for $/pt
+  // No $/pt set
   if (!pv) {
-    document.getElementById('eeAvgPtsHr').value = '';
-    document.getElementById('eeAvgDetail').textContent = '';
+    tableEl.innerHTML = '';
+    document.getElementById('eeTotalWeeklyPts').textContent = '0';
     document.getElementById('eeAnnualEst').innerHTML = '&mdash;';
     document.getElementById('eeBreakdown').innerHTML = 'Set your <strong>$/point</strong> in the Paycheck Projection card above to see estimates';
-    document.getElementById('eeResetAvgBtn').style.display = 'none';
     return;
   }
 
-  // Calculate total points and hours from all shifts
-  let totalPoints = 0;
-  let totalClockedHrs = 0;
-  let totalAvailHrs = 0;
-  let shiftCount = 0;
+  const avgPts = getAvgPointsByShiftType();
+  const shiftsWk = getShiftsPerWeekByType();
+  const overrides = settings.eeShiftTypeOverrides || {};
 
-  Object.values(data.shifts).forEach(shift => {
-    if (!shift.assignmentType) return;
-    if (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off') return;
-    if (shift.forcedOff) return;
-    // Skip future pager-only placeholder shifts — no real hours to count
-    if (isFuturePagerOnly(shift)) return;
+  // Determine types to show (union of both, excluding specials)
+  const types = new Set([...Object.keys(avgPts), ...Object.keys(shiftsWk)]);
+  types.delete('_overall');
+  types.delete('vacation');
+  types.delete('forced_off');
 
-    const st = calcShiftTotal(shift);
-    totalPoints += st.total;
+  // Sort in predefined order, then any extras
+  const sortedTypes = EE_TYPE_ORDER.filter(t => types.has(t));
+  types.forEach(t => { if (!sortedTypes.includes(t)) sortedTypes.push(t); });
 
-    let clockedMin = 0;
-    const entries = shift.timeEntries || [];
-    if (entries.length > 0) {
-      entries.forEach(e => {
-        if (!e.start || !e.end) return;
-        let s = timeToMinutes(e.start);
-        let en = timeToMinutes(e.end);
-        if (en <= s) en += 1440;
-        clockedMin += (en - s);
-      });
-    } else if (shift.startTime && shift.endTime) {
-      let s = timeToMinutes(shift.startTime);
-      let en = timeToMinutes(shift.endTime);
-      if (en <= s) en += 1440;
-      clockedMin += (en - s);
-    }
+  if (sortedTypes.length === 0) {
+    tableEl.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;text-align:center;margin:8px 0;">No shift data yet</p>';
+    document.getElementById('eeTotalWeeklyPts').textContent = '0';
+    document.getElementById('eeAnnualEst').innerHTML = '&mdash;';
+    document.getElementById('eeBreakdown').textContent = '';
+    return;
+  }
 
-    const clockedHrs = clockedMin / 60;
-    totalClockedHrs += clockedHrs;
+  let html = '<div style="display:grid;grid-template-columns:auto 1fr 1fr auto;gap:2px 6px;align-items:center;font-size:0.78rem;">';
 
-    if (UNRESTRICTED_CALL_TYPES.has(shift.assignmentType)) {
-      totalAvailHrs += 24;
-    } else {
-      totalAvailHrs += clockedHrs;
-    }
+  // Header
+  html += '<div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;padding-bottom:4px;">Type</div>';
+  html += '<div style="font-size:0.6rem;color:var(--text-dim);text-align:center;text-transform:uppercase;padding-bottom:4px;">Avg Pts</div>';
+  html += '<div style="font-size:0.6rem;color:var(--text-dim);text-align:center;text-transform:uppercase;padding-bottom:4px;">Shifts/Wk</div>';
+  html += '<div style="font-size:0.6rem;color:var(--text-dim);text-align:right;text-transform:uppercase;padding-bottom:4px;">Wkly Pts</div>';
 
-    shiftCount++;
+  sortedTypes.forEach(type => {
+    const calcAvg = avgPts[type] || 0;
+    const calcSpw = shiftsWk[type] || 0;
+    const ovr = overrides[type] || {};
+    const displayAvg = ovr.avgPts != null ? ovr.avgPts : calcAvg;
+    const displaySpw = ovr.shiftsWk != null ? ovr.shiftsWk : calcSpw;
+    const weeklyPts = round2(displayAvg * displaySpw);
+    const isAvgOvr = ovr.avgPts != null;
+    const isSpwOvr = ovr.shiftsWk != null;
+
+    // Type name
+    html += '<div style="font-weight:500;white-space:nowrap;padding:2px 4px 2px 0;">' + escHtml(getAssignmentTypeName(type)) + '</div>';
+
+    // Avg pts/shift input
+    html += '<div style="display:flex;align-items:center;justify-content:center;gap:2px;">';
+    html += '<input type="number" step="0.1" min="0" value="' + displayAvg.toFixed(1) + '" ';
+    html += 'data-type="' + type + '" data-field="avgPts" data-calc="' + calcAvg.toFixed(1) + '" ';
+    html += 'class="text-input ee-type-input" style="width:58px;font-size:0.78rem;text-align:center;padding:2px 4px;' + (isAvgOvr ? 'color:var(--accent2);' : '') + '" ';
+    html += 'oninput="onEETypeInput(this)">';
+    if (isAvgOvr) html += '<button class="btn btn-outline btn-sm" onclick="resetEETypeField(this,\'' + type + '\',\'avgPts\')" style="font-size:0.55rem;padding:1px 3px;line-height:1;" title="Reset">&#x21bb;</button>';
+    html += '</div>';
+
+    // Shifts/week input
+    html += '<div style="display:flex;align-items:center;justify-content:center;gap:2px;">';
+    html += '<input type="number" step="0.1" min="0" value="' + displaySpw.toFixed(1) + '" ';
+    html += 'data-type="' + type + '" data-field="shiftsWk" data-calc="' + calcSpw.toFixed(1) + '" ';
+    html += 'class="text-input ee-type-input" style="width:50px;font-size:0.78rem;text-align:center;padding:2px 4px;' + (isSpwOvr ? 'color:var(--accent2);' : '') + '" ';
+    html += 'oninput="onEETypeInput(this)">';
+    if (isSpwOvr) html += '<button class="btn btn-outline btn-sm" onclick="resetEETypeField(this,\'' + type + '\',\'shiftsWk\')" style="font-size:0.55rem;padding:1px 3px;line-height:1;" title="Reset">&#x21bb;</button>';
+    html += '</div>';
+
+    // Weekly pts (computed)
+    html += '<div style="text-align:right;font-weight:600;color:var(--primary);" data-weekly-type="' + type + '">' + weeklyPts.toFixed(1) + '</div>';
   });
 
-  eeCalcAvgClocked = totalClockedHrs > 0 ? totalPoints / totalClockedHrs : 0;
-  eeCalcAvgAvail = totalAvailHrs > 0 ? totalPoints / totalAvailHrs : 0;
-  const calcAvg = earningsEstimatorMode === 'clocked' ? eeCalcAvgClocked : eeCalcAvgAvail;
-  const modeLabel = earningsEstimatorMode === 'clocked' ? 'clocked in' : 'availability';
-  const totalHrsLabel = earningsEstimatorMode === 'clocked'
-    ? round2(totalClockedHrs).toLocaleString('en-US', { maximumFractionDigits: 0 })
-    : round2(totalAvailHrs).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  html += '</div>';
 
-  // Set avg pts/hr input (only if not manually overridden)
-  const avgInput = document.getElementById('eeAvgPtsHr');
-  if (!eeManualOverride) {
-    avgInput.value = calcAvg > 0 ? calcAvg.toFixed(2) : '';
-    document.getElementById('eeResetAvgBtn').style.display = 'none';
-  }
+  // Data source note
+  const shiftCount = Object.values(data.shifts).filter(s => s.assignmentType && s.assignmentType !== 'vacation' && s.assignmentType !== 'forced_off' && !s.forcedOff && !isFuturePagerOnly(s)).length;
+  html += '<div style="font-size:0.62rem;color:var(--text-dim);text-align:center;margin-top:6px;">' + shiftCount + ' shifts \u2022 Avg pts from all history \u2022 Shifts/wk from last 3 months</div>';
 
-  document.getElementById('eeAvgDetail').textContent = shiftCount > 0
-    ? round2(totalPoints).toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' pts / ' + totalHrsLabel + ' hrs (' + modeLabel + ') \u2022 ' + shiftCount + ' shifts'
-    : 'No shift data';
-
-  // Use the input value (which may be manual override)
-  const activeAvg = parseFloat(avgInput.value) || 0;
-  const hrsPerWeek = parseFloat(hrsInput.value) || 40;
-  const weeksPerYear = parseFloat(wksInput.value) || 48;
-
-  // Save weeks/year to settings if changed (hrs/week auto-computes each session)
-  if (settings.eeWeeksPerYear !== weeksPerYear) {
-    settings.eeWeeksPerYear = weeksPerYear;
-    clearTimeout(window._eeSaveTimer);
-    window._eeSaveTimer = setTimeout(() => saveSettings(settings), 1000);
-  }
-
-  // Annual estimate
-  if (activeAvg > 0) {
-    const annual = round2(activeAvg * hrsPerWeek * weeksPerYear * pv);
-    document.getElementById('eeAnnualEst').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
-    document.getElementById('eeBreakdown').textContent =
-      activeAvg.toFixed(2) + ' pts/hr \u00D7 ' + hrsPerWeek + ' hrs \u00D7 ' + weeksPerYear + ' wks \u00D7 $' + pv.toFixed(2) + '/pt';
-  } else {
-    document.getElementById('eeAnnualEst').innerHTML = '&mdash;';
-    document.getElementById('eeBreakdown').textContent = shiftCount > 0 ? '' : 'No shift data to calculate average';
-  }
+  tableEl.innerHTML = html;
+  recalcEETotals();
 }
 
 function renderPaycheckCard() {
@@ -12605,6 +12575,40 @@ function getAvgPointsByShiftType() {
   });
   avgs._overall = allCount > 0 ? round2(allTotal / allCount) : 0;
   return avgs;
+}
+
+// Calculate average shifts per week by type (last 3 months, total calendar weeks incl. vacation)
+function getShiftsPerWeekByType() {
+  const recent = getRecentShifts(3);
+  const typeCounts = {};
+  let minDate = null, maxDate = null;
+
+  recent.forEach(s => {
+    if (!s.assignmentType) return;
+    if (s.assignmentType === 'vacation' || s.assignmentType === 'forced_off') return;
+    if (s.forcedOff) return;
+    if (isFuturePagerOnly(s)) return;
+
+    const type = s.assignmentType;
+    if (!typeCounts[type]) typeCounts[type] = 0;
+    typeCounts[type]++;
+
+    // Track date range for total calendar weeks
+    const d = new Date(s.date + 'T12:00:00');
+    if (!minDate || d < minDate) minDate = d;
+    if (!maxDate || d > maxDate) maxDate = d;
+  });
+
+  // Total calendar weeks in the date range (including vacation weeks)
+  const totalWeeks = (minDate && maxDate)
+    ? Math.max((maxDate - minDate) / (7 * 86400000), 1)
+    : 1;
+
+  const result = {};
+  Object.entries(typeCounts).forEach(([type, count]) => {
+    result[type] = round2(count / totalWeeks);
+  });
+  return result;
 }
 
 // Project current month points using scheduled shifts and historical averages
