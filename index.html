@@ -6735,8 +6735,18 @@ function loadShiftForDate() {
     if (calType === 'forced_off') {
       populateTimeEntries([{ start: '', end: '' }]);
     } else {
-      const earlyStart = ['SF1', 'OB_restricted', 'ACS'].includes(calType);
-      populateTimeEntries([{ start: earlyStart ? '07:00' : '07:10', end: '' }]);
+      let defaultStart = '07:10';
+      if (UNRESTRICTED_CALL_TYPES.has(calType)) {
+        if (calType === 'mole') {
+          const wkndOrHol = isWeekend(date);
+          defaultStart = wkndOrHol ? '21:00' : '19:00';
+        } else {
+          defaultStart = '07:00';
+        }
+      } else if (['SF1', 'OB_restricted', 'ACS'].includes(calType)) {
+        defaultStart = '07:00';
+      }
+      populateTimeEntries([{ start: defaultStart, end: '' }]);
     }
     document.getElementById('shiftHoliday').checked = false;
     document.getElementById('cardiacLiverOptions').classList.add('hidden');
