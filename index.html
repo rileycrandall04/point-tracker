@@ -5767,6 +5767,36 @@ function laborEpiduralTierPoints(fromHrs, toHrs) {
   return pts;
 }
 
+// Calculate points the OTHER party earned on a shared/handoff case
+function calcOtherPartyPoints(caseData, shift) {
+  const ct = caseData.caseType;
+
+  // Handoff labor epidural: other party got startup + tier points up to handoff
+  if (ct === 'labor_epidural' && caseData.isSharedLabor && caseData.laborInitialStart) {
+    const cs = timeToMinutes(caseData.startTime);
+    if (!cs && !caseData.startTime) return 0;
+    let initStart = timeToMinutes(caseData.laborInitialStart);
+    if (cs < initStart) initStart -= 1440;
+    const handoffOffsetHrs = Math.min((cs - initStart) / 60, 24);
+    let pts = 2.5 + laborEpiduralTierPoints(0, handoffOffsetHrs);
+    if (shift && shift.assignmentType === 'OB_restricted') pts *= 2;
+    return round2(pts);
+  }
+
+  // Shared standard case: other party got complementary startup percentage
+  if (caseData.isSharedCase) {
+    const baseUnits = parseFloat(caseData.baseUnits) || 0;
+    const pct = parseFloat(caseData.sharedStartupPct) || 50;
+    const otherPct = 100 - pct;
+    let pts = 0.5 * baseUnits * (otherPct / 100);
+    const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
+    if (isOBShift && !caseData.isORCase) pts *= 2;
+    return round2(pts);
+  }
+
+  return 0;
+}
+
 function calcCasePoints(caseData, shift, ignoreManual) {
   if (!ignoreManual && caseData.manualPoints != null) return round2(Number(caseData.manualPoints));
   const ct = caseData.caseType;
@@ -6876,8 +6906,12 @@ function renderDECaseList() {
   }
 
   let html = '';
+  let yourTotal = 0;
+  let otherTotal = 0;
   shiftCases.forEach(c => {
     const pts = shift ? calcCasePoints(c, shift) : 0;
+    yourTotal += pts;
+    otherTotal += shift ? calcOtherPartyPoints(c, shift) : 0;
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType, c);
     const isOpenLabor = c.caseType === 'labor_epidural' && c.startTime && !c.endTime;
     const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` :
@@ -6894,6 +6928,17 @@ function renderDECaseList() {
       </div>
     </div>`;
   });
+
+  // Summary footer
+  yourTotal = round2(yourTotal);
+  otherTotal = round2(otherTotal);
+  html += '<div style="border-top:2px solid var(--border);margin-top:8px;padding-top:8px;">';
+  html += `<div style="display:flex;justify-content:space-between;font-size:0.9rem;font-weight:700;"><span>Total Points</span><span class="de-pts">${yourTotal.toFixed(1)}</span></div>`;
+  if (otherTotal > 0) {
+    html += `<div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-dim);margin-top:4px;"><span>Other Party</span><span>${otherTotal.toFixed(1)}</span></div>`;
+  }
+  html += '</div>';
+
   listEl.innerHTML = html;
 }
 
