@@ -12031,15 +12031,18 @@ function renderMonthlyPace() {
   const vacationDays = monthShifts.filter(s => s.assignmentType === 'vacation');
   const totalVacDays = vacationDays.length;
 
-  // Count weekdays (Mon-Fri) in the month, excluding vacation days
+  // Count working days in the month, excluding vacation days
+  // Weekdays (Mon-Fri) always count; weekend days count only if a shift is scheduled
   let weekdaysInMonth = 0;
   let weekdaysElapsed = 0;
   const vacDates = new Set(vacationDays.map(s => s.date));
+  const shiftDates = new Set(monthShifts.filter(s => s.assignmentType !== 'vacation').map(s => s.date));
   for (let d = 1; d <= daysInMonth; d++) {
     const dt = new Date(effY, effM - 1, d);
     const dow = dt.getDay(); // 0=Sun, 6=Sat
-    if (dow === 0 || dow === 6) continue; // skip weekends
     const dateStr = effY + '-' + String(effM).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    const isWeekend = (dow === 0 || dow === 6);
+    if (isWeekend && !shiftDates.has(dateStr)) continue; // skip weekends unless a shift is scheduled
     if (vacDates.has(dateStr)) continue; // skip vacation days
     weekdaysInMonth++;
     if (d <= dayOfMonth) weekdaysElapsed++;
@@ -14822,13 +14825,16 @@ function updateHeaderPoints() {
     const daysInMonth = new Date(eY, eM, 0).getDate();
     const vacDays = monthShifts.filter(s => s.assignmentType === 'vacation');
     const hdrVacDates = new Set(vacDays.map(s => s.date));
-    // Count weekdays (Mon-Fri) excluding vacation — same logic as renderMonthlyPace
+    // Count working days excluding vacation — same logic as renderMonthlyPace
+    // Weekend days with a scheduled shift still count as working days
     let hdrWeekdaysInMonth = 0, hdrWeekdaysElapsed = 0;
+    const hdrShiftDates = new Set(monthShifts.filter(s => s.assignmentType !== 'vacation').map(s => s.date));
     for (let dd = 1; dd <= daysInMonth; dd++) {
       const dt = new Date(eY, eM - 1, dd);
       const dow = dt.getDay();
-      if (dow === 0 || dow === 6) continue;
       const ds = eY + '-' + String(eM).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
+      const isWeekend = (dow === 0 || dow === 6);
+      if (isWeekend && !hdrShiftDates.has(ds)) continue;
       if (hdrVacDates.has(ds)) continue;
       hdrWeekdaysInMonth++;
       if (dd <= dayOfMonth) hdrWeekdaysElapsed++;
