@@ -2180,6 +2180,10 @@ input.mil-time.invalid {
               <input type="checkbox" id="caseITMorphine">
               <label for="caseITMorphine">IT Morphine (3 pts)</label>
             </div>
+            <div class="checkbox-group">
+              <input type="checkbox" id="caseThoracicEpidural">
+              <label for="caseThoracicEpidural">Thoracic Epidural (3.75 pts)</label>
+            </div>
           </div>
         </details>
       </div>
@@ -2374,6 +2378,9 @@ input.mil-time.invalid {
       <div id="caseLogTableContainer">
         <div class="empty-state"><p>No cases for this month.</p></div>
       </div>
+    </div>
+    <div style="margin-top:12px;text-align:center;">
+      <button class="btn btn-outline btn-sm" id="exportCSVBtn">Download Case Log CSV</button>
     </div>
   </div>
 
@@ -3000,7 +3007,6 @@ input.mil-time.invalid {
   <div class="card">
     <h2>Data Management</h2>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn btn-outline btn-sm" id="exportCSVBtn">Export CSV</button>
       <button class="btn btn-outline btn-sm" id="exportAllBtn">Export JSON</button>
       <label class="btn btn-outline btn-sm" style="cursor:pointer;">
         Import JSON
@@ -3633,6 +3639,10 @@ input.mil-time.invalid {
       <div class="checkbox-group">
         <input type="checkbox" id="editITMorphine">
         <label for="editITMorphine">IT Morphine (3 pts)</label>
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="editThoracicEpidural">
+        <label for="editThoracicEpidural">Thoracic Epidural (3.75 pts)</label>
       </div>
     </div>
     <div id="editLaborEpiduralFields" class="hidden">
@@ -5777,6 +5787,7 @@ function calcAddOnPoints(caseData) {
   if (caseData.hasPAC) pts += 2;
   if (caseData.hasTEEAddOn) pts += 0.4;
   if (caseData.hasITMorphine) pts += 3;
+  if (caseData.hasThoracicEpidural) pts += 3.75;
   return pts;
 }
 
@@ -6043,6 +6054,7 @@ function getCaseBreakdown(caseData, shift) {
   if (caseData.hasPAC) bd.push({label: 'PAC', pts: 2});
   if (caseData.hasTEEAddOn) bd.push({label: 'TEE', pts: 0.4});
   if (caseData.hasITMorphine) bd.push({label: 'IT Morphine', pts: 3});
+  if (caseData.hasThoracicEpidural) bd.push({label: 'Thoracic Epidural', pts: 3.75});
   const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
   if (isOBShift && !caseData.isORCase) {
     const subtotal = bd.reduce((s,r) => s + r.pts, 0);
@@ -7789,7 +7801,7 @@ function autoLearnProcedureMapping(procedure, asaCode) {
   if (el) { el.addEventListener('input', updatePointPreview); el.addEventListener('change', updatePointPreview); }
 });
 
-['caseEmergency','caseHighRiskPeds','caseORCase','caseCentralLine','caseArterialLine','casePAC','caseTEEAddOn','caseITMorphine','caseShared'].forEach(id => {
+['caseEmergency','caseHighRiskPeds','caseORCase','caseCentralLine','caseArterialLine','casePAC','caseTEEAddOn','caseITMorphine','caseThoracicEpidural','caseShared'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', updatePointPreview);
 });
@@ -7858,6 +7870,7 @@ function buildCaseFromForm() {
     hasPAC: document.getElementById('casePAC')?.checked || false,
     hasTEEAddOn: document.getElementById('caseTEEAddOn')?.checked || false,
     hasITMorphine: document.getElementById('caseITMorphine')?.checked || false,
+    hasThoracicEpidural: document.getElementById('caseThoracicEpidural')?.checked || false,
     epiduralRounds: document.getElementById('apsEpiduralCount')?.value || 0,
     painRounds: document.getElementById('apsPainCount')?.value || 0,
     isSharedLabor: isLabor && (document.getElementById('laborShared')?.checked || false),
@@ -7922,6 +7935,7 @@ function resetCaseForm() {
   document.getElementById('casePAC').checked = false;
   document.getElementById('caseTEEAddOn').checked = false;
   document.getElementById('caseITMorphine').checked = false;
+  document.getElementById('caseThoracicEpidural').checked = false;
   document.getElementById('laborStart').value = '';
   document.getElementById('laborEnd').value = '';
   document.getElementById('laborShared').checked = false;
@@ -8210,6 +8224,17 @@ function updateTodayRateChips() {
   // Current rate chip (only when clocked in — shift in progress)
   if (date === effectiveWorkDate() && result.isInProgress) {
     const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
+    // CRNA supervision bonus: +7/hr for standalone CRNA_supervision or overlay during supervision window
+    let supRate = 0;
+    if (shift.assignmentType === 'CRNA_supervision') {
+      supRate = 7;
+    } else if (shift.supervisionStart && shift.supervisionEnd) {
+      let supStart = timeToMinutes(shift.supervisionStart);
+      let supEnd = timeToMinutes(shift.supervisionEnd);
+      if (supEnd <= supStart) supEnd += 1440;
+      const nowAdj = currentMin < supStart && supEnd > 1440 ? currentMin + 1440 : currentMin;
+      if (nowAdj >= supStart && nowAdj < supEnd) supRate = 7;
+    }
     const isWkndOrHol = isWknd || isHol;
     const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
     let inPagerWindow = false;
@@ -8245,9 +8270,10 @@ function updateTodayRateChips() {
       }
     });
 
-    const totalRate = currentRate + pagerRate + prodRate;
+    const totalRate = currentRate + supRate + pagerRate + prodRate;
     const parts = [];
     parts.push('AR ' + currentRate.toFixed(0));
+    if (supRate > 0) parts.push('Supv +7');
     if (pagerRate > 0) parts.push('Pager 3.5');
     if (prodRate > 0) parts.push('Prod ' + prodRate.toFixed(1));
     const hasExtras = pagerRate > 0 || prodRate > 0;
@@ -8350,6 +8376,17 @@ function tickLiveUpdate() {
   const isWkndOrHol = isWknd || isHol;
 
   const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
+  // CRNA supervision bonus: +7/hr for standalone CRNA_supervision or overlay during supervision window
+  let supRate = 0;
+  if (shift.assignmentType === 'CRNA_supervision') {
+    supRate = 7;
+  } else if (shift.supervisionStart && shift.supervisionEnd) {
+    let supStart = timeToMinutes(shift.supervisionStart);
+    let supEnd = timeToMinutes(shift.supervisionEnd);
+    if (supEnd <= supStart) supEnd += 1440;
+    const nowAdj = currentMin < supStart && supEnd > 1440 ? currentMin + 1440 : currentMin;
+    if (nowAdj >= supStart && nowAdj < supEnd) supRate = 7;
+  }
   const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
   let inPagerWindow = false;
   if (pagerWin) {
@@ -8400,13 +8437,13 @@ function tickLiveUpdate() {
 
   // SF1: AR always ticks at actual rate; others: AR paused during minimum
   const effectiveARRate = inMinPeriod ? 0 : currentRate;
-  const totalRate = effectiveARRate + pagerRate + prodRate;
+  const totalRate = effectiveARRate + supRate + pagerRate + prodRate;
 
   // Interpolate: add fractional seconds of accrual on top of minute-level base
   const secFraction = currentSec / 3600; // fraction of an hour
   // During minimum period: flat AR + ticking prod/supv; SF1 always ticks normally
   const liveTotal = inMinPeriod
-    ? (minPoints + result.prod + result.call + result.subspec + result.supervision + ((pagerRate + prodRate) * secFraction))
+    ? (minPoints + result.prod + result.call + result.subspec + result.supervision + ((supRate + pagerRate + prodRate) * secFraction))
     : (result.total + (totalRate * secFraction));
   const dollarTotal = round2(liveTotal * pv);
 
@@ -8424,12 +8461,13 @@ function tickLiveUpdate() {
     const arLive = inMinPeriod ? minPoints : (result.ar + (effectiveARRate * secFraction));
     const callLive = result.call + (pagerRate * secFraction);
     const prodLive = result.prod + (prodRate * secFraction);
+    const supLive = result.supervision + (supRate * secFraction);
     const comps = [];
     if (arLive > 0) comps.push({ label: 'AR', val: arLive });
     if (prodLive > 0) comps.push({ label: 'Prod', val: prodLive });
     if (callLive > 0) comps.push({ label: 'Pager', val: callLive });
     if (result.subspec > 0) comps.push({ label: 'Sub', val: result.subspec });
-    if (result.supervision > 0) comps.push({ label: 'Supv', val: result.supervision });
+    if (supLive > 0) comps.push({ label: 'Supv', val: supLive });
     let chipHtml = '';
     comps.forEach(c => {
       const chipColor = c.label === 'Pager' ? 'rgba(245,166,35,0.15)' : 'rgba(255,255,255,0.06)';
@@ -9075,6 +9113,7 @@ function getCaseAddOnSummary(c) {
   if (c.hasPAC) parts.push('PAC');
   if (c.hasTEEAddOn) parts.push('TEE');
   if (c.hasITMorphine) parts.push('ITM');
+  if (c.hasThoracicEpidural) parts.push('TE');
   return parts.join(', ');
 }
 
@@ -14471,6 +14510,7 @@ function openCaseEdit(caseId) {
   document.getElementById('editPAC').checked = c.hasPAC || false;
   document.getElementById('editTEEAddOn').checked = c.hasTEEAddOn || false;
   document.getElementById('editITMorphine').checked = c.hasITMorphine || false;
+  document.getElementById('editThoracicEpidural').checked = c.hasThoracicEpidural || false;
 
   // Labor epidural fields
   if (editCaseType === 'labor_epidural') {
@@ -14529,6 +14569,7 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
     c.hasPAC = document.getElementById('editPAC').checked;
     c.hasTEEAddOn = document.getElementById('editTEEAddOn').checked;
     c.hasITMorphine = document.getElementById('editITMorphine').checked;
+    c.hasThoracicEpidural = document.getElementById('editThoracicEpidural').checked;
     c.notes = document.getElementById('editCaseNotes').value;
   } else if (editCaseType === 'labor_epidural') {
     c.procedure = 'Labor Epidural';
@@ -14606,7 +14647,7 @@ function deleteCaseFromList(id) {
 // EXPORT / IMPORT
 // ================================================================
 document.getElementById('exportCSVBtn').addEventListener('click', () => {
-  const prefix = `${historyYear}-${String(historyMonth+1).padStart(2,'0')}`;
+  const prefix = `${clYear}-${String(clMonth+1).padStart(2,'0')}`;
   const monthShifts = Object.values(data.shifts).filter(s => s.date.startsWith(prefix)).sort((a,b) => a.date.localeCompare(b.date));
   const csvEsc = v => `"${String(v).replace(/"/g, '""')}"`;
   let csv = 'Date,Assignment,Procedure,ASA Code,Base Units,Physical Status,Start,End,Case Points,Shift Total Points\n';
@@ -16537,6 +16578,7 @@ async function parseCaseExcel(file) {
       arterialLine: false,
       pac: false,
       teeAddOn: false,
+      thoracicEpidural: false,
       notes: surgeon + (shared && /^y/i.test(shared) ? ' (shared)' : ''),
       timestamp: new Date().toISOString()
     });
@@ -16573,6 +16615,7 @@ async function parseCasePDF(file) {
       arterialLine: false,
       pac: false,
       teeAddOn: false,
+      thoracicEpidural: false,
       notes: pc.cptCode ? 'CPT ' + pc.cptCode : '',
       timestamp: new Date().toISOString()
     });
@@ -16747,9 +16790,10 @@ function saveReconDecisions() {
 function getAddOnTypeName(type) {
   const names = {
     brachial_plexus: 'Brachial Plexus Block', other_nerve: 'Other Nerve Block',
-    it_morphine: 'IT Morphine', arterial_line: 'Arterial Line',
-    central_line: 'Central Line', epidural_round: 'Epidural Rounding',
-    pain_round: 'Pain Rounding', tee: 'TEE', pac: 'PAC'
+    it_morphine: 'IT Morphine', thoracic_epidural: 'Thoracic Epidural',
+    arterial_line: 'Arterial Line', central_line: 'Central Line',
+    epidural_round: 'Epidural Rounding', pain_round: 'Pain Rounding',
+    tee: 'TEE', pac: 'PAC'
   };
   return names[type] || type;
 }
@@ -16765,6 +16809,7 @@ function countAppAddOns(trackerCases, date) {
     if (c.hasPAC) counts.pac = (counts.pac || 0) + 1;
     if (c.hasTEEAddOn) counts.tee = (counts.tee || 0) + 1;
     if (c.hasITMorphine) counts.it_morphine = (counts.it_morphine || 0) + 1;
+    if (c.hasThoracicEpidural) counts.thoracic_epidural = (counts.thoracic_epidural || 0) + 1;
   });
   return counts;
 }
@@ -17199,6 +17244,7 @@ function renderProdRecon() {
       else if (type === 'it_morphine') c.hasITMorphine = true;
       else if (type === 'pac') c.hasPAC = true;
       else if (type === 'tee') c.hasTEEAddOn = true;
+      else if (type === 'thoracic_epidural') c.hasThoracicEpidural = true;
       saveData(data);
       showToast(`Added ${getAddOnTypeName(type)} to case`);
       renderProdRecon();
@@ -18111,6 +18157,7 @@ function renderScanCaseCards() {
     if (c.hasCentralLine) tags.push('<span class="scc-tag active">CVC</span>');
     if (c.hasArterialLine) tags.push('<span class="scc-tag active">Art Line</span>');
     if (c.hasTEE) tags.push('<span class="scc-tag active">TEE</span>');
+    if (c.hasThoracicEpidural) tags.push('<span class="scc-tag active">Thor Epi</span>');
 
     const card = document.createElement('div');
     card.className = 'scan-case-card';
@@ -18172,6 +18219,9 @@ function renderScanCaseCards() {
         </label>
         <label style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;">
           <input type="checkbox" data-idx="${idx}" data-field="hasTEE" ${c.hasTEE ? 'checked' : ''}> TEE
+        </label>
+        <label style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" data-idx="${idx}" data-field="hasThoracicEpidural" ${c.hasThoracicEpidural ? 'checked' : ''}> Thor Epi
         </label>
       </div>
       <div style="margin-top:6px;">
@@ -18265,6 +18315,7 @@ document.getElementById('scanImportBtn').addEventListener('click', () => {
       hasPAC: false,
       hasTEEAddOn: sc.hasTEE || false,
       hasITMorphine: sc.hasITMorphine || false,
+      hasThoracicEpidural: sc.hasThoracicEpidural || false,
       notes: sc.notes || '',
       timestamp: new Date().toISOString()
     });
