@@ -2943,6 +2943,17 @@ input.mil-time.invalid {
     </details>
   </div>
 
+  <!-- Admin User Lookup (admin only) -->
+  <div class="card hidden" id="adminUserLookupCard" style="margin-top:12px;">
+    <h2>User Data Lookup</h2>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <input type="email" id="adminLookupEmail" placeholder="user@gmail.com"
+        style="flex:1;min-width:200px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+      <button class="btn btn-primary btn-sm" onclick="adminLookupUser()">Lookup</button>
+    </div>
+    <div id="adminLookupResults" style="font-size:0.82rem;"></div>
+  </div>
+
   <!-- Account -->
   <div class="card" id="accountCard">
     <h2>Account</h2>
@@ -3983,6 +3994,73 @@ let syncDebounceTimer = null;
 let googleAccessToken = null;
 const ADMIN_UID = 'ZCXVQgTIknSVa7MvOnXSw550MCo2';
 function isAdmin() { return currentUser && currentUser.uid === ADMIN_UID; }
+
+async function adminLookupUser() {
+  if (!isAdmin()) return;
+  const email = (document.getElementById('adminLookupEmail').value || '').trim();
+  const out = document.getElementById('adminLookupResults');
+  if (!email) { out.innerHTML = '<p style="color:var(--accent2);">Enter an email address</p>'; return; }
+  out.innerHTML = '<p>Looking up...</p>';
+  try {
+    const snap = await db.collection('userProfiles').where('email', '==', email).get();
+    if (snap.empty) { out.innerHTML = '<p style="color:var(--accent2);">No user found with email: ' + email + '</p>'; return; }
+    const uid = snap.docs[0].id;
+    const profile = snap.docs[0].data();
+    const dataDoc = await db.collection('users').doc(uid).collection('data').doc('data').get();
+    if (!dataDoc.exists) { out.innerHTML = '<p style="color:var(--accent2);">User found (UID: ' + uid + ') but no data document exists.</p>'; return; }
+    const d = dataDoc.data();
+    const cases = Array.isArray(d.cases) ? d.cases : [];
+    const shifts = d.shifts || {};
+    const today = new Date().toISOString().split('T')[0];
+    let h = '<div style="background:var(--surface);padding:12px;border-radius:8px;margin-bottom:10px;">';
+    h += '<strong>' + (profile.displayName || 'N/A') + '</strong> &mdash; ' + email;
+    h += '<br><span style="color:var(--text-dim);font-size:0.75rem;">UID: ' + uid + ' | Last sign-in: ' + (profile.lastSignIn || 'N/A') + '</span>';
+    h += '<br><span style="color:var(--text-dim);font-size:0.75rem;">Total: ' + cases.length + ' cases, ' + Object.keys(shifts).length + ' shifts</span></div>';
+    // Today's shift
+    h += '<h3 style="margin:10px 0 6px;">Shift for ' + today + '</h3>';
+    if (shifts[today]) {
+      const s = shifts[today];
+      h += '<div style="background:var(--surface);padding:10px;border-radius:6px;">';
+      h += '<strong>' + (s.assignmentType || '?') + '</strong>';
+      if (s.timeEntries && s.timeEntries.length > 0) {
+        s.timeEntries.forEach(function(te, i) { h += '<br>Entry ' + (i + 1) + ': ' + (te.start || '?') + ' &ndash; ' + (te.end || '(no end)'); });
+      }
+      h += '</div>';
+    } else {
+      h += '<p style="color:var(--accent2);">No shift for today</p>';
+    }
+    // Today's cases
+    var todayCases = cases.filter(function(c) { return c.shiftDate === today || c.date === today; });
+    h += '<h3 style="margin:10px 0 6px;">Cases for ' + today + ' (' + todayCases.length + ')</h3>';
+    if (todayCases.length > 0) {
+      todayCases.forEach(function(c) {
+        h += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:4px;">';
+        h += '<strong>' + (c.procedure || c.caseType || 'Unknown') + '</strong>';
+        h += ' | ' + (c.startTime || '?') + '&ndash;' + (c.endTime || '?');
+        h += ' | ' + (c.totalPoints != null ? c.totalPoints : '?') + ' pts';
+        if (c.asaCode) h += ' | ASA: ' + c.asaCode;
+        if (c.id) h += '<br><span style="font-size:0.7rem;color:var(--text-dim);">ID: ' + c.id + '</span>';
+        h += '</div>';
+      });
+    } else {
+      h += '<p style="color:var(--accent2);">No cases found for today</p>';
+    }
+    // Recent cases (7 days)
+    var weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+    var weekAgoStr = weekAgo.toISOString().split('T')[0];
+    var recent = cases.filter(function(c) { return (c.shiftDate || c.date || '') >= weekAgoStr; }).sort(function(a, b) { return (b.shiftDate || b.date || '').localeCompare(a.shiftDate || a.date || ''); });
+    h += '<details style="margin-top:10px;"><summary style="cursor:pointer;color:var(--primary);">Recent cases (7 days: ' + recent.length + ')</summary>';
+    recent.forEach(function(c) {
+      h += '<div style="padding:4px 0;border-bottom:1px solid var(--border);">';
+      h += (c.shiftDate || c.date || '?') + ' | ' + (c.procedure || c.caseType || '?') + ' | ' + (c.startTime || '?') + '&ndash;' + (c.endTime || '?') + ' | ' + (c.totalPoints != null ? c.totalPoints : '?') + ' pts';
+      h += '</div>';
+    });
+    h += '</details>';
+    out.innerHTML = h;
+  } catch (err) {
+    out.innerHTML = '<p style="color:var(--accent2);">Error: ' + err.message + '</p>';
+  }
+}
 
 // ================================================================
 // DATA STORE
@@ -18446,6 +18524,8 @@ auth.onAuthStateChanged(async (user) => {
     if (isAdmin()) {
       const aiCard = document.getElementById('claudeAISettingsCard');
       if (aiCard) aiCard.classList.remove('hidden');
+      const lookupCard = document.getElementById('adminUserLookupCard');
+      if (lookupCard) lookupCard.classList.remove('hidden');
       document.getElementById('settingsClaudeKey').value = settings.claudeApiKey || '';
       document.getElementById('settingsPersonalTimeValue').value = settings.personalTimeValue || '';
     }
