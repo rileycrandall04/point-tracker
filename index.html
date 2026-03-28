@@ -2725,6 +2725,13 @@ input.mil-time.invalid {
     </div>
     <div class="collapse-body" id="histCompBody">
       <div style="padding-top:12px;">
+        <details style="margin-bottom:10px;">
+          <summary style="cursor:pointer;font-size:0.78rem;color:var(--primary);">How to use this table</summary>
+          <div style="font-size:0.75rem;color:var(--text-dim);margin-top:6px;line-height:1.5;">
+            <p style="margin:0 0 6px;">Billing runs <strong>one month behind</strong>. Each row's $/pt value should come from the <strong>prior month's</strong> office billing report.</p>
+            <p style="margin:0;">For example, in the <strong>Mar 26</strong> row, enter the $/pt from <strong>February's</strong> billing report.</p>
+          </div>
+        </details>
         <div id="histCompTable"></div>
         <div style="margin-top:10px;display:flex;align-items:center;gap:12px;">
           <button class="btn btn-primary btn-sm" id="savePVHistoryBtn">Save Point Values</button>
@@ -2732,15 +2739,23 @@ input.mil-time.invalid {
         </div>
         <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px;">
           <h4 style="margin:0 0 8px;font-size:0.82rem;color:var(--text);">Monthly Point Override</h4>
-          <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">
-            On the 20th of each month, enter your actual paycheck amount and point totals from your pay stub to track prediction accuracy.
-            <strong>Note:</strong> Enter data for the production month, not the paycheck month (e.g., your February paycheck reflects January production &mdash; enter it under January).
-          </p>
+          <details style="margin-bottom:10px;">
+            <summary style="cursor:pointer;font-size:0.78rem;color:var(--primary);">How to fill this in</summary>
+            <div style="font-size:0.75rem;color:var(--text-dim);margin-top:6px;line-height:1.5;">
+              <p style="margin:0 0 6px;">Billing runs <strong>one month behind</strong>. Always enter values from the <strong>prior month's</strong> reports. If the label says March, enter February's data.</p>
+              <ul style="margin:0;padding-left:18px;">
+                <li><strong>Time Points</strong> &mdash; Actual Qgenda time points from the prior month, if they differ from the calculated total.</li>
+                <li><strong>Prod Points</strong> &mdash; Production/billing points from the office total for the prior month.</li>
+                <li><strong>Compensation</strong> &mdash; Compensation total from the prior month's compensation summary report.</li>
+              </ul>
+            </div>
+          </details>
           <div class="month-nav">
             <button id="ovPrevMonth">&larr;</button>
             <span id="ovMonthLabel">January 2026</span>
             <button id="ovNextMonth">&rarr;</button>
           </div>
+          <div id="ovMonthHint" style="text-align:center;font-size:0.72rem;color:var(--accent2);margin-top:4px;font-style:italic;"></div>
           <div style="display:flex;gap:10px;margin-top:10px;">
             <div style="flex:1;">
               <label style="display:block;font-size:0.7rem;color:var(--text-dim);margin-bottom:3px;">Time Points</label>
@@ -2820,6 +2835,17 @@ input.mil-time.invalid {
     </div>
     <div class="collapse-body" id="paycheckTrackBody">
       <div style="padding-top:12px;">
+    <details style="margin-bottom:10px;">
+      <summary style="cursor:pointer;font-size:0.78rem;color:var(--primary);">How to use paycheck tracking</summary>
+      <div style="font-size:0.75rem;color:var(--text-dim);margin-top:6px;line-height:1.5;">
+        <p style="margin:0 0 6px;">Track your actual paycheck deposits to compare against projections over time.</p>
+        <ul style="margin:0;padding-left:18px;">
+          <li><strong>Month</strong> &mdash; Select the month this paycheck covers.</li>
+          <li><strong>Amount Deposited</strong> &mdash; Your net deposit amount.</li>
+          <li><strong>Retirement Contribution</strong> &mdash; Your pre-tax retirement contribution for the month, if applicable.</li>
+        </ul>
+      </div>
+    </details>
     <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px;flex-wrap:wrap;">
       <div style="flex:1;min-width:120px;">
         <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:2px;">Month</label>
@@ -10487,6 +10513,10 @@ let ovMonth = new Date().getMonth();
 function updateOVMonthLabel() {
   const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   document.getElementById('ovMonthLabel').textContent = `${mn[ovMonth]} ${ovYear}`;
+  const priorMonth = (ovMonth - 1 + 12) % 12;
+  const priorYear = ovMonth === 0 ? ovYear - 1 : ovYear;
+  const hint = document.getElementById('ovMonthHint');
+  if (hint) hint.textContent = `Enter values from ${mn[priorMonth]} ${priorYear} reports`;
 }
 
 function getOVKey() {
