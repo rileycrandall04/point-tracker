@@ -11400,12 +11400,17 @@ function renderHistoricalComp() {
 
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const now = new Date();
+  const currentMonthKey = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   function mkKey(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+
+  // Hide current month row to prevent confusion (billing runs a month behind)
+  const filteredMonths = rangeMonths.filter(mk => mk !== currentMonthKey);
+  if (filteredMonths.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No data yet.</p>'; return; }
 
   // Compute all months in range for totals + accuracy aggregate
   let grandCalc = 0, grandActual = 0, hasAnyActual = false;
   let accSum = 0, accCount = 0;
-  const visibleData = rangeMonths.map(workMk => {
+  const visibleData = filteredMonths.map(workMk => {
     const pd = computePaycheckData(workMk, mt);
     grandCalc += pd.calcProduction;
     if (pd.hasOverride) { grandActual += pd.actualAmt; hasAnyActual = true; }
@@ -11454,7 +11459,7 @@ function renderHistoricalComp() {
 
   // Totals row — reflects ALL months
   html += `<tr style="border-top:2px solid var(--border);">`;
-  html += `<td style="padding:5px 3px;font-weight:700;" colspan="3">Total (${rangeMonths.length} mo)</td>`;
+  html += `<td style="padding:5px 3px;font-weight:700;" colspan="3">Total (${filteredMonths.length} mo)</td>`;
   html += `<td style="padding:5px 3px;text-align:right;font-weight:700;color:var(--primary);">$${grandCalc.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
   html += `<td style="padding:5px 3px;text-align:right;font-weight:700;color:var(--accent2);">$${grandActual.toLocaleString('en-US', {maximumFractionDigits: 0})}</td>`;
   html += `<td></td>`;
