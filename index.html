@@ -8031,7 +8031,20 @@ function resetCaseForm() {
   document.getElementById('laborStartLabel').textContent = 'Epidural Start';
   document.getElementById('apsEpiduralCount').value = '0';
   document.getElementById('apsPainCount').value = '0';
-  document.getElementById('caseNotes').value = '';
+  // Auto-populate surgeon name from last case on this shift
+  const shiftCases = (data.cases || []).filter(c => c.shiftDate === workingDate && c.notes);
+  const notesEl = document.getElementById('caseNotes');
+  if (shiftCases.length > 0) {
+    notesEl.value = shiftCases[shiftCases.length - 1].notes;
+    notesEl.style.background = 'rgba(250,204,21,0.15)';
+    notesEl.style.borderColor = '#facc15';
+    const clearHighlight = () => { notesEl.style.background = ''; notesEl.style.borderColor = ''; notesEl.removeEventListener('focus', clearHighlight); };
+    notesEl.addEventListener('focus', clearHighlight);
+  } else {
+    notesEl.value = '';
+    notesEl.style.background = '';
+    notesEl.style.borderColor = '';
+  }
   document.getElementById('caseCaseNotes').value = '';
   document.getElementById('simpleNotes').value = '';
   document.getElementById('casePointPreview').classList.add('hidden');
