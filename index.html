@@ -6496,10 +6496,10 @@ document.getElementById('quickProcCollapseHeader').addEventListener('click', () 
 
 // Quick Procedure button clicks
 const quickProcs = {
-  colonoscopy: { name: 'Colonoscopy', units: 4 },
-  egd: { name: 'EGD', units: 5 },
-  double: { name: 'EGD + Colonoscopy', units: 5 },
-  tonsils: { name: 'Tonsillectomy', units: 5 }
+  colonoscopy: { name: 'Colonoscopy', units: 4, asa: '00812' },
+  egd: { name: 'EGD', units: 5, asa: '00731' },
+  double: { name: 'EGD + Colonoscopy', units: 5, asa: '00813' },
+  tonsils: { name: 'Tonsillectomy', units: 5, asa: '00170' }
 };
 
 document.querySelectorAll('[data-qproc]').forEach(btn => {
@@ -6511,6 +6511,7 @@ document.querySelectorAll('[data-qproc]').forEach(btn => {
     applyCaseTypeVisibility('standard');
     document.getElementById('caseProcedure').value = proc.name;
     document.getElementById('caseBaseUnits').value = proc.units;
+    if (proc.asa) document.getElementById('caseASACode').value = proc.asa;
     updatePointPreview();
     showToast(proc.name + ' pre-filled');
   });
