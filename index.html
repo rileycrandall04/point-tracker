@@ -7357,7 +7357,21 @@ document.getElementById('editLaborShared').addEventListener('change', function()
 
   function selectItem(el) {
     procInput.value = el.dataset.name;
-    const asa = el.dataset.asa;
+    let asa = el.dataset.asa;
+    // If no ASA code from history, reverse-lookup by procedure name in master database
+    if (!asa) {
+      const procName = el.dataset.name.toLowerCase();
+      const masterCodes = typeof ASA_MASTER_DATA !== 'undefined' ? ASA_MASTER_DATA : {};
+      // Try exact match first, then substring match
+      for (const [code, entry] of Object.entries(masterCodes)) {
+        if (entry.desc && entry.desc.toLowerCase() === procName) { asa = code; break; }
+      }
+      if (!asa) {
+        for (const [code, entry] of Object.entries(masterCodes)) {
+          if (entry.desc && (entry.desc.toLowerCase().includes(procName) || procName.includes(entry.desc.toLowerCase()))) { asa = code; break; }
+        }
+      }
+    }
     if (asa) {
       document.getElementById('caseASACode').value = asa;
       // Prefer authoritative base units from master database
