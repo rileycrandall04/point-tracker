@@ -8047,27 +8047,31 @@ function resetCaseForm() {
   document.getElementById('apsEpiduralCount').value = '0';
   document.getElementById('apsPainCount').value = '0';
   // Auto-populate surgeon name from last case on this shift
-  const shiftCases = (data.cases || []).filter(c => c.shiftDate === workingDate && (c.notes || '').trim());
   const notesEl = document.getElementById('caseNotes');
   // Remove any prior highlight listener to avoid stacking
   if (notesEl._clearHighlight) { notesEl.removeEventListener('focus', notesEl._clearHighlight); notesEl._clearHighlight = null; }
-  if (shiftCases.length > 0) {
-    const surgeonName = shiftCases[shiftCases.length - 1].notes.trim();
-    notesEl.value = surgeonName;
-    notesEl.style.setProperty('background', 'rgba(250,204,21,0.15)', 'important');
-    notesEl.style.setProperty('border-color', '#facc15', 'important');
-    notesEl._clearHighlight = () => {
-      notesEl.style.removeProperty('background');
-      notesEl.style.removeProperty('border-color');
-      notesEl.removeEventListener('focus', notesEl._clearHighlight);
-      notesEl._clearHighlight = null;
-    };
-    notesEl.addEventListener('focus', notesEl._clearHighlight);
-  } else {
-    notesEl.value = '';
-    notesEl.style.removeProperty('background');
-    notesEl.style.removeProperty('border-color');
-  }
+  notesEl.value = '';
+  notesEl.style.removeProperty('background');
+  notesEl.style.removeProperty('border-color');
+  // Defer so the just-saved case is fully committed to data.cases
+  setTimeout(() => {
+    const shiftCases = (data.cases || []).filter(c => c.shiftDate === workingDate && (c.notes || '').trim());
+    if (shiftCases.length > 0) {
+      const surgeonName = (shiftCases[shiftCases.length - 1].notes || '').trim();
+      if (surgeonName) {
+        notesEl.value = surgeonName;
+        notesEl.style.setProperty('background', 'rgba(250,204,21,0.15)', 'important');
+        notesEl.style.setProperty('border-color', '#facc15', 'important');
+        notesEl._clearHighlight = () => {
+          notesEl.style.removeProperty('background');
+          notesEl.style.removeProperty('border-color');
+          notesEl.removeEventListener('focus', notesEl._clearHighlight);
+          notesEl._clearHighlight = null;
+        };
+        notesEl.addEventListener('focus', notesEl._clearHighlight);
+      }
+    }
+  }, 50);
   document.getElementById('caseCaseNotes').value = '';
   document.getElementById('simpleNotes').value = '';
   document.getElementById('casePointPreview').classList.add('hidden');
