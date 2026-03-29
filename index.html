@@ -6539,8 +6539,8 @@ function updateEndTimeWarning() {
 
 function updateORCaseVisibility() {
   const shift = data.shifts[workingDate];
-  const isSF = shift && ['SF1','SF2'].includes(shift.assignmentType);
-  const show = isSF && selectedCaseType === 'standard';
+  const isOBShift = shift && ['SF1','SF2','OB_restricted'].includes(shift.assignmentType);
+  const show = isOBShift && selectedCaseType === 'standard';
   document.getElementById('orCaseRow').classList.toggle('hidden', !show);
   if (!show) document.getElementById('caseORCase').checked = false;
 }
@@ -14617,8 +14617,8 @@ function openCaseEdit(caseId) {
 
   // OR Case checkbox visibility
   const shift = data.shifts[c.shiftDate];
-  const isSF = shift && ['SF1','SF2'].includes(shift.assignmentType);
-  document.getElementById('editORCaseRow').classList.toggle('hidden', !isSF);
+  const isOBShift = shift && ['SF1','SF2','OB_restricted'].includes(shift.assignmentType);
+  document.getElementById('editORCaseRow').classList.toggle('hidden', !isOBShift);
   document.getElementById('editCaseORCase').checked = c.isORCase || false;
 
   document.getElementById('caseEditModal').classList.remove('hidden');
