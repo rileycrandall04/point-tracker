@@ -8046,18 +8046,26 @@ function resetCaseForm() {
   document.getElementById('apsEpiduralCount').value = '0';
   document.getElementById('apsPainCount').value = '0';
   // Auto-populate surgeon name from last case on this shift
-  const shiftCases = (data.cases || []).filter(c => c.shiftDate === workingDate && c.notes);
+  const shiftCases = (data.cases || []).filter(c => c.shiftDate === workingDate && (c.notes || '').trim());
   const notesEl = document.getElementById('caseNotes');
+  // Remove any prior highlight listener to avoid stacking
+  if (notesEl._clearHighlight) { notesEl.removeEventListener('focus', notesEl._clearHighlight); notesEl._clearHighlight = null; }
   if (shiftCases.length > 0) {
-    notesEl.value = shiftCases[shiftCases.length - 1].notes;
-    notesEl.style.background = 'rgba(250,204,21,0.15)';
-    notesEl.style.borderColor = '#facc15';
-    const clearHighlight = () => { notesEl.style.background = ''; notesEl.style.borderColor = ''; notesEl.removeEventListener('focus', clearHighlight); };
-    notesEl.addEventListener('focus', clearHighlight);
+    const surgeonName = shiftCases[shiftCases.length - 1].notes.trim();
+    notesEl.value = surgeonName;
+    notesEl.style.setProperty('background', 'rgba(250,204,21,0.15)', 'important');
+    notesEl.style.setProperty('border-color', '#facc15', 'important');
+    notesEl._clearHighlight = () => {
+      notesEl.style.removeProperty('background');
+      notesEl.style.removeProperty('border-color');
+      notesEl.removeEventListener('focus', notesEl._clearHighlight);
+      notesEl._clearHighlight = null;
+    };
+    notesEl.addEventListener('focus', notesEl._clearHighlight);
   } else {
     notesEl.value = '';
-    notesEl.style.background = '';
-    notesEl.style.borderColor = '';
+    notesEl.style.removeProperty('background');
+    notesEl.style.removeProperty('border-color');
   }
   document.getElementById('caseCaseNotes').value = '';
   document.getElementById('simpleNotes').value = '';
