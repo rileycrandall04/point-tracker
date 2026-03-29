@@ -6513,6 +6513,7 @@ document.querySelectorAll('[data-qproc]').forEach(btn => {
     document.getElementById('caseBaseUnits').value = proc.units;
     if (proc.asa) document.getElementById('caseASACode').value = proc.asa;
     updatePointPreview();
+    if (typeof tryAutoFillSurgeon === 'function') tryAutoFillSurgeon(proc.name);
     showToast(proc.name + ' pre-filled');
   });
 });
@@ -7390,6 +7391,7 @@ document.getElementById('editLaborShared').addEventListener('change', function()
     }
     hideSuggestions();
     updatePointPreview();
+    if (typeof tryAutoFillSurgeon === 'function') tryAutoFillSurgeon(el.dataset.name);
   }
 
   procInput.addEventListener('input', showSuggestions);
@@ -7830,6 +7832,44 @@ function autoLearnProcedureMapping(procedure, asaCode) {
     return map;
   }
 
+  // Auto-fill surgeon name when a procedure is selected, if the last surgeon on this shift
+  // has been associated with that procedure in past cases
+  window.tryAutoFillSurgeon = function(procedureName) {
+    const notesEl = document.getElementById('caseNotes');
+    if (!notesEl || !procedureName || notesEl.value.trim()) return; // Don't overwrite manual entry
+    // Find last case on this shift with a surgeon name
+    const shiftCases = (data.cases || []).filter(c => c.shiftDate === workingDate && (c.notes || '').trim());
+    if (shiftCases.length === 0) return;
+    const lastSurgeon = normalizeSurgeonName((shiftCases[shiftCases.length - 1].notes || '').trim());
+    if (!lastSurgeon) return;
+    // Check if this surgeon has been associated with this procedure in local cases
+    const procLower = procedureName.toLowerCase();
+    let found = (data.cases || []).some(c =>
+      normalizeSurgeonName((c.notes || '').trim()) === lastSurgeon &&
+      c.procedure && c.procedure.toLowerCase() === procLower
+    );
+    // Also check shared cases
+    if (!found && typeof sharedCasesCache !== 'undefined' && sharedCasesCache.length) {
+      found = sharedCasesCache.some(sc =>
+        normalizeSurgeonName((sc.surgeon || '').trim()) === lastSurgeon &&
+        sc.procedure && sc.procedure.toLowerCase() === procLower
+      );
+    }
+    if (found) {
+      notesEl.value = lastSurgeon;
+      notesEl.style.setProperty('background', 'rgba(250,204,21,0.15)', 'important');
+      notesEl.style.setProperty('border-color', '#facc15', 'important');
+      if (notesEl._clearHighlight) notesEl.removeEventListener('focus', notesEl._clearHighlight);
+      notesEl._clearHighlight = () => {
+        notesEl.style.removeProperty('background');
+        notesEl.style.removeProperty('border-color');
+        notesEl.removeEventListener('focus', notesEl._clearHighlight);
+        notesEl._clearHighlight = null;
+      };
+      notesEl.addEventListener('focus', notesEl._clearHighlight);
+    }
+  };
+
   function initSurgeonAutocomplete(textareaId, sugBoxId) {
     const textarea = document.getElementById(textareaId);
     const sugBox = document.getElementById(sugBoxId);
@@ -8046,32 +8086,7 @@ function resetCaseForm() {
   document.getElementById('laborStartLabel').textContent = 'Epidural Start';
   document.getElementById('apsEpiduralCount').value = '0';
   document.getElementById('apsPainCount').value = '0';
-  // Auto-populate surgeon name from last case on this shift
-  const notesEl = document.getElementById('caseNotes');
-  // Remove any prior highlight listener to avoid stacking
-  if (notesEl._clearHighlight) { notesEl.removeEventListener('focus', notesEl._clearHighlight); notesEl._clearHighlight = null; }
-  notesEl.value = '';
-  notesEl.style.removeProperty('background');
-  notesEl.style.removeProperty('border-color');
-  // Defer so the just-saved case is fully committed to data.cases
-  setTimeout(() => {
-    const shiftCases = (data.cases || []).filter(c => c.shiftDate === workingDate && (c.notes || '').trim());
-    if (shiftCases.length > 0) {
-      const surgeonName = (shiftCases[shiftCases.length - 1].notes || '').trim();
-      if (surgeonName) {
-        notesEl.value = surgeonName;
-        notesEl.style.setProperty('background', 'rgba(250,204,21,0.15)', 'important');
-        notesEl.style.setProperty('border-color', '#facc15', 'important');
-        notesEl._clearHighlight = () => {
-          notesEl.style.removeProperty('background');
-          notesEl.style.removeProperty('border-color');
-          notesEl.removeEventListener('focus', notesEl._clearHighlight);
-          notesEl._clearHighlight = null;
-        };
-        notesEl.addEventListener('focus', notesEl._clearHighlight);
-      }
-    }
-  }, 50);
+  document.getElementById('caseNotes').value = '';
   document.getElementById('caseCaseNotes').value = '';
   document.getElementById('simpleNotes').value = '';
   document.getElementById('casePointPreview').classList.add('hidden');
