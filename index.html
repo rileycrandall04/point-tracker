@@ -2717,7 +2717,7 @@ input.mil-time.invalid {
     <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
   </div>
 
-  <!-- 5. Historical Compensation -->
+  <!-- 5. Historical Compensation — prior month data -->
   <div class="card collapse-section" id="histCompCard">
     <div class="collapse-header" onclick="toggleCollapse('histComp')">
       <h3>Historical Compensation</h3>
@@ -2780,7 +2780,7 @@ input.mil-time.invalid {
     </div>
   </div>
 
-  <!-- 6. Monthly Stipends & Deductions (collapsible) -->
+  <!-- 6. Monthly Stipends & Deductions — current month (collapsible) -->
   <div class="card collapse-section">
     <div class="collapse-header" onclick="toggleCollapse('compStipends')">
       <h3>Stipends & Deductions</h3>
@@ -2788,9 +2788,13 @@ input.mil-time.invalid {
     </div>
     <div class="collapse-body" id="compStipendsBody">
       <div style="padding-top:12px;">
-        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-          Add fixed dollar amounts per month (e.g., medical director stipend, teaching pay). Use negative values for deductions. These contribute to revenue totals but not point calculations.
-        </p>
+        <details style="margin-bottom:10px;">
+          <summary style="cursor:pointer;font-size:0.78rem;color:var(--primary);">How to use stipends &amp; deductions</summary>
+          <div style="font-size:0.75rem;color:var(--text-dim);margin-top:6px;line-height:1.5;">
+            <p style="margin:0 0 6px;">Add fixed dollar amounts for the <strong>current month</strong> (e.g., medical director stipend, teaching pay). Use negative values for deductions.</p>
+            <p style="margin:0;">These contribute to revenue totals but not point calculations. Enter amounts under the month they apply to &mdash; no billing lag here.</p>
+          </div>
+        </details>
         <div class="month-nav">
           <button id="stipPrevMonth">&larr;</button>
           <span id="stipMonthLabel">January 2026</span>
@@ -2807,27 +2811,7 @@ input.mil-time.invalid {
     </div>
   </div>
 
-  <!-- 7. Earnings Estimator (collapsible) -->
-  <div class="card collapse-section" id="earningsEstimatorCard">
-    <div class="collapse-header" onclick="toggleCollapse('earningsEst')">
-      <h3>Earnings Estimator</h3>
-      <span class="arrow" id="earningsEstArrow">&#9660;</span>
-    </div>
-    <div class="collapse-body" id="earningsEstBody">
-      <div style="padding-top:12px;">
-        <!-- Per-shift-type table (dynamically rendered, includes total row) -->
-        <div id="eeShiftTypeTable"></div>
-        <!-- Annual estimate -->
-        <div style="text-align:center;margin-bottom:6px;">
-          <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Estimated Annual Production</div>
-          <div style="font-size:1.5rem;font-weight:700;color:#facc15;" id="eeAnnualEst">&mdash;</div>
-        </div>
-        <div style="text-align:center;font-size:0.7rem;color:var(--text-dim);" id="eeBreakdown"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 8. Paycheck Tracking (collapsible) -->
+  <!-- 7. Paycheck Tracking — current month (collapsible) -->
   <div class="card collapse-section" id="paycheckTrackingCard">
     <div class="collapse-header" onclick="toggleCollapse('paycheckTrack')">
       <h3>Paycheck Tracking</h3>
@@ -2838,9 +2822,10 @@ input.mil-time.invalid {
     <details style="margin-bottom:10px;">
       <summary style="cursor:pointer;font-size:0.78rem;color:var(--primary);">How to use paycheck tracking</summary>
       <div style="font-size:0.75rem;color:var(--text-dim);margin-top:6px;line-height:1.5;">
-        <p style="margin:0 0 6px;">Track your actual paycheck deposits to compare against projections over time.</p>
+        <p style="margin:0 0 6px;">Track your actual paycheck deposits for the <strong>current month</strong> to compare against projections in real time.</p>
+        <p style="margin:0 0 6px;">When you get paid in March, enter that paycheck amount under <strong>March</strong>.</p>
         <ul style="margin:0;padding-left:18px;">
-          <li><strong>Month</strong> &mdash; Select the month this paycheck covers.</li>
+          <li><strong>Month</strong> &mdash; The month you received the paycheck.</li>
           <li><strong>Amount Deposited</strong> &mdash; Your net deposit amount.</li>
           <li><strong>Retirement Contribution</strong> &mdash; Your pre-tax retirement contribution for the month, if applicable.</li>
         </ul>
@@ -2878,6 +2863,26 @@ input.mil-time.invalid {
         <button class="btn btn-outline btn-sm" onclick="paycheckPageNav(1)" id="paycheckNextBtn">Next &rarr;</button>
       </div>
     </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. Earnings Estimator — projections (collapsible) -->
+  <div class="card collapse-section" id="earningsEstimatorCard">
+    <div class="collapse-header" onclick="toggleCollapse('earningsEst')">
+      <h3>Earnings Estimator</h3>
+      <span class="arrow" id="earningsEstArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="earningsEstBody">
+      <div style="padding-top:12px;">
+        <!-- Per-shift-type table (dynamically rendered, includes total row) -->
+        <div id="eeShiftTypeTable"></div>
+        <!-- Annual estimate -->
+        <div style="text-align:center;margin-bottom:6px;">
+          <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Estimated Annual Production</div>
+          <div style="font-size:1.5rem;font-weight:700;color:#facc15;" id="eeAnnualEst">&mdash;</div>
+        </div>
+        <div style="text-align:center;font-size:0.7rem;color:var(--text-dim);" id="eeBreakdown"></div>
       </div>
     </div>
   </div>
@@ -9160,6 +9165,15 @@ function toggleCollapse(sectionId) {
     arrow.classList.add('open');
   }
 }
+
+// Recalculate collapse-body max-height when a <details> inside it is toggled
+document.addEventListener('toggle', function(e) {
+  if (e.target.tagName !== 'DETAILS') return;
+  const collapseBody = e.target.closest('.collapse-body');
+  if (collapseBody && collapseBody.style.maxHeight && collapseBody.style.maxHeight !== '0px') {
+    collapseBody.style.maxHeight = collapseBody.scrollHeight + 'px';
+  }
+}, true);
 
 // Shared helper: shift clocked-in hours (sum of time entries, not gaps)
 function calcShiftHours(shift) {
