@@ -5168,10 +5168,19 @@ function todayStr() {
 
 function effectiveWorkDate() {
   const now = new Date();
-  if (now.getHours() < 7) {
+  const currentMin = now.getHours() * 60 + now.getMinutes();
+  if (currentMin < 420) { // Before 07:00
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
-    return yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
+    const yesterdayKey = yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
+    // At 06:40+ after a call shift, advance to today for the post-call shift
+    if (currentMin >= 400) {
+      const prevShift = data.shifts[yesterdayKey];
+      if (prevShift && ['1st_call','2nd_call','3rd_call','4th_call'].includes(prevShift.assignmentType)) {
+        return todayStr();
+      }
+    }
+    return yesterdayKey;
   }
   return todayStr();
 }
