@@ -2574,8 +2574,8 @@ input.mil-time.invalid {
   <!-- Procedure Time Lookup -->
   <div class="card">
     <h2>Procedure Time Lookup</h2>
-    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;">Search a procedure to see average case duration by surgeon</p>
-    <input type="text" id="procLookupSearch" placeholder="Type procedure name..." oninput="renderProcLookup()" autocomplete="off" style="width:100%;margin-bottom:8px;">
+    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;">Search by procedure name or surgeon name</p>
+    <input type="text" id="procLookupSearch" placeholder="Search procedure or surgeon..." oninput="renderProcLookup()" autocomplete="off" style="width:100%;margin-bottom:8px;">
     <div id="procLookupResults"></div>
   </div>
 
@@ -13501,12 +13501,14 @@ function renderProcLookup() {
   const seen = new Set();
   const myUid = currentUser ? currentUser.uid : '';
 
+  // Build full case list first, then filter by procedure name or surgeon name
+  const allCases = [];
+
   // Pass 1: Local cases
   data.cases.forEach(c => {
     if (!c.startTime || !c.endTime || c.isSharedCase) return;
     const name = c.caseType === 'standard' ? (c.procedure || '') : getCaseTypeName(c.caseType, c);
-    if (!name || !name.toLowerCase().includes(query)) return;
-    if (!procNames[name]) procNames[name] = [];
+    if (!name) return;
     const surgeon = normalizeSurgeonName((c.notes || '').trim());
     let s = timeToMinutes(c.startTime);
     let e = timeToMinutes(c.endTime);
@@ -13515,7 +13517,7 @@ function renderProcLookup() {
     if (mins <= 0) return;
     const dedupKey = (myUid || 'local') + '|' + c.shiftDate + '|' + c.startTime;
     seen.add(dedupKey);
-    procNames[name].push({ surgeon, mins, id: c.id, date: c.shiftDate, startTime: c.startTime, endTime: c.endTime, isFromShared: false });
+    allCases.push({ name, surgeon, mins, id: c.id, date: c.shiftDate, startTime: c.startTime, endTime: c.endTime, isFromShared: false });
   });
 
   // Pass 2: Shared cases from other users
@@ -13524,22 +13526,36 @@ function renderProcLookup() {
       if (sc.uid === myUid) return;
       if (!sc.startTime || !sc.endTime) return;
       const name = sc.caseType === 'standard' ? (sc.procedure || '') : getCaseTypeName(sc.caseType);
-      if (!name || !name.toLowerCase().includes(query)) return;
+      if (!name) return;
       const dedupKey = sc.uid + '|' + sc.shiftDate + '|' + sc.startTime;
       if (seen.has(dedupKey)) return;
       seen.add(dedupKey);
-      if (!procNames[name]) procNames[name] = [];
       let s = timeToMinutes(sc.startTime);
       let e = timeToMinutes(sc.endTime);
       if (e <= s) e += 1440;
       const mins = e - s;
       if (mins <= 0) return;
-      procNames[name].push({ surgeon: normalizeSurgeonName(sc.surgeon || '') || 'Unknown', mins, id: null, date: sc.shiftDate, startTime: sc.startTime, endTime: sc.endTime, isFromShared: true });
+      allCases.push({ name, surgeon: normalizeSurgeonName(sc.surgeon || '') || 'Unknown', mins, id: null, date: sc.shiftDate, startTime: sc.startTime, endTime: sc.endTime, isFromShared: true });
     });
   }
 
+  // Check if query matches any surgeon names
+  const surgeonMatch = allCases.some(c => c.surgeon && c.surgeon.toLowerCase().includes(query));
+  const procMatch = allCases.some(c => c.name.toLowerCase().includes(query));
+
+  // Filter: match procedure name OR surgeon name
+  const filtered = allCases.filter(c =>
+    c.name.toLowerCase().includes(query) || (c.surgeon && c.surgeon.toLowerCase().includes(query))
+  );
+
+  // Group by procedure
+  filtered.forEach(c => {
+    if (!procNames[c.name]) procNames[c.name] = [];
+    procNames[c.name].push(c);
+  });
+
   const procs = Object.keys(procNames);
-  if (procs.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No matching procedures found.</p>'; return; }
+  if (procs.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No matching procedures or surgeons found.</p>'; return; }
 
   let html = '';
   procs.sort().forEach(proc => {
