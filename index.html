@@ -9779,7 +9779,12 @@ function getShiftPayBreakdown(shift) {
       const c = consolidated[seen[key]];
       c.durationMin += r.durationMin;
       c.amount = round2(c.amount + r.amount);
-      if (r.clockOut) c.clockOut = r.clockOut;
+      if (r.clockIn) {
+        c.clockIn = c.clockIn ? c.clockIn + ', ' + r.clockIn : r.clockIn;
+      }
+      if (r.clockOut) {
+        c.clockOut = c.clockOut ? c.clockOut + ', ' + r.clockOut : r.clockOut;
+      }
     } else {
       seen[key] = consolidated.length;
       consolidated.push({ ...r });
@@ -10064,7 +10069,7 @@ function renderShiftLogTable() {
             html += `<td data-blank class="sl-col-check"></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>`;
           }
           html += `<td class="sl-col-clockin">${r.clockIn || ''}</td><td class="sl-col-clockout">${r.clockOut || ''}</td>`;
-          html += `<td class="sl-col-inout">${r.clockIn || ''}${r.clockOut ? '-' + r.clockOut : ''}</td>`;
+          html += `<td class="sl-col-inout">${fmtInOut(r.clockIn, r.clockOut)}</td>`;
           html += `<td class="sl-col-paycode">${r.payCode}</td><td>${(r.durationMin / 60).toFixed(1)}</td>`;
           html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
           html += buildAmountCell(shift, r._ri, r.amount);
@@ -10107,7 +10112,7 @@ function renderShiftLogTable() {
             html += `<td data-blank class="sl-col-check"></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>`;
           }
           html += `<td class="sl-col-clockin">${r.clockIn || ''}</td><td class="sl-col-clockout">${r.clockOut || ''}</td>`;
-          html += `<td class="sl-col-inout">${r.clockIn || ''}${r.clockOut ? '-' + r.clockOut : ''}</td>`;
+          html += `<td class="sl-col-inout">${fmtInOut(r.clockIn, r.clockOut)}</td>`;
           html += `<td class="sl-col-paycode">${r.payCode}</td><td>${(r.durationMin / 60).toFixed(1)}</td>`;
           html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
           html += buildAmountCell(shift, r._ri, r.amount);
@@ -10155,7 +10160,7 @@ function renderShiftLogTable() {
       }
       html += `<td class="sl-col-clockin">${r.clockIn || ''}</td>`;
       html += `<td class="sl-col-clockout">${r.clockOut || ''}</td>`;
-      html += `<td class="sl-col-inout">${r.clockIn || ''}${r.clockOut ? '-' + r.clockOut : ''}</td>`;
+      html += `<td class="sl-col-inout">${fmtInOut(r.clockIn, r.clockOut)}</td>`;
       html += `<td class="sl-col-paycode">${r.payCode}</td>`;
       html += `<td>${(r.durationMin / 60).toFixed(1)}</td>`;
       html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
@@ -10174,6 +10179,20 @@ function renderShiftLogTable() {
   html += `<tr style="border-top:2px solid var(--border);"><td colspan="15" style="text-align:right;font-weight:700;">Monthly Total</td><td><strong>${grandTotal.toFixed(1)}</strong></td></tr>`;
   html += '</tbody></table>';
   container.innerHTML = html;
+}
+
+function fmtInOut(clockIn, clockOut) {
+  if (!clockIn && !clockOut) return '-';
+  const ins = (clockIn || '').split(', ').filter(Boolean);
+  const outs = (clockOut || '').split(', ').filter(Boolean);
+  const len = Math.max(ins.length, outs.length);
+  const pairs = [];
+  for (let i = 0; i < len; i++) {
+    const ci = ins[i] || '';
+    const co = outs[i] || '';
+    pairs.push(ci + (co ? '-' + co : ''));
+  }
+  return pairs.join(', ');
 }
 
 function toggleSlExpanded() {
