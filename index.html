@@ -2742,11 +2742,11 @@ input.mil-time.invalid {
           <details style="margin-bottom:10px;">
             <summary style="cursor:pointer;font-size:0.78rem;color:var(--primary);">How to fill this in</summary>
             <div style="font-size:0.75rem;color:var(--text-dim);margin-top:6px;line-height:1.5;">
-              <p style="margin:0 0 6px;">Billing runs <strong>one month behind</strong>. Always enter values from the <strong>prior month's</strong> reports. If the label says March, enter February's data.</p>
+              <p style="margin:0 0 6px;">Enter values from the reports for the month shown in the label.</p>
               <ul style="margin:0;padding-left:18px;">
-                <li><strong>Time Points</strong> &mdash; Actual Qgenda time points from the prior month, if they differ from the calculated total.</li>
-                <li><strong>Prod Points</strong> &mdash; Production/billing points from the office total for the prior month.</li>
-                <li><strong>Compensation</strong> &mdash; Compensation total from the prior month's compensation summary report.</li>
+                <li><strong>Time Points</strong> &mdash; Actual Qgenda time points for that month, if they differ from the calculated total.</li>
+                <li><strong>Prod Points</strong> &mdash; Production/billing points from the office total for that month.</li>
+                <li><strong>Compensation</strong> &mdash; Compensation total from that month's compensation summary report.</li>
               </ul>
             </div>
           </details>
@@ -10565,10 +10565,8 @@ let ovMonth = new Date().getMonth();
 function updateOVMonthLabel() {
   const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   document.getElementById('ovMonthLabel').textContent = `${mn[ovMonth]} ${ovYear}`;
-  const priorMonth = (ovMonth - 1 + 12) % 12;
-  const priorYear = ovMonth === 0 ? ovYear - 1 : ovYear;
   const hint = document.getElementById('ovMonthHint');
-  if (hint) hint.textContent = `Enter values from ${mn[priorMonth]} ${priorYear} reports`;
+  if (hint) hint.textContent = `Enter values from ${mn[ovMonth]} ${ovYear} reports`;
 }
 
 function getOVKey() {
