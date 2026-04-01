@@ -10740,6 +10740,35 @@ function saveStabPaycheck() {
   showToast('Paycheck saved');
 }
 
+function saveStabActualRevenue() {
+  const mk = stabMonthKey();
+  const input = document.getElementById('stabActualRevenue');
+  if (!input) return;
+  const valStr = input.value.trim();
+  if (!data.overrides) data.overrides = {};
+  if (valStr === '') {
+    // Clear override
+    if (data.overrides[mk]) {
+      delete data.overrides[mk].compTotal;
+      if (Object.keys(data.overrides[mk]).length === 0) delete data.overrides[mk];
+    }
+    saveData(data);
+    renderStabilization();
+    renderProjections();
+    showToast('Actual revenue cleared');
+    return;
+  }
+  const val = parseFloat(valStr.replace(/[$,]/g, ''));
+  if (isNaN(val)) { showToast('Enter a valid amount'); return; }
+  if (!data.overrides[mk]) data.overrides[mk] = {};
+  data.overrides[mk].compTotal = val;
+  saveData(data);
+  renderStabilization();
+  renderHistoricalComp();
+  renderHistoricalTrends();
+  showToast('Actual revenue saved');
+}
+
 function addStabStipendRow(container, label, amount) {
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;';
@@ -11497,9 +11526,9 @@ function renderHistoricalComp() {
     html += `<td style="padding:5px 3px;text-align:right;color:var(--primary);">${d.pv > 0 ? '$' + d.calcProduction.toLocaleString('en-US', {maximumFractionDigits: 0}) : '-'}</td>`;
     const actualDisplay = d.hasOverride
       ? '$' + d.actualAmt.toLocaleString('en-US', {maximumFractionDigits: 0})
-      : '<span style="color:var(--text-dim);font-size:0.65rem;">tap</span>';
+      : (d.pv > 0 ? '<span style="color:var(--text-dim);font-size:0.65rem;">edit</span>' : '-');
     const actualColor = d.hasOverride ? 'color:var(--accent2);font-weight:600;' : '';
-    html += `<td style="padding:5px 3px;text-align:right;${actualColor}cursor:pointer;" onclick="editHistCompActual('${d.workMk}')">${actualDisplay}</td>`;
+    html += `<td style="padding:5px 3px;text-align:right;${actualColor}cursor:pointer;" onclick="editHistCompActual('${d.workMk}')" title="Edit in Paycheck Projection">${actualDisplay}</td>`;
     // Accuracy column
     if (d.accuracy != null) {
       const accColor = d.accuracy >= 95 ? 'var(--accent)' : d.accuracy >= 85 ? 'var(--accent2)' : 'var(--danger)';
@@ -11994,26 +12023,25 @@ function paycheckPageNav(dir) {
   renderPaycheckTable();
 }
 
-function editHistCompActual(payMk) {
-  const ov = (data.overrides || {})[payMk];
-  const current = ov && ov.compTotal != null ? ov.compTotal : '';
-  const input = prompt('Enter actual compensation received (or leave blank to clear):', current);
-  if (input === null) return; // cancelled
-  if (!data.overrides) data.overrides = {};
-  if (input.trim() === '') {
-    // Clear override
-    if (data.overrides[payMk]) {
-      delete data.overrides[payMk].compTotal;
-      if (Object.keys(data.overrides[payMk]).length === 0) delete data.overrides[payMk];
-    }
-  } else {
-    const val = parseFloat(input.replace(/[$,]/g, ''));
-    if (isNaN(val)) { showToast('Invalid amount'); return; }
-    if (!data.overrides[payMk]) data.overrides[payMk] = {};
-    data.overrides[payMk].compTotal = val;
+function editHistCompActual(workMk) {
+  // Navigate the Paycheck Projection card to this month and open the breakdown
+  const now = new Date();
+  const [y, m] = workMk.split('-').map(Number);
+  stabMonthOffset = (y - now.getFullYear()) * 12 + (m - 1 - now.getMonth());
+  renderStabilization();
+  // Open the breakdown if closed
+  const panel = document.getElementById('stabBreakdown');
+  const link = document.getElementById('stabBreakdownToggle');
+  if (!panel.style.maxHeight || panel.style.maxHeight === '0px') {
+    panel.style.maxHeight = panel.scrollHeight + 'px';
+    link.innerHTML = 'Hide breakdown &#9650;';
   }
-  saveData(data);
-  renderProjections(); // re-renders all comp cards including this table
+  // Scroll to the projection card and focus the revenue input
+  setTimeout(() => {
+    document.getElementById('stabPaycheckRow').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const revenueInput = document.getElementById('stabActualRevenue');
+    if (revenueInput) revenueInput.focus();
+  }, 100);
   showToast('Compensation updated');
 }
 
@@ -12089,12 +12117,24 @@ function renderStabilization() {
     bdHtml += `</div>`;
   });
 
-  // Production line
+  // Revenue line (calculated)
   if (pv > 0) {
     bdHtml += '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">';
-    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.8rem;"><span style="color:var(--text-dim);">Revenue</span><span style="font-weight:600;color:var(--primary);">${weighted.toFixed(1)} &times; $${pv.toFixed(2)} = $${production.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.8rem;"><span style="color:var(--text-dim);">Calculated Revenue</span><span style="font-weight:600;color:var(--primary);">${weighted.toFixed(1)} &times; $${pv.toFixed(2)} = $${production.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
     bdHtml += '</div>';
   }
+
+  // Actual AR+Production revenue entry
+  const compOvForRevenue = data.overrides[targetKey] && data.overrides[targetKey].compTotal != null ? data.overrides[targetKey].compTotal : null;
+  const revenueDefault = compOvForRevenue != null ? compOvForRevenue : (production > 0 ? production : '');
+  bdHtml += '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">';
+  bdHtml += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:2px;">Actual AR+Production Revenue</div>';
+  bdHtml += '<div style="font-size:0.68rem;color:var(--accent2);margin-bottom:6px;font-style:italic;">Enter total AR+Production from the compensation summary report</div>';
+  bdHtml += '<div style="display:flex;gap:8px;align-items:flex-end;">';
+  bdHtml += `<div style="flex:1;"><input type="number" id="stabActualRevenue" placeholder="$0.00" step="0.01" value="${compOvForRevenue != null ? compOvForRevenue : ''}" class="text-input" style="width:100%;font-size:0.78rem;padding:5px 8px;"></div>`;
+  bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabActualRevenue()" style="font-size:0.72rem;padding:4px 12px;height:30px;">Save</button>';
+  bdHtml += '</div>';
+  bdHtml += '</div>';
 
   // Stipend/deduction section (retirement is always first, non-deletable)
   const existingRetire = (data.retirement || {})[targetKey] || 0;
