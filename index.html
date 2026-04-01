@@ -10698,14 +10698,10 @@ function saveStabStipends() {
   if (!data.stipends) data.stipends = {};
   if (!data.retirement) data.retirement = {};
 
-  // Save retirement (entered as negative, stored as positive)
+  // Save retirement (entered as negative, stored as positive; 0 blocks carryover)
   const retInput = document.getElementById('stabRetirementAmount');
   const retVal = retInput ? Math.abs(parseFloat(retInput.value) || 0) : 0;
-  if (retVal > 0) {
-    data.retirement[mk] = retVal;
-  } else {
-    delete data.retirement[mk];
-  }
+  data.retirement[mk] = retVal;
 
   // Save stipend/deduction entries
   const entries = [];
