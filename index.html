@@ -12051,7 +12051,7 @@ function renderStabilization() {
   // Production line
   if (pv > 0) {
     bdHtml += '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">';
-    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.8rem;"><span style="color:var(--text-dim);">Production</span><span style="font-weight:600;color:var(--primary);">${weighted.toFixed(1)} &times; $${pv.toFixed(2)} = $${production.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.8rem;"><span style="color:var(--text-dim);">Revenue</span><span style="font-weight:600;color:var(--primary);">${weighted.toFixed(1)} &times; $${pv.toFixed(2)} = $${production.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
     bdHtml += '</div>';
   }
 
@@ -12116,11 +12116,11 @@ function renderStabilization() {
   const compOv = data.overrides[targetKey] && data.overrides[targetKey].compTotal != null ? data.overrides[targetKey].compTotal : null;
 
   if (decAdv && targetDate.getMonth() === 0) {
-    earningLabel.textContent = 'Jan production — received in Dec advance';
+    earningLabel.textContent = 'Jan revenue — received in Dec advance';
     document.getElementById('stabPaycheck').textContent = '$0.00';
     summaryEl.textContent = '';
   } else if (compOv != null) {
-    earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' production — override';
+    earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue — override';
     document.getElementById('stabPaycheck').textContent = '$' + compOv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     summaryEl.textContent = '';
   } else if (pv && pv > 0) {
@@ -12132,16 +12132,16 @@ function renderStabilization() {
       const janPv = getPointValueForMonth(mkFwd(0));
       const janStipend = getMonthlyStipendTotal(mkFwd(0));
       totalPaycheck += janWeighted * janPv + janStipend;
-      earningLabel.textContent = 'Dec production (+ Jan advance) → paid Dec 20';
+      earningLabel.textContent = 'Dec revenue (+ Jan advance) → paid Dec 20';
     } else {
-      earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' production → paid ' + payMonthName + ' 20';
+      earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue → paid ' + payMonthName + ' 20';
     }
 
     document.getElementById('stabPaycheck').textContent = '$' + totalPaycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     // Summary line
     let parts = [];
-    if (production > 0) parts.push('Production: $' + production.toLocaleString('en-US', {maximumFractionDigits: 0}));
+    if (production > 0) parts.push('Revenue: $' + production.toLocaleString('en-US', {maximumFractionDigits: 0}));
     if (stipend !== 0) {
       const stipLabel = stipend > 0 ? 'Stipends: +$' + stipend.toLocaleString('en-US', {maximumFractionDigits: 0}) : 'Deductions: -$' + Math.abs(stipend).toLocaleString('en-US', {maximumFractionDigits: 0});
       parts.push(stipLabel);
@@ -12149,7 +12149,7 @@ function renderStabilization() {
     summaryEl.textContent = parts.join(' · ');
   } else {
     document.getElementById('stabPaycheck').innerHTML = '&mdash;';
-    earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' production → paid ' + payMonthName + ' 20';
+    earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue → paid ' + payMonthName + ' 20';
     summaryEl.textContent = pv ? '' : 'Set $/pt to see estimate';
   }
 }
