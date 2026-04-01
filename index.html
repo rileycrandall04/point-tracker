@@ -2841,7 +2841,14 @@ input.mil-time.invalid {
       <span class="arrow" id="annualTaxArrow">&#9660;</span>
     </div>
     <div class="collapse-body" id="annualTaxBody">
-      <div style="padding-top:12px;" id="annualTaxContent"></div>
+      <div style="padding-top:12px;">
+        <div class="month-nav" style="margin-bottom:10px;">
+          <button id="taxPrevYear">&larr;</button>
+          <span id="taxYearLabel" style="font-size:0.85rem;font-weight:600;"></span>
+          <button id="taxNextYear">&rarr;</button>
+        </div>
+        <div id="annualTaxContent"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -11821,11 +11828,17 @@ function renderPaycheckCard() {
   renderPaycheckTable();
 }
 
+let taxYearOffset = 0;
+
+document.getElementById('taxPrevYear').addEventListener('click', () => { taxYearOffset--; renderAnnualTaxBreakdown(); });
+document.getElementById('taxNextYear').addEventListener('click', () => { taxYearOffset++; renderAnnualTaxBreakdown(); });
+
 function renderAnnualTaxBreakdown() {
   const el = document.getElementById('annualTaxContent');
   if (!el) return;
   const now = new Date();
-  const year = now.getFullYear();
+  const year = now.getFullYear() + taxYearOffset;
+  document.getElementById('taxYearLabel').textContent = year;
   const mt = getMonthlyTotals();
   const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -11886,7 +11899,9 @@ function renderAnnualTaxBreakdown() {
   const fmt = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
   let html = '<div style="font-size:0.78rem;">';
-  html += `<div style="text-align:center;margin-bottom:8px;font-size:0.72rem;color:var(--text-dim);">${year} Year-to-Date (${monthCount} months with data)</div>`;
+  const isPastYear = year < now.getFullYear();
+  const yearLabel = isPastYear ? year + ' Calendar Year' : year + ' Year-to-Date';
+  html += `<div style="text-align:center;margin-bottom:8px;font-size:0.72rem;color:var(--text-dim);">${yearLabel} (${monthCount} month${monthCount !== 1 ? 's' : ''} with data)</div>`;
 
   html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-weight:600;"><span>Total Revenue</span><span style="color:var(--accent2);">' + fmt(totalRevenue) + '</span></div>';
   html += '<div style="font-size:0.65rem;color:var(--text-dim);padding:2px 0 6px 12px;font-style:italic;">AR+Production + positive stipends + retirement contributions</div>';
