@@ -9770,21 +9770,17 @@ function getShiftPayBreakdown(shift) {
     merged.push({ ...r });
   }
 
-  // Consolidate all rows with the same payCode + payRate into single totals
+  // Consolidate rows with the same payCode + payRate + entry into single totals
+  // Keep different clock-in entries on separate rows
   const consolidated = [];
   const seen = {};
   for (const r of merged) {
-    const key = r.payCode + '|' + r.payRate;
+    const key = r.payCode + '|' + r.payRate + '|' + (r.entryIdx != null ? r.entryIdx : '');
     if (seen[key] !== undefined) {
       const c = consolidated[seen[key]];
       c.durationMin += r.durationMin;
       c.amount = round2(c.amount + r.amount);
-      if (r.clockIn) {
-        c.clockIn = c.clockIn ? c.clockIn + ', ' + r.clockIn : r.clockIn;
-      }
-      if (r.clockOut) {
-        c.clockOut = c.clockOut ? c.clockOut + ', ' + r.clockOut : r.clockOut;
-      }
+      if (r.clockOut) c.clockOut = r.clockOut;
     } else {
       seen[key] = consolidated.length;
       consolidated.push({ ...r });
