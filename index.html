@@ -11833,6 +11833,8 @@ function renderAnnualTaxBreakdown() {
   let totalNonGuaranteed = 0;
   let totalRetirement = 0;
   let totalRevenue = 0;
+  let totalPositiveStipends = 0;
+  let totalNegativeDeductions = 0;
   let monthCount = 0;
 
   for (let m = 0; m < 12; m++) {
@@ -11856,12 +11858,16 @@ function renderAnnualTaxBreakdown() {
     if (revenue > 0 || stipEntries.length > 0) monthCount++;
 
     const ngAmt = getNonGuaranteedTotal(mk);
-    const gStip = stipEntries.reduce((s, e) => s + (e.amount || 0), 0);
+    const allStip = stipEntries.reduce((s, e) => s + (e.amount || 0), 0);
+    const positiveStip = stipEntries.filter(e => (e.amount || 0) > 0).reduce((s, e) => s + e.amount, 0);
+    const negativeStip = stipEntries.filter(e => (e.amount || 0) < 0).reduce((s, e) => s + e.amount, 0);
 
-    totalRevenue += revenue;
+    totalRevenue += revenue + positiveStip + retAmt;
+    totalPositiveStipends += positiveStip;
+    totalNegativeDeductions += Math.abs(negativeStip);
     totalRetirement += retAmt;
     totalNonGuaranteed += ngAmt;
-    totalGuaranteed += revenue + gStip - retAmt;
+    totalGuaranteed += revenue + allStip - retAmt;
   }
 
   const totalIncome = totalGuaranteed + totalNonGuaranteed;
@@ -11870,11 +11876,13 @@ function renderAnnualTaxBreakdown() {
   let html = '<div style="font-size:0.78rem;">';
   html += `<div style="text-align:center;margin-bottom:8px;font-size:0.72rem;color:var(--text-dim);">${year} Year-to-Date (${monthCount} months with data)</div>`;
 
-  html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-weight:600;"><span>Total Annual Income</span><span style="color:var(--accent2);">' + fmt(totalIncome) + '</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-weight:600;"><span>Total Revenue</span><span style="color:var(--accent2);">' + fmt(totalRevenue) + '</span></div>';
+  html += '<div style="font-size:0.65rem;color:var(--text-dim);padding:2px 0 6px 12px;font-style:italic;">AR+Production + positive stipends + retirement contributions</div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 12px;font-size:0.75rem;color:var(--text-dim);border-bottom:1px solid var(--border);"><span>Total Annual Income (take-home)</span><span>' + fmt(totalIncome) + '</span></div>';
   html += '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 12px;font-size:0.75rem;color:var(--text-dim);"><span>Guaranteed Income</span><span>' + fmt(totalGuaranteed) + '</span></div>';
   html += '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 12px;font-size:0.75rem;color:var(--text-dim);"><span>Non-Guaranteed Income</span><span>' + fmt(totalNonGuaranteed) + '</span></div>';
   html += '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 12px;font-size:0.75rem;color:var(--text-dim);"><span>Total Retirement Contributions</span><span>' + fmt(totalRetirement) + '</span></div>';
-  html += '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 12px;font-size:0.75rem;color:var(--text-dim);"><span>Total Revenue (pre-deductions)</span><span>' + fmt(totalRevenue) + '</span></div>';
+  if (totalNegativeDeductions > 0) html += '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 12px;font-size:0.75rem;color:var(--text-dim);"><span>Total Deductions</span><span>-' + fmt(totalNegativeDeductions) + '</span></div>';
 
   html += '</div>';
   el.innerHTML = html;
