@@ -10729,19 +10729,10 @@ function getRetirementForMonth(monthKey) {
   return 0;
 }
 
-// Get non-guaranteed payments for a month, carrying over from prior months
+// Get non-guaranteed payments for a month (no carryover)
 function getNonGuaranteedForMonth(monthKey) {
   if (!data.nonGuaranteed) data.nonGuaranteed = {};
-  if (data.nonGuaranteed[monthKey]) return data.nonGuaranteed[monthKey];
-  const [y, m] = monthKey.split('-').map(Number);
-  for (let i = 1; i <= 12; i++) {
-    const d = new Date(y, m - 1 - i, 1);
-    const priorKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-    if (data.nonGuaranteed[priorKey] && Object.keys(data.nonGuaranteed[priorKey]).length > 0) {
-      return { ...data.nonGuaranteed[priorKey] };
-    }
-  }
-  return {};
+  return data.nonGuaranteed[monthKey] || {};
 }
 
 function getNonGuaranteedTotal(monthKey) {
