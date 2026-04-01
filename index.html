@@ -12103,7 +12103,11 @@ function renderStabilization() {
   const stipend = stipendEntries.reduce((s, e) => s + (e.amount || 0), 0);
   const retirementAmt = getRetirementForMonth(targetKey);
   const payDate = new Date(ty, tm, 1);
-  const paycheck = round2(production + stipend - retirementAmt);
+  // Use actual AR+Production if entered, otherwise use calculated
+  if (!data.overrides) data.overrides = {};
+  const actualRevenue = data.overrides[targetKey] && data.overrides[targetKey].compTotal != null ? data.overrides[targetKey].compTotal : null;
+  const revenueForCalc = actualRevenue != null ? actualRevenue : production;
+  const paycheck = round2(revenueForCalc + stipend - retirementAmt);
 
   // Render breakdown: blend calculation + production + stipend lines
   let bdHtml = '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:6px;margin-top:8px;">Point blend calculation:</div>';
@@ -12201,11 +12205,7 @@ function renderStabilization() {
     earningLabel.textContent = 'Jan revenue — received in Dec advance';
     document.getElementById('stabPaycheck').textContent = '$0.00';
     summaryEl.textContent = '';
-  } else if (compOv != null) {
-    earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue — override';
-    document.getElementById('stabPaycheck').textContent = '$' + compOv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    summaryEl.textContent = '';
-  } else if (pv && pv > 0) {
+  } else if (revenueForCalc > 0 || (pv && pv > 0)) {
     let totalPaycheck = paycheck;
 
     if (decAdv && targetDate.getMonth() === 11) {
@@ -12216,14 +12216,16 @@ function renderStabilization() {
       totalPaycheck += janWeighted * janPv + janStipend;
       earningLabel.textContent = 'Dec revenue (+ Jan advance) → paid Dec 20';
     } else {
-      earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue → paid ' + payMonthName + ' 20';
+      const revLabel = actualRevenue != null ? ' (actual)' : '';
+      earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue' + revLabel + ' → paid ' + payMonthName + ' 20';
     }
 
     document.getElementById('stabPaycheck').textContent = '$' + totalPaycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     // Summary line
     let parts = [];
-    if (production > 0) parts.push('Revenue: $' + production.toLocaleString('en-US', {maximumFractionDigits: 0}));
+    const revDisplayLabel = actualRevenue != null ? 'Actual Revenue' : 'Revenue';
+    if (revenueForCalc > 0) parts.push(revDisplayLabel + ': $' + revenueForCalc.toLocaleString('en-US', {maximumFractionDigits: 0}));
     if (stipend !== 0) {
       const stipLabel = stipend > 0 ? 'Stipends: +$' + stipend.toLocaleString('en-US', {maximumFractionDigits: 0}) : 'Deductions: -$' + Math.abs(stipend).toLocaleString('en-US', {maximumFractionDigits: 0});
       parts.push(stipLabel);
