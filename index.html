@@ -2642,14 +2642,19 @@ input.mil-time.invalid {
         <input type="number" id="dashPointValue" min="0" step="0.01" placeholder="55.00" style="max-width:90px;padding:4px 8px;font-size:0.8rem;">
       </div>
     </div>
+    <div class="month-nav" style="margin-bottom:10px;">
+      <button id="stabPrevMonth">&larr;</button>
+      <span id="stabMonthLabel" style="font-size:0.85rem;font-weight:600;"></span>
+      <button id="stabNextMonth">&rarr;</button>
+    </div>
     <div id="stabPaycheckRow" style="text-align:center; margin-bottom:12px;">
       <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:2px;" id="stabEarningLabel">Earning for: —</div>
       <div style="font-size:1.6rem; font-weight:700; color:var(--accent2);" id="stabPaycheck">&mdash;</div>
-      <div style="font-size:0.85rem; color:var(--text-dim); margin-top:8px;" id="stabCurrentPaycheck"></div>
+      <div id="stabPaycheckBreakdownSummary" style="font-size:0.78rem;color:var(--text-dim);margin-top:4px;"></div>
     </div>
     <div class="summary-grid">
       <div class="summary-item">
-        <div class="label">This Month (raw)</div>
+        <div class="label">Raw Points</div>
         <div class="value blue" id="stabRaw">0</div>
       </div>
       <div class="summary-item">
@@ -2797,7 +2802,6 @@ input.mil-time.invalid {
           <li><strong>Month</strong> &mdash; The month you received the paycheck.</li>
           <li><strong>Amount Deposited</strong> &mdash; Your net deposit amount.</li>
           <li><strong>Retirement Contribution</strong> &mdash; Your pre-tax retirement contribution for the month, if applicable.</li>
-          <li><strong>Stipends &amp; Deductions</strong> &mdash; Fixed dollar amounts for the selected month (e.g., medical director stipend, teaching pay). Use negative values for deductions. These contribute to revenue totals but not point calculations.</li>
         </ul>
       </div>
     </details>
@@ -2814,12 +2818,6 @@ input.mil-time.invalid {
         <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:2px;">Retirement Contribution</label>
         <input type="number" id="paycheckRetirement" class="text-input" placeholder="$0.00" step="0.01" style="width:100%;font-size:0.85rem;">
       </div>
-    </div>
-    <div style="margin-bottom:8px;">
-      <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:4px;">Stipends & Deductions</label>
-      <div id="stipendEntries"></div>
-      <button type="button" class="add-entry-btn" id="addStipendBtn" style="margin-top:2px;">+ Add Line</button>
-      <div id="stipendStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;"></div>
     </div>
     <div style="margin-bottom:12px;">
       <button class="btn btn-primary btn-sm" onclick="savePaycheckEntry()" style="height:36px;white-space:nowrap;">Save</button>
@@ -10683,80 +10681,73 @@ document.getElementById('clearOverrideBtn').addEventListener('click', () => {
 });
 
 // ================================================================
-// MONTHLY STIPENDS
+// MONTHLY STIPENDS (managed via Paycheck Projection card breakdown)
 // ================================================================
-function getStipKey() {
-  const v = document.getElementById('paycheckMonth').value;
-  if (v) return v;
-  const now = new Date();
-  return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-}
-
-function loadStipendUI() {
-  if (!data.stipends) data.stipends = {};
-  const mk = getStipKey();
-  const entries = data.stipends[mk] || [];
-  const container = document.getElementById('stipendEntries');
-  container.innerHTML = '';
-  if (entries.length === 0) {
-    addStipendRow(container, '', '');
-  } else {
-    entries.forEach(e => addStipendRow(container, e.label, e.amount));
-  }
-  updateStipendStatus();
-}
-
-function addStipendRow(container, label, amount) {
-  const row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center;';
-  row.innerHTML = `<input type="text" placeholder="Label (e.g., Med Director)" value="${label}" class="text-input stip-label" style="flex:2;font-size:0.85rem;">
-    <input type="text" inputmode="text" placeholder="$0.00" value="${amount}" class="text-input stip-amount" style="flex:1;font-size:0.85rem;">
-    <button type="button" style="background:none;border:none;color:var(--danger);font-size:1.2rem;cursor:pointer;padding:4px 8px;" class="stip-remove">&times;</button>`;
-  row.querySelector('.stip-remove').addEventListener('click', () => {
-    row.remove();
-    if (container.children.length === 0) addStipendRow(container, '', '');
-    const collapseBody = document.getElementById('paycheckTrackBody');
-    if (collapseBody && collapseBody.style.maxHeight && collapseBody.style.maxHeight !== '0px') {
-      collapseBody.style.maxHeight = collapseBody.scrollHeight + 'px';
-    }
-  });
-  container.appendChild(row);
-  // Expand collapse body to fit new content
-  const collapseBody = document.getElementById('paycheckTrackBody');
-  if (collapseBody && collapseBody.style.maxHeight && collapseBody.style.maxHeight !== '0px') {
-    collapseBody.style.maxHeight = collapseBody.scrollHeight + 'px';
-  }
-}
-
-function updateStipendStatus() {
-  const mk = getStipKey();
-  const entries = (data.stipends || {})[mk] || [];
-  const total = entries.reduce((s, e) => s + (e.amount || 0), 0);
-  const status = document.getElementById('stipendStatus');
-  if (total !== 0) {
-    const color = total > 0 ? 'var(--accent2)' : 'var(--danger)';
-    const prefix = total < 0 ? '-' : '';
-    const label = total > 0 ? 'in stipends' : 'in deductions';
-    status.innerHTML = `<span style="color:${color};font-weight:600;">${prefix}$${Math.abs(total).toLocaleString('en-US', {minimumFractionDigits:2})} ${label} this month</span>`;
-  } else {
-    status.textContent = '';
-  }
-}
-
 function getMonthlyStipendTotal(monthKey) {
   if (!data.stipends) return 0;
   const entries = data.stipends[monthKey] || [];
   return entries.reduce((s, e) => s + (e.amount || 0), 0);
 }
 
-document.getElementById('addStipendBtn').addEventListener('click', () => {
-  addStipendRow(document.getElementById('stipendEntries'), '', '');
-});
+// Get stipend entries for a month, carrying over from prior month if none exist
+function getStipendEntriesForMonth(monthKey) {
+  if (!data.stipends) data.stipends = {};
+  if (data.stipends[monthKey] && data.stipends[monthKey].length > 0) {
+    return data.stipends[monthKey];
+  }
+  // Carryover: find the most recent prior month with entries
+  const [y, m] = monthKey.split('-').map(Number);
+  for (let i = 1; i <= 12; i++) {
+    const d = new Date(y, m - 1 - i, 1);
+    const priorKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    if (data.stipends[priorKey] && data.stipends[priorKey].length > 0) {
+      return data.stipends[priorKey].map(e => ({ label: e.label, amount: e.amount }));
+    }
+  }
+  return [];
+}
 
-// Reload stipend entries when paycheck month changes
-document.getElementById('paycheckMonth').addEventListener('change', () => {
-  loadStipendUI();
-});
+function saveStabStipends() {
+  const mk = stabMonthKey();
+  const container = document.getElementById('stabStipendEntries');
+  if (!container) return;
+  if (!data.stipends) data.stipends = {};
+  const entries = [];
+  for (const row of container.children) {
+    const label = row.querySelector('.stip-label').value.trim();
+    const amount = parseFloat(row.querySelector('.stip-amount').value) || 0;
+    if (label || amount !== 0) entries.push({ label, amount });
+  }
+  if (entries.length > 0) {
+    data.stipends[mk] = entries;
+  } else {
+    delete data.stipends[mk];
+  }
+  saveData(data);
+  renderStabilization();
+  showToast('Stipends saved');
+}
+
+function addStabStipendRow(container, label, amount) {
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;';
+  row.innerHTML = `<input type="text" placeholder="Label" value="${escHtml(String(label))}" class="text-input stip-label" style="flex:2;font-size:0.78rem;padding:5px 8px;">
+    <input type="text" inputmode="text" placeholder="$0" value="${amount || ''}" class="text-input stip-amount" style="flex:1;font-size:0.78rem;padding:5px 8px;">
+    <button type="button" style="background:none;border:none;color:var(--danger);font-size:1rem;cursor:pointer;padding:2px 6px;" class="stip-remove">&times;</button>`;
+  row.querySelector('.stip-remove').addEventListener('click', () => {
+    row.remove();
+    refreshStabBreakdownHeight();
+  });
+  container.appendChild(row);
+  refreshStabBreakdownHeight();
+}
+
+function refreshStabBreakdownHeight() {
+  const panel = document.getElementById('stabBreakdown');
+  if (panel && panel.style.maxHeight && panel.style.maxHeight !== '0px') {
+    panel.style.maxHeight = panel.scrollHeight + 'px';
+  }
+}
 
 // ================================================================
 // NAVIGATE TO WORK SCAN
@@ -11062,7 +11053,6 @@ function renderProjections() {
   renderHistoricalTrends();
   renderHistoricalComp();
   loadOverrideUI();
-  loadStipendUI();
   checkPVReminder();
   renderEarningsEstimator();
   renderPaycheckCard();
@@ -11760,23 +11750,8 @@ function savePaycheckEntry() {
   } else {
     delete data.retirement[month];
   }
-  // Save stipends for the selected month
-  if (!data.stipends) data.stipends = {};
-  const stipRows = document.getElementById('stipendEntries').children;
-  const stipEntries = [];
-  for (const row of stipRows) {
-    const label = row.querySelector('.stip-label').value.trim();
-    const amt = parseFloat(row.querySelector('.stip-amount').value) || 0;
-    if (label || amt !== 0) stipEntries.push({ label, amount: amt });
-  }
-  if (stipEntries.length > 0) {
-    data.stipends[month] = stipEntries;
-  } else {
-    delete data.stipends[month];
-  }
   saveData(data);
-  updateStipendStatus();
-  showToast('Saved');
+  showToast('Paycheck saved');
   loadPaycheckFormForMonth(month);
   renderPaycheckChart();
   renderPaycheckTable();
@@ -12044,24 +12019,54 @@ function toggleStabBreakdown() {
   }
 }
 
+// Paycheck Projection month navigation
+let stabMonthOffset = 0; // 0 = current month, 1 = next month, -1 = last month, etc.
+function stabMonthKey() {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() + stabMonthOffset, 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+document.getElementById('stabPrevMonth').addEventListener('click', () => { stabMonthOffset--; renderStabilization(); });
+document.getElementById('stabNextMonth').addEventListener('click', () => { stabMonthOffset++; renderStabilization(); });
+
 function renderStabilization() {
   const now = new Date();
   const mt = getMonthlyTotals();
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  function mk(offset) { const d = new Date(now.getFullYear(), now.getMonth() - offset, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+  const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  // Target month (the production/work month)
+  const targetDate = new Date(now.getFullYear(), now.getMonth() + stabMonthOffset, 1);
+  const targetKey = stabMonthKey();
+  const [ty, tm] = targetKey.split('-').map(Number);
+
+  // Update month label
+  document.getElementById('stabMonthLabel').textContent = fullMonthNames[targetDate.getMonth()] + ' ' + targetDate.getFullYear();
+
+  function mkFromTarget(offset) {
+    const d = new Date(ty, tm - 1 - offset, 1);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  }
+
   const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
-  const labels = ['This month', 'Last month', '2 months ago', '3 months ago', '4 months ago'];
-  const vals = [0,1,2,3,4].map(i => mt[mk(i)] || 0);
+  const vals = [0,1,2,3,4].map(i => mt[mkFromTarget(i)] || 0);
   const raw = vals[0];
   const weighted = round2(weights.reduce((sum, w, i) => sum + w * vals[i], 0));
   document.getElementById('stabRaw').textContent = raw.toFixed(1);
   document.getElementById('stabWeighted').textContent = weighted.toFixed(1);
 
-  // Render breakdown
-  let bdHtml = '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:6px;">How the blend is calculated:</div>';
+  const pv = getPointValueForMonth(targetKey);
+  const production = pv > 0 ? round2(weighted * pv) : 0;
+  const stipend = getMonthlyStipendTotal(targetKey);
+  const stipendEntries = getStipendEntriesForMonth(targetKey);
+  const paycheck = round2(production + stipend);
+
+  // Render breakdown: blend calculation + production + stipend lines
+  let bdHtml = '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:6px;margin-top:8px;">Point blend calculation:</div>';
   weights.forEach((w, i) => {
     const pct = (w * 100).toFixed(0);
-    const mDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const mDate = new Date(ty, tm - 1 - i, 1);
     const mLabel = monthNames[mDate.getMonth()] + ' ' + mDate.getFullYear();
     const contribution = round2(w * vals[i]);
     bdHtml += `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:0.8rem;">`;
@@ -12069,75 +12074,91 @@ function renderStabilization() {
     bdHtml += `<span>${vals[i].toFixed(1)} &times; ${pct}% = <strong>${contribution.toFixed(1)}</strong></span>`;
     bdHtml += `</div>`;
   });
+
+  // Production line
+  if (pv > 0) {
+    bdHtml += '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">';
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.8rem;"><span style="color:var(--text-dim);">Production</span><span style="font-weight:600;color:var(--primary);">${weighted.toFixed(1)} &times; $${pv.toFixed(2)} = $${production.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    bdHtml += '</div>';
+  }
+
+  // Stipend/deduction section
+  bdHtml += '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">';
+  bdHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:0.75rem;color:var(--text-dim);">Stipends & Deductions</span>';
+  bdHtml += '<button type="button" class="add-entry-btn" onclick="addStabStipendRow(document.getElementById(\'stabStipendEntries\'),\'\',\'\');refreshStabBreakdownHeight();" style="font-size:0.7rem;padding:2px 8px;">+ Add</button></div>';
+  bdHtml += '<div id="stabStipendEntries"></div>';
+  bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabStipends()" style="margin-top:4px;font-size:0.72rem;padding:4px 12px;">Save Stipends</button>';
+  bdHtml += '</div>';
+
+  // Net total
+  if (pv > 0) {
+    bdHtml += '<div style="border-top:2px solid var(--border);margin-top:10px;padding-top:8px;">';
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>Net Paycheck</span><span style="color:var(--accent2);">$${paycheck.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    bdHtml += '</div>';
+  }
+
   document.getElementById('stabBreakdown').innerHTML = bdHtml;
-  const currentMonthKey = mk(0);
-  const pv = getPointValueForMonth(currentMonthKey);
+
+  // Populate stipend entry rows
+  const stipContainer = document.getElementById('stabStipendEntries');
+  if (stipContainer) {
+    if (stipendEntries.length === 0) {
+      addStabStipendRow(stipContainer, '', '');
+    } else {
+      stipendEntries.forEach(e => addStabStipendRow(stipContainer, e.label, e.amount));
+    }
+  }
+
+  // Refresh breakdown panel height if open
+  refreshStabBreakdownHeight();
+
+  // Paycheck display
   const decAdv = settings.decemberAdvance !== false;
   const earningLabel = document.getElementById('stabEarningLabel');
-  const curEl = document.getElementById('stabCurrentPaycheck');
-
-  // Compute "earning for" paycheck label — the paycheck current work feeds into
-  const nextPayDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const buildingMonthName = monthNames[nextPayDate.getMonth()];
+  const summaryEl = document.getElementById('stabPaycheckBreakdownSummary');
+  const payDate = new Date(ty, tm, 1);
+  const payMonthName = monthNames[payDate.getMonth()];
 
   // Check for comp total overrides
   if (!data.overrides) data.overrides = {};
-  const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const nextMonthKey = nextMonthDate.getFullYear() + '-' + String(nextMonthDate.getMonth()+1).padStart(2,'0');
-  const buildingCompOv = data.overrides[nextMonthKey] && data.overrides[nextMonthKey].compTotal != null ? data.overrides[nextMonthKey].compTotal : null;
-  const receivingCompOv = data.overrides[currentMonthKey] && data.overrides[currentMonthKey].compTotal != null ? data.overrides[currentMonthKey].compTotal : null;
+  const compOv = data.overrides[targetKey] && data.overrides[targetKey].compTotal != null ? data.overrides[targetKey].compTotal : null;
 
-  if (decAdv && now.getMonth() === 0) {
-    // January: paycheck was already received in December
-    earningLabel.textContent = 'Earning for Feb 20';
+  if (decAdv && targetDate.getMonth() === 0) {
+    earningLabel.textContent = 'Jan production — received in Dec advance';
     document.getElementById('stabPaycheck').textContent = '$0.00';
-  } else if (buildingCompOv != null) {
-    // Comp total override for building paycheck
-    if (decAdv && now.getMonth() === 11) {
-      earningLabel.textContent = 'Earning for Dec 20 (+ Jan advance) — override';
-    } else {
-      earningLabel.textContent = 'Earning for ' + buildingMonthName + ' 20 — override';
-    }
-    document.getElementById('stabPaycheck').textContent = '$' + buildingCompOv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    summaryEl.textContent = '';
+  } else if (compOv != null) {
+    earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' production — override';
+    document.getElementById('stabPaycheck').textContent = '$' + compOv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    summaryEl.textContent = '';
   } else if (pv && pv > 0) {
-    const currentStipend = getMonthlyStipendTotal(mk(0));
-    let paycheck = weighted * pv + currentStipend;
+    let totalPaycheck = paycheck;
 
-    if (decAdv && now.getMonth() === 11) {
-      // December: add January's advance paycheck
-      const mkFwd = function(month) { const d = new Date(now.getFullYear() + 1, month, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); };
-      const janWeighted = round2(0.10 * (mt[mkFwd(0)]||0) + 0.40 * raw + 0.25 * (mt[mk(1)]||0) + 0.15 * (mt[mk(2)]||0) + 0.10 * (mt[mk(3)]||0));
-      const decStipend = getMonthlyStipendTotal(mk(0));
+    if (decAdv && targetDate.getMonth() === 11) {
+      const mkFwd = function(month) { const d = new Date(ty + 1, month, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); };
+      const janWeighted = round2(0.10 * (mt[mkFwd(0)]||0) + 0.40 * raw + 0.25 * (mt[mkFromTarget(1)]||0) + 0.15 * (mt[mkFromTarget(2)]||0) + 0.10 * (mt[mkFromTarget(3)]||0));
       const janPv = getPointValueForMonth(mkFwd(0));
-      paycheck += janWeighted * janPv + decStipend;
-      earningLabel.textContent = 'Earning for Dec 20 (+ Jan advance)';
+      const janStipend = getMonthlyStipendTotal(mkFwd(0));
+      totalPaycheck += janWeighted * janPv + janStipend;
+      earningLabel.textContent = 'Dec production (+ Jan advance) → paid Dec 20';
     } else {
-      earningLabel.textContent = 'Earning for ' + buildingMonthName + ' 20';
+      earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' production → paid ' + payMonthName + ' 20';
     }
 
-    document.getElementById('stabPaycheck').textContent = '$' + paycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById('stabPaycheck').textContent = '$' + totalPaycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Summary line
+    let parts = [];
+    if (production > 0) parts.push('Production: $' + production.toLocaleString('en-US', {maximumFractionDigits: 0}));
+    if (stipend !== 0) {
+      const stipLabel = stipend > 0 ? 'Stipends: +$' + stipend.toLocaleString('en-US', {maximumFractionDigits: 0}) : 'Deductions: -$' + Math.abs(stipend).toLocaleString('en-US', {maximumFractionDigits: 0});
+      parts.push(stipLabel);
+    }
+    summaryEl.textContent = parts.join(' · ');
   } else {
     document.getElementById('stabPaycheck').innerHTML = '&mdash;';
-    earningLabel.textContent = 'Earning for ' + buildingMonthName + ' 20';
-  }
-
-  // "Receiving" paycheck — the paycheck arriving this month (blend shifted back 1 month)
-  const receivingMonthName = monthNames[now.getMonth()];
-  const receivingPrefix = now.getDate() >= 20 ? 'Received' : 'Receiving';
-  const lastMonthKey = mk(1);
-  const lastPv = getPointValueForMonth(lastMonthKey);
-  if (decAdv && now.getMonth() === 0) {
-    curEl.textContent = 'Received in Dec advance';
-  } else if (receivingCompOv != null) {
-    curEl.textContent = receivingPrefix + ': ' + receivingMonthName + ' 20 (override) \u2014 $' + receivingCompOv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  } else if (lastPv && lastPv > 0) {
-    const curVals = [1,2,3,4,5].map(i => mt[mk(i)] || 0);
-    const curWeighted = round2(weights.reduce((sum, w, i) => sum + w * curVals[i], 0));
-    const curStipend = getMonthlyStipendTotal(mk(1));
-    const curPaycheck = curWeighted * lastPv + curStipend;
-    curEl.textContent = receivingPrefix + ': ' + receivingMonthName + ' 20 \u2014 $' + curPaycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  } else {
-    curEl.textContent = '';
+    earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' production → paid ' + payMonthName + ' 20';
+    summaryEl.textContent = pv ? '' : 'Set $/pt to see estimate';
   }
 }
 
