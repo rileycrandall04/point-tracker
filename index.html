@@ -1187,7 +1187,6 @@ input.mil-time.invalid {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.72rem;
-  min-width: 900px;
 }
 .shift-log-table thead { position: sticky; top: 0; z-index: 2; }
 .shift-log-table th {
@@ -1259,6 +1258,19 @@ input.mil-time.invalid {
   border-bottom: none;
 }
 .sl-pager-row { background: rgba(245,158,11,0.06); }
+
+/* Shift log mobile responsive — hide less-important columns */
+@media (max-width: 680px) {
+  .shift-log-table { font-size: 0.68rem; }
+  .shift-log-table th, .shift-log-table td { padding: 5px 3px; }
+  .sl-hide-mobile { display: none !important; }
+}
+@media (max-width: 480px) {
+  .shift-log-table { font-size: 0.64rem; }
+  .shift-log-table th, .shift-log-table td { padding: 4px 2px; }
+  .sl-hide-narrow { display: none !important; }
+  .sl-badge { font-size: 0.58rem; padding: 1px 4px; }
+}
 
 /* ===== TOGGLE SWITCH ===== */
 .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-dim); }
@@ -9912,7 +9924,7 @@ function renderShiftLogTable() {
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   let html = slWatchHtml + '<table class="shift-log-table" id="shiftLogTable"><thead><tr>';
   html += '<th class="sl-check"><input type="checkbox" id="slSelectAll" onclick="slToggleAll(this)"></th>';
-  html += '<th>Date</th><th>Assignment</th><th>Time</th><th>Duration</th><th>Clock In</th><th>Clock Out</th><th>Pay Code</th><th>Hours</th><th>Pay Rate</th><th>Amount</th><th></th><th></th><th class="sl-del-cell"></th>';
+  html += '<th>Date</th><th>Assignment</th><th>Time</th><th class="sl-hide-mobile">Duration</th><th class="sl-hide-mobile">Clock In</th><th class="sl-hide-mobile">Clock Out</th><th class="sl-hide-narrow">Pay Code</th><th class="sl-hide-narrow">Hours</th><th class="sl-hide-mobile">Pay Rate</th><th>Amount</th><th></th><th></th><th class="sl-del-cell"></th>';
   html += '</tr></thead><tbody>';
 
   let grandTotal = 0;
@@ -9949,7 +9961,7 @@ function renderShiftLogTable() {
       html += checkboxCell;
       html += `<td>${dateLabel}</td>`;
       html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
-      html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>Vacation</td><td>-</td><td>-</td><td>0.0</td>`;
+      html += `<td>-</td><td class="sl-hide-mobile">-</td><td class="sl-hide-mobile">-</td><td class="sl-hide-mobile">-</td><td class="sl-hide-narrow">Vacation</td><td class="sl-hide-narrow">-</td><td class="sl-hide-mobile">-</td><td>0.0</td>`;
       html += `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>`;
       html += `<td><button class="unbilled-btn ${shift.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleShiftUnbilled('${shift.date}')">$</button></td>`;
       html += deleteCell;
@@ -9966,8 +9978,8 @@ function renderShiftLogTable() {
       html += checkboxCell;
       html += `<td>${dateLabel}</td>`;
       html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
-      html += `<td>${timeStr}</td><td>${totalHrs.toFixed(1)}h</td>`;
-      html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
+      html += `<td>${timeStr}</td><td class="sl-hide-mobile">${totalHrs.toFixed(1)}h</td>`;
+      html += `<td class="sl-hide-mobile">-</td><td class="sl-hide-mobile">-</td><td class="sl-hide-narrow">-</td><td class="sl-hide-narrow">-</td><td class="sl-hide-mobile">-</td><td>0.0</td>`;
       html += `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>`;
       html += `<td><button class="unbilled-btn ${shift.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleShiftUnbilled('${shift.date}')">$</button></td>`;
       html += deleteCell;
@@ -10012,13 +10024,13 @@ function renderShiftLogTable() {
             html += `<td>${dateLabel}</td>`;
             html += `<td><span class="sl-badge sl-badge-or">Pre-Call</span></td>`;
             html += `<td>${pcTimeStr}</td>`;
-            html += `<td>${pcHrs.toFixed(1)}h</td>`;
+            html += `<td class="sl-hide-mobile">${pcHrs.toFixed(1)}h</td>`;
           } else {
-            html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>';
+            html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank class="sl-hide-mobile"></td>';
           }
-          html += `<td>${r.clockIn || ''}</td><td>${r.clockOut || ''}</td>`;
-          html += `<td>${r.payCode}</td><td>${(r.durationMin / 60).toFixed(1)}</td>`;
-          html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
+          html += `<td class="sl-hide-mobile">${r.clockIn || ''}</td><td class="sl-hide-mobile">${r.clockOut || ''}</td>`;
+          html += `<td class="sl-hide-narrow">${r.payCode}</td><td class="sl-hide-narrow">${(r.durationMin / 60).toFixed(1)}</td>`;
+          html += `<td class="sl-hide-mobile">${r.payRate.toFixed(1)}/hr</td>`;
           html += buildAmountCell(shift, r._ri, r.amount);
           html += i === 0 ? `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>` : '<td></td>';
           html += i === 0 ? `<td><button class="unbilled-btn ${shift.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleShiftUnbilled('${shift.date}')">$</button></td>` : '<td></td>';
@@ -10030,8 +10042,8 @@ function renderShiftLogTable() {
         html += checkboxCell;
         html += `<td>${dateLabel}</td>`;
         html += `<td><span class="sl-badge sl-badge-or">Pre-Call</span></td>`;
-        html += `<td>${pcTimeStr}</td><td>${pcHrs.toFixed(1)}h</td>`;
-        html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
+        html += `<td>${pcTimeStr}</td><td class="sl-hide-mobile">${pcHrs.toFixed(1)}h</td>`;
+        html += `<td class="sl-hide-mobile">-</td><td class="sl-hide-mobile">-</td><td class="sl-hide-narrow">-</td><td class="sl-hide-narrow">-</td><td class="sl-hide-mobile">-</td><td>0.0</td>`;
         html += `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>`;
         html += `<td><button class="unbilled-btn ${shift.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleShiftUnbilled('${shift.date}')">$</button></td>`;
         html += deleteCell;
@@ -10050,13 +10062,13 @@ function renderShiftLogTable() {
             html += `<td>${dateLabel}</td>`;
             html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
             html += `<td>${timeStr}</td>`;
-            html += `<td>${eveningHrs.toFixed(1)}h</td>`;
+            html += `<td class="sl-hide-mobile">${eveningHrs.toFixed(1)}h</td>`;
           } else {
-            html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>';
+            html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank class="sl-hide-mobile"></td>';
           }
-          html += `<td>${r.clockIn || ''}</td><td>${r.clockOut || ''}</td>`;
-          html += `<td>${r.payCode}</td><td>${(r.durationMin / 60).toFixed(1)}</td>`;
-          html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
+          html += `<td class="sl-hide-mobile">${r.clockIn || ''}</td><td class="sl-hide-mobile">${r.clockOut || ''}</td>`;
+          html += `<td class="sl-hide-narrow">${r.payCode}</td><td class="sl-hide-narrow">${(r.durationMin / 60).toFixed(1)}</td>`;
+          html += `<td class="sl-hide-mobile">${r.payRate.toFixed(1)}/hr</td>`;
           html += buildAmountCell(shift, r._ri, r.amount);
           html += '<td></td>';
           html += '<td></td>';
@@ -10068,8 +10080,8 @@ function renderShiftLogTable() {
         html += '<td data-blank></td>';
         html += `<td>${dateLabel}</td>`;
         html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
-        html += `<td>${timeStr}</td><td>${eveningHrs.toFixed(1)}h</td>`;
-        html += `<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>0.0</td>`;
+        html += `<td>${timeStr}</td><td class="sl-hide-mobile">${eveningHrs.toFixed(1)}h</td>`;
+        html += `<td class="sl-hide-mobile">-</td><td class="sl-hide-mobile">-</td><td class="sl-hide-narrow">-</td><td class="sl-hide-narrow">-</td><td class="sl-hide-mobile">-</td><td>0.0</td>`;
         html += '<td></td>';
         html += '<td></td>';
         html += '<td></td>';
@@ -10092,15 +10104,15 @@ function renderShiftLogTable() {
         html += `<td>${dateLabel}</td>`;
         html += `<td><span class="sl-badge ${badgeClass}">${escHtml(typeName)}</span></td>`;
         html += `<td>${timeStr}</td>`;
-        html += `<td>${totalHrs.toFixed(1)}h</td>`;
+        html += `<td class="sl-hide-mobile">${totalHrs.toFixed(1)}h</td>`;
       } else {
-        html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td>';
+        html += '<td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank class="sl-hide-mobile"></td>';
       }
-      html += `<td>${r.clockIn || ''}</td>`;
-      html += `<td>${r.clockOut || ''}</td>`;
-      html += `<td>${r.payCode}</td>`;
-      html += `<td>${(r.durationMin / 60).toFixed(1)}</td>`;
-      html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
+      html += `<td class="sl-hide-mobile">${r.clockIn || ''}</td>`;
+      html += `<td class="sl-hide-mobile">${r.clockOut || ''}</td>`;
+      html += `<td class="sl-hide-narrow">${r.payCode}</td>`;
+      html += `<td class="sl-hide-narrow">${(r.durationMin / 60).toFixed(1)}</td>`;
+      html += `<td class="sl-hide-mobile">${r.payRate.toFixed(1)}/hr</td>`;
       html += buildAmountCell(shift, i, r.amount);
       html += i === 0 ? `<td><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>` : '<td></td>';
       html += i === 0 ? `<td><button class="unbilled-btn ${shift.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleShiftUnbilled('${shift.date}')">$</button></td>` : '<td></td>';
@@ -10131,7 +10143,7 @@ function buildShiftTotalRow(shift, shiftTotal, altClass) {
   const isManual = hasRowOverrides || shift.manualTotal != null;
   const manualClass = isManual ? ' pts-manual' : '';
   const resetHtml = isManual ? `<span class="pts-reset" onclick="event.stopPropagation();resetShiftPoints('${shift.date}')">reset</span>` : '';
-  return `<tr class="sl-sub-row${altClass}" data-shiftdate="${shift.date}"><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td colspan="3" style="text-align:right;font-size:0.72rem;color:var(--text-dim);font-weight:600;">Shift Total</td><td class="pts-cell${manualClass}" onclick="event.stopPropagation();editShiftPoints('${shift.date}',this)"><strong>${round2(shiftTotal).toFixed(1)}</strong>${resetHtml}</td><td></td><td></td><td></td></tr>`;
+  return `<tr class="sl-sub-row${altClass} sl-total-row" data-shiftdate="${shift.date}"><td colspan="10" style="text-align:right;font-size:0.72rem;color:var(--text-dim);font-weight:600;">Shift Total</td><td class="pts-cell${manualClass}" onclick="event.stopPropagation();editShiftPoints('${shift.date}',this)"><strong>${round2(shiftTotal).toFixed(1)}</strong>${resetHtml}</td><td></td><td></td><td></td></tr>`;
 }
 
 function editShiftPoints(dateStr, td) {
