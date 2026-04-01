@@ -10700,14 +10700,14 @@ function saveStabStipends() {
 
   // Save retirement (entered as negative, stored as positive; 0 blocks carryover)
   const retInput = document.getElementById('stabRetirementAmount');
-  const retVal = retInput ? Math.abs(parseFloat(retInput.value) || 0) : 0;
+  const retVal = retInput ? Math.abs(parseFloat(retInput.value.replace(/[$,]/g, '')) || 0) : 0;
   data.retirement[mk] = retVal;
 
   // Save stipend/deduction entries
   const entries = [];
   for (const row of container.children) {
     const label = row.querySelector('.stip-label').value.trim();
-    const amount = parseFloat(row.querySelector('.stip-amount').value) || 0;
+    const amount = parseFloat(row.querySelector('.stip-amount').value.replace(/[$,]/g, '')) || 0;
     if (label || amount !== 0) entries.push({ label, amount });
   }
   if (entries.length > 0) {
@@ -10772,8 +10772,9 @@ function saveStabActualRevenue() {
 function addStabStipendRow(container, label, amount) {
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;';
+  const fmtAmt = amount ? (amount < 0 ? '-$' + Math.abs(amount).toFixed(2) : '$' + Number(amount).toFixed(2)) : '';
   row.innerHTML = `<input type="text" placeholder="Label" value="${escHtml(String(label))}" class="text-input stip-label" style="flex:2;font-size:0.78rem;padding:5px 8px;">
-    <input type="text" inputmode="text" placeholder="$0" value="${amount || ''}" class="text-input stip-amount" style="flex:1;font-size:0.78rem;padding:5px 8px;">
+    <input type="text" inputmode="text" placeholder="$0.00" value="${fmtAmt}" class="text-input stip-amount" style="flex:1;font-size:0.78rem;padding:5px 8px;">
     <button type="button" style="background:none;border:none;color:var(--danger);font-size:1rem;cursor:pointer;padding:2px 6px;" class="stip-remove">&times;</button>`;
   row.querySelector('.stip-remove').addEventListener('click', () => {
     row.remove();
@@ -12141,7 +12142,7 @@ function renderStabilization() {
   bdHtml += '<button type="button" class="add-entry-btn" onclick="addStabStipendRow(document.getElementById(\'stabStipendEntries\'),\'\',\'\');refreshStabBreakdownHeight();" style="font-size:0.7rem;padding:2px 8px;">+ Add</button></div>';
   bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
   bdHtml += `<input type="text" value="Retirement" class="text-input" style="flex:2;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
-  bdHtml += `<input type="text" inputmode="text" id="stabRetirementAmount" placeholder="$0" value="${existingRetire ? '-' + existingRetire : ''}" class="text-input" style="flex:1;font-size:0.78rem;padding:5px 8px;">`;
+  bdHtml += `<input type="text" inputmode="text" id="stabRetirementAmount" placeholder="$0.00" value="${existingRetire ? '-$' + existingRetire.toFixed(2) : ''}" class="text-input" style="flex:1;font-size:0.78rem;padding:5px 8px;">`;
   bdHtml += '<span style="width:26px;"></span>';
   bdHtml += '</div>';
   bdHtml += '<div id="stabStipendEntries"></div>';
