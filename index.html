@@ -5174,13 +5174,14 @@ function effectiveWorkDate() {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayKey = yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
     // At 06:40+ after a call shift, advance to today for the post-call shift
-    // BUT only if the user is no longer clocked in (all time entries have end times)
+    // Stay on call shift if user clocked in at 06:30 or earlier and is still clocked in
+    // Advance to today if user clocks in after 06:30 (new post-call shift)
     if (currentMin >= 400) {
       const prevShift = data.shifts[yesterdayKey];
       if (prevShift && ['1st_call','2nd_call','3rd_call','4th_call'].includes(prevShift.assignmentType)) {
         const entries = prevShift.timeEntries || [];
-        const stillClockedIn = entries.some(e => e.start && !e.end);
-        if (!stillClockedIn) return todayStr();
+        const clockedInEarly = entries.some(e => e.start && !e.end && timeToMinutes(e.start) <= 390);
+        if (!clockedInEarly) return todayStr();
       }
     }
     return yesterdayKey;
