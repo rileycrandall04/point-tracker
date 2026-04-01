@@ -12032,6 +12032,7 @@ function renderStabilization() {
   const production = pv > 0 ? round2(weighted * pv) : 0;
   const stipend = getMonthlyStipendTotal(targetKey);
   const stipendEntries = getStipendEntriesForMonth(targetKey);
+  const payDate = new Date(ty, tm, 1);
   const paycheck = round2(production + stipend);
 
   // Render breakdown: blend calculation + production + stipend lines
@@ -12108,7 +12109,6 @@ function renderStabilization() {
   const decAdv = settings.decemberAdvance !== false;
   const earningLabel = document.getElementById('stabEarningLabel');
   const summaryEl = document.getElementById('stabPaycheckBreakdownSummary');
-  const payDate = new Date(ty, tm, 1);
   const payMonthName = monthNames[payDate.getMonth()];
 
   // Check for comp total overrides
