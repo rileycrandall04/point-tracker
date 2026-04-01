@@ -10710,7 +10710,7 @@ function addStipendRow(container, label, amount) {
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center;';
   row.innerHTML = `<input type="text" placeholder="Label (e.g., Med Director)" value="${label}" class="text-input stip-label" style="flex:2;font-size:0.85rem;">
-    <input type="number" placeholder="$0.00" value="${amount}" step="0.01" class="text-input stip-amount" style="flex:1;font-size:0.85rem;">
+    <input type="text" inputmode="text" placeholder="$0.00" value="${amount}" class="text-input stip-amount" style="flex:1;font-size:0.85rem;">
     <button type="button" style="background:none;border:none;color:var(--danger);font-size:1.2rem;cursor:pointer;padding:4px 8px;" class="stip-remove">&times;</button>`;
   row.querySelector('.stip-remove').addEventListener('click', () => {
     row.remove();
