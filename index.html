@@ -10704,6 +10704,26 @@ function getRetirementForMonth(monthKey) {
   return 0;
 }
 
+// Get non-guaranteed payments for a month, carrying over from prior months
+function getNonGuaranteedForMonth(monthKey) {
+  if (!data.nonGuaranteed) data.nonGuaranteed = {};
+  if (data.nonGuaranteed[monthKey]) return data.nonGuaranteed[monthKey];
+  const [y, m] = monthKey.split('-').map(Number);
+  for (let i = 1; i <= 12; i++) {
+    const d = new Date(y, m - 1 - i, 1);
+    const priorKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    if (data.nonGuaranteed[priorKey] && Object.keys(data.nonGuaranteed[priorKey]).length > 0) {
+      return { ...data.nonGuaranteed[priorKey] };
+    }
+  }
+  return {};
+}
+
+function getNonGuaranteedTotal(monthKey) {
+  const ng = getNonGuaranteedForMonth(monthKey);
+  return Object.values(ng).reduce((s, v) => s + (v || 0), 0);
+}
+
 function saveStabStipends() {
   const mk = stabMonthKey();
   const container = document.getElementById('stabStipendEntries');
@@ -10721,18 +10741,29 @@ function saveStabStipends() {
   for (const row of container.children) {
     const label = row.querySelector('.stip-label').value.trim();
     const amount = parseFloat(row.querySelector('.stip-amount').value.replace(/[$,]/g, '')) || 0;
-    const ng = row.querySelector('.stip-ng') ? row.querySelector('.stip-ng').checked : false;
-    if (label || amount !== 0) {
-      const entry = { label, amount };
-      if (ng) entry.nonGuaranteed = true;
-      entries.push(entry);
-    }
+    if (label || amount !== 0) entries.push({ label, amount });
   }
   if (entries.length > 0) {
     data.stipends[mk] = entries;
   } else {
     delete data.stipends[mk];
   }
+
+  // Save non-guaranteed payments
+  if (!data.nonGuaranteed) data.nonGuaranteed = {};
+  const ngKeys = ['classB', 'crna', 'surgCenter'];
+  const ngObj = {};
+  ngKeys.forEach(k => {
+    const el = document.getElementById('stabNG_' + k);
+    const v = el ? parseFloat(el.value.replace(/[$,]/g, '')) || 0 : 0;
+    if (v !== 0) ngObj[k] = v;
+  });
+  if (Object.keys(ngObj).length > 0) {
+    data.nonGuaranteed[mk] = ngObj;
+  } else {
+    delete data.nonGuaranteed[mk];
+  }
+
   saveData(data);
   renderStabilization();
   renderPipelineChart();
@@ -10789,13 +10820,12 @@ function saveStabActualRevenue() {
   showToast('Actual revenue saved');
 }
 
-function addStabStipendRow(container, label, amount, nonGuaranteed) {
+function addStabStipendRow(container, label, amount) {
   const row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;';
+  row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;';
   const fmtAmt = amount ? (amount < 0 ? '-$' + Math.abs(amount).toFixed(2) : '$' + Number(amount).toFixed(2)) : '';
   row.innerHTML = `<input type="text" placeholder="Label" value="${escHtml(String(label))}" class="text-input stip-label" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;">
     <input type="text" inputmode="text" placeholder="$0.00" value="${fmtAmt}" class="text-input stip-amount" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">
-    <label style="display:flex;align-items:center;gap:3px;font-size:0.65rem;color:var(--text-dim);white-space:nowrap;cursor:pointer;" title="Non-guaranteed payment"><input type="checkbox" class="stip-ng" ${nonGuaranteed ? 'checked' : ''}> NG</label>
     <button type="button" style="background:none;border:none;color:var(--danger);font-size:1rem;cursor:pointer;padding:2px 6px;" class="stip-remove">&times;</button>`;
   row.querySelector('.stip-remove').addEventListener('click', () => {
     row.remove();
@@ -11825,8 +11855,8 @@ function renderAnnualTaxBreakdown() {
 
     if (revenue > 0 || stipEntries.length > 0) monthCount++;
 
-    const ngAmt = stipEntries.filter(e => e.nonGuaranteed).reduce((s, e) => s + (e.amount || 0), 0);
-    const gStip = stipEntries.filter(e => !e.nonGuaranteed).reduce((s, e) => s + (e.amount || 0), 0);
+    const ngAmt = getNonGuaranteedTotal(mk);
+    const gStip = stipEntries.reduce((s, e) => s + (e.amount || 0), 0);
 
     totalRevenue += revenue;
     totalRetirement += retAmt;
@@ -12207,12 +12237,14 @@ function renderStabilization() {
   const stipendEntries = getStipendEntriesForMonth(targetKey);
   const stipend = stipendEntries.reduce((s, e) => s + (e.amount || 0), 0);
   const retirementAmt = getRetirementForMonth(targetKey);
+  const ngAmounts = getNonGuaranteedForMonth(targetKey);
+  const ngTotal = Object.values(ngAmounts).reduce((s, v) => s + (v || 0), 0);
   const payDate = new Date(ty, tm, 1);
   // Use actual AR+Production if entered, otherwise use calculated
   if (!data.overrides) data.overrides = {};
   const actualRevenue = data.overrides[targetKey] && data.overrides[targetKey].compTotal != null ? data.overrides[targetKey].compTotal : null;
   const revenueForCalc = actualRevenue != null ? actualRevenue : production;
-  const paycheck = round2(revenueForCalc + stipend - retirementAmt);
+  const paycheck = round2(revenueForCalc + stipend + ngTotal - retirementAmt);
 
   // Render breakdown: blend calculation + production + stipend lines
   let bdHtml = '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:6px;margin-top:8px;">Point blend calculation:</div>';
@@ -12248,21 +12280,33 @@ function renderStabilization() {
   const existingRetire = (data.retirement || {})[targetKey] || 0;
   bdHtml += '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">';
   bdHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:0.75rem;color:var(--text-dim);">Stipends & Deductions</span>';
-  bdHtml += '<button type="button" class="add-entry-btn" onclick="addStabStipendRow(document.getElementById(\'stabStipendEntries\'),\'\',\'\',false);refreshStabBreakdownHeight();" style="font-size:0.7rem;padding:2px 8px;">+ Add</button></div>';
-  bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">';
+  bdHtml += '<button type="button" class="add-entry-btn" onclick="addStabStipendRow(document.getElementById(\'stabStipendEntries\'),\'\',\'\');refreshStabBreakdownHeight();" style="font-size:0.7rem;padding:2px 8px;">+ Add</button></div>';
+  bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
   bdHtml += `<input type="text" value="Retirement" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
   bdHtml += `<input type="text" inputmode="text" id="stabRetirementAmount" placeholder="$0.00" value="${existingRetire ? '-$' + existingRetire.toFixed(2) : ''}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
-  bdHtml += '<label style="display:flex;align-items:center;gap:3px;font-size:0.65rem;color:var(--text-dim);white-space:nowrap;opacity:0.4;" title="Retirement is always guaranteed"><input type="checkbox" disabled> NG</label>';
-  bdHtml += '<span style="width:20px;"></span>';
+  bdHtml += '<span style="width:26px;"></span>';
   bdHtml += '</div>';
   bdHtml += '<div id="stabStipendEntries"></div>';
+
+  // Non-guaranteed payments (fixed rows)
+  const ngLabels = [['classB', 'Class B Margin'], ['crna', 'CRNA Distribution'], ['surgCenter', 'Surgical Center Dist']];
+  bdHtml += '<div style="margin-top:8px;margin-bottom:6px;font-size:0.72rem;color:var(--text-dim);">Non-Guaranteed Payments</div>';
+  ngLabels.forEach(([key, label]) => {
+    const val = ngAmounts[key] || '';
+    const fmtVal = val ? '$' + Number(val).toFixed(2) : '';
+    bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
+    bdHtml += `<input type="text" value="${label}" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
+    bdHtml += `<input type="text" inputmode="text" id="stabNG_${key}" placeholder="$0.00" value="${fmtVal}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
+    bdHtml += '<span style="width:26px;"></span>';
+    bdHtml += '</div>';
+  });
+
   bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabStipends()" style="margin-top:4px;font-size:0.72rem;padding:4px 12px;">Save Stipends/Deductions</button>';
   bdHtml += '</div>';
 
   // Net total — Calculated Bank Deposit
   if (revenueForCalc > 0 || pv > 0) {
     // Calculate non-guaranteed vs guaranteed portions
-    const ngTotal = stipendEntries.filter(e => e.nonGuaranteed).reduce((s, e) => s + (e.amount || 0), 0);
     const guaranteedAmt = paycheck - ngTotal;
     bdHtml += '<div style="border-top:2px solid var(--border);margin-top:10px;padding-top:8px;">';
     bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>Calculated Bank Deposit</span><span style="color:var(--accent2);">$${paycheck.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
@@ -12290,9 +12334,9 @@ function renderStabilization() {
   const stipContainer = document.getElementById('stabStipendEntries');
   if (stipContainer) {
     if (stipendEntries.length === 0) {
-      addStabStipendRow(stipContainer, '', '', false);
+      addStabStipendRow(stipContainer, '', '');
     } else {
-      stipendEntries.forEach(e => addStabStipendRow(stipContainer, e.label, e.amount, e.nonGuaranteed || false));
+      stipendEntries.forEach(e => addStabStipendRow(stipContainer, e.label, e.amount));
     }
   }
 
@@ -12339,6 +12383,7 @@ function renderStabilization() {
       parts.push(stipLabel);
     }
     if (retirementAmt > 0) parts.push('Retirement: -$' + retirementAmt.toLocaleString('en-US', {maximumFractionDigits: 0}));
+    if (ngTotal > 0) parts.push('Non-Guar: +$' + ngTotal.toLocaleString('en-US', {maximumFractionDigits: 0}));
     summaryEl.textContent = parts.join(' · ');
   } else {
     document.getElementById('stabPaycheck').innerHTML = '&mdash;';
