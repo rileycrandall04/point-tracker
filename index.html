@@ -5180,7 +5180,12 @@ function effectiveWorkDate() {
       const prevShift = data.shifts[yesterdayKey];
       if (prevShift && ['1st_call','2nd_call','3rd_call','4th_call'].includes(prevShift.assignmentType)) {
         const entries = prevShift.timeEntries || [];
-        const clockedInEarly = entries.some(e => e.start && !e.end && timeToMinutes(e.start) <= 390);
+        const clockedInEarly = entries.some(e => {
+          if (!e.start || e.end) return false;
+          const s = timeToMinutes(e.start);
+          // Clock-in at 06:30 or earlier (including overnight starts like 17:00+)
+          return s <= 390 || s >= 420;
+        });
         if (!clockedInEarly) return todayStr();
       }
     }
