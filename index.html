@@ -10708,7 +10708,12 @@ function saveStabStipends() {
   for (const row of container.children) {
     const label = row.querySelector('.stip-label').value.trim();
     const amount = parseFloat(row.querySelector('.stip-amount').value.replace(/[$,]/g, '')) || 0;
-    if (label || amount !== 0) entries.push({ label, amount });
+    const ng = row.querySelector('.stip-ng') ? row.querySelector('.stip-ng').checked : false;
+    if (label || amount !== 0) {
+      const entry = { label, amount };
+      if (ng) entry.nonGuaranteed = true;
+      entries.push(entry);
+    }
   }
   if (entries.length > 0) {
     data.stipends[mk] = entries;
@@ -10771,12 +10776,13 @@ function saveStabActualRevenue() {
   showToast('Actual revenue saved');
 }
 
-function addStabStipendRow(container, label, amount) {
+function addStabStipendRow(container, label, amount, nonGuaranteed) {
   const row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;';
+  row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;';
   const fmtAmt = amount ? (amount < 0 ? '-$' + Math.abs(amount).toFixed(2) : '$' + Number(amount).toFixed(2)) : '';
-  row.innerHTML = `<input type="text" placeholder="Label" value="${escHtml(String(label))}" class="text-input stip-label" style="flex:2;font-size:0.78rem;padding:5px 8px;">
-    <input type="text" inputmode="text" placeholder="$0.00" value="${fmtAmt}" class="text-input stip-amount" style="flex:1;font-size:0.78rem;padding:5px 8px;">
+  row.innerHTML = `<input type="text" placeholder="Label" value="${escHtml(String(label))}" class="text-input stip-label" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;">
+    <input type="text" inputmode="text" placeholder="$0.00" value="${fmtAmt}" class="text-input stip-amount" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">
+    <label style="display:flex;align-items:center;gap:3px;font-size:0.65rem;color:var(--text-dim);white-space:nowrap;cursor:pointer;" title="Non-guaranteed payment"><input type="checkbox" class="stip-ng" ${nonGuaranteed ? 'checked' : ''}> NG</label>
     <button type="button" style="background:none;border:none;color:var(--danger);font-size:1rem;cursor:pointer;padding:2px 6px;" class="stip-remove">&times;</button>`;
   row.querySelector('.stip-remove').addEventListener('click', () => {
     row.remove();
@@ -12145,20 +12151,28 @@ function renderStabilization() {
   const existingRetire = (data.retirement || {})[targetKey] || 0;
   bdHtml += '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">';
   bdHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:0.75rem;color:var(--text-dim);">Stipends & Deductions</span>';
-  bdHtml += '<button type="button" class="add-entry-btn" onclick="addStabStipendRow(document.getElementById(\'stabStipendEntries\'),\'\',\'\');refreshStabBreakdownHeight();" style="font-size:0.7rem;padding:2px 8px;">+ Add</button></div>';
-  bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
-  bdHtml += `<input type="text" value="Retirement" class="text-input" style="flex:2;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
-  bdHtml += `<input type="text" inputmode="text" id="stabRetirementAmount" placeholder="$0.00" value="${existingRetire ? '-$' + existingRetire.toFixed(2) : ''}" class="text-input" style="flex:1;font-size:0.78rem;padding:5px 8px;">`;
-  bdHtml += '<span style="width:26px;"></span>';
+  bdHtml += '<button type="button" class="add-entry-btn" onclick="addStabStipendRow(document.getElementById(\'stabStipendEntries\'),\'\',\'\',false);refreshStabBreakdownHeight();" style="font-size:0.7rem;padding:2px 8px;">+ Add</button></div>';
+  bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">';
+  bdHtml += `<input type="text" value="Retirement" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
+  bdHtml += `<input type="text" inputmode="text" id="stabRetirementAmount" placeholder="$0.00" value="${existingRetire ? '-$' + existingRetire.toFixed(2) : ''}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
+  bdHtml += '<label style="display:flex;align-items:center;gap:3px;font-size:0.65rem;color:var(--text-dim);white-space:nowrap;opacity:0.4;" title="Retirement is always guaranteed"><input type="checkbox" disabled> NG</label>';
+  bdHtml += '<span style="width:20px;"></span>';
   bdHtml += '</div>';
   bdHtml += '<div id="stabStipendEntries"></div>';
   bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabStipends()" style="margin-top:4px;font-size:0.72rem;padding:4px 12px;">Save Stipends/Deductions</button>';
   bdHtml += '</div>';
 
-  // Net total
+  // Net total — Calculated Bank Deposit
   if (revenueForCalc > 0 || pv > 0) {
+    // Calculate non-guaranteed vs guaranteed portions
+    const ngTotal = stipendEntries.filter(e => e.nonGuaranteed).reduce((s, e) => s + (e.amount || 0), 0);
+    const guaranteedAmt = paycheck - ngTotal;
     bdHtml += '<div style="border-top:2px solid var(--border);margin-top:10px;padding-top:8px;">';
-    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>Estimated Paycheck</span><span style="color:var(--accent2);">$${paycheck.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>Calculated Bank Deposit</span><span style="color:var(--accent2);">$${paycheck.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    if (ngTotal !== 0) {
+      bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-top:4px;color:var(--text-dim);"><span>Guaranteed</span><span>$${guaranteedAmt.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+      bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-top:2px;color:var(--text-dim);"><span>Non-Guaranteed</span><span>$${ngTotal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    }
     bdHtml += '</div>';
   }
 
@@ -12167,15 +12181,10 @@ function renderStabilization() {
   const existingDeposit = (data.paychecks || {})[payKey];
   bdHtml += '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;">';
   const payMonthLabel = fullMonthNames[payDate.getMonth()] + ' ' + payDate.getFullYear();
-  bdHtml += `<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:2px;">Actual Paycheck</div>`;
-  bdHtml += `<div style="font-size:0.68rem;color:var(--accent2);margin-bottom:6px;font-style:italic;">Enter from your ${payMonthLabel} pay stub (received on the 20th)</div>`;
-  bdHtml += '<div style="margin-bottom:4px;"><label style="font-size:0.68rem;color:var(--text-dim);">Amount Deposited</label></div>';
+  bdHtml += `<div style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:2px;">Actual Bank Deposit</div>`;
+  bdHtml += `<div style="font-size:0.62rem;color:var(--text-dim);margin-bottom:6px;">Enter from your ${payMonthLabel} pay stub (received on the 20th)</div>`;
   bdHtml += `<input type="number" id="stabDeposit" placeholder="$0.00" step="0.01" value="${existingDeposit != null ? existingDeposit : ''}" class="text-input" style="width:100%;font-size:0.85rem;padding:8px 10px;margin-bottom:6px;box-sizing:border-box;">`;
   bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabPaycheck()" style="font-size:0.68rem;padding:3px 10px;">Save</button>';
-  if (existingDeposit != null && existingRetire > 0) {
-    const total = existingDeposit + existingRetire;
-    bdHtml += `<div style="font-size:0.72rem;color:var(--accent2);margin-top:4px;">Total compensation (deposit + retirement): $${total.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>`;
-  }
   bdHtml += '</div>';
 
   document.getElementById('stabBreakdown').innerHTML = bdHtml;
@@ -12184,9 +12193,9 @@ function renderStabilization() {
   const stipContainer = document.getElementById('stabStipendEntries');
   if (stipContainer) {
     if (stipendEntries.length === 0) {
-      addStabStipendRow(stipContainer, '', '');
+      addStabStipendRow(stipContainer, '', '', false);
     } else {
-      stipendEntries.forEach(e => addStabStipendRow(stipContainer, e.label, e.amount));
+      stipendEntries.forEach(e => addStabStipendRow(stipContainer, e.label, e.amount, e.nonGuaranteed || false));
     }
   }
 
