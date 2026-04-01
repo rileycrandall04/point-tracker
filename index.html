@@ -2866,16 +2866,12 @@ input.mil-time.invalid {
       <label>Point Value Estimate ($/pt)</label>
       <input type="number" id="settingsPointValue" min="0" step="0.01" style="max-width:140px;">
     </div>
-    <label class="toggle-row" style="margin-top:12px;">
-      <span>December advance paycheck</span>
-      <span class="toggle-switch">
-        <input type="checkbox" id="decAdvanceToggle" checked>
-        <span class="slider"></span>
-      </span>
-    </label>
-    <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
-      December includes January's paycheck advance; January shows $0.
-    </p>
+    <div style="margin-top:12px;padding:8px 12px;background:rgba(59,130,246,0.08);border-radius:8px;">
+      <div style="font-size:0.82rem;font-weight:600;">December Bonus Paycheck</div>
+      <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
+        December includes a 2nd bonus paycheck estimated from the year's average. Enter bonus stipends and non-guaranteed payments in the December Paycheck Projection breakdown.
+      </p>
+    </div>
   </div>
 
   <!-- Scan Settings -->
@@ -3490,7 +3486,7 @@ input.mil-time.invalid {
         <div class="cr-formula">[M-2: 10%] [M-1: 40%] [M: 25%] [M+1: 15%] [M+2: 10%]</div>
         <p style="margin-top:8px;"><strong>Formulas:</strong></p>
         <div class="cr-formula">Blended = &Sigma;(weight &times; month points)<br>Production = Blended &times; Point Value ($/pt)<br>Paycheck = Production + Stipends</div>
-        <p class="cr-note">December Advance: January paycheck = $0, December paycheck = double (advance + month).</p>
+        <p class="cr-note">December Bonus Paycheck: December includes a 2nd paycheck estimated from the year's average, with stipend and non-guaranteed payment entry.</p>
       </div>
     </div>
 
@@ -10758,6 +10754,89 @@ function getNonGuaranteedTotal(monthKey) {
   return Object.values(ng).reduce((s, v) => s + (v || 0), 0);
 }
 
+// Compute December Bonus estimate: average of all regular paychecks for the year
+function computeDecBonusEstimate(year) {
+  const mt = getMonthlyTotals();
+  let total = 0, count = 0;
+  for (let payMonth = 1; payMonth <= 12; payMonth++) {
+    const payKey = year + '-' + String(payMonth).padStart(2, '0');
+    // Use actual deposit if available
+    if (data.paychecks && data.paychecks[payKey] != null) {
+      const amt = data.paychecks[payKey];
+      if (amt > 0) { total += amt; count++; }
+      continue;
+    }
+    // Otherwise compute estimate from production month (one month before pay month)
+    const prodDate = new Date(year, payMonth - 2, 1);
+    const prodKey = prodDate.getFullYear() + '-' + String(prodDate.getMonth() + 1).padStart(2, '0');
+    const pv = getPointValueForMonth(prodKey);
+    if (!pv || pv <= 0) continue;
+    const cd = computePaycheckData(prodKey, mt);
+    const amt = cd.hasOverride ? cd.actualAmt + cd.stipend : cd.calcPaycheck;
+    if (amt > 0) { total += amt; count++; }
+  }
+  return count > 0 ? round2(total / count) : 0;
+}
+
+function saveDecBonusStipends(year) {
+  const bonusKey = year + '-12b';
+  const container = document.getElementById('decBonusStipendEntries');
+  if (!container) return;
+  if (!data.stipends) data.stipends = {};
+  if (!data.retirement) data.retirement = {};
+  if (!data.nonGuaranteed) data.nonGuaranteed = {};
+
+  // Save retirement
+  const retInput = document.getElementById('decBonusRetirement');
+  const retVal = retInput ? Math.abs(parseFloat(retInput.value.replace(/[$,]/g, '')) || 0) : 0;
+  data.retirement[bonusKey] = retVal;
+
+  // Save stipend entries
+  const entries = [];
+  for (const row of container.children) {
+    const label = row.querySelector('.stip-label').value.trim();
+    const amount = parseFloat(row.querySelector('.stip-amount').value.replace(/[$,]/g, '')) || 0;
+    if (label || amount !== 0) entries.push({ label, amount });
+  }
+  if (entries.length > 0) {
+    data.stipends[bonusKey] = entries;
+  } else {
+    delete data.stipends[bonusKey];
+  }
+
+  // Save NG payments
+  const ngKeys = ['classB', 'crna', 'surgCenter'];
+  const ngObj = {};
+  ngKeys.forEach(k => {
+    const el = document.getElementById('decBonusNG_' + k);
+    const v = el ? parseFloat(el.value.replace(/[$,]/g, '')) || 0 : 0;
+    if (v !== 0) ngObj[k] = v;
+  });
+  data.nonGuaranteed[bonusKey] = ngObj;
+
+  saveData(data);
+  renderStabilization();
+  renderPipelineChart();
+  renderHistoricalTrends();
+  showToast('Saved');
+}
+
+function saveDecBonusPaycheck(year) {
+  const bonusKey = year + '-12b';
+  const di = document.getElementById('decBonusDeposit');
+  const depositStr = di ? di.value.trim() : '';
+  if (depositStr === '') { showToast('Enter an amount'); return; }
+  const deposit = parseFloat(depositStr);
+  if (isNaN(deposit)) { showToast('Enter a valid amount'); return; }
+  if (!data.paychecks) data.paychecks = {};
+  data.paychecks[bonusKey] = deposit;
+  saveData(data);
+  renderStabilization();
+  renderPaycheckChart();
+  renderPaycheckTable();
+  showToast('Bonus paycheck saved');
+}
+
 function saveStabStipends() {
   const mk = stabMonthKey();
   const container = document.getElementById('stabStipendEntries');
@@ -11286,7 +11365,6 @@ function getAllPaycheckMonths() {
 
 function computePaycheckData(workMk, mt) {
   const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
-  const decAdv = settings.decemberAdvance !== false;
   if (!data.overrides) data.overrides = {};
   if (!settings.pointValues) settings.pointValues = {};
   function mkKey(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
@@ -11411,7 +11489,6 @@ function renderHistoricalTrends() {
   const tooltipData = [];
   const accuracyValues = [];
   let hasAnyAccuracy = false;
-  const decAdvChart = settings.decemberAdvance !== false;
   const nowChart = new Date();
   function mkKeyChart(year, month) { const d = new Date(year, month, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
 
@@ -11425,10 +11502,8 @@ function renderHistoricalTrends() {
     const paidLabel = monthNames[pd.payDate.getMonth()] + ' ' + String(pd.payDate.getFullYear()).slice(2);
     const payMkForRecv = pd.payDate.getFullYear() + '-' + String(pd.payDate.getMonth() + 1).padStart(2, '0');
     const isReceiving = payMkForRecv === mkKeyChart(nowChart.getFullYear(), nowChart.getMonth());
-    const isDecWork = decAdvChart && pd.workDate.getMonth() === 11;
     let paidTip;
-    if (isDecWork) paidTip = 'Paid in Dec (advance)';
-    else if (isReceiving) paidTip = 'Paid in ' + paidLabel + ' (receiving)';
+    if (isReceiving) paidTip = 'Paid in ' + paidLabel + ' (receiving)';
     else paidTip = 'Paid in ' + paidLabel;
     tooltipData.push({
       source: pd.hasOverride ? 'Actual' : 'Calculated',
@@ -11918,6 +11993,26 @@ function renderAnnualTaxBreakdown() {
     totalGuaranteed += revenue + allStip - retAmt;
   }
 
+  // Include December bonus paycheck if received
+  const bonusKey = year + '-12b';
+  const bonusRecvDate = new Date(year, 11, 20);
+  if (now >= bonusRecvDate) {
+    const bonusStipEntries = (data.stipends && data.stipends[bonusKey]) || [];
+    const bonusRetAmt = (data.retirement && data.retirement[bonusKey]) || 0;
+    const bonusNgAmt = getNonGuaranteedTotal(bonusKey);
+    const bonusAllStip = bonusStipEntries.reduce((s, e) => s + (e.amount || 0), 0);
+    const bonusPositiveStip = bonusStipEntries.filter(e => (e.amount || 0) > 0).reduce((s, e) => s + e.amount, 0);
+    const bonusNegativeStip = bonusStipEntries.filter(e => (e.amount || 0) < 0).reduce((s, e) => s + e.amount, 0);
+    if (bonusAllStip !== 0 || bonusNgAmt > 0 || bonusRetAmt > 0) {
+      totalRevenue += bonusPositiveStip + bonusRetAmt;
+      totalPositiveStipends += bonusPositiveStip;
+      totalNegativeDeductions += Math.abs(bonusNegativeStip);
+      totalRetirement += bonusRetAmt;
+      totalNonGuaranteed += bonusNgAmt;
+      totalGuaranteed += bonusAllStip - bonusRetAmt;
+    }
+  }
+
   const totalIncome = totalGuaranteed + totalNonGuaranteed;
   const fmt = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
@@ -11969,8 +12064,13 @@ function setPaycheckRange(range) {
 function editPaycheckMonth(month) {
   // Navigate the Paycheck Projection card to this month
   const now = new Date();
-  const [y, m] = month.split('-').map(Number);
-  stabMonthOffset = (y - now.getFullYear()) * 12 + (m - 1 - now.getMonth());
+  const isBonus = month.endsWith('b');
+  const [y, mStr] = month.split('-');
+  const m = parseInt(mStr);
+  // Bonus paycheck (YYYY-12b) → navigate to November production (December paycheck)
+  // Regular paycheck month M → navigate to production month M-1
+  const prodMonth = isBonus ? 10 : m - 1; // November = 10 for bonus
+  stabMonthOffset = (parseInt(y) - now.getFullYear()) * 12 + (prodMonth - now.getMonth());
   renderStabilization();
   // Open the breakdown if closed
   const panel = document.getElementById('stabBreakdown');
@@ -11984,9 +12084,15 @@ function editPaycheckMonth(month) {
 }
 
 function deletePaycheckEntry(month) {
-  if (!confirm('Delete paycheck entry for ' + month + '?')) return;
+  const isBonus = month.endsWith('b');
+  const label = isBonus ? 'December Bonus ' + month.split('-')[0] : month;
+  if (!confirm('Delete paycheck entry for ' + label + '?')) return;
   delete data.paychecks[month];
   if (data.retirement) delete data.retirement[month];
+  if (isBonus) {
+    if (data.stipends) delete data.stipends[month];
+    if (data.nonGuaranteed) delete data.nonGuaranteed[month];
+  }
   saveData(data);
   showToast('Entry deleted');
   renderStabilization();
@@ -12002,7 +12108,9 @@ function renderPaycheckChart() {
 
   const labels = months.map(m => {
     const [y, mo] = m.split('-');
-    return monthNames[parseInt(mo) - 1] + ' ' + y.slice(2);
+    const isBonus = mo.endsWith('b');
+    const moNum = parseInt(mo);
+    return (isBonus ? 'Dec Bonus ' : monthNames[moNum - 1] + ' ') + y.slice(2);
   });
   const values = months.map(m => data.paychecks[m] || 0);
   const retValues = months.map(m => (data.retirement || {})[m] || 0);
@@ -12135,7 +12243,9 @@ function renderPaycheckTable() {
     totalRetire += ret;
     const rowTotal = amt + ret;
     const [y, mo] = m.split('-');
-    const label = monthNames[parseInt(mo) - 1] + ' ' + y;
+    const isBonus = mo.endsWith('b');
+    const moNum = parseInt(mo);
+    const label = (isBonus ? 'Dec Bonus ' : monthNames[moNum - 1] + ' ') + y;
     const bg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
     html += `<tr style="border-bottom:1px solid var(--border);background:${bg};cursor:pointer;" onclick="editPaycheckMonth('${m}')" title="Click to edit">`;
     html += `<td style="padding:6px 4px;">${label}</td>`;
@@ -12386,6 +12496,84 @@ function renderStabilization() {
   bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabPaycheck()" style="font-size:0.68rem;padding:3px 10px;">Save</button>';
   bdHtml += '</div>';
 
+  // December Bonus Paycheck section
+  const isDecPaycheck = payDate.getMonth() === 11;
+  let bonusPaycheckAmt = 0;
+  if (isDecPaycheck) {
+    const bonusYear = payDate.getFullYear();
+    const bonusKey = bonusYear + '-12b';
+    const bonusEstimate = computeDecBonusEstimate(bonusYear);
+    const bonusStipEntries = (data.stipends && data.stipends[bonusKey]) || [];
+    const bonusStip = bonusStipEntries.reduce((s, e) => s + (e.amount || 0), 0);
+    const bonusRetire = (data.retirement && data.retirement[bonusKey]) || 0;
+    const bonusNg = getNonGuaranteedForMonth(bonusKey);
+    const bonusNgTotal = Object.values(bonusNg).reduce((s, v) => s + (v || 0), 0);
+    const hasBonusEntries = bonusStipEntries.length > 0 || bonusNgTotal > 0 || bonusRetire > 0;
+    bonusPaycheckAmt = hasBonusEntries ? round2(bonusStip + bonusNgTotal - bonusRetire) : bonusEstimate;
+
+    bdHtml += '<div style="border-top:3px solid var(--accent2);margin-top:16px;padding-top:12px;">';
+    bdHtml += '<div style="font-size:0.92rem;font-weight:700;color:var(--accent2);margin-bottom:4px;">December Bonus Paycheck</div>';
+    bdHtml += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">Estimated from average of ${bonusYear} paychecks. The bulk of this paycheck comes from stipends and non-guaranteed payments.</div>`;
+
+    // Average estimate line
+    const fmtEst = bonusEstimate > 0 ? '$' + bonusEstimate.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '\u2014';
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:6px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">${bonusYear} Paycheck Average</span><span style="font-weight:600;color:var(--primary);">${fmtEst}</span></div>`;
+
+    // Bonus stipend/deduction section
+    bdHtml += '<div style="margin-top:8px;">';
+    bdHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:0.75rem;color:var(--text-dim);">Stipends & Deductions</span>';
+    bdHtml += `<button type="button" class="add-entry-btn" onclick="addStabStipendRow(document.getElementById('decBonusStipendEntries'),'','');refreshStabBreakdownHeight();" style="font-size:0.7rem;padding:2px 8px;">+ Add</button></div>`;
+    bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
+    bdHtml += `<input type="text" value="Retirement" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
+    bdHtml += `<input type="text" inputmode="text" id="decBonusRetirement" placeholder="$0.00" value="${bonusRetire ? '-$' + bonusRetire.toFixed(2) : ''}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
+    bdHtml += '<span style="width:26px;"></span>';
+    bdHtml += '</div>';
+    bdHtml += '<div id="decBonusStipendEntries"></div>';
+
+    // Bonus NG payments
+    const bngLabels = [['classB', 'Class B Margin'], ['crna', 'CRNA Distribution'], ['surgCenter', 'Surgical Center Dist']];
+    bdHtml += '<div style="margin-top:8px;margin-bottom:6px;font-size:0.72rem;color:var(--text-dim);">Non-Guaranteed Payments</div>';
+    bngLabels.forEach(([key, label]) => {
+      const val = bonusNg[key] || '';
+      const fmtVal = val ? '$' + Number(val).toFixed(2) : '';
+      bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
+      bdHtml += `<input type="text" value="${label}" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
+      bdHtml += `<input type="text" inputmode="text" id="decBonusNG_${key}" placeholder="$0.00" value="${fmtVal}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
+      bdHtml += '<span style="width:26px;"></span>';
+      bdHtml += '</div>';
+    });
+
+    bdHtml += `<button class="btn btn-primary btn-sm" onclick="saveDecBonusStipends(${bonusYear})" style="margin-top:4px;font-size:0.72rem;padding:4px 12px;">Save Bonus Stipends/Deductions</button>`;
+    bdHtml += '</div>';
+
+    // Calculated bonus deposit
+    bdHtml += '<div style="border-top:2px solid var(--border);margin-top:10px;padding-top:8px;">';
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>Bonus Calculated Deposit</span><span style="color:var(--accent2);">$${bonusPaycheckAmt.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    if (!hasBonusEntries && bonusEstimate > 0) {
+      bdHtml += '<div style="font-size:0.65rem;color:var(--text-dim);margin-top:2px;font-style:italic;">Based on year average — enter stipends/NG for actual breakdown</div>';
+    }
+    bdHtml += '</div>';
+
+    // Actual bonus deposit entry
+    const existingBonusDeposit = (data.paychecks || {})[bonusKey];
+    bdHtml += '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;">';
+    bdHtml += `<div style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:2px;">Actual Bonus Bank Deposit</div>`;
+    bdHtml += `<div style="font-size:0.62rem;color:var(--text-dim);margin-bottom:6px;">Enter from your December bonus pay stub</div>`;
+    bdHtml += `<input type="number" id="decBonusDeposit" placeholder="$0.00" step="0.01" value="${existingBonusDeposit != null ? existingBonusDeposit : ''}" class="text-input" style="width:100%;font-size:0.85rem;padding:8px 10px;margin-bottom:6px;box-sizing:border-box;">`;
+    bdHtml += `<button class="btn btn-primary btn-sm" onclick="saveDecBonusPaycheck(${bonusYear})" style="font-size:0.68rem;padding:3px 10px;">Save</button>`;
+    bdHtml += '</div>';
+
+    // Combined December total
+    const combinedDec = round2(paycheck + bonusPaycheckAmt);
+    bdHtml += '<div style="border-top:3px solid var(--accent2);margin-top:12px;padding-top:8px;">';
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.92rem;font-weight:700;"><span>Combined December Total</span><span style="color:var(--accent2);">$${combinedDec.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-top:4px;color:var(--text-dim);"><span>Regular Paycheck</span><span>$${paycheck.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-top:2px;color:var(--text-dim);"><span>Bonus Paycheck</span><span>$${bonusPaycheckAmt.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    bdHtml += '</div>';
+
+    bdHtml += '</div>'; // Close bonus section
+  }
+
   document.getElementById('stabBreakdown').innerHTML = bdHtml;
 
   // Populate stipend entry rows
@@ -12398,11 +12586,25 @@ function renderStabilization() {
     }
   }
 
+  // Populate bonus stipend entry rows for December
+  if (isDecPaycheck) {
+    const bonusYear = payDate.getFullYear();
+    const bonusKey = bonusYear + '-12b';
+    const bonusStipContainer = document.getElementById('decBonusStipendEntries');
+    if (bonusStipContainer) {
+      const bonusStipEntries = (data.stipends && data.stipends[bonusKey]) || [];
+      if (bonusStipEntries.length === 0) {
+        addStabStipendRow(bonusStipContainer, '', '');
+      } else {
+        bonusStipEntries.forEach(e => addStabStipendRow(bonusStipContainer, e.label, e.amount));
+      }
+    }
+  }
+
   // Refresh breakdown panel height if open
   refreshStabBreakdownHeight();
 
   // Paycheck display
-  const decAdv = settings.decemberAdvance !== false;
   const earningLabel = document.getElementById('stabEarningLabel');
   const summaryEl = document.getElementById('stabPaycheckBreakdownSummary');
   const payMonthName = monthNames[payDate.getMonth()];
@@ -12411,20 +12613,13 @@ function renderStabilization() {
   if (!data.overrides) data.overrides = {};
   const compOv = data.overrides[targetKey] && data.overrides[targetKey].compTotal != null ? data.overrides[targetKey].compTotal : null;
 
-  if (decAdv && targetDate.getMonth() === 0) {
-    earningLabel.textContent = 'Jan revenue — received in Dec advance';
-    document.getElementById('stabPaycheck').textContent = '$0.00';
-    summaryEl.textContent = '';
-  } else if (revenueForCalc > 0 || (pv && pv > 0)) {
+  if (revenueForCalc > 0 || (pv && pv > 0)) {
     let totalPaycheck = paycheck;
 
-    if (decAdv && targetDate.getMonth() === 11) {
-      const mkFwd = function(month) { const d = new Date(ty + 1, month, 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); };
-      const janWeighted = round2(0.10 * (mt[mkFwd(0)]||0) + 0.40 * raw + 0.25 * (mt[mkFromTarget(1)]||0) + 0.15 * (mt[mkFromTarget(2)]||0) + 0.10 * (mt[mkFromTarget(3)]||0));
-      const janPv = getPointValueForMonth(mkFwd(0));
-      const janStipend = getMonthlyStipendTotal(mkFwd(0));
-      totalPaycheck += janWeighted * janPv + janStipend;
-      earningLabel.textContent = 'Dec revenue (+ Jan advance) → paid Dec 20';
+    if (isDecPaycheck) {
+      totalPaycheck += bonusPaycheckAmt;
+      const revLabel = actualRevenue != null ? ' (actual)' : '';
+      earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue' + revLabel + ' + bonus → paid Dec 20';
     } else {
       const revLabel = actualRevenue != null ? ' (actual)' : '';
       earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue' + revLabel + ' → paid ' + payMonthName + ' 20';
@@ -12442,6 +12637,7 @@ function renderStabilization() {
     }
     if (retirementAmt > 0) parts.push('Retirement: -$' + retirementAmt.toLocaleString('en-US', {maximumFractionDigits: 0}));
     if (ngTotal > 0) parts.push('Non-Guar: +$' + ngTotal.toLocaleString('en-US', {maximumFractionDigits: 0}));
+    if (isDecPaycheck) parts.push('Bonus: +$' + bonusPaycheckAmt.toLocaleString('en-US', {maximumFractionDigits: 0}));
     summaryEl.textContent = parts.join(' · ');
   } else {
     document.getElementById('stabPaycheck').innerHTML = '&mdash;';
@@ -12459,8 +12655,6 @@ function renderProjectedAnnual() {
   const thisYear = now.getFullYear();
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  const decAdv = settings.decemberAdvance !== false;
-
   // YTD revenue received: only count paychecks already received (received on 20th of pay month)
   let ytdRevenue = 0;
   let ytdMonths = 0;
@@ -12470,12 +12664,7 @@ function renderProjectedAnnual() {
     const wYear = workDate.getFullYear();
     const wMonth = workDate.getMonth();
     const workKey = wYear + '-' + String(wMonth + 1).padStart(2, '0');
-    let recvDate;
-    if (decAdv && wMonth === 11) {
-      recvDate = new Date(wYear, 11, 20);
-    } else {
-      recvDate = new Date(wYear, wMonth + 1, 20);
-    }
+    const recvDate = new Date(wYear, wMonth + 1, 20);
     if (recvDate.getFullYear() !== thisYear || recvDate > now) continue;
     if (!mt[workKey]) continue;
     const ov = data.overrides && data.overrides[workKey];
@@ -12492,6 +12681,16 @@ function renderProjectedAnnual() {
     receivedMonths.push({ payMonth: recvDate.getMonth(), amt, source });
   }
 
+  // Include December bonus paycheck if received
+  const bonusKey = thisYear + '-12b';
+  const bonusDeposit = data.paychecks && data.paychecks[bonusKey];
+  const bonusRecvDate = new Date(thisYear, 11, 20);
+  let bonusIncluded = false;
+  if (bonusDeposit != null && bonusDeposit > 0 && now >= bonusRecvDate) {
+    ytdRevenue += bonusDeposit;
+    bonusIncluded = true;
+  }
+
   // Average of current-year received months where amt > $0
   const nonZeroMonths = receivedMonths.filter(r => r.amt > 0);
   const avgComp = nonZeroMonths.length > 0 ? round2(nonZeroMonths.reduce((a, r) => a + r.amt, 0) / nonZeroMonths.length) : 0;
@@ -12506,15 +12705,16 @@ function renderProjectedAnnual() {
     : '\u2014';
 
   if (hasReceivedFirstCheck && avgComp > 0) {
+    // 13 total paychecks per year (12 regular + 1 December bonus)
     const paychecksRemaining = 12 - ytdMonths;
     let projRemaining = round2(avgComp * paychecksRemaining);
 
-    // Dec advance adjustments for remaining projection
+    // Add projected December bonus if not yet received
     const receivedMap = {};
     receivedMonths.forEach(r => { receivedMap[r.payMonth] = r; });
-    if (decAdv && paychecksRemaining > 0) {
-      if (!receivedMap[11]) projRemaining = round2(projRemaining + avgComp); // Dec double
-      if (!receivedMap[0]) projRemaining = round2(projRemaining - avgComp); // Jan $0
+    if (!bonusIncluded && !receivedMap[11]) {
+      // December bonus estimate = average of year's paychecks
+      projRemaining = round2(projRemaining + avgComp);
     }
 
     const annual = round2(ytdRevenue + projRemaining);
@@ -12526,17 +12726,18 @@ function renderProjectedAnnual() {
     const breakdownLines = [];
     for (let pm = 0; pm < 12; pm++) {
       const label = monthNames[pm];
-      if (decAdv && pm === 0) {
-        breakdownLines.push(label + ': $0 (Dec advance)');
-      } else if (receivedMap2[pm]) {
+      if (receivedMap2[pm]) {
         const r = receivedMap2[pm];
         breakdownLines.push(label + ': $' + r.amt.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (' + r.source + ')');
       } else {
         breakdownLines.push(label + ': $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj)');
       }
     }
-    if (decAdv && !receivedMap2[11]) {
-      breakdownLines[11] = 'Dec: $' + (avgComp * 2).toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj, +Jan)';
+    // December bonus line
+    if (bonusIncluded) {
+      breakdownLines.push('Dec Bonus: $' + bonusDeposit.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (actual)');
+    } else {
+      breakdownLines.push('Dec Bonus: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj, avg)');
     }
     breakdownLines.push('');
     breakdownLines.push('Avg: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo (' + nonZeroMonths.length + ' month' + (nonZeroMonths.length !== 1 ? 's' : '') + ')');
@@ -12927,55 +13128,11 @@ function renderPipelineChart() {
     stipendValues.push(getMonthlyStipendTotal(stipKey));
   }
 
-  // December advance: December gets January's paycheck added, January becomes $0
-  const decAdv = settings.decemberAdvance !== false;
-  const decAdvFlags = [];
+  // Track which target months are December (for bonus paycheck display)
+  const decBonusFlags = [];
   for (let target = 0; target < 5; target++) {
     const targetDate = new Date(now.getFullYear(), now.getMonth() + target, 1);
-    const targetMonth = targetDate.getMonth();
-    decAdvFlags.push({ isDec: targetMonth === 11, isJan: targetMonth === 0 });
-
-    if (decAdv && targetMonth === 0) {
-      realValues[target] = 0;
-      projectedValues[target] = 0;
-      stipendValues[target] = 0;
-    }
-
-    if (decAdv && targetMonth === 11) {
-      const janDate = new Date(targetDate.getFullYear() + 1, 0, 1);
-      let janReal = 0, janProj = 0;
-      for (let w = 0; w < 5; w++) {
-        const srcDate = new Date(janDate.getFullYear(), janDate.getMonth() - w - 1, 1);
-        const srcKey = mkKey(srcDate.getFullYear(), srcDate.getMonth());
-        const isCurrentOrPast = srcDate <= now || srcKey === mkKey(now.getFullYear(), now.getMonth());
-        const isProjected = !mt[srcKey] && !isCurrentOrPast;
-        const isCurrentMonth = srcKey === currentMk;
-        let srcPts;
-        if (isCurrentMonth && currentMonthProjection) {
-          srcPts = currentMonthProjection.total;
-        } else if (mt[srcKey] !== undefined) {
-          srcPts = mt[srcKey];
-        } else if (isCurrentOrPast) {
-          srcPts = 0;
-        } else {
-          srcPts = avgProjection;
-        }
-        const contribution = round2(srcPts * weights[w]);
-        if (isProjected) {
-          janProj += contribution;
-        } else if (isCurrentMonth && currentMonthProjection && currentMonthProjection.total > 0) {
-          const af = currentMonthProjection.actualPts / currentMonthProjection.total;
-          janReal += round2(contribution * af);
-          janProj += round2(contribution * (1 - af));
-        } else {
-          janReal += contribution;
-        }
-      }
-      realValues[target] += round2(janReal);
-      projectedValues[target] += round2(janProj);
-      const janStipKey = mkKey(targetDate.getFullYear(), 11);
-      stipendValues[target] += getMonthlyStipendTotal(janStipKey);
-    }
+    decBonusFlags.push({ isDec: targetDate.getMonth() === 11 });
   }
 
   // Build per-target point values for each bar
@@ -13044,8 +13201,6 @@ function renderPipelineChart() {
             title: ctx => ctx[0].label,
             afterBody: function(ctx) {
               const idx = ctx[0].dataIndex;
-              const flags = decAdvFlags[idx];
-              if (decAdv && flags.isJan) return ['  $0 \u2014 advanced in December'];
               if (compOverrideFlags[idx]) return ['  Compensation override: $' + realData[idx].toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})];
               const bd = breakdowns[idx];
               const lines = bd.map(b => {
@@ -13062,7 +13217,7 @@ function renderPipelineChart() {
                 const tpv = targetPvs[idx];
                 let line = `  Total: ${total.toFixed(1)} pts \u2192 $${round2(total * tpv).toLocaleString('en-US', {maximumFractionDigits:0})}`;
                 if (stip !== 0) line += ` ${stip > 0 ? '+' : '-'} $${Math.abs(stip).toLocaleString('en-US', {maximumFractionDigits:0})} ${stip > 0 ? 'stipend' : 'deductions'}`;
-                if (flags.isDec) line += ' (incl. Jan advance)';
+                if (decBonusFlags[idx].isDec) line += ' (+ bonus paycheck)';
                 lines.push(line);
               }
               return lines;
@@ -13092,22 +13247,17 @@ function renderPipelineChart() {
   if (useDollars) {
     const receivingAmt = compOverrideFlags[0] ? realData[0] : round2((realValues[0] + projectedValues[0]) * targetPvs[0] + stipendValues[0]);
     const buildingAmt = compOverrideFlags[1] ? realData[1] : round2((realValues[1] + projectedValues[1]) * targetPvs[1] + stipendValues[1]);
-    const isCurrentJan = decAdv && now.getMonth() === 0;
     const recvPrefix = now.getDate() >= 20 ? 'Received' : 'Receiving';
 
-    const earningLabel = (decAdv && now.getMonth() === 11) ? 'Earning for Dec 20 (+ Jan advance)' : 'Earning for ' + buildingMonth + ' 20';
+    const earningLabel = (now.getMonth() === 11) ? 'Earning for Dec 20 (+ bonus)' : 'Earning for ' + buildingMonth + ' 20';
     let line1 = '<span style="font-size:0.72rem;color:var(--text-dim);">' + earningLabel + ':</span> ';
     line1 += fmtDollar(buildingAmt);
     if (compOverrideFlags[1]) line1 += ' <span style="font-size:0.65rem;color:var(--text-dim);">(override)</span>';
 
     let line2;
-    if (isCurrentJan) {
-      line2 = '<span style="font-size:0.72rem;color:var(--text-dim);">Received in Dec advance:</span> $0';
-    } else {
-      line2 = '<span style="font-size:0.72rem;color:var(--text-dim);">' + recvPrefix + ' ' + receivingMonth + ' 20:</span> ';
-      line2 += fmtDollar(receivingAmt);
-      if (compOverrideFlags[0]) line2 += ' <span style="font-size:0.65rem;color:var(--text-dim);">(override)</span>';
-    }
+    line2 = '<span style="font-size:0.72rem;color:var(--text-dim);">' + recvPrefix + ' ' + receivingMonth + ' 20:</span> ';
+    line2 += fmtDollar(receivingAmt);
+    if (compOverrideFlags[0]) line2 += ' <span style="font-size:0.65rem;color:var(--text-dim);">(override)</span>';
 
     summaryEl.innerHTML = line1 + '<br>' + line2;
   } else {
@@ -15495,15 +15645,7 @@ dashPointValueInput.addEventListener('change', () => {
   showToast('Point value saved');
 });
 
-// December advance paycheck toggle
-const decAdvToggle = document.getElementById('decAdvanceToggle');
-decAdvToggle.checked = settings.decemberAdvance !== false;
-decAdvToggle.addEventListener('change', () => {
-  settings.decemberAdvance = decAdvToggle.checked;
-  saveSettings(settings);
-  renderStabilization();
-  renderPipelineChart();
-});
+// December bonus paycheck is always enabled (replaced December advance toggle)
 
 // Shared data toggle
 const shareToggle = document.getElementById('shareDataToggle');
