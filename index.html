@@ -7013,10 +7013,8 @@ function updateDataEntryState() {
       document.getElementById('deSSBTimes').textContent = 'Vacation Day';
     } else if (isForcedOff) {
       document.getElementById('deSSBTimes').textContent = '56 pts — Forced Off';
-    } else if (entries.length === 1) {
-      document.getElementById('deSSBTimes').textContent = (entries[0].start || '?') + ' - ' + (entries[0].end || '?');
     } else {
-      document.getElementById('deSSBTimes').textContent = entries.length + ' time entries';
+      document.getElementById('deSSBTimes').textContent = entries.map(e => (e.start || '?') + ' - ' + (e.end || '?')).join(', ');
     }
     // Show case section only if not vacation/forced off
     if (isVacation || isForcedOff) {
@@ -9862,7 +9860,7 @@ function renderShiftLogTable() {
       const typeName = wCalLabel ? wCalLabel.label : getAssignmentTypeName(s.assignmentType);
       const entries = s.timeEntries || [];
       const timeStr = entries.length > 0 && entries[0].start
-        ? entries[0].start + (entries[entries.length-1].end ? ' - ' + entries[entries.length-1].end : '')
+        ? entries.map(e => e.start + (e.end ? '-' + e.end : '')).join(', ')
         : 'no times';
       slWatchHtml += '<div class="watch-item"><span>' + formatDateShort(s.date) + ' &mdash; ' + escHtml(typeName) + ' (' + timeStr + ')</span>';
       slWatchHtml += '<button class="bill-btn" onclick="claimUnbilledShift(\'' + s.date + '\',\'' + prefix + '\')">Bill to ' + curMonthName + '</button></div>';
@@ -9932,9 +9930,10 @@ function renderShiftLogTable() {
     const hasPreCall = shift.preCallStart && shift.preCallEnd;
     const totalHrs = calcShiftHours(shift);
     const entries = shift.timeEntries || [];
-    const timeStr = entries.length > 0 && entries[0].start
-      ? entries[0].start + (entries[entries.length - 1].end ? ' - ' + entries[entries.length - 1].end : '')
-      : '-';
+    let timeStr = '-';
+    if (entries.length > 0 && entries[0].start) {
+      timeStr = entries.map(e => e.start + (e.end ? '-' + e.end : '')).join(', ');
+    }
     const ma = shift.manualAmounts || {};
     const shiftCalcTotal = rows.reduce((s, r) => s + r.amount, 0);
     const shiftTotal = rows.reduce((s, r, ri) => s + (ma[ri] != null ? ma[ri] : r.amount), 0);
@@ -10408,7 +10407,7 @@ function renderFlaggedPage() {
     const typeName = fCalLabel ? fCalLabel.label : getAssignmentTypeName(s.assignmentType);
     const entries = s.timeEntries || [];
     const times = entries.length > 0 && entries[0].start
-      ? entries[0].start + (entries[entries.length-1].end ? ' \u2013 ' + entries[entries.length-1].end : '')
+      ? entries.map(e => e.start + (e.end ? '\u2013' + e.end : '')).join(', ')
       : 'no times recorded';
     items.push({ date: s.date, dateStr, type: 'shift', label: typeName, detail: times, id: s.date });
   });
@@ -14229,10 +14228,8 @@ function renderDayDetailContent() {
   let timesText = '';
   if (isVacation) {
     timesText = 'Vacation Day';
-  } else if (entries.length === 1) {
-    timesText = (entries[0].start || '?') + ' - ' + (entries[0].end || '?');
   } else {
-    timesText = entries.length + ' time entries';
+    timesText = entries.map(e => (e.start || '?') + ' - ' + (e.end || '?')).join(', ');
   }
 
   let html = '';
