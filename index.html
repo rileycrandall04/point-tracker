@@ -13554,33 +13554,36 @@ function renderProcLookup() {
     procNames[c.name].push(c);
   });
 
-  const procs = Object.keys(procNames);
-  if (procs.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No matching procedures or surgeons found.</p>'; return; }
+  if (filtered.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No matching procedures or surgeons found.</p>'; return; }
+
+  // Determine if the primary match is a surgeon name (not a procedure name)
+  const isSurgeonSearch = surgeonMatch && !procMatch;
 
   let html = '';
-  procs.sort().forEach(proc => {
-    const cases = procNames[proc];
-    const totalMins = cases.reduce((s, c) => s + c.mins, 0);
-    const avgAll = Math.round(totalMins / cases.length);
-    const localCount = cases.filter(c => !c.isFromShared).length;
-    const procKey = escHtml(proc).replace(/'/g, "\\'");
-    html += `<div style="margin-bottom:12px;">`;
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">`;
-    html += `<span style="font-weight:600;font-size:0.85rem;">${escHtml(proc)}</span>`;
-    html += `<span style="display:flex;align-items:center;gap:6px;">`;
-    html += `<span style="font-size:0.78rem;color:var(--text-dim);">${cases.length} case${cases.length !== 1 ? 's' : ''} &middot; avg ${avgAll} min</span>`;
-    if (localCount > 0) html += `<button class="proc-rename-btn" onclick="event.stopPropagation();renameProcedure('${procKey}')" title="Rename all cases with this procedure">&#9998;</button>`;
-    html += `</span></div>`;
 
-    // Group by surgeon
+  if (isSurgeonSearch) {
+    // Group by surgeon first, then list procedures under each surgeon
     const bySurgeon = {};
-    cases.forEach(c => {
+    filtered.forEach(c => {
       const key = c.surgeon || 'Unknown';
       if (!bySurgeon[key]) bySurgeon[key] = [];
       bySurgeon[key].push(c);
     });
-    const surgeons = Object.entries(bySurgeon)
-      .map(([name, items]) => {
+
+    Object.entries(bySurgeon).sort((a, b) => a[0].localeCompare(b[0])).forEach(([surgName, cases]) => {
+      const totalMins = cases.reduce((s, c) => s + c.mins, 0);
+      const avgAll = Math.round(totalMins / cases.length);
+      html += `<div style="margin-bottom:16px;">`;
+      html += `<div style="font-weight:700;font-size:0.9rem;margin-bottom:6px;color:var(--text);">${escHtml(surgName)}</div>`;
+      html += `<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">${cases.length} total case${cases.length !== 1 ? 's' : ''} &middot; overall avg ${avgAll} min</div>`;
+
+      // Group by procedure under this surgeon
+      const byProc = {};
+      cases.forEach(c => {
+        if (!byProc[c.name]) byProc[c.name] = [];
+        byProc[c.name].push(c);
+      });
+      Object.entries(byProc).sort((a, b) => a[0].localeCompare(b[0])).forEach(([procName, items]) => {
         const durations = items.map(c => c.mins);
         const avg = Math.round(durations.reduce((s, v) => s + v, 0) / durations.length);
         let sd = 0;
@@ -13588,12 +13591,59 @@ function renderProcLookup() {
           const mean = durations.reduce((s, v) => s + v, 0) / durations.length;
           sd = Math.round(Math.sqrt(durations.reduce((s, v) => s + (v - mean) ** 2, 0) / durations.length));
         }
-        return { name, avg, count: durations.length, sd, items };
-      })
-      .sort((a, b) => a.avg - b.avg);
-    surgeons.forEach(s => {
-      const sdTag = s.count >= 2 ? ` <span style="color:var(--text-dim);font-size:0.72rem;">\u00b1${s.sd}</span>` : '';
-      html += `<div class="efficiency-item proc-lookup-row" onclick="toggleProcCaseList(this)" style="cursor:pointer;"><span class="eff-label">${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.count})</span></span><span class="eff-value">${s.avg}${sdTag} min <span style="font-size:0.7rem;color:var(--text-dim);">&#9662;</span></span></div>`;
+        const sdTag = durations.length >= 2 ? ` <span style="color:var(--text-dim);font-size:0.72rem;">\u00b1${sd}</span>` : '';
+        html += `<div class="efficiency-item proc-lookup-row" onclick="toggleProcCaseList(this)" style="cursor:pointer;"><span class="eff-label">${escHtml(procName)} <span style="color:var(--text-dim);font-size:0.75rem;">(${items.length})</span></span><span class="eff-value">${avg}${sdTag} min <span style="font-size:0.7rem;color:var(--text-dim);">&#9662;</span></span></div>`;
+        html += `<div class="proc-case-list" style="display:none;">`;
+        items.sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach(ci => {
+          html += `<div class="proc-case-item"${ci.id ? ' data-caseid="' + ci.id + '"' : ''}>`;
+          html += `<span>${ci.date ? formatDateShort(ci.date) : '?'}${ci.isFromShared ? ' <span style="color:var(--primary);font-size:0.68rem;">shared</span>' : ''}</span>`;
+          html += `<span>${ci.startTime} - ${ci.endTime} (${ci.mins} min)</span>`;
+          if (!ci.isFromShared && ci.id) html += `<button class="proc-rename-btn" onclick="event.stopPropagation();renameSingleCase('${ci.id}')" title="Rename this case's procedure">&#9998;</button>`;
+          html += `</div>`;
+        });
+        html += `</div>`;
+      });
+      html += `</div>`;
+    });
+  } else {
+    // Standard view: group by procedure, then by surgeon underneath
+    const procs = Object.keys(procNames);
+    procs.sort().forEach(proc => {
+      const cases = procNames[proc];
+      const totalMins = cases.reduce((s, c) => s + c.mins, 0);
+      const avgAll = Math.round(totalMins / cases.length);
+      const localCount = cases.filter(c => !c.isFromShared).length;
+      const procKey = escHtml(proc).replace(/'/g, "\\'");
+      html += `<div style="margin-bottom:12px;">`;
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">`;
+      html += `<span style="font-weight:600;font-size:0.85rem;">${escHtml(proc)}</span>`;
+      html += `<span style="display:flex;align-items:center;gap:6px;">`;
+      html += `<span style="font-size:0.78rem;color:var(--text-dim);">${cases.length} case${cases.length !== 1 ? 's' : ''} &middot; avg ${avgAll} min</span>`;
+      if (localCount > 0) html += `<button class="proc-rename-btn" onclick="event.stopPropagation();renameProcedure('${procKey}')" title="Rename all cases with this procedure">&#9998;</button>`;
+      html += `</span></div>`;
+
+      // Group by surgeon
+      const bySurgeon = {};
+      cases.forEach(c => {
+        const key = c.surgeon || 'Unknown';
+        if (!bySurgeon[key]) bySurgeon[key] = [];
+        bySurgeon[key].push(c);
+      });
+      const surgeons = Object.entries(bySurgeon)
+        .map(([name, items]) => {
+          const durations = items.map(c => c.mins);
+          const avg = Math.round(durations.reduce((s, v) => s + v, 0) / durations.length);
+          let sd = 0;
+          if (durations.length >= 2) {
+            const mean = durations.reduce((s, v) => s + v, 0) / durations.length;
+            sd = Math.round(Math.sqrt(durations.reduce((s, v) => s + (v - mean) ** 2, 0) / durations.length));
+          }
+          return { name, avg, count: durations.length, sd, items };
+        })
+        .sort((a, b) => a.avg - b.avg);
+      surgeons.forEach(s => {
+        const sdTag = s.count >= 2 ? ` <span style="color:var(--text-dim);font-size:0.72rem;">\u00b1${s.sd}</span>` : '';
+        html += `<div class="efficiency-item proc-lookup-row" onclick="toggleProcCaseList(this)" style="cursor:pointer;"><span class="eff-label">${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.count})</span></span><span class="eff-value">${s.avg}${sdTag} min <span style="font-size:0.7rem;color:var(--text-dim);">&#9662;</span></span></div>`;
       // Hidden case list
       html += `<div class="proc-case-list" style="display:none;">`;
       s.items.sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach(ci => {
@@ -13606,7 +13656,8 @@ function renderProcLookup() {
       html += `</div>`;
     });
     html += `</div>`;
-  });
+    });
+  }
   el.innerHTML = html;
 }
 
