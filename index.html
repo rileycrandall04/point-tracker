@@ -2833,6 +2833,17 @@ input.mil-time.invalid {
       </div>
     </div>
   </div>
+
+  <!-- 8. Annual Tax Breakdown -->
+  <div class="card collapse-section" id="annualTaxCard">
+    <div class="collapse-header" onclick="toggleCollapse('annualTax')">
+      <h3>Annual Tax Breakdown</h3>
+      <span class="arrow" id="annualTaxArrow">&#9660;</span>
+    </div>
+    <div class="collapse-body" id="annualTaxBody">
+      <div style="padding-top:12px;" id="annualTaxContent"></div>
+    </div>
+  </div>
 </div>
 
 <!-- SETTINGS PAGE -->
@@ -9151,7 +9162,8 @@ function toggleCollapse(sectionId) {
     histComp: 'histCompBody',
     importScan: 'importScanBody',
     earningsEst: 'earningsEstBody',
-    paycheckTrack: 'paycheckTrackBody'
+    paycheckTrack: 'paycheckTrackBody',
+    annualTax: 'annualTaxBody'
   };
   const arrowMap = {
     deScan: 'deScanArrow',
@@ -9159,7 +9171,8 @@ function toggleCollapse(sectionId) {
     histComp: 'histCompArrow',
     importScan: 'importScanArrow',
     earningsEst: 'earningsEstArrow',
-    paycheckTrack: 'paycheckTrackArrow'
+    paycheckTrack: 'paycheckTrackArrow',
+    annualTax: 'annualTaxArrow'
   };
   const body = document.getElementById(bodyMap[sectionId]);
   const arrow = document.getElementById(arrowMap[sectionId]);
@@ -11143,6 +11156,7 @@ function renderProjections() {
   checkPVReminder();
   renderEarningsEstimator();
   renderPaycheckCard();
+  renderAnnualTaxBreakdown();
 }
 
 function isFuturePagerOnly(shift) {
@@ -11777,6 +11791,65 @@ function renderPaycheckCard() {
   renderPaycheckTable();
 }
 
+function renderAnnualTaxBreakdown() {
+  const el = document.getElementById('annualTaxContent');
+  if (!el) return;
+  const now = new Date();
+  const year = now.getFullYear();
+  const mt = getMonthlyTotals();
+  const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  let totalGuaranteed = 0;
+  let totalNonGuaranteed = 0;
+  let totalRetirement = 0;
+  let totalRevenue = 0;
+  let monthCount = 0;
+
+  for (let m = 0; m < 12; m++) {
+    const mk = year + '-' + String(m + 1).padStart(2, '0');
+    const stipEntries = getStipendEntriesForMonth(mk);
+    const retAmt = getRetirementForMonth(mk);
+    const pv = getPointValueForMonth(mk);
+
+    // Use actual revenue if entered, otherwise calculated
+    const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
+    const vals = [0,1,2,3,4].map(i => {
+      const d = new Date(year, m - i, 1);
+      const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      return mt[k] || 0;
+    });
+    const weighted = weights.reduce((sum, w, i) => sum + w * vals[i], 0);
+    const calcProd = pv > 0 ? weighted * pv : 0;
+    const actualRev = data.overrides && data.overrides[mk] && data.overrides[mk].compTotal != null ? data.overrides[mk].compTotal : null;
+    const revenue = actualRev != null ? actualRev : calcProd;
+
+    if (revenue > 0 || stipEntries.length > 0) monthCount++;
+
+    const ngAmt = stipEntries.filter(e => e.nonGuaranteed).reduce((s, e) => s + (e.amount || 0), 0);
+    const gStip = stipEntries.filter(e => !e.nonGuaranteed).reduce((s, e) => s + (e.amount || 0), 0);
+
+    totalRevenue += revenue;
+    totalRetirement += retAmt;
+    totalNonGuaranteed += ngAmt;
+    totalGuaranteed += revenue + gStip - retAmt;
+  }
+
+  const totalIncome = totalGuaranteed + totalNonGuaranteed;
+  const fmt = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+  let html = '<div style="font-size:0.78rem;">';
+  html += `<div style="text-align:center;margin-bottom:8px;font-size:0.72rem;color:var(--text-dim);">${year} Year-to-Date (${monthCount} months with data)</div>`;
+
+  html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-weight:600;"><span>Total Annual Income</span><span style="color:var(--accent2);">' + fmt(totalIncome) + '</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 12px;font-size:0.75rem;color:var(--text-dim);"><span>Guaranteed Income</span><span>' + fmt(totalGuaranteed) + '</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 12px;font-size:0.75rem;color:var(--text-dim);"><span>Non-Guaranteed Income</span><span>' + fmt(totalNonGuaranteed) + '</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 12px;font-size:0.75rem;color:var(--text-dim);"><span>Total Retirement Contributions</span><span>' + fmt(totalRetirement) + '</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:4px 0 4px 12px;font-size:0.75rem;color:var(--text-dim);"><span>Total Revenue (pre-deductions)</span><span>' + fmt(totalRevenue) + '</span></div>';
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 function getPaycheckMonths(range) {
   const now = new Date();
   const allMonths = Object.keys(data.paychecks || {}).sort();
@@ -12092,6 +12165,30 @@ function renderStabilization() {
   // Update month label — show the paycheck month (one month after production)
   const labelDate = new Date(ty, tm, 1);
   document.getElementById('stabMonthLabel').textContent = fullMonthNames[labelDate.getMonth()] + ' ' + labelDate.getFullYear() + ' Paycheck';
+
+  // Update $/pt input for the target month
+  const pvInput = document.getElementById('dashPointValue');
+  if (pvInput) {
+    const hasMonthPV = settings.pointValues && settings.pointValues[targetKey] != null;
+    if (hasMonthPV) {
+      pvInput.value = settings.pointValues[targetKey];
+      pvInput.style.fontStyle = 'normal';
+      pvInput.title = '';
+    } else {
+      // Carry over: find most recent prior month's value
+      let carriedPV = settings.pointValue || 0;
+      if (settings.pointValues) {
+        for (let i = 1; i <= 12; i++) {
+          const d = new Date(ty, tm - 1 - i, 1);
+          const pk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+          if (settings.pointValues[pk] != null) { carriedPV = settings.pointValues[pk]; break; }
+        }
+      }
+      pvInput.value = carriedPV || '';
+      pvInput.style.fontStyle = carriedPV ? 'italic' : 'normal';
+      pvInput.title = carriedPV ? 'Carried over from prior month' : '';
+    }
+  }
 
   function mkFromTarget(offset) {
     const d = new Date(ty, tm - 1 - offset, 1);
@@ -15195,7 +15292,16 @@ pointValueInput.value = settings.pointValue || '';
 dashPointValueInput.value = settings.pointValue || '';
 
 function syncPointValue(source) {
-  settings.pointValue = parseFloat(source.value) || 0;
+  const val = parseFloat(source.value) || 0;
+  settings.pointValue = val;
+  // Also save per-month for the currently displayed month
+  if (!settings.pointValues) settings.pointValues = {};
+  const mk = stabMonthKey();
+  if (val > 0) {
+    settings.pointValues[mk] = val;
+  } else {
+    delete settings.pointValues[mk];
+  }
   saveSettings(settings);
   // Keep both inputs in sync
   pointValueInput.value = source.value;
@@ -15206,6 +15312,7 @@ function syncPointValue(source) {
   renderMonthlyPace();
   renderPipelineChart();
   renderHistoricalTrends();
+  renderAnnualTaxBreakdown();
 }
 
 pointValueInput.addEventListener('change', () => {
