@@ -2793,35 +2793,6 @@ input.mil-time.invalid {
     </div>
     <div class="collapse-body" id="paycheckTrackBody">
       <div style="padding-top:12px;">
-    <details style="margin-bottom:10px;">
-      <summary style="cursor:pointer;font-size:0.78rem;color:var(--primary);">How to use paycheck tracking</summary>
-      <div style="font-size:0.75rem;color:var(--text-dim);margin-top:6px;line-height:1.5;">
-        <p style="margin:0 0 6px;">Track your actual paycheck deposits for the <strong>current month</strong> to compare against projections in real time.</p>
-        <p style="margin:0 0 6px;">When you get paid in March, enter that paycheck amount under <strong>March</strong>.</p>
-        <ul style="margin:0;padding-left:18px;">
-          <li><strong>Month</strong> &mdash; The month you received the paycheck.</li>
-          <li><strong>Amount Deposited</strong> &mdash; Your net deposit amount.</li>
-          <li><strong>Retirement Contribution</strong> &mdash; Your pre-tax retirement contribution for the month, if applicable.</li>
-        </ul>
-      </div>
-    </details>
-    <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:120px;">
-        <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:2px;">Month</label>
-        <input type="month" id="paycheckMonth" class="text-input" style="width:100%;font-size:0.85rem;">
-      </div>
-      <div style="flex:1;min-width:120px;">
-        <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:2px;">Amount Deposited</label>
-        <input type="number" id="paycheckAmount" class="text-input" placeholder="$0.00" step="0.01" style="width:100%;font-size:0.85rem;">
-      </div>
-      <div style="flex:1;min-width:120px;">
-        <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:2px;">Retirement Contribution</label>
-        <input type="number" id="paycheckRetirement" class="text-input" placeholder="$0.00" step="0.01" style="width:100%;font-size:0.85rem;">
-      </div>
-    </div>
-    <div style="margin-bottom:12px;">
-      <button class="btn btn-primary btn-sm" onclick="savePaycheckEntry()" style="height:36px;white-space:nowrap;">Save</button>
-    </div>
     <div style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;" id="paycheckRangeBtns">
       <button class="btn btn-outline btn-sm active" onclick="setPaycheckRange('3m')">3m</button>
       <button class="btn btn-outline btn-sm" onclick="setPaycheckRange('6m')">6m</button>
@@ -10728,6 +10699,32 @@ function saveStabStipends() {
   showToast('Stipends saved');
 }
 
+function saveStabPaycheck() {
+  const mk = stabMonthKey();
+  const di = document.getElementById('stabDeposit');
+  const ri = document.getElementById('stabRetirement');
+  const depositStr = di ? di.value.trim() : '';
+  const retireStr = ri ? ri.value.trim() : '';
+  if (depositStr === '' && retireStr === '') { showToast('Enter an amount'); return; }
+  const deposit = depositStr !== '' ? parseFloat(depositStr) : ((data.paychecks || {})[mk] || 0);
+  const retirement = retireStr !== '' ? parseFloat(retireStr) : ((data.retirement || {})[mk] || 0);
+  if (isNaN(deposit)) { showToast('Enter a valid deposit amount'); return; }
+  if (isNaN(retirement)) { showToast('Enter a valid retirement amount'); return; }
+  if (!data.paychecks) data.paychecks = {};
+  if (!data.retirement) data.retirement = {};
+  data.paychecks[mk] = deposit;
+  if (retirement !== 0) {
+    data.retirement[mk] = retirement;
+  } else {
+    delete data.retirement[mk];
+  }
+  saveData(data);
+  renderStabilization();
+  renderPaycheckChart();
+  renderPaycheckTable();
+  showToast('Paycheck saved');
+}
+
 function addStabStipendRow(container, label, amount) {
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;';
@@ -11686,20 +11683,9 @@ function renderEarningsEstimator() {
 function renderPaycheckCard() {
   const card = document.getElementById('paycheckTrackingCard');
   if (!card) return;
-  // Default month input to current month
-  const mi = document.getElementById('paycheckMonth');
-  if (mi && !mi.value) {
-    const now = new Date();
-    mi.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-  }
-  if (mi) loadPaycheckFormForMonth(mi.value);
   renderPaycheckChart();
   renderPaycheckTable();
 }
-
-document.getElementById('paycheckMonth').addEventListener('change', function() {
-  loadPaycheckFormForMonth(this.value);
-});
 
 function getPaycheckMonths(range) {
   const now = new Date();
@@ -11729,49 +11715,21 @@ function setPaycheckRange(range) {
   renderPaycheckTable();
 }
 
-function savePaycheckEntry() {
-  const mi = document.getElementById('paycheckMonth');
-  const ai = document.getElementById('paycheckAmount');
-  const ri = document.getElementById('paycheckRetirement');
-  const month = mi.value;
-  if (!month) { showToast('Select a month'); return; }
-  const amountStr = ai.value.trim();
-  const retirementStr = ri.value.trim();
-  if (amountStr === '' && retirementStr === '') { showToast('Enter an amount'); return; }
-  const amount = amountStr !== '' ? parseFloat(amountStr) : ((data.paychecks || {})[month] || 0);
-  const retirement = retirementStr !== '' ? parseFloat(retirementStr) : ((data.retirement || {})[month] || 0);
-  if (isNaN(amount)) { showToast('Enter a valid deposit amount'); return; }
-  if (isNaN(retirement)) { showToast('Enter a valid retirement amount'); return; }
-  if (!data.paychecks) data.paychecks = {};
-  if (!data.retirement) data.retirement = {};
-  data.paychecks[month] = amount;
-  if (retirement !== 0) {
-    data.retirement[month] = retirement;
-  } else {
-    delete data.retirement[month];
-  }
-  saveData(data);
-  showToast('Paycheck saved');
-  loadPaycheckFormForMonth(month);
-  renderPaycheckChart();
-  renderPaycheckTable();
-}
-
-function loadPaycheckFormForMonth(month) {
-  const ai = document.getElementById('paycheckAmount');
-  const ri = document.getElementById('paycheckRetirement');
-  const existingAmt = (data.paychecks || {})[month];
-  const existingRet = (data.retirement || {})[month];
-  ai.value = existingAmt != null ? existingAmt : '';
-  ri.value = existingRet ? existingRet : '';
-}
-
 function editPaycheckMonth(month) {
-  const mi = document.getElementById('paycheckMonth');
-  mi.value = month;
-  loadPaycheckFormForMonth(month);
-  mi.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  document.getElementById('paycheckAmount').focus();
+  // Navigate the Paycheck Projection card to this month
+  const now = new Date();
+  const [y, m] = month.split('-').map(Number);
+  stabMonthOffset = (y - now.getFullYear()) * 12 + (m - 1 - now.getMonth());
+  renderStabilization();
+  // Open the breakdown if closed
+  const panel = document.getElementById('stabBreakdown');
+  const link = document.getElementById('stabBreakdownToggle');
+  if (!panel.style.maxHeight || panel.style.maxHeight === '0px') {
+    panel.style.maxHeight = panel.scrollHeight + 'px';
+    link.innerHTML = 'Hide breakdown &#9650;';
+  }
+  // Scroll to the projection card
+  document.getElementById('stabPaycheckRow').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function deletePaycheckEntry(month) {
@@ -11780,6 +11738,7 @@ function deletePaycheckEntry(month) {
   if (data.retirement) delete data.retirement[month];
   saveData(data);
   showToast('Entry deleted');
+  renderStabilization();
   renderPaycheckChart();
   renderPaycheckTable();
 }
@@ -12093,9 +12052,27 @@ function renderStabilization() {
   // Net total
   if (pv > 0) {
     bdHtml += '<div style="border-top:2px solid var(--border);margin-top:10px;padding-top:8px;">';
-    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>Net Paycheck</span><span style="color:var(--accent2);">$${paycheck.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>Estimated Paycheck</span><span style="color:var(--accent2);">$${paycheck.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
     bdHtml += '</div>';
   }
+
+  // Actual paycheck entry
+  const existingDeposit = (data.paychecks || {})[targetKey];
+  const existingRetire = (data.retirement || {})[targetKey];
+  bdHtml += '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;">';
+  bdHtml += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:6px;">Actual Paycheck</div>';
+  bdHtml += '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">';
+  bdHtml += '<div style="flex:1;min-width:100px;"><label style="font-size:0.68rem;color:var(--text-dim);display:block;margin-bottom:2px;">Deposited</label>';
+  bdHtml += `<input type="number" id="stabDeposit" placeholder="$0.00" step="0.01" value="${existingDeposit != null ? existingDeposit : ''}" class="text-input" style="width:100%;font-size:0.78rem;padding:5px 8px;"></div>`;
+  bdHtml += '<div style="flex:1;min-width:100px;"><label style="font-size:0.68rem;color:var(--text-dim);display:block;margin-bottom:2px;">Retirement</label>';
+  bdHtml += `<input type="number" id="stabRetirement" placeholder="$0.00" step="0.01" value="${existingRetire || ''}" class="text-input" style="width:100%;font-size:0.78rem;padding:5px 8px;"></div>`;
+  bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabPaycheck()" style="font-size:0.72rem;padding:4px 12px;height:30px;">Save</button>';
+  bdHtml += '</div>';
+  if (existingDeposit != null) {
+    const total = existingDeposit + (existingRetire || 0);
+    bdHtml += `<div style="font-size:0.72rem;color:var(--accent2);margin-top:4px;">Total compensation: $${total.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>`;
+  }
+  bdHtml += '</div>';
 
   document.getElementById('stabBreakdown').innerHTML = bdHtml;
 
