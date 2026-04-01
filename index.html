@@ -10783,11 +10783,7 @@ function saveStabStipends() {
     const v = el ? parseFloat(el.value.replace(/[$,]/g, '')) || 0 : 0;
     if (v !== 0) ngObj[k] = v;
   });
-  if (Object.keys(ngObj).length > 0) {
-    data.nonGuaranteed[mk] = ngObj;
-  } else {
-    delete data.nonGuaranteed[mk];
-  }
+  data.nonGuaranteed[mk] = ngObj;
 
   saveData(data);
   renderStabilization();
