@@ -12270,7 +12270,7 @@ function renderStabilization() {
   const compOvForRevenue = data.overrides[targetKey] && data.overrides[targetKey].compTotal != null ? data.overrides[targetKey].compTotal : null;
   const revenueDefault = compOvForRevenue != null ? compOvForRevenue : (production > 0 ? production : '');
   bdHtml += '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">';
-  bdHtml += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:2px;">Actual AR+Production Revenue</div>';
+  bdHtml += '<div style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:2px;">Actual AR+Production Revenue</div>';
   bdHtml += '<div style="font-size:0.68rem;color:var(--accent2);margin-bottom:6px;font-style:italic;">Enter the Pooled Compensation amount from the compensation summary report</div>';
   bdHtml += `<input type="number" id="stabActualRevenue" placeholder="$0.00" step="0.01" value="${compOvForRevenue != null ? compOvForRevenue : ''}" class="text-input" style="width:100%;font-size:0.85rem;padding:8px 10px;margin-bottom:6px;box-sizing:border-box;">`;
   bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabActualRevenue()" style="font-size:0.68rem;padding:3px 10px;">Save</button>';
