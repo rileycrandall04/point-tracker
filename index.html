@@ -10559,14 +10559,17 @@ document.getElementById('cancelShiftEdit').addEventListener('click', () => {
 // ================================================================
 // MONTHLY OVERRIDE
 // ================================================================
-let ovYear = new Date().getFullYear();
-let ovMonth = new Date().getMonth();
+// Default to prior month (production month whose reports are available on payday)
+let ovMonth = (new Date().getMonth() - 1 + 12) % 12;
+let ovYear = new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear();
 
 function updateOVMonthLabel() {
   const mn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   document.getElementById('ovMonthLabel').textContent = `${mn[ovMonth]} ${ovYear}`;
+  const payMonth = (ovMonth + 1) % 12;
+  const payYear = ovMonth === 11 ? ovYear + 1 : ovYear;
   const hint = document.getElementById('ovMonthHint');
-  if (hint) hint.textContent = `Enter values from ${mn[ovMonth]} ${ovYear} reports`;
+  if (hint) hint.textContent = `Enter ${mn[ovMonth]} ${ovYear} values (received on ${mn[payMonth]} ${payYear} payday)`;
 }
 
 function getOVKey() {
