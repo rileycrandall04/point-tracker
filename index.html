@@ -10932,14 +10932,27 @@ function dismissPaycheckReminder() {
 }
 
 function goToPaycheckEntry() {
-  // Navigate to compensation page and scroll to historical comp
+  // Navigate to compensation page and open Paycheck Projection for the prior month
   document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const compBtn = document.querySelector('.bottom-nav button[data-page="compensation"]');
   if (compBtn) compBtn.classList.add('active');
   document.getElementById('page-compensation').classList.add('active');
   renderProjections();
-  setTimeout(() => scrollToHistComp(), 100);
+  // Navigate Paycheck Projection to the prior month (whose paycheck is received this month)
+  const now = new Date();
+  stabMonthOffset = -1;
+  renderStabilization();
+  // Open the breakdown
+  const panel = document.getElementById('stabBreakdown');
+  const link = document.getElementById('stabBreakdownToggle');
+  if (!panel.style.maxHeight || panel.style.maxHeight === '0px') {
+    panel.style.maxHeight = panel.scrollHeight + 'px';
+    link.innerHTML = 'Hide breakdown &#9650;';
+  }
+  setTimeout(() => {
+    document.getElementById('stabPaycheckRow').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 100);
 }
 
 function checkPaycheckReminder() {
@@ -10947,12 +10960,12 @@ function checkPaycheckReminder() {
   if (!banner || window._paycheckReminderDismissed) { if (banner) banner.classList.add('hidden'); return; }
   const now = new Date();
   if (now.getDate() < 20) { banner.classList.add('hidden'); return; }
-  // Check if last month's actual paycheck has been entered
+  // Check if last month's actual paycheck deposit has been entered
   // Last month's work feeds into this month's paycheck (received on 20th)
   const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevKey = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth() + 1).padStart(2, '0');
-  const ov = data.overrides && data.overrides[prevKey];
-  if (!ov || ov.compTotal == null) {
+  const hasDeposit = data.paychecks && data.paychecks[prevKey] != null;
+  if (!hasDeposit) {
     const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     document.getElementById('paycheckEntryReminderText').textContent = 'Enter your ' + monthNames[now.getMonth()] + ' paycheck amount.';
     banner.classList.remove('hidden');
