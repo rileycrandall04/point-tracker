@@ -1268,9 +1268,9 @@ input.mil-time.invalid {
 .sl-expand-toggle { display: none; margin-bottom: 8px; }
 
 @media (max-width: 680px) {
-  .shift-log-table:not(.sl-expanded) { font-size: 0.66rem; }
-  .shift-log-table:not(.sl-expanded) th,
-  .shift-log-table:not(.sl-expanded) td { padding: 4px 3px; }
+  .shift-log-table:not(.sl-expanded) { font-size: 0.58rem; }
+  .shift-log-table:not(.sl-expanded) th { font-size: 0.54rem; padding: 3px 2px; }
+  .shift-log-table:not(.sl-expanded) td { padding: 3px 2px; }
   .shift-log-table:not(.sl-expanded) .sl-col-check { display: none !important; }
   .shift-log-table:not(.sl-expanded) .sl-col-paycode { display: none !important; }
   .shift-log-table:not(.sl-expanded) .sl-col-clockin { display: none !important; }
@@ -1280,11 +1280,12 @@ input.mil-time.invalid {
   .shift-log-table:not(.sl-expanded) .sl-col-unbilled { display: none !important; }
   .shift-log-table:not(.sl-expanded) .sl-col-del { display: none !important; }
   .shift-log-table:not(.sl-expanded) .sl-col-actions { display: table-cell !important; }
-  .shift-log-table:not(.sl-expanded) .sl-badge { font-size: 0.58rem; padding: 1px 4px; }
+  .shift-log-table:not(.sl-expanded) .sl-badge { font-size: 0.52rem; padding: 1px 3px; }
+  .shift-log-table:not(.sl-expanded) .sl-total-row td[colspan] { font-size: 0.58rem; }
   .sl-expand-toggle { display: inline-block; }
   .sl-expanded { min-width: 900px; }
   .sl-actions-cell { white-space: nowrap; }
-  .sl-actions-cell button { padding: 1px 3px; font-size: 0.75rem; }
+  .sl-actions-cell button { padding: 1px 2px; font-size: 0.65rem; }
 }
 
 /* ===== TOGGLE SWITCH ===== */
@@ -9937,8 +9938,9 @@ function renderShiftLogTable() {
 
   // Detail table
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  if (window.slExpandedView === undefined) window.slExpandedView = true;
   const expandedClass = window.slExpandedView ? ' sl-expanded' : '';
-  let html = slWatchHtml + '<button class="btn btn-outline btn-sm sl-expand-toggle" onclick="toggleSlExpanded()" style="font-size:0.7rem;padding:3px 10px;">' + (window.slExpandedView ? 'Compact View' : 'Show All Columns') + '</button>';
+  let html = slWatchHtml + '<button class="btn btn-outline btn-sm sl-expand-toggle" onclick="toggleSlExpanded()" style="font-size:0.7rem;padding:3px 10px;">' + (window.slExpandedView ? 'Compact View' : 'Full View') + '</button>';
   html += '<table class="shift-log-table' + expandedClass + '" id="shiftLogTable"><thead><tr>';
   html += '<th class="sl-check sl-col-check"><input type="checkbox" id="slSelectAll" onclick="slToggleAll(this)"></th>';
   html += '<th>Date</th><th>Assignment</th><th>Time</th><th>Duration</th>';
@@ -10196,7 +10198,7 @@ function buildShiftTotalRow(shift, shiftTotal, altClass) {
   const isManual = hasRowOverrides || shift.manualTotal != null;
   const manualClass = isManual ? ' pts-manual' : '';
   const resetHtml = isManual ? `<span class="pts-reset" onclick="event.stopPropagation();resetShiftPoints('${shift.date}')">reset</span>` : '';
-  return `<tr class="sl-sub-row${altClass} sl-total-row" data-shiftdate="${shift.date}"><td colspan="12" style="text-align:right;font-size:0.72rem;color:var(--text-dim);font-weight:600;">Shift Total</td><td class="pts-cell${manualClass}" onclick="event.stopPropagation();editShiftPoints('${shift.date}',this)"><strong>${round2(shiftTotal).toFixed(1)}</strong>${resetHtml}</td><td class="sl-col-flag"></td><td class="sl-col-unbilled"></td><td class="sl-col-del"></td><td class="sl-col-actions"></td></tr>`;
+  return `<tr class="sl-sub-row${altClass} sl-total-row" data-shiftdate="${shift.date}"><td data-blank class="sl-col-check"></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank class="sl-col-clockin"></td><td data-blank class="sl-col-clockout"></td><td data-blank class="sl-col-inout"></td><td data-blank class="sl-col-paycode"></td><td colspan="3" style="text-align:right;font-size:0.72rem;color:var(--text-dim);font-weight:600;">Shift Total</td><td class="pts-cell${manualClass}" onclick="event.stopPropagation();editShiftPoints('${shift.date}',this)"><strong>${round2(shiftTotal).toFixed(1)}</strong>${resetHtml}</td><td class="sl-col-flag"></td><td class="sl-col-unbilled"></td><td class="sl-col-del"></td><td class="sl-col-actions"></td></tr>`;
 }
 
 function editShiftPoints(dateStr, td) {
