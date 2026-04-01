@@ -3163,6 +3163,24 @@ input.mil-time.invalid {
     <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:16px;">What's new in the Point Tracker.</p>
 
     <div style="margin-bottom:20px;">
+      <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Mar 31, 2026</h3>
+      <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
+        <li><strong>Paycheck Projection overhaul</strong> &mdash; The Paycheck Projection card is now the single hub for all monthly financial data. Navigate months with arrow buttons to view past and future paycheck estimates. Stipends, deductions, retirement, actual revenue, and deposit amounts are all entered directly in the breakdown panel.</li>
+        <li><strong>Stipend carryover</strong> &mdash; Stipend and deduction entries automatically carry over from the most recent prior month when navigating to a new month. Retirement contributions also carry over and can be cleared by entering $0.</li>
+        <li><strong>Non-guaranteed payments</strong> &mdash; Three fixed non-guaranteed payment rows (Class B Margin, CRNA Distribution, Surgical Center Dist) are always visible. The Calculated Bank Deposit shows a guaranteed vs non-guaranteed breakdown when applicable.</li>
+        <li><strong>Annual Tax Breakdown</strong> &mdash; New collapsible card at the bottom of the compensation tab showing calendar-year totals for total revenue, guaranteed income, non-guaranteed income, retirement contributions, and deductions. Navigate between years with arrow buttons. Only includes months where the paycheck has been received (on the 20th, adjusted for weekends).</li>
+        <li><strong>Per-month $/pt persistence</strong> &mdash; The $/point value now saves per-month. When navigating to a month without a saved value, the prior month&rsquo;s value is carried over and shown in italics to indicate it hasn&rsquo;t been confirmed yet.</li>
+        <li><strong>Actual revenue entry</strong> &mdash; Enter the Pooled Compensation amount from the compensation summary report directly in the Paycheck Projection breakdown. When entered, the estimated paycheck uses the actual revenue instead of the calculated blended value. Points History table is now read-only; clicking &ldquo;edit&rdquo; navigates to the Projection card.</li>
+        <li><strong>Paycheck reminder improvements</strong> &mdash; Monthly reminders now link directly to the Paycheck Projection card and open the breakdown for the relevant month. Added a &ldquo;Skip&rdquo; option that persists per-month so reminders don&rsquo;t return after reload.</li>
+        <li><strong>Case edit autocomplete</strong> &mdash; Editing an existing case now shows predictive text for the procedure name, just like the case entry form. Selecting a suggestion auto-fills the ASA code and base units.</li>
+        <li><strong>Procedure Time Lookup</strong> &mdash; Search by surgeon name to see all procedures performed by that surgeon with average times and standard deviations. Surgeon search shows a surgeon-first layout with procedures listed underneath.</li>
+        <li><strong>Card renames</strong> &mdash; &ldquo;Historical Compensation&rdquo; renamed to &ldquo;Points History&rdquo;, &ldquo;Paycheck Tracking&rdquo; to &ldquo;Paycheck History&rdquo;, &ldquo;Earnings Estimator&rdquo; to &ldquo;Annual Earning Pace&rdquo;, and &ldquo;Estimated Paycheck&rdquo; to &ldquo;Calculated Bank Deposit&rdquo;. Labels use &ldquo;Revenue&rdquo; instead of &ldquo;Production&rdquo; throughout the Projection card.</li>
+        <li><strong>Override page fix</strong> &mdash; Monthly override page now defaults to the prior month and shows payday context (e.g., &ldquo;Enter March 2026 values, received on April 2026 payday&rdquo;).</li>
+        <li><strong>Deduction support</strong> &mdash; Stipend amount inputs now use a full keyboard on mobile to allow entering negative values for deductions. All values formatted as dollars and cents.</li>
+      </ul>
+    </div>
+
+    <div style="margin-bottom:20px;">
       <h3 style="font-size:0.9rem;color:var(--primary);margin-bottom:8px;">Mar 9, 2026</h3>
       <ul style="font-size:0.82rem;color:var(--text);line-height:1.7;padding-left:20px;margin:0;">
         <li><strong>Earnings Estimator redesign</strong> &mdash; Replaced the old avg-pts/hr &times; hrs/week model with a per-shift-type projection. The estimator now shows a table of each shift type you&rsquo;ve worked, with auto-calculated avg points per shift and shifts per week. Edit any value to explore what-if scenarios; overrides are highlighted and resettable. Annual estimate uses total weekly points &times; 52 &times; $/pt, with vacation naturally baked in.</li>
