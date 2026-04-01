@@ -3548,13 +3548,15 @@ input.mil-time.invalid {
       </select>
     </div>
     <div id="editStandardFields">
-      <div class="form-group">
+      <div class="form-group proc-autocomplete">
         <label>Procedure Name</label>
-        <input type="text" id="editCaseProcedure" placeholder="e.g., Lap Chole">
+        <input type="text" id="editCaseProcedure" placeholder="e.g., Lap Chole" autocomplete="off">
+        <div class="proc-suggestions hidden" id="editProcSuggestions"></div>
       </div>
-      <div class="form-group">
+      <div class="form-group asa-autocomplete">
         <label>ASA Code</label>
-        <input type="text" id="editCaseASACode" placeholder="e.g., 00740">
+        <input type="text" id="editCaseASACode" placeholder="e.g., 00740" autocomplete="off">
+        <div class="proc-suggestions hidden" id="editAsaSuggestions"></div>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -7292,6 +7294,67 @@ document.getElementById('editLaborShared').addEventListener('change', function()
   document.getElementById('editLaborStartLabel').textContent = this.checked ? 'Handoff Time' : 'Epidural Start';
 });
 
+// Shared procedure history lookup (used by both case entry and edit autocomplete)
+function getProcHistory() {
+  const map = {};
+  data.cases.forEach(c => {
+    if (c.caseType !== 'standard' || !c.procedure) return;
+    const name = c.procedure.trim();
+    if (!name || name.toLowerCase() === 'standard') return;
+    if (!map[name]) map[name] = { count: 0, lastUnits: '', lastASACode: '' };
+    map[name].count++;
+    if (c.baseUnits) map[name].lastUnits = c.baseUnits;
+    if (c.asaCode) map[name].lastASACode = c.asaCode;
+  });
+  // Include procedures from shared pool
+  if (sharedCasesLoaded) {
+    const myUid = currentUser ? currentUser.uid : '';
+    sharedCasesCache.forEach(sc => {
+      if (sc.uid === myUid) return;
+      if (sc.caseType !== 'standard' || !sc.procedure) return;
+      const name = sc.procedure.trim();
+      if (!name || name.toLowerCase() === 'standard') return;
+      if (!map[name]) map[name] = { count: 0, lastUnits: '', lastASACode: '' };
+      map[name].count++;
+      if (sc.baseUnits) map[name].lastUnits = sc.baseUnits;
+      if (sc.asaCode) map[name].lastASACode = sc.asaCode;
+    });
+  }
+  return map;
+}
+
+// Shared ASA code → procedure lookup (used by both case entry and edit autocomplete)
+function getProcsForCode(code) {
+  const map = {};
+  data.cases.forEach(c => {
+    if (c.caseType !== 'standard' || !c.asaCode || !c.procedure) return;
+    if (c.asaCode.trim() === code) {
+      const name = c.procedure.trim();
+      if (!name || name.toLowerCase() === 'standard') return;
+      map[name] = (map[name] || 0) + 1;
+    }
+  });
+  if (sharedCasesLoaded) {
+    const myUid = currentUser ? currentUser.uid : '';
+    sharedCasesCache.forEach(sc => {
+      if (sc.uid === myUid) return;
+      if (sc.caseType !== 'standard' || !sc.asaCode || !sc.procedure) return;
+      if (sc.asaCode.trim() === code) {
+        const name = sc.procedure.trim();
+        if (!name || name.toLowerCase() === 'standard') return;
+        map[name] = (map[name] || 0) + 1;
+      }
+    });
+  }
+  // Source 3: Community procedure mappings
+  if (asaCodeProceduresLoaded && asaCodeProcedures[code]) {
+    asaCodeProcedures[code].forEach(function(procName) {
+      if (!map[procName]) map[procName] = 0;
+    });
+  }
+  return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
+}
+
 // Procedure autocomplete
 (function() {
   const procInput = document.getElementById('caseProcedure');
@@ -7299,34 +7362,6 @@ document.getElementById('editLaborShared').addEventListener('change', function()
   const baseUnitsInput = document.getElementById('caseBaseUnits');
   let activeIdx = -1;
   let baseUnitsAutoFilled = false;
-
-  function getProcHistory() {
-    const map = {};
-    data.cases.forEach(c => {
-      if (c.caseType !== 'standard' || !c.procedure) return;
-      const name = c.procedure.trim();
-      if (!name || name.toLowerCase() === 'standard') return;
-      if (!map[name]) map[name] = { count: 0, lastUnits: '', lastASACode: '' };
-      map[name].count++;
-      if (c.baseUnits) map[name].lastUnits = c.baseUnits;
-      if (c.asaCode) map[name].lastASACode = c.asaCode;
-    });
-    // Include procedures from shared pool
-    if (sharedCasesLoaded) {
-      const myUid = currentUser ? currentUser.uid : '';
-      sharedCasesCache.forEach(sc => {
-        if (sc.uid === myUid) return;
-        if (sc.caseType !== 'standard' || !sc.procedure) return;
-        const name = sc.procedure.trim();
-        if (!name || name.toLowerCase() === 'standard') return;
-        if (!map[name]) map[name] = { count: 0, lastUnits: '', lastASACode: '' };
-        map[name].count++;
-        if (sc.baseUnits) map[name].lastUnits = sc.baseUnits;
-        if (sc.asaCode) map[name].lastASACode = sc.asaCode;
-      });
-    }
-    return map;
-  }
 
   function showSuggestions() {
     const query = procInput.value.trim().toLowerCase();
@@ -7412,37 +7447,6 @@ let asaRefReturnPage = null;
   const baseUnitsInput = document.getElementById('caseBaseUnits');
   const procInput = document.getElementById('caseProcedure');
   let asaActiveIdx = -1;
-
-  function getProcsForCode(code) {
-    const map = {};
-    data.cases.forEach(c => {
-      if (c.caseType !== 'standard' || !c.asaCode || !c.procedure) return;
-      if (c.asaCode.trim() === code) {
-        const name = c.procedure.trim();
-        if (!name || name.toLowerCase() === 'standard') return;
-        map[name] = (map[name] || 0) + 1;
-      }
-    });
-    if (sharedCasesLoaded) {
-      const myUid = currentUser ? currentUser.uid : '';
-      sharedCasesCache.forEach(sc => {
-        if (sc.uid === myUid) return;
-        if (sc.caseType !== 'standard' || !sc.asaCode || !sc.procedure) return;
-        if (sc.asaCode.trim() === code) {
-          const name = sc.procedure.trim();
-          if (!name || name.toLowerCase() === 'standard') return;
-          map[name] = (map[name] || 0) + 1;
-        }
-      });
-    }
-    // Source 3: Community procedure mappings
-    if (asaCodeProceduresLoaded && asaCodeProcedures[code]) {
-      asaCodeProcedures[code].forEach(function(procName) {
-        if (!map[procName]) map[procName] = 0;
-      });
-    }
-    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  }
 
   function showAsaSuggestions(code) {
     const procs = getProcsForCode(code);
@@ -14720,6 +14724,151 @@ function deleteCaseFromList(id) {
   updateDETally();
   showToast('Case deleted');
 }
+
+// ================================================================
+// EDIT MODAL — Procedure autocomplete
+(function() {
+  const procInput = document.getElementById('editCaseProcedure');
+  const sugBox = document.getElementById('editProcSuggestions');
+  const baseUnitsInput = document.getElementById('editCaseBaseUnits');
+  const asaInput = document.getElementById('editCaseASACode');
+  let activeIdx = -1;
+
+  function showSuggestions() {
+    const query = procInput.value.trim().toLowerCase();
+    if (!query) { hideSuggestions(); return; }
+    const history = getProcHistory();
+    const matches = Object.entries(history)
+      .filter(([name]) => name.toLowerCase().includes(query))
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 8);
+    if (matches.length === 0) { hideSuggestions(); return; }
+    activeIdx = -1;
+    sugBox.innerHTML = matches.map(([name, d], i) =>
+      `<div class="proc-item" data-idx="${i}" data-name="${escHtml(name)}" data-units="${escHtml(d.lastUnits)}" data-asa="${escHtml(d.lastASACode)}">${escHtml(name)}<span class="proc-units">${d.lastASACode ? d.lastASACode + ' ' : ''}${d.lastUnits ? d.lastUnits + 'u' : ''} (${d.count})</span></div>`
+    ).join('');
+    sugBox.classList.remove('hidden');
+  }
+
+  function hideSuggestions() { sugBox.classList.add('hidden'); sugBox.innerHTML = ''; activeIdx = -1; }
+
+  function selectItem(el) {
+    procInput.value = el.dataset.name;
+    const asa = el.dataset.asa;
+    if (asa) {
+      asaInput.value = asa;
+      const masterBU = getAsaBU(asa);
+      if (masterBU !== undefined) {
+        baseUnitsInput.value = masterBU;
+      } else {
+        const units = el.dataset.units;
+        if (units) baseUnitsInput.value = units;
+      }
+    } else {
+      const units = el.dataset.units;
+      if (units) baseUnitsInput.value = units;
+    }
+    hideSuggestions();
+  }
+
+  procInput.addEventListener('input', showSuggestions);
+  procInput.addEventListener('focus', () => { if (procInput.value.trim()) showSuggestions(); });
+
+  procInput.addEventListener('keydown', function(e) {
+    const items = sugBox.querySelectorAll('.proc-item');
+    if (items.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIdx = Math.min(activeIdx + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIdx = Math.max(activeIdx - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+    } else if (e.key === 'Enter' && activeIdx >= 0) {
+      e.preventDefault();
+      selectItem(items[activeIdx]);
+    } else if (e.key === 'Escape') {
+      hideSuggestions();
+    }
+  });
+
+  sugBox.addEventListener('click', function(e) {
+    const item = e.target.closest('.proc-item');
+    if (item) selectItem(item);
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('#editStandardFields .proc-autocomplete')) hideSuggestions();
+  });
+})();
+
+// EDIT MODAL — ASA code autocomplete
+(function() {
+  const asaInput = document.getElementById('editCaseASACode');
+  const asaSugBox = document.getElementById('editAsaSuggestions');
+  const baseUnitsInput = document.getElementById('editCaseBaseUnits');
+  const procInput = document.getElementById('editCaseProcedure');
+  let asaActiveIdx = -1;
+
+  function showAsaSuggestions(code) {
+    const procs = getProcsForCode(code);
+    if (procs.length === 0) { hideAsaSuggestions(); return; }
+    asaActiveIdx = -1;
+    asaSugBox.innerHTML = procs.map(([name, count], i) =>
+      `<div class="proc-item" data-idx="${i}" data-name="${escHtml(name)}">${escHtml(name)}<span class="proc-units">(${count})</span></div>`
+    ).join('');
+    asaSugBox.classList.remove('hidden');
+  }
+
+  function hideAsaSuggestions() { asaSugBox.classList.add('hidden'); asaSugBox.innerHTML = ''; asaActiveIdx = -1; }
+
+  function selectAsaItem(el) {
+    procInput.value = el.dataset.name;
+    hideAsaSuggestions();
+  }
+
+  asaInput.addEventListener('input', function() {
+    const code = this.value.trim();
+    const codeBU = getAsaBU(code);
+    if (codeBU !== undefined) {
+      baseUnitsInput.value = codeBU;
+    }
+    if (code.length >= 5 && !procInput.value.trim()) {
+      showAsaSuggestions(code);
+    } else {
+      hideAsaSuggestions();
+    }
+  });
+
+  asaInput.addEventListener('keydown', function(e) {
+    const items = asaSugBox.querySelectorAll('.proc-item');
+    if (items.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      asaActiveIdx = Math.min(asaActiveIdx + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('active', i === asaActiveIdx));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      asaActiveIdx = Math.max(asaActiveIdx - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('active', i === asaActiveIdx));
+    } else if (e.key === 'Enter' && asaActiveIdx >= 0) {
+      e.preventDefault();
+      selectAsaItem(items[asaActiveIdx]);
+    } else if (e.key === 'Escape') {
+      hideAsaSuggestions();
+    }
+  });
+
+  asaSugBox.addEventListener('click', function(e) {
+    const item = e.target.closest('.proc-item');
+    if (item) selectAsaItem(item);
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('#editStandardFields .asa-autocomplete')) hideAsaSuggestions();
+  });
+})();
 
 // ================================================================
 // EXPORT / IMPORT
