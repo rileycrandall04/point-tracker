@@ -10721,14 +10721,18 @@ function saveStabStipends() {
 }
 
 function saveStabPaycheck() {
-  const mk = stabMonthKey();
+  // Save deposit under the pay month (one month after production month)
+  const prodKey = stabMonthKey();
+  const [py, pm] = prodKey.split('-').map(Number);
+  const payDate = new Date(py, pm, 1);
+  const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
   const di = document.getElementById('stabDeposit');
   const depositStr = di ? di.value.trim() : '';
   if (depositStr === '') { showToast('Enter an amount'); return; }
   const deposit = parseFloat(depositStr);
   if (isNaN(deposit)) { showToast('Enter a valid amount'); return; }
   if (!data.paychecks) data.paychecks = {};
-  data.paychecks[mk] = deposit;
+  data.paychecks[payKey] = deposit;
   saveData(data);
   renderStabilization();
   renderPaycheckChart();
@@ -12152,7 +12156,8 @@ function renderStabilization() {
   }
 
   // Actual paycheck entry
-  const existingDeposit = (data.paychecks || {})[targetKey];
+  const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
+  const existingDeposit = (data.paychecks || {})[payKey];
   bdHtml += '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;">';
   const payMonthLabel = fullMonthNames[payDate.getMonth()] + ' ' + payDate.getFullYear();
   bdHtml += `<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:2px;">Actual Paycheck</div>`;
