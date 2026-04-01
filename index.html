@@ -11837,7 +11837,19 @@ function renderAnnualTaxBreakdown() {
   let totalNegativeDeductions = 0;
   let monthCount = 0;
 
+  // Determine which production months have had paychecks received
+  // Paycheck for production month m is received on ~20th of month m+1
+  // If the 20th falls on Sat/Sun, it's received on the prior Fri (18th or 19th)
+  function isPaycheckReceived(prodMonth) {
+    const payDate = new Date(year, prodMonth + 1, 20); // 20th of the month after production
+    const dow = payDate.getDay();
+    const adjustedDay = dow === 6 ? 19 : dow === 0 ? 18 : 20; // Fri if Sat, Fri if Sun
+    const receiveDate = new Date(year, prodMonth + 1, adjustedDay);
+    return now >= receiveDate;
+  }
+
   for (let m = 0; m < 12; m++) {
+    if (!isPaycheckReceived(m)) continue; // Skip future months not yet received
     const mk = year + '-' + String(m + 1).padStart(2, '0');
     const stipEntries = getStipendEntriesForMonth(mk);
     const retAmt = getRetirementForMonth(mk);
