@@ -12037,8 +12037,9 @@ function renderStabilization() {
   const targetKey = stabMonthKey();
   const [ty, tm] = targetKey.split('-').map(Number);
 
-  // Update month label
-  document.getElementById('stabMonthLabel').textContent = fullMonthNames[targetDate.getMonth()] + ' ' + targetDate.getFullYear();
+  // Update month label — show the paycheck month (one month after production)
+  const labelDate = new Date(ty, tm, 1);
+  document.getElementById('stabMonthLabel').textContent = fullMonthNames[labelDate.getMonth()] + ' ' + labelDate.getFullYear() + ' Paycheck';
 
   function mkFromTarget(offset) {
     const d = new Date(ty, tm - 1 - offset, 1);
