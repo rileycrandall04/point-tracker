@@ -10717,6 +10717,8 @@ function saveStabStipends() {
   }
   saveData(data);
   renderStabilization();
+  renderPipelineChart();
+  renderHistoricalTrends();
   showToast('Saved');
 }
 
@@ -12154,7 +12156,7 @@ function renderStabilization() {
   bdHtml += '</div>';
 
   // Net total
-  if (pv > 0) {
+  if (revenueForCalc > 0 || pv > 0) {
     bdHtml += '<div style="border-top:2px solid var(--border);margin-top:10px;padding-top:8px;">';
     bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>Estimated Paycheck</span><span style="color:var(--accent2);">$${paycheck.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
     bdHtml += '</div>';
