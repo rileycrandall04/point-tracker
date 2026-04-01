@@ -10719,7 +10719,8 @@ function getStipendEntriesForMonth(monthKey) {
     return data.stipends[monthKey];
   }
   // Carryover: find the most recent prior month with entries
-  const [y, m] = monthKey.split('-').map(Number);
+  const [yStr, mStr] = monthKey.split('-');
+  const y = parseInt(yStr), m = parseInt(mStr);
   for (let i = 1; i <= 12; i++) {
     const d = new Date(y, m - 1 - i, 1);
     const priorKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -10734,7 +10735,8 @@ function getStipendEntriesForMonth(monthKey) {
 function getRetirementForMonth(monthKey) {
   if (!data.retirement) data.retirement = {};
   if (data.retirement[monthKey] != null) return data.retirement[monthKey];
-  const [y, m] = monthKey.split('-').map(Number);
+  const [yStr, mStr] = monthKey.split('-');
+  const y = parseInt(yStr), m = parseInt(mStr);
   for (let i = 1; i <= 12; i++) {
     const d = new Date(y, m - 1 - i, 1);
     const priorKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
