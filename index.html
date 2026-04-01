@@ -2808,11 +2808,11 @@ input.mil-time.invalid {
       </div>
       <div style="flex:1;min-width:120px;">
         <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:2px;">Amount Deposited</label>
-        <input type="number" id="paycheckAmount" class="text-input" placeholder="$0.00" min="0" step="0.01" style="width:100%;font-size:0.85rem;">
+        <input type="number" id="paycheckAmount" class="text-input" placeholder="$0.00" step="0.01" style="width:100%;font-size:0.85rem;">
       </div>
       <div style="flex:1;min-width:120px;">
         <label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:2px;">Retirement Contribution</label>
-        <input type="number" id="paycheckRetirement" class="text-input" placeholder="$0.00" min="0" step="0.01" style="width:100%;font-size:0.85rem;">
+        <input type="number" id="paycheckRetirement" class="text-input" placeholder="$0.00" step="0.01" style="width:100%;font-size:0.85rem;">
       </div>
     </div>
     <div style="margin-bottom:8px;">
@@ -4092,10 +4092,11 @@ function loadData() {
       if (!d.stipends) d.stipends = {};
       if (!d.calendarAssignments) d.calendarAssignments = {};
       if (!d.paychecks) d.paychecks = {};
+      if (!d.retirement) d.retirement = {};
       return d;
     }
   } catch(e) {}
-  return { shifts: {}, cases: [], overrides: {}, stipends: {}, calendarAssignments: {}, paychecks: {} };
+  return { shifts: {}, cases: [], overrides: {}, stipends: {}, calendarAssignments: {}, paychecks: {}, retirement: {} };
 }
 
 function saveData(d) {
@@ -4385,6 +4386,8 @@ async function loadFromFirestore(uid) {
       if (!d.overrides) d.overrides = {};
       if (!d.stipends) d.stipends = {};
       if (!d.calendarAssignments) d.calendarAssignments = {};
+      if (!d.paychecks) d.paychecks = {};
+      if (!d.retirement) d.retirement = {};
       // Ensure cases is an array
       if (!Array.isArray(d.cases)) d.cases = [];
       data = d;
@@ -11698,9 +11701,14 @@ function renderPaycheckCard() {
     const now = new Date();
     mi.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   }
+  if (mi) loadPaycheckFormForMonth(mi.value);
   renderPaycheckChart();
   renderPaycheckTable();
 }
+
+document.getElementById('paycheckMonth').addEventListener('change', function() {
+  loadPaycheckFormForMonth(this.value);
+});
 
 function getPaycheckMonths(range) {
   const now = new Date();
@@ -11735,15 +11743,18 @@ function savePaycheckEntry() {
   const ai = document.getElementById('paycheckAmount');
   const ri = document.getElementById('paycheckRetirement');
   const month = mi.value;
-  const retirement = parseFloat(ri.value) || 0;
   if (!month) { showToast('Select a month'); return; }
-  const existingAmt = (data.paychecks || {})[month];
-  const amount = ai.value.trim() === '' && existingAmt != null ? existingAmt : parseFloat(ai.value);
-  if (isNaN(amount) || amount < 0) { showToast('Enter a valid amount'); return; }
+  const amountStr = ai.value.trim();
+  const retirementStr = ri.value.trim();
+  if (amountStr === '' && retirementStr === '') { showToast('Enter an amount'); return; }
+  const amount = amountStr !== '' ? parseFloat(amountStr) : ((data.paychecks || {})[month] || 0);
+  const retirement = retirementStr !== '' ? parseFloat(retirementStr) : ((data.retirement || {})[month] || 0);
+  if (isNaN(amount)) { showToast('Enter a valid deposit amount'); return; }
+  if (isNaN(retirement)) { showToast('Enter a valid retirement amount'); return; }
   if (!data.paychecks) data.paychecks = {};
   if (!data.retirement) data.retirement = {};
   data.paychecks[month] = amount;
-  if (retirement > 0) {
+  if (retirement !== 0) {
     data.retirement[month] = retirement;
   } else {
     delete data.retirement[month];
@@ -11763,12 +11774,28 @@ function savePaycheckEntry() {
     delete data.stipends[month];
   }
   saveData(data);
-  ai.value = '';
-  ri.value = '';
   updateStipendStatus();
   showToast('Saved');
+  loadPaycheckFormForMonth(month);
   renderPaycheckChart();
   renderPaycheckTable();
+}
+
+function loadPaycheckFormForMonth(month) {
+  const ai = document.getElementById('paycheckAmount');
+  const ri = document.getElementById('paycheckRetirement');
+  const existingAmt = (data.paychecks || {})[month];
+  const existingRet = (data.retirement || {})[month];
+  ai.value = existingAmt != null ? existingAmt : '';
+  ri.value = existingRet ? existingRet : '';
+}
+
+function editPaycheckMonth(month) {
+  const mi = document.getElementById('paycheckMonth');
+  mi.value = month;
+  loadPaycheckFormForMonth(month);
+  mi.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  document.getElementById('paycheckAmount').focus();
 }
 
 function deletePaycheckEntry(month) {
@@ -11924,7 +11951,7 @@ function renderPaycheckTable() {
     const [y, mo] = m.split('-');
     const label = monthNames[parseInt(mo) - 1] + ' ' + y;
     const bg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
-    html += `<tr style="border-bottom:1px solid var(--border);background:${bg};">`;
+    html += `<tr style="border-bottom:1px solid var(--border);background:${bg};cursor:pointer;" onclick="editPaycheckMonth('${m}')" title="Click to edit">`;
     html += `<td style="padding:6px 4px;">${label}</td>`;
     html += `<td style="padding:6px 4px;text-align:right;font-weight:600;color:var(--primary);">${fmt(amt)}</td>`;
     if (hasRetirement) html += `<td style="padding:6px 4px;text-align:right;font-weight:600;color:#22c55e;">${ret > 0 ? fmt(ret) : '—'}</td>`;
