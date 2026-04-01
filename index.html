@@ -2304,11 +2304,11 @@ input.mil-time.invalid {
 <!-- TODAY PAGE -->
 <div class="page active" id="page-today">
   <div class="card hidden" id="todayPVReminder" style="background:var(--accent2); color:#000; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-    <span style="font-size:0.85rem; font-weight:600;"><span id="todayPVReminderText"></span> <a href="#" onclick="goToPVHistory(); return false;" style="color:#000; text-decoration:underline; font-weight:400;">Update now</a></span>
+    <span style="font-size:0.85rem; font-weight:600;"><span id="todayPVReminderText"></span> <a href="#" onclick="goToPVHistory(); return false;" style="color:#000; text-decoration:underline; font-weight:400;">Update now</a> <a href="#" onclick="skipPVReminder(); return false;" style="color:#000; text-decoration:underline; font-weight:400; opacity:0.7; margin-left:6px;">Skip</a></span>
     <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
   <div class="card hidden" id="paycheckEntryReminder" style="background:var(--primary); color:#fff; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-    <span style="font-size:0.85rem; font-weight:600;"><span id="paycheckEntryReminderText"></span> <a href="#" onclick="goToPaycheckEntry(); return false;" style="color:#fff; text-decoration:underline; font-weight:400;">Enter now</a></span>
+    <span style="font-size:0.85rem; font-weight:600;"><span id="paycheckEntryReminderText"></span> <a href="#" onclick="goToPaycheckEntry(); return false;" style="color:#fff; text-decoration:underline; font-weight:400;">Enter now</a> <a href="#" onclick="skipPaycheckReminder(); return false;" style="color:#fff; text-decoration:underline; font-weight:400; opacity:0.7; margin-left:6px;">Skip</a></span>
     <button onclick="dismissPaycheckReminder()" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
   <div class="card hidden" id="openLaborReminder" style="background:var(--danger); color:#fff; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; cursor:pointer;" onclick="goToOpenLaborCases()">
@@ -10931,6 +10931,28 @@ function dismissPaycheckReminder() {
   if (el) el.classList.add('hidden');
 }
 
+function skipPVReminder() {
+  const now = new Date();
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevKey = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth() + 1).padStart(2, '0');
+  if (!settings.skippedReminders) settings.skippedReminders = {};
+  settings.skippedReminders['pv_' + prevKey] = true;
+  saveSettings(settings);
+  dismissPVReminder();
+  showToast('Skipped — using calculated values');
+}
+
+function skipPaycheckReminder() {
+  const now = new Date();
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevKey = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth() + 1).padStart(2, '0');
+  if (!settings.skippedReminders) settings.skippedReminders = {};
+  settings.skippedReminders['paycheck_' + prevKey] = true;
+  saveSettings(settings);
+  dismissPaycheckReminder();
+  showToast('Skipped — using calculated values');
+}
+
 function goToPaycheckEntry() {
   // Navigate to compensation page and open Paycheck Projection for the prior month
   document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
@@ -10965,7 +10987,8 @@ function checkPaycheckReminder() {
   const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevKey = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth() + 1).padStart(2, '0');
   const hasDeposit = data.paychecks && data.paychecks[prevKey] != null;
-  if (!hasDeposit) {
+  const paycheckSkipped = settings.skippedReminders && settings.skippedReminders['paycheck_' + prevKey];
+  if (!hasDeposit && !paycheckSkipped) {
     const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     document.getElementById('paycheckEntryReminderText').textContent = 'Enter your ' + monthNames[now.getMonth()] + ' pay stub values (' + monthNames[prevMonth.getMonth()] + ' production).';
     banner.classList.remove('hidden');
@@ -11034,7 +11057,8 @@ function checkPVReminder() {
   const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevKey = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth()+1).padStart(2,'0');
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  if (!settings.pointValues || settings.pointValues[prevKey] == null) {
+  const pvSkipped = settings.skippedReminders && settings.skippedReminders['pv_' + prevKey];
+  if (!pvSkipped && (!settings.pointValues || settings.pointValues[prevKey] == null)) {
     const msg = monthNames[prevMonth.getMonth()] + ' $/point hasn\'t been confirmed yet.';
     if (todayBanner) {
       document.getElementById('todayPVReminderText').textContent = msg;
