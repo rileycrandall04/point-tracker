@@ -10678,11 +10678,36 @@ function getStipendEntriesForMonth(monthKey) {
   return [];
 }
 
+// Get retirement amount for a month, carrying over from prior months if not set
+function getRetirementForMonth(monthKey) {
+  if (!data.retirement) data.retirement = {};
+  if (data.retirement[monthKey] != null) return data.retirement[monthKey];
+  const [y, m] = monthKey.split('-').map(Number);
+  for (let i = 1; i <= 12; i++) {
+    const d = new Date(y, m - 1 - i, 1);
+    const priorKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    if (data.retirement[priorKey] != null && data.retirement[priorKey] > 0) return data.retirement[priorKey];
+  }
+  return 0;
+}
+
 function saveStabStipends() {
   const mk = stabMonthKey();
   const container = document.getElementById('stabStipendEntries');
   if (!container) return;
   if (!data.stipends) data.stipends = {};
+  if (!data.retirement) data.retirement = {};
+
+  // Save retirement (entered as negative, stored as positive)
+  const retInput = document.getElementById('stabRetirementAmount');
+  const retVal = retInput ? Math.abs(parseFloat(retInput.value) || 0) : 0;
+  if (retVal > 0) {
+    data.retirement[mk] = retVal;
+  } else {
+    delete data.retirement[mk];
+  }
+
+  // Save stipend/deduction entries
   const entries = [];
   for (const row of container.children) {
     const label = row.querySelector('.stip-label').value.trim();
@@ -10696,28 +10721,18 @@ function saveStabStipends() {
   }
   saveData(data);
   renderStabilization();
-  showToast('Stipends saved');
+  showToast('Saved');
 }
 
 function saveStabPaycheck() {
   const mk = stabMonthKey();
   const di = document.getElementById('stabDeposit');
-  const ri = document.getElementById('stabRetirement');
   const depositStr = di ? di.value.trim() : '';
-  const retireStr = ri ? ri.value.trim() : '';
-  if (depositStr === '' && retireStr === '') { showToast('Enter an amount'); return; }
-  const deposit = depositStr !== '' ? parseFloat(depositStr) : ((data.paychecks || {})[mk] || 0);
-  const retirement = retireStr !== '' ? parseFloat(retireStr) : ((data.retirement || {})[mk] || 0);
-  if (isNaN(deposit)) { showToast('Enter a valid deposit amount'); return; }
-  if (isNaN(retirement)) { showToast('Enter a valid retirement amount'); return; }
+  if (depositStr === '') { showToast('Enter an amount'); return; }
+  const deposit = parseFloat(depositStr);
+  if (isNaN(deposit)) { showToast('Enter a valid amount'); return; }
   if (!data.paychecks) data.paychecks = {};
-  if (!data.retirement) data.retirement = {};
   data.paychecks[mk] = deposit;
-  if (retirement !== 0) {
-    data.retirement[mk] = retirement;
-  } else {
-    delete data.retirement[mk];
-  }
   saveData(data);
   renderStabilization();
   renderPaycheckChart();
@@ -12057,8 +12072,9 @@ function renderStabilization() {
   const production = pv > 0 ? round2(weighted * pv) : 0;
   const stipendEntries = getStipendEntriesForMonth(targetKey);
   const stipend = stipendEntries.reduce((s, e) => s + (e.amount || 0), 0);
+  const retirementAmt = getRetirementForMonth(targetKey);
   const payDate = new Date(ty, tm, 1);
-  const paycheck = round2(production + stipend);
+  const paycheck = round2(production + stipend - retirementAmt);
 
   // Render breakdown: blend calculation + production + stipend lines
   let bdHtml = '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:6px;margin-top:8px;">Point blend calculation:</div>';
@@ -12080,10 +12096,16 @@ function renderStabilization() {
     bdHtml += '</div>';
   }
 
-  // Stipend/deduction section
+  // Stipend/deduction section (retirement is always first, non-deletable)
+  const existingRetire = (data.retirement || {})[targetKey] || 0;
   bdHtml += '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">';
   bdHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:0.75rem;color:var(--text-dim);">Stipends & Deductions</span>';
   bdHtml += '<button type="button" class="add-entry-btn" onclick="addStabStipendRow(document.getElementById(\'stabStipendEntries\'),\'\',\'\');refreshStabBreakdownHeight();" style="font-size:0.7rem;padding:2px 8px;">+ Add</button></div>';
+  bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
+  bdHtml += `<input type="text" value="Retirement" class="text-input" style="flex:2;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
+  bdHtml += `<input type="text" inputmode="text" id="stabRetirementAmount" placeholder="$0" value="${existingRetire ? '-' + existingRetire : ''}" class="text-input" style="flex:1;font-size:0.78rem;padding:5px 8px;">`;
+  bdHtml += '<span style="width:26px;"></span>';
+  bdHtml += '</div>';
   bdHtml += '<div id="stabStipendEntries"></div>';
   bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabStipends()" style="margin-top:4px;font-size:0.72rem;padding:4px 12px;">Save Stipends/Deductions</button>';
   bdHtml += '</div>';
@@ -12097,21 +12119,18 @@ function renderStabilization() {
 
   // Actual paycheck entry
   const existingDeposit = (data.paychecks || {})[targetKey];
-  const existingRetire = (data.retirement || {})[targetKey];
   bdHtml += '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;">';
   const payMonthLabel = fullMonthNames[payDate.getMonth()] + ' ' + payDate.getFullYear();
   bdHtml += `<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:2px;">Actual Paycheck</div>`;
   bdHtml += `<div style="font-size:0.68rem;color:var(--accent2);margin-bottom:6px;font-style:italic;">Enter from your ${payMonthLabel} pay stub (received on the 20th)</div>`;
   bdHtml += '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">';
-  bdHtml += '<div style="flex:1;min-width:100px;"><label style="font-size:0.68rem;color:var(--text-dim);display:block;margin-bottom:2px;">Deposited</label>';
+  bdHtml += '<div style="flex:1;min-width:140px;"><label style="font-size:0.68rem;color:var(--text-dim);display:block;margin-bottom:2px;">Amount Deposited</label>';
   bdHtml += `<input type="number" id="stabDeposit" placeholder="$0.00" step="0.01" value="${existingDeposit != null ? existingDeposit : ''}" class="text-input" style="width:100%;font-size:0.78rem;padding:5px 8px;"></div>`;
-  bdHtml += '<div style="flex:1;min-width:100px;"><label style="font-size:0.68rem;color:var(--text-dim);display:block;margin-bottom:2px;">Retirement</label>';
-  bdHtml += `<input type="number" id="stabRetirement" placeholder="$0.00" step="0.01" value="${existingRetire || ''}" class="text-input" style="width:100%;font-size:0.78rem;padding:5px 8px;"></div>`;
   bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabPaycheck()" style="font-size:0.72rem;padding:4px 12px;height:30px;">Save</button>';
   bdHtml += '</div>';
-  if (existingDeposit != null) {
-    const total = existingDeposit + (existingRetire || 0);
-    bdHtml += `<div style="font-size:0.72rem;color:var(--accent2);margin-top:4px;">Total compensation: $${total.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>`;
+  if (existingDeposit != null && existingRetire > 0) {
+    const total = existingDeposit + existingRetire;
+    bdHtml += `<div style="font-size:0.72rem;color:var(--accent2);margin-top:4px;">Total compensation (deposit + retirement): $${total.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>`;
   }
   bdHtml += '</div>';
 
@@ -12171,6 +12190,7 @@ function renderStabilization() {
       const stipLabel = stipend > 0 ? 'Stipends: +$' + stipend.toLocaleString('en-US', {maximumFractionDigits: 0}) : 'Deductions: -$' + Math.abs(stipend).toLocaleString('en-US', {maximumFractionDigits: 0});
       parts.push(stipLabel);
     }
+    if (retirementAmt > 0) parts.push('Retirement: -$' + retirementAmt.toLocaleString('en-US', {maximumFractionDigits: 0}));
     summaryEl.textContent = parts.join(' · ');
   } else {
     document.getElementById('stabPaycheck').innerHTML = '&mdash;';
