@@ -12441,27 +12441,42 @@ async function ocrExtractText(file) {
 }
 
 function parseCompReportOCR(text) {
+  // Extract compensation date (e.g., "Compensation Date: 2/1/2026 12:00:00AM")
+  let compDate = null;
+  const dateMatch = text.match(/compensation\s*date[:\s]+(\d{1,2}\/\d{1,2}\/\d{4})/i);
+  if (dateMatch) {
+    const [m, d, y] = dateMatch[1].split('/').map(Number);
+    compDate = { month: m, year: y };
+  }
   // Extract "Grand Total for All Pools" or "Grand Total" amount
+  let grandTotal = null;
   const lines = text.split('\n');
   for (const line of lines) {
     if (/grand\s*total/i.test(line)) {
       const match = line.match(/([\d,]+\.\d{2})/);
-      if (match) return parseFloat(match[1].replace(/,/g, ''));
+      if (match) { grandTotal = parseFloat(match[1].replace(/,/g, '')); break; }
     }
   }
-  // Fallback: look for "Total for Pool"
-  for (const line of lines) {
-    if (/total\s*for\s*pool/i.test(line)) {
-      const match = line.match(/([\d,]+\.\d{2})/);
-      if (match) return parseFloat(match[1].replace(/,/g, ''));
+  if (grandTotal == null) {
+    for (const line of lines) {
+      if (/total\s*for\s*pool/i.test(line)) {
+        const match = line.match(/([\d,]+\.\d{2})/);
+        if (match) { grandTotal = parseFloat(match[1].replace(/,/g, '')); break; }
+      }
     }
   }
-  return null;
+  return { grandTotal, compDate };
 }
 
 function parsePayStubOCR(text) {
   const lines = text.split('\n');
-  const result = { stipends: [], deductions: [], retirement: 0, directDeposit: null };
+  const result = { stipends: [], deductions: [], retirement: 0, directDeposit: null, depositDate: null };
+  // Extract deposit date (e.g., "Deposit Date 03/20/2026" or "Deposit Date: 03/20/2026")
+  const depDateMatch = text.match(/deposit\s*date[:\s]+(\d{1,2}\/\d{1,2}\/\d{4})/i);
+  if (depDateMatch) {
+    const [m, d, y] = depDateMatch[1].split('/').map(Number);
+    result.depositDate = { month: m, year: y };
+  }
   let section = ''; // 'comp', 'deduct', 'deposit'
 
   for (const line of lines) {
@@ -12534,13 +12549,31 @@ async function peUploadCompReport(inputEl) {
   refreshPaycheckEntryHeight();
   try {
     const text = await ocrExtractText(file);
-    const grandTotal = parseCompReportOCR(text);
+    const { grandTotal, compDate } = parseCompReportOCR(text);
+    let statusHtml = '';
+
+    // Date validation: comp date is the 1st of the month AFTER production
+    // e.g., comp date 2/1/2026 = January production. So expected comp month = production month + 1.
+    const mk = stabMonthKey();
+    const [ty, tm] = mk.split('-').map(Number);
+    if (compDate) {
+      const expectedDate = new Date(ty, tm, 1); // production month (0-indexed: tm-1) + 1 = tm
+      const expectedMonth = expectedDate.getMonth() + 1;
+      const expectedYear = expectedDate.getFullYear();
+      if (compDate.month !== expectedMonth || compDate.year !== expectedYear) {
+        const monthNames = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const prodMonthName = monthNames[tm];
+        statusHtml += '<div style="color:var(--danger);margin-bottom:4px;font-weight:600;">Date mismatch: Report compensation date is ' + compDate.month + '/1/' + compDate.year + ', but you\'re entering ' + prodMonthName + ' ' + ty + ' production (expected ' + expectedMonth + '/1/' + expectedYear + ').</div>';
+      }
+    }
+
     if (grandTotal != null) {
       document.getElementById('peGrandTotal').value = grandTotal.toFixed(2);
-      statusEl.innerHTML = '<div style="color:var(--accent);">Found: Grand Total = $' + grandTotal.toLocaleString('en-US', {minimumFractionDigits:2}) + '</div>';
+      statusHtml += '<div style="color:var(--accent);">Found: Grand Total = $' + grandTotal.toLocaleString('en-US', {minimumFractionDigits:2}) + '</div>';
     } else {
-      statusEl.innerHTML = '<div style="color:var(--danger);">Could not find Grand Total. Try entering manually.</div>';
+      statusHtml += '<div style="color:var(--danger);">Could not find Grand Total. Try entering manually.</div>';
     }
+    statusEl.innerHTML = statusHtml;
   } catch (e) {
     statusEl.innerHTML = '<div style="color:var(--danger);">Error reading image. Try again or enter manually.</div>';
   }
@@ -12578,13 +12611,29 @@ async function peUploadPayStub(inputEl) {
       if (depEl) depEl.value = parsed.directDeposit.toFixed(2);
     }
 
+    let statusHtml = '';
+
+    // Date validation: deposit date should match the paycheck month
+    const mk = stabMonthKey();
+    const [ty, tm] = mk.split('-').map(Number);
+    const payDate = new Date(ty, tm, 1); // pay month = production month + 1
+    if (parsed.depositDate) {
+      const expectedPayMonth = payDate.getMonth() + 1;
+      const expectedPayYear = payDate.getFullYear();
+      if (parsed.depositDate.month !== expectedPayMonth || parsed.depositDate.year !== expectedPayYear) {
+        const monthNames = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        statusHtml += '<div style="color:var(--danger);margin-bottom:4px;font-weight:600;">Date mismatch: Pay stub deposit date is ' + monthNames[parsed.depositDate.month] + ' ' + parsed.depositDate.year + ', but you\'re entering the ' + monthNames[expectedPayMonth] + ' ' + expectedPayYear + ' paycheck.</div>';
+      }
+    }
+
     let summary = [];
     if (parsed.stipends.length > 0) summary.push(parsed.stipends.length + ' compensation items');
     if (parsed.deductions.length > 0) summary.push(parsed.deductions.length + ' deductions');
     if (parsed.retirement > 0) summary.push('Retirement: $' + parsed.retirement.toLocaleString('en-US', {minimumFractionDigits:2}));
     if (parsed.directDeposit != null) summary.push('Deposit: $' + parsed.directDeposit.toLocaleString('en-US', {minimumFractionDigits:2}));
 
-    statusEl.innerHTML = '<div style="color:var(--accent);">Extracted: ' + (summary.length > 0 ? summary.join(' · ') : 'No data found') + '</div><div style="font-size:0.65rem;color:var(--text-dim);margin-top:2px;">Review and edit values above, then save.</div>';
+    statusHtml += '<div style="color:var(--accent);">Extracted: ' + (summary.length > 0 ? summary.join(' · ') : 'No data found') + '</div><div style="font-size:0.65rem;color:var(--text-dim);margin-top:2px;">Review and edit values above, then save.</div>';
+    statusEl.innerHTML = statusHtml;
   } catch (e) {
     statusEl.innerHTML = '<div style="color:var(--danger);">Error reading image. Try again or enter manually.</div>';
   }
