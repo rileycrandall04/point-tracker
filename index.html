@@ -12515,7 +12515,7 @@ function renderPEStep1(mk, ty, tm) {
 
   html += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">';
   html += `<span style="font-size:0.82rem;color:var(--text-dim);">$</span>`;
-  html += `<input type="number" id="pePointValue" min="0" step="0.01" placeholder="${skipVal.toFixed(2)}" value="${currentPV > 0 ? currentPV.toFixed(2) : ''}" class="text-input" style="flex:1;font-size:0.9rem;padding:8px 10px;">`;
+  html += `<input type="number" id="pePointValue" min="0" step="0.01" placeholder="${skipVal.toFixed(2)}" value="${currentPV > 0 ? currentPV.toFixed(2) : ''}" class="text-input" style="flex:1;font-size:1.3rem;padding:12px 14px;text-align:center;">`;
   html += `<span style="font-size:0.82rem;color:var(--text-dim);">/pt</span>`;
   html += `<button class="btn btn-primary btn-sm" onclick="peStep1Save()" style="font-size:0.75rem;padding:6px 14px;">Save</button>`;
   html += '</div>';
