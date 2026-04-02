@@ -11259,7 +11259,7 @@ function goToPaycheckEntry() {
   const link = document.getElementById('stabBreakdownToggle');
   if (!panel.style.maxHeight || panel.style.maxHeight === '0px') {
     panel.style.maxHeight = panel.scrollHeight + 'px';
-    link.innerHTML = 'Hide breakdown &#9650;';
+    link.innerHTML = 'Hide point breakdown &#9650;';
   }
   setTimeout(() => {
     document.getElementById('stabPaycheckRow').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -12161,7 +12161,7 @@ function editPaycheckMonth(month) {
   const link = document.getElementById('stabBreakdownToggle');
   if (!panel.style.maxHeight || panel.style.maxHeight === '0px') {
     panel.style.maxHeight = panel.scrollHeight + 'px';
-    link.innerHTML = 'Hide breakdown &#9650;';
+    link.innerHTML = 'Hide point breakdown &#9650;';
   }
   // Scroll to the projection card
   document.getElementById('stabPaycheckRow').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -12398,7 +12398,7 @@ function editHistCompActual(workMk) {
   const link = document.getElementById('stabBreakdownToggle');
   if (!panel.style.maxHeight || panel.style.maxHeight === '0px') {
     panel.style.maxHeight = panel.scrollHeight + 'px';
-    link.innerHTML = 'Hide breakdown &#9650;';
+    link.innerHTML = 'Hide point breakdown &#9650;';
   }
   // Scroll to the projection card and focus the revenue input
   setTimeout(() => {
@@ -12415,10 +12415,10 @@ function toggleStabBreakdown() {
   const link = document.getElementById('stabBreakdownToggle');
   if (panel.style.maxHeight && panel.style.maxHeight !== '0px') {
     panel.style.maxHeight = '0';
-    link.innerHTML = 'Show breakdown &#9660;';
+    link.innerHTML = 'Show point breakdown &#9660;';
   } else {
     panel.style.maxHeight = panel.scrollHeight + 'px';
-    link.innerHTML = 'Hide breakdown &#9650;';
+    link.innerHTML = 'Hide point breakdown &#9650;';
   }
 }
 
@@ -12859,49 +12859,14 @@ function renderStabilization() {
     bdHtml += '</div>';
   }
 
-  // Actual AR+Production revenue entry
-  const compOvForRevenue = data.overrides[targetKey] && data.overrides[targetKey].compTotal != null ? data.overrides[targetKey].compTotal : null;
-  const revenueDefault = compOvForRevenue != null ? compOvForRevenue : (production > 0 ? production : '');
-  bdHtml += '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">';
-  bdHtml += '<div style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:2px;">Actual AR+Production Revenue</div>';
-  bdHtml += '<div style="font-size:0.68rem;color:var(--accent2);margin-bottom:6px;font-style:italic;">Enter the Pooled Compensation amount from the compensation summary report</div>';
-  bdHtml += `<input type="number" id="stabActualRevenue" placeholder="$0.00" step="0.01" value="${compOvForRevenue != null ? compOvForRevenue : ''}" class="text-input" style="width:100%;font-size:0.85rem;padding:8px 10px;margin-bottom:6px;box-sizing:border-box;">`;
-  bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabActualRevenue()" style="font-size:0.68rem;padding:3px 10px;">Save</button>';
-  bdHtml += '</div>';
+  document.getElementById('stabBreakdown').innerHTML = bdHtml;
 
-  // Stipend/deduction section (retirement is always first, non-deletable)
-  const existingRetire = (data.retirement || {})[targetKey] || 0;
-  bdHtml += '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">';
-  bdHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:0.75rem;color:var(--text-dim);">Stipends & Deductions</span>';
-  bdHtml += '<button type="button" class="add-entry-btn" onclick="addStabStipendRow(document.getElementById(\'stabStipendEntries\'),\'\',\'\');refreshStabBreakdownHeight();" style="font-size:0.7rem;padding:2px 8px;">+ Add</button></div>';
-  bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
-  bdHtml += `<input type="text" value="Retirement" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
-  bdHtml += `<input type="text" inputmode="text" id="stabRetirementAmount" placeholder="$0.00" value="${existingRetire ? '-$' + existingRetire.toFixed(2) : ''}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
-  bdHtml += '<span style="width:26px;"></span>';
-  bdHtml += '</div>';
-  bdHtml += '<div id="stabStipendEntries"></div>';
+  // Refresh breakdown panel height if open
+  refreshStabBreakdownHeight();
 
-  // Non-guaranteed payments (fixed rows)
-  const ngLabels = [['classB', 'Class B Margin'], ['crna', 'CRNA Distribution'], ['surgCenter', 'Surgical Center Dist']];
-  bdHtml += '<div style="margin-top:8px;margin-bottom:6px;font-size:0.72rem;color:var(--text-dim);">Non-Guaranteed Payments</div>';
-  ngLabels.forEach(([key, label]) => {
-    const val = ngAmounts[key] || '';
-    const fmtVal = val ? '$' + Number(val).toFixed(2) : '';
-    bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
-    bdHtml += `<input type="text" value="${label}" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
-    bdHtml += `<input type="text" inputmode="text" id="stabNG_${key}" placeholder="$0.00" value="${fmtVal}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
-    bdHtml += '<span style="width:26px;"></span>';
-    bdHtml += '</div>';
-  });
-
-  bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabStipends()" style="margin-top:4px;font-size:0.72rem;padding:4px 12px;">Save Stipends/Deductions</button>';
-  bdHtml += '</div>';
-
-  // Actual paycheck entry
+  // Compute displayed paycheck with priority logic
   const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
   const existingDeposit = (data.paychecks || {})[payKey];
-
-  // Displayed paycheck amount priority: actual deposit > calculated > estimate
   let displayPaycheck = paycheck;
   let paycheckSource = 'estimate';
   if (existingDeposit != null) {
@@ -12911,30 +12876,7 @@ function renderStabilization() {
     paycheckSource = 'calculated';
   }
 
-  // Net total — Bank Deposit
-  if (displayPaycheck > 0 || pv > 0) {
-    const depositLabel = paycheckSource === 'actual' ? 'Actual Bank Deposit'
-      : paycheckSource === 'calculated' ? 'Calculated Bank Deposit'
-      : 'Estimated Bank Deposit';
-    bdHtml += '<div style="border-top:2px solid var(--border);margin-top:10px;padding-top:8px;">';
-    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>${depositLabel}</span><span style="color:var(--accent2);">$${displayPaycheck.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
-    if (paycheckSource !== 'actual' && ngTotal !== 0) {
-      const guaranteedAmt = paycheck - ngTotal;
-      bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-top:4px;color:var(--text-dim);"><span>Guaranteed</span><span>$${guaranteedAmt.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
-      bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-top:2px;color:var(--text-dim);"><span>Non-Guaranteed</span><span>$${ngTotal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
-    }
-    bdHtml += '</div>';
-  }
-
-  bdHtml += '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;">';
-  const payMonthLabel = fullMonthNames[payDate.getMonth()] + ' ' + payDate.getFullYear();
-  bdHtml += `<div style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:2px;">Actual Bank Deposit</div>`;
-  bdHtml += `<div style="font-size:0.62rem;color:var(--text-dim);margin-bottom:6px;">Enter from your ${payMonthLabel} pay stub (received on the 20th)</div>`;
-  bdHtml += `<input type="number" id="stabDeposit" placeholder="$0.00" step="0.01" value="${existingDeposit != null ? existingDeposit : ''}" class="text-input" style="width:100%;font-size:0.85rem;padding:8px 10px;margin-bottom:6px;box-sizing:border-box;">`;
-  bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabPaycheck()" style="font-size:0.68rem;padding:3px 10px;">Save</button>';
-  bdHtml += '</div>';
-
-  // December Bonus Paycheck section
+  // December Bonus Paycheck
   const isDecPaycheck = payDate.getMonth() === 11;
   let bonusPaycheckAmt = 0;
   if (isDecPaycheck) {
@@ -12948,7 +12890,6 @@ function renderStabilization() {
     const bonusNgTotal = Object.values(bonusNg).reduce((s, v) => s + (v || 0), 0);
     const hasBonusEntries = bonusStipEntries.length > 0 || bonusNgTotal > 0 || bonusRetire > 0;
     const existingBonusDeposit = (data.paychecks || {})[bonusKey];
-    // Priority: actual deposit > stipend/NG total > year average estimate
     if (existingBonusDeposit != null) {
       bonusPaycheckAmt = existingBonusDeposit;
     } else if (hasBonusEntries) {
@@ -12956,96 +12897,7 @@ function renderStabilization() {
     } else {
       bonusPaycheckAmt = bonusEstimate;
     }
-
-    bdHtml += '<div style="border-top:3px solid var(--accent2);margin-top:16px;padding-top:12px;">';
-    bdHtml += '<div style="font-size:0.92rem;font-weight:700;color:var(--accent2);margin-bottom:8px;">December Bonus Paycheck</div>';
-
-    // Bonus stipend/deduction section
-    bdHtml += '<div style="margin-top:8px;">';
-    bdHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:0.75rem;color:var(--text-dim);">Stipends & Deductions</span>';
-    bdHtml += `<button type="button" class="add-entry-btn" onclick="addStabStipendRow(document.getElementById('decBonusStipendEntries'),'','');refreshStabBreakdownHeight();" style="font-size:0.7rem;padding:2px 8px;">+ Add</button></div>`;
-    bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
-    bdHtml += `<input type="text" value="Retirement" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
-    bdHtml += `<input type="text" inputmode="text" id="decBonusRetirement" placeholder="$0.00" value="${bonusRetire ? '-$' + bonusRetire.toFixed(2) : ''}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
-    bdHtml += '<span style="width:26px;"></span>';
-    bdHtml += '</div>';
-    bdHtml += '<div id="decBonusStipendEntries"></div>';
-
-    // Bonus NG payments
-    const bngLabels = [['classB', 'Class B Margin'], ['crna', 'CRNA Distribution'], ['surgCenter', 'Surgical Center Dist']];
-    bdHtml += '<div style="margin-top:8px;margin-bottom:6px;font-size:0.72rem;color:var(--text-dim);">Non-Guaranteed Payments</div>';
-    bngLabels.forEach(([key, label]) => {
-      const val = bonusNg[key] || '';
-      const fmtVal = val ? '$' + Number(val).toFixed(2) : '';
-      bdHtml += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
-      bdHtml += `<input type="text" value="${label}" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
-      bdHtml += `<input type="text" inputmode="text" id="decBonusNG_${key}" placeholder="$0.00" value="${fmtVal}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
-      bdHtml += '<span style="width:26px;"></span>';
-      bdHtml += '</div>';
-    });
-
-    bdHtml += `<button class="btn btn-primary btn-sm" onclick="saveDecBonusStipends(${bonusYear})" style="margin-top:4px;font-size:0.72rem;padding:4px 12px;">Save Bonus Stipends/Deductions</button>`;
-    bdHtml += '</div>';
-
-    // Bonus total display
-    bdHtml += '<div style="border-top:2px solid var(--border);margin-top:10px;padding-top:8px;">';
-    let bonusSrcLabel = 'Bonus Estimated Deposit';
-    if (existingBonusDeposit != null) {
-      bonusSrcLabel = 'Bonus Actual Deposit';
-    } else if (hasBonusEntries) {
-      bonusSrcLabel = 'Bonus Calculated Deposit';
-    }
-    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>${bonusSrcLabel}</span><span style="color:var(--accent2);">$${bonusPaycheckAmt.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
-    bdHtml += '</div>';
-
-    // Actual bonus deposit entry
-    bdHtml += '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;">';
-    bdHtml += `<div style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:2px;">Actual Bonus Bank Deposit</div>`;
-    bdHtml += `<div style="font-size:0.62rem;color:var(--text-dim);margin-bottom:6px;">Enter from your December bonus pay stub</div>`;
-    bdHtml += `<input type="number" id="decBonusDeposit" placeholder="$0.00" step="0.01" value="${existingBonusDeposit != null ? existingBonusDeposit : ''}" class="text-input" style="width:100%;font-size:0.85rem;padding:8px 10px;margin-bottom:6px;box-sizing:border-box;">`;
-    bdHtml += `<button class="btn btn-primary btn-sm" onclick="saveDecBonusPaycheck(${bonusYear})" style="font-size:0.68rem;padding:3px 10px;">Save</button>`;
-    bdHtml += '</div>';
-
-    // Combined December total
-    const combinedDec = round2(paycheck + bonusPaycheckAmt);
-    bdHtml += '<div style="border-top:3px solid var(--accent2);margin-top:12px;padding-top:8px;">';
-    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.92rem;font-weight:700;"><span>Combined December Total</span><span style="color:var(--accent2);">$${combinedDec.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
-    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-top:4px;color:var(--text-dim);"><span>Regular Paycheck</span><span>$${paycheck.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
-    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-top:2px;color:var(--text-dim);"><span>Bonus Paycheck</span><span>$${bonusPaycheckAmt.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
-    bdHtml += '</div>';
-
-    bdHtml += '</div>'; // Close bonus section
   }
-
-  document.getElementById('stabBreakdown').innerHTML = bdHtml;
-
-  // Populate stipend entry rows
-  const stipContainer = document.getElementById('stabStipendEntries');
-  if (stipContainer) {
-    if (stipendEntries.length === 0) {
-      addStabStipendRow(stipContainer, '', '');
-    } else {
-      stipendEntries.forEach(e => addStabStipendRow(stipContainer, e.label, e.amount));
-    }
-  }
-
-  // Populate bonus stipend entry rows for December
-  if (isDecPaycheck) {
-    const bonusYear = payDate.getFullYear();
-    const bonusKey = bonusYear + '-12b';
-    const bonusStipContainer = document.getElementById('decBonusStipendEntries');
-    if (bonusStipContainer) {
-      const bonusStipEntries = (data.stipends && data.stipends[bonusKey]) || [];
-      if (bonusStipEntries.length === 0) {
-        addStabStipendRow(bonusStipContainer, '', '');
-      } else {
-        bonusStipEntries.forEach(e => addStabStipendRow(bonusStipContainer, e.label, e.amount));
-      }
-    }
-  }
-
-  // Refresh breakdown panel height if open
-  refreshStabBreakdownHeight();
 
   // Paycheck display
   const earningLabel = document.getElementById('stabEarningLabel');
