@@ -11190,6 +11190,9 @@ document.addEventListener('click', function(e) {
     });
     prunePointValues();
     saveSettings(settings);
+    // Sync other inputs with the current month's value
+    const currentMk = stabMonthKey();
+    syncAllPointValueInputs(currentMk);
     // Re-render comp cards with updated values
     renderHistoricalComp();
     renderHistoricalTrends();
@@ -11197,6 +11200,7 @@ document.addEventListener('click', function(e) {
     renderProjectedAnnual();
     renderPipelineChart();
     renderEarningsEstimator();
+    renderPaycheckEntryIfOpen();
     // Fix collapsible height after re-render
     const histBody = document.getElementById('histCompBody');
     if (histBody && histBody.style.maxHeight && histBody.style.maxHeight !== '0px') {
@@ -12927,8 +12931,7 @@ function peStep1Save() {
     settings.pointValues[mk] = val;
     settings.pointValue = val;
     saveSettings(settings);
-    const dashPV = document.getElementById('dashPointValue');
-    if (dashPV) dashPV.value = val;
+    syncAllPointValueInputs(mk);
     showToast('Point value saved: $' + val.toFixed(2));
   } else {
     showToast('Enter a value');
@@ -12937,6 +12940,7 @@ function peStep1Save() {
   peStep = 2;
   renderPaycheckEntry();
   renderStabilization();
+  renderHistoricalComp();
 }
 
 function peStep1Skip() {
@@ -12950,11 +12954,11 @@ function peStep1Skip() {
   settings.pointValues[mk] = skipVal;
   settings.pointValue = skipVal;
   saveSettings(settings);
-  const dashPV = document.getElementById('dashPointValue');
-  if (dashPV) dashPV.value = skipVal;
+  syncAllPointValueInputs(mk);
   peStep = 2;
   renderPaycheckEntry();
   renderStabilization();
+  renderHistoricalComp();
 }
 
 function peStep2Save() {
@@ -16215,9 +16219,7 @@ function syncPointValue(source) {
     delete settings.pointValues[mk];
   }
   saveSettings(settings);
-  // Keep both inputs in sync
-  pointValueInput.value = source.value;
-  dashPointValueInput.value = source.value;
+  syncAllPointValueInputs(mk);
   // Re-render projections that depend on $/pt
   renderStabilization();
   renderProjectedAnnual();
@@ -16225,6 +16227,20 @@ function syncPointValue(source) {
   renderPipelineChart();
   renderHistoricalTrends();
   renderAnnualTaxBreakdown();
+  renderHistoricalComp();
+  renderPaycheckEntryIfOpen();
+}
+
+// Keep all $/pt inputs in sync across Settings, Dashboard, History table, and Paycheck Entry
+function syncAllPointValueInputs(monthKey) {
+  const val = getPointValueForMonth(monthKey);
+  const pvi = document.getElementById('settingsPointValue');
+  const dvi = document.getElementById('dashPointValue');
+  if (pvi) pvi.value = val || '';
+  if (dvi) dvi.value = val || '';
+  // Sync history table input for this month if visible
+  const histInput = document.querySelector('[data-pvmonth="' + monthKey + '"]');
+  if (histInput) histInput.value = val > 0 ? val : '';
 }
 
 pointValueInput.addEventListener('change', () => {
