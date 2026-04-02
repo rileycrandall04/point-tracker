@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/tesseract.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
@@ -12433,15 +12433,31 @@ function toggleStabBreakdown() {
 let ocrWorker = null;
 
 async function getOCRWorker() {
+  if (typeof Tesseract === 'undefined') {
+    // Try dynamic load fallback
+    if (typeof loadTesseract === 'function') {
+      await loadTesseract();
+    }
+    if (typeof Tesseract === 'undefined') {
+      throw new Error('OCR library not loaded. Check your internet connection and reload the page.');
+    }
+  }
   if (ocrWorker) return ocrWorker;
-  ocrWorker = await Tesseract.createWorker('eng');
+  try {
+    ocrWorker = await Tesseract.createWorker('eng');
+  } catch (e) {
+    // v4 fallback: createWorker() then loadLanguage + initialize
+    ocrWorker = await Tesseract.createWorker();
+    await ocrWorker.loadLanguage('eng');
+    await ocrWorker.initialize('eng');
+  }
   return ocrWorker;
 }
 
 async function ocrExtractText(file) {
   const worker = await getOCRWorker();
-  const { data: { text } } = await worker.recognize(file);
-  return text;
+  const result = await worker.recognize(file);
+  return result.data.text;
 }
 
 function parseCompReportOCR(text) {
@@ -12575,7 +12591,8 @@ async function peUploadCompReport(inputEl) {
     }
     statusEl.innerHTML = statusHtml;
   } catch (e) {
-    statusEl.innerHTML = '<div style="color:var(--danger);">Error reading image. Try again or enter manually.</div>';
+    console.error('OCR comp report error:', e);
+    statusEl.innerHTML = '<div style="color:var(--danger);">Error: ' + escHtml(e.message || 'Could not read image') + '. Try again or enter manually.</div>';
   }
   refreshPaycheckEntryHeight();
 }
@@ -12635,7 +12652,8 @@ async function peUploadPayStub(inputEl) {
     statusHtml += '<div style="color:var(--accent);">Extracted: ' + (summary.length > 0 ? summary.join(' · ') : 'No data found') + '</div><div style="font-size:0.65rem;color:var(--text-dim);margin-top:2px;">Review and edit values above, then save.</div>';
     statusEl.innerHTML = statusHtml;
   } catch (e) {
-    statusEl.innerHTML = '<div style="color:var(--danger);">Error reading image. Try again or enter manually.</div>';
+    console.error('OCR pay stub error:', e);
+    statusEl.innerHTML = '<div style="color:var(--danger);">Error: ' + escHtml(e.message || 'Could not read image') + '. Try again or enter manually.</div>';
   }
   refreshPaycheckEntryHeight();
 }
@@ -17128,7 +17146,7 @@ function loadTesseract() {
   if (window.Tesseract) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/tesseract.min.js';
     s.onload = resolve;
     s.onerror = () => reject(new Error('Failed to load Tesseract.js'));
     document.head.appendChild(s);
