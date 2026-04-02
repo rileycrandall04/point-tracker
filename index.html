@@ -12455,8 +12455,15 @@ async function getOCRWorker() {
 }
 
 async function ocrExtractText(file) {
+  // Read file into a data URL first to avoid mobile file access errors
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read the image file. Try saving the screenshot to your gallery first, then upload it.'));
+    reader.readAsDataURL(file);
+  });
   const worker = await getOCRWorker();
-  const result = await worker.recognize(file);
+  const result = await worker.recognize(dataUrl);
   return result.data.text;
 }
 
