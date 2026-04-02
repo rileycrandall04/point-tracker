@@ -10796,7 +10796,8 @@ function getMonthlyStipendTotal(monthKey) {
 // Get stipend entries for a month, carrying over from prior month if none exist
 function getStipendEntriesForMonth(monthKey) {
   if (!data.stipends) data.stipends = {};
-  if (data.stipends[monthKey] && data.stipends[monthKey].length > 0) {
+  // If month has explicit entry (even empty array), use it — don't carry over
+  if (data.stipends[monthKey] !== undefined) {
     return data.stipends[monthKey];
   }
   // Carryover: find the most recent prior month with entries
@@ -10881,11 +10882,7 @@ function saveDecBonusStipends(year) {
     const amount = parseFloat(row.querySelector('.stip-amount').value.replace(/[$,]/g, '')) || 0;
     if (label || amount !== 0) entries.push({ label, amount });
   }
-  if (entries.length > 0) {
-    data.stipends[bonusKey] = entries;
-  } else {
-    delete data.stipends[bonusKey];
-  }
+  data.stipends[bonusKey] = entries;
 
   // Save NG payments
   const ngKeys = ['classB', 'crna', 'surgCenter'];
@@ -10942,7 +10939,7 @@ function saveStabStipends() {
   if (entries.length > 0) {
     data.stipends[mk] = entries;
   } else {
-    delete data.stipends[mk];
+    data.stipends[mk] = [];
   }
 
   // Save non-guaranteed payments
