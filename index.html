@@ -12589,15 +12589,18 @@ function renderStabilization() {
     const bonusNg = getNonGuaranteedForMonth(bonusKey);
     const bonusNgTotal = Object.values(bonusNg).reduce((s, v) => s + (v || 0), 0);
     const hasBonusEntries = bonusStipEntries.length > 0 || bonusNgTotal > 0 || bonusRetire > 0;
-    bonusPaycheckAmt = hasBonusEntries ? round2(bonusStip + bonusNgTotal - bonusRetire) : bonusEstimate;
+    const existingBonusDeposit = (data.paychecks || {})[bonusKey];
+    // Priority: actual deposit > stipend/NG total > year average estimate
+    if (existingBonusDeposit != null) {
+      bonusPaycheckAmt = existingBonusDeposit;
+    } else if (hasBonusEntries) {
+      bonusPaycheckAmt = round2(bonusStip + bonusNgTotal - bonusRetire);
+    } else {
+      bonusPaycheckAmt = bonusEstimate;
+    }
 
     bdHtml += '<div style="border-top:3px solid var(--accent2);margin-top:16px;padding-top:12px;">';
-    bdHtml += '<div style="font-size:0.92rem;font-weight:700;color:var(--accent2);margin-bottom:4px;">December Bonus Paycheck</div>';
-    bdHtml += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">Estimated from average of ${bonusYear} paychecks. The bulk of this paycheck comes from stipends and non-guaranteed payments.</div>`;
-
-    // Average estimate line
-    const fmtEst = bonusEstimate > 0 ? '$' + bonusEstimate.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '\u2014';
-    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:6px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text-dim);">${bonusYear} Paycheck Average</span><span style="font-weight:600;color:var(--primary);">${fmtEst}</span></div>`;
+    bdHtml += '<div style="font-size:0.92rem;font-weight:700;color:var(--accent2);margin-bottom:8px;">December Bonus Paycheck</div>';
 
     // Bonus stipend/deduction section
     bdHtml += '<div style="margin-top:8px;">';
@@ -12626,16 +12629,18 @@ function renderStabilization() {
     bdHtml += `<button class="btn btn-primary btn-sm" onclick="saveDecBonusStipends(${bonusYear})" style="margin-top:4px;font-size:0.72rem;padding:4px 12px;">Save Bonus Stipends/Deductions</button>`;
     bdHtml += '</div>';
 
-    // Calculated bonus deposit
+    // Bonus total display
     bdHtml += '<div style="border-top:2px solid var(--border);margin-top:10px;padding-top:8px;">';
-    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>Bonus Calculated Deposit</span><span style="color:var(--accent2);">$${bonusPaycheckAmt.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
-    if (!hasBonusEntries && bonusEstimate > 0) {
-      bdHtml += '<div style="font-size:0.65rem;color:var(--text-dim);margin-top:2px;font-style:italic;">Based on year average — enter stipends/NG for actual breakdown</div>';
+    let bonusSrcLabel = 'Bonus Estimated Deposit';
+    if (existingBonusDeposit != null) {
+      bonusSrcLabel = 'Bonus Actual Deposit';
+    } else if (hasBonusEntries) {
+      bonusSrcLabel = 'Bonus Calculated Deposit';
     }
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>${bonusSrcLabel}</span><span style="color:var(--accent2);">$${bonusPaycheckAmt.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
     bdHtml += '</div>';
 
     // Actual bonus deposit entry
-    const existingBonusDeposit = (data.paychecks || {})[bonusKey];
     bdHtml += '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;">';
     bdHtml += `<div style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:2px;">Actual Bonus Bank Deposit</div>`;
     bdHtml += `<div style="font-size:0.62rem;color:var(--text-dim);margin-bottom:6px;">Enter from your December bonus pay stub</div>`;
