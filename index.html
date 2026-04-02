@@ -12604,9 +12604,12 @@ async function peUploadCompReport(inputEl) {
     }
     if (items.length > 0) {
       showOCRReviewPopup(items, dateWarning, function(accepted) {
-        const gt = accepted.find(a => a.id === 'comp_grand');
-        if (gt) document.getElementById('peGrandTotal').value = gt.value.toFixed(2);
-        statusEl.innerHTML = '<div style="color:var(--accent);">Values applied.</div>';
+        accepted.forEach(a => {
+          if (a.dest === 'Production Earnings (Step 2)') {
+            document.getElementById('peGrandTotal').value = a.value.toFixed(2);
+          }
+        });
+        statusEl.innerHTML = '<div style="color:var(--accent);">' + accepted.length + ' value' + (accepted.length !== 1 ? 's' : '') + ' applied.</div>';
         refreshPaycheckEntryHeight();
       });
       statusEl.innerHTML = '';
@@ -12660,27 +12663,36 @@ async function peUploadPayStub(inputEl) {
 
     if (items.length > 0) {
       showOCRReviewPopup(items, dateWarning, function(accepted) {
-        // Apply accepted values
-        const retItem = accepted.find(a => a.id === 'retire');
-        if (retItem) {
-          const retEl = document.getElementById('peRetirement');
-          if (retEl) retEl.value = '-$' + retItem.value.toFixed(2);
-        }
-        const stipItems = accepted.filter(a => a.id.startsWith('stip_'));
-        const dedItems = accepted.filter(a => a.id.startsWith('ded_'));
-        if (stipItems.length > 0 || dedItems.length > 0) {
+        // Route each accepted item by its destination type
+        const stipends = [];
+        const ngMap = { 'Class B Margin': 'classB', 'CRNA Distribution': 'crna', 'Surgical Center Dist': 'surgCenter' };
+        accepted.forEach(a => {
+          const d = a.dest;
+          if (d === 'Retirement') {
+            const retEl = document.getElementById('peRetirement');
+            if (retEl) retEl.value = '-$' + Math.abs(a.value).toFixed(2);
+          } else if (d === 'Actual Bank Deposit') {
+            const depEl = document.getElementById('peActualDeposit');
+            if (depEl) depEl.value = Math.abs(a.value).toFixed(2);
+          } else if (d === 'Production Earnings (Step 2)') {
+            const gtEl = document.getElementById('peGrandTotal');
+            if (gtEl) gtEl.value = a.value.toFixed(2);
+          } else if (ngMap[d]) {
+            const ngEl = document.getElementById('peNG_' + ngMap[d]);
+            if (ngEl) ngEl.value = '$' + Math.abs(a.value).toFixed(2);
+          } else if (d === 'Stipend') {
+            stipends.push({ label: a.label, amount: a.value });
+          } else if (d === 'Deduction') {
+            stipends.push({ label: a.label, amount: a.value < 0 ? a.value : -Math.abs(a.value) });
+          }
+        });
+        // Populate stipend rows
+        if (stipends.length > 0) {
           const container = document.getElementById('peStipendEntries');
           if (container) {
             container.innerHTML = '';
-            stipItems.forEach(s => addStabStipendRow(container, s.label, s.value));
-            dedItems.forEach(d => addStabStipendRow(container, d.label, d.value));
-            if (container.children.length === 0) addStabStipendRow(container, '', '');
+            stipends.forEach(s => addStabStipendRow(container, s.label, s.amount));
           }
-        }
-        const depItem = accepted.find(a => a.id === 'deposit');
-        if (depItem) {
-          const depEl = document.getElementById('peActualDeposit');
-          if (depEl) depEl.value = depItem.value.toFixed(2);
         }
         statusEl.innerHTML = '<div style="color:var(--accent);">' + accepted.length + ' value' + (accepted.length !== 1 ? 's' : '') + ' applied. Review and save.</div>';
         refreshPaycheckEntryHeight();
@@ -12697,9 +12709,8 @@ async function peUploadPayStub(inputEl) {
   refreshPaycheckEntryHeight();
 }
 
-// OCR Review Popup — shows extracted values for user to accept/reject
+// OCR Review Popup — shows extracted values for user to edit and accept
 function showOCRReviewPopup(items, dateWarning, onAccept) {
-  // Remove existing popup if any
   const existing = document.getElementById('ocrReviewOverlay');
   if (existing) existing.remove();
 
@@ -12707,25 +12718,31 @@ function showOCRReviewPopup(items, dateWarning, onAccept) {
   overlay.id = 'ocrReviewOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
 
-  const fmt = v => (v < 0 ? '-' : '') + '$' + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const destOptions = ['Stipend', 'Deduction', 'Retirement', 'Actual Bank Deposit', 'Production Earnings (Step 2)', 'Class B Margin', 'CRNA Distribution', 'Surgical Center Dist', 'Skip'];
 
-  let html = '<div style="background:var(--surface);border-radius:12px;max-width:400px;width:100%;max-height:80vh;overflow-y:auto;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4);">';
-  html += '<div style="font-size:1rem;font-weight:700;margin-bottom:8px;">Review Extracted Values</div>';
-  html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:10px;">Check the values found in the document. Uncheck any you don\'t want to apply.</div>';
+  let html = '<div style="background:var(--surface);border-radius:12px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4);">';
+  html += '<div style="font-size:1rem;font-weight:700;margin-bottom:4px;">Review Extracted Values</div>';
+  html += '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:10px;">Edit labels, amounts, and entry types before applying.</div>';
 
   if (dateWarning) {
     html += '<div style="background:rgba(239,68,68,0.1);border:1px solid var(--danger);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:0.75rem;color:var(--danger);font-weight:600;">' + escHtml(dateWarning) + '</div>';
   }
 
   items.forEach((item, i) => {
-    html += '<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--surface2);cursor:pointer;">';
-    html += '<input type="checkbox" ' + (item.checked ? 'checked' : '') + ' data-ocr-idx="' + i + '" style="margin-top:2px;width:18px;height:18px;accent-color:var(--primary);flex-shrink:0;">';
-    html += '<div style="flex:1;min-width:0;">';
-    html += '<div style="font-size:0.82rem;font-weight:600;">' + escHtml(item.label) + '</div>';
-    html += '<div style="display:flex;justify-content:space-between;margin-top:2px;">';
-    html += '<span style="font-size:0.88rem;font-weight:700;color:var(--accent2);">' + fmt(item.value) + '</span>';
-    html += '<span style="font-size:0.68rem;color:var(--text-dim);background:var(--surface2);padding:1px 6px;border-radius:4px;">' + escHtml(item.dest) + '</span>';
-    html += '</div></div></label>';
+    html += '<div style="padding:8px 0;border-bottom:1px solid var(--surface2);" data-ocr-row="' + i + '">';
+    html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">';
+    html += '<input type="checkbox" ' + (item.checked ? 'checked' : '') + ' data-ocr-idx="' + i + '" style="width:16px;height:16px;accent-color:var(--primary);flex-shrink:0;">';
+    html += '<input type="text" data-ocr-label="' + i + '" value="' + escHtml(item.label) + '" class="text-input" style="flex:1;font-size:0.78rem;padding:4px 6px;">';
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;align-items:center;margin-left:22px;">';
+    html += '<input type="text" data-ocr-value="' + i + '" value="' + (item.value < 0 ? '-' : '') + Math.abs(item.value).toFixed(2) + '" class="text-input" style="width:90px;font-size:0.82rem;padding:4px 6px;text-align:right;font-weight:600;">';
+    html += '<select data-ocr-dest="' + i + '" class="text-input" style="flex:1;font-size:0.7rem;padding:4px 4px;">';
+    destOptions.forEach(opt => {
+      const sel = opt === item.dest ? ' selected' : '';
+      html += '<option value="' + escHtml(opt) + '"' + sel + '>' + escHtml(opt) + '</option>';
+    });
+    html += '</select>';
+    html += '</div></div>';
   });
 
   html += '<div style="display:flex;gap:8px;margin-top:14px;">';
@@ -12739,20 +12756,21 @@ function showOCRReviewPopup(items, dateWarning, onAccept) {
   overlay.querySelector('#ocrAcceptBtn').addEventListener('click', () => {
     const accepted = [];
     overlay.querySelectorAll('[data-ocr-idx]').forEach(cb => {
-      if (cb.checked) accepted.push(items[parseInt(cb.dataset.ocrIdx)]);
+      const idx = parseInt(cb.dataset.ocrIdx);
+      if (!cb.checked) return;
+      const label = overlay.querySelector('[data-ocr-label="' + idx + '"]').value.trim();
+      const rawVal = overlay.querySelector('[data-ocr-value="' + idx + '"]').value.replace(/[$,]/g, '');
+      const value = parseFloat(rawVal) || 0;
+      const dest = overlay.querySelector('[data-ocr-dest="' + idx + '"]').value;
+      if (dest === 'Skip') return;
+      accepted.push({ id: items[idx].id, label, value, dest });
     });
     overlay.remove();
     onAccept(accepted);
   });
 
-  overlay.querySelector('#ocrCancelBtn').addEventListener('click', () => {
-    overlay.remove();
-  });
-
-  // Close on backdrop click
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
-  });
+  overlay.querySelector('#ocrCancelBtn').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
 // Paycheck Entry stepwise flow
