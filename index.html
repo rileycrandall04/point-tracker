@@ -2691,9 +2691,13 @@ input.mil-time.invalid {
       </div>
     </div>
     <div style="margin-top:12px;text-align:center;">
-      <a href="#" id="stabBreakdownToggle" onclick="toggleStabBreakdown(); return false;" style="font-size:0.8rem;color:var(--primary);">Show breakdown &#9660;</a>
+      <a href="#" id="stabBreakdownToggle" onclick="toggleStabBreakdown(); return false;" style="font-size:0.8rem;color:var(--primary);">Show point breakdown &#9660;</a>
     </div>
     <div id="stabBreakdown" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;"></div>
+    <div style="margin-top:8px;text-align:center;">
+      <a href="#" id="paycheckEntryToggle" onclick="togglePaycheckEntry(); return false;" style="font-size:0.8rem;color:var(--accent2);font-weight:600;">Paycheck Entry &#9660;</a>
+    </div>
+    <div id="paycheckEntryPanel" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;"></div>
   </div>
 
   <!-- 3. Production Pipeline -->
@@ -12416,6 +12420,347 @@ function toggleStabBreakdown() {
     panel.style.maxHeight = panel.scrollHeight + 'px';
     link.innerHTML = 'Hide breakdown &#9650;';
   }
+}
+
+// Paycheck Entry stepwise flow
+let peStep = 1; // current step (1-3)
+
+function togglePaycheckEntry() {
+  const panel = document.getElementById('paycheckEntryPanel');
+  const link = document.getElementById('paycheckEntryToggle');
+  if (panel.style.maxHeight && panel.style.maxHeight !== '0px') {
+    panel.style.maxHeight = '0';
+    link.innerHTML = 'Paycheck Entry &#9660;';
+  } else {
+    peStep = 1;
+    renderPaycheckEntry();
+    panel.style.maxHeight = panel.scrollHeight + 'px';
+    link.innerHTML = 'Paycheck Entry &#9650;';
+  }
+}
+
+function refreshPaycheckEntryHeight() {
+  const panel = document.getElementById('paycheckEntryPanel');
+  if (panel && panel.style.maxHeight && panel.style.maxHeight !== '0px') {
+    panel.style.maxHeight = panel.scrollHeight + 'px';
+  }
+}
+
+function renderPaycheckEntry() {
+  const panel = document.getElementById('paycheckEntryPanel');
+  if (!panel) return;
+  const mk = stabMonthKey();
+  const [ty, tm] = mk.split('-').map(Number);
+  const payDate = new Date(ty, tm, 1);
+  const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
+  const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const payMonthName = fullMonthNames[payDate.getMonth()] + ' ' + payDate.getFullYear();
+
+  // Step indicator
+  let html = '<div style="padding:12px 0 8px;">';
+  html += '<div style="display:flex;justify-content:center;gap:6px;margin-bottom:12px;">';
+  for (let s = 1; s <= 3; s++) {
+    const active = s === peStep;
+    const done = s < peStep;
+    const bg = active ? 'var(--accent2)' : done ? 'var(--accent)' : 'var(--surface2)';
+    const color = (active || done) ? '#fff' : 'var(--text-dim)';
+    html += `<div style="width:28px;height:28px;border-radius:50%;background:${bg};color:${color};display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:700;">${done ? '&#10003;' : s}</div>`;
+    if (s < 3) html += '<div style="width:24px;height:2px;background:var(--border);align-self:center;"></div>';
+  }
+  html += '</div>';
+
+  if (peStep === 1) {
+    html += renderPEStep1(mk, ty, tm);
+  } else if (peStep === 2) {
+    html += renderPEStep2(mk, ty, tm, payMonthName);
+  } else if (peStep === 3) {
+    html += renderPEStep3(mk, ty, tm, payKey, payMonthName);
+  }
+
+  html += '</div>';
+  panel.innerHTML = html;
+
+  // Populate stipend rows for step 3
+  if (peStep === 3) {
+    const container = document.getElementById('peStipendEntries');
+    if (container) {
+      const entries = getStipendEntriesForMonth(mk);
+      if (entries.length === 0) {
+        addStabStipendRow(container, '', '');
+      } else {
+        entries.forEach(e => addStabStipendRow(container, e.label, e.amount));
+      }
+    }
+  }
+
+  refreshPaycheckEntryHeight();
+}
+
+function renderPEStep1(mk, ty, tm) {
+  const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const prodMonth = fullMonthNames[tm - 1] + ' ' + ty;
+  const currentPV = getPointValueForMonth(mk);
+  // Find previous month's value for skip fallback
+  const prevDate = new Date(ty, tm - 2, 1);
+  const prevKey = prevDate.getFullYear() + '-' + String(prevDate.getMonth() + 1).padStart(2, '0');
+  const prevPV = getPointValueForMonth(prevKey);
+  const skipVal = prevPV > 0 ? prevPV : 14;
+
+  let html = '<div style="font-size:0.88rem;font-weight:700;color:var(--text);margin-bottom:4px;">Step 1: Point Value</div>';
+  html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:10px;">Enter the dollar value per point for ${prodMonth}. This determines how your production points convert to earnings.</div>`;
+
+  if (currentPV > 0) {
+    html += `<div style="font-size:0.72rem;color:var(--accent);margin-bottom:8px;font-style:italic;">Current value: $${currentPV.toFixed(2)}/pt (already set)</div>`;
+  }
+
+  html += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">';
+  html += `<span style="font-size:0.82rem;color:var(--text-dim);">$</span>`;
+  html += `<input type="number" id="pePointValue" min="0" step="0.01" placeholder="${skipVal.toFixed(2)}" value="${currentPV > 0 ? currentPV.toFixed(2) : ''}" class="text-input" style="flex:1;font-size:0.9rem;padding:8px 10px;">`;
+  html += `<span style="font-size:0.82rem;color:var(--text-dim);">/pt</span>`;
+  html += `<button class="btn btn-primary btn-sm" onclick="peStep1Save()" style="font-size:0.75rem;padding:6px 14px;">Save</button>`;
+  html += '</div>';
+
+  html += `<div style="text-align:center;"><button class="btn btn-outline btn-sm" onclick="peStep1Skip()" style="font-size:0.7rem;padding:4px 12px;">Skip (use $${skipVal.toFixed(2)})</button></div>`;
+
+  return html;
+}
+
+function renderPEStep2(mk, ty, tm, payMonthName) {
+  const mt = getMonthlyTotals();
+  const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const prodMonth = fullMonthNames[tm - 1] + ' ' + ty;
+  const pv = getPointValueForMonth(mk);
+  const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
+  function mkFromTarget(offset) {
+    const d = new Date(ty, tm - 1 - offset, 1);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  }
+  const vals = [0,1,2,3,4].map(i => mt[mkFromTarget(i)] || 0);
+  const weighted = weights.reduce((sum, w, i) => sum + w * vals[i], 0);
+  const calcProduction = pv > 0 ? round2(weighted * pv) : 0;
+  const existingOverride = data.overrides && data.overrides[mk] && data.overrides[mk].compTotal != null ? data.overrides[mk].compTotal : null;
+
+  let html = '<div style="font-size:0.88rem;font-weight:700;color:var(--text);margin-bottom:4px;">Step 2: Total Production & Time Earnings</div>';
+  html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Open your <strong>Compensation Summary Report</strong> and enter the dollar value from the line showing <strong>"Grand Total From all Pools"</strong>.</div>`;
+
+  if (calcProduction > 0) {
+    html += `<div style="font-size:0.72rem;color:var(--accent);margin-bottom:8px;font-style:italic;">App estimate: $${calcProduction.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} (${weighted.toFixed(1)} pts × $${pv.toFixed(2)})</div>`;
+  }
+
+  html += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">';
+  html += `<span style="font-size:0.82rem;color:var(--text-dim);">$</span>`;
+  html += `<input type="number" id="peGrandTotal" step="0.01" placeholder="0.00" value="${existingOverride != null ? existingOverride : ''}" class="text-input" style="flex:1;font-size:0.9rem;padding:8px 10px;">`;
+  html += `<button class="btn btn-primary btn-sm" onclick="peStep2Save()" style="font-size:0.75rem;padding:6px 14px;">Save</button>`;
+  html += '</div>';
+
+  const skipLabel = calcProduction > 0 ? 'Skip (use app estimate)' : 'Skip';
+  html += `<div style="text-align:center;"><button class="btn btn-outline btn-sm" onclick="peStep2Skip()" style="font-size:0.7rem;padding:4px 12px;">${skipLabel}</button></div>`;
+
+  return html;
+}
+
+function renderPEStep3(mk, ty, tm, payKey, payMonthName) {
+  const stipEntries = getStipendEntriesForMonth(mk);
+  const stipTotal = stipEntries.reduce((s, e) => s + (e.amount || 0), 0);
+  const retireAmt = getRetirementForMonth(mk);
+  const ngAmounts = getNonGuaranteedForMonth(mk);
+  const ngTotal = Object.values(ngAmounts).reduce((s, v) => s + (v || 0), 0);
+
+  // Calculate running total from step 2 + stipends
+  const pv = getPointValueForMonth(mk);
+  const mt = getMonthlyTotals();
+  const weights = [0.10, 0.40, 0.25, 0.15, 0.10];
+  function mkFromTarget(offset) {
+    const d = new Date(ty, tm - 1 - offset, 1);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  }
+  const vals = [0,1,2,3,4].map(i => mt[mkFromTarget(i)] || 0);
+  const weighted = weights.reduce((sum, w, i) => sum + w * vals[i], 0);
+  const calcProd = pv > 0 ? round2(weighted * pv) : 0;
+  const actualRev = data.overrides && data.overrides[mk] && data.overrides[mk].compTotal != null ? data.overrides[mk].compTotal : null;
+  const revenueBase = actualRev != null ? actualRev : calcProd;
+  const runningTotal = round2(revenueBase + stipTotal + ngTotal - retireAmt);
+
+  const existingDeposit = (data.paychecks || {})[payKey];
+
+  let html = '<div style="font-size:0.88rem;font-weight:700;color:var(--text);margin-bottom:4px;">Step 3: Stipends, Deductions & Final Total</div>';
+  html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:10px;">Enter all stipends and deductions from your actual pay stub.</div>`;
+
+  // Retirement
+  const existingRetire = (data.retirement || {})[mk] || 0;
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:0.75rem;color:var(--text-dim);">Stipends & Deductions</span>';
+  html += `<button type="button" class="add-entry-btn" onclick="addStabStipendRow(document.getElementById('peStipendEntries'),'','');refreshPaycheckEntryHeight();" style="font-size:0.7rem;padding:2px 8px;">+ Add</button></div>`;
+  html += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
+  html += `<input type="text" value="Retirement" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
+  html += `<input type="text" inputmode="text" id="peRetirement" placeholder="$0.00" value="${existingRetire ? '-$' + existingRetire.toFixed(2) : ''}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
+  html += '<span style="width:26px;"></span>';
+  html += '</div>';
+  html += '<div id="peStipendEntries"></div>';
+
+  // Non-guaranteed payments
+  const ngLabels = [['classB', 'Class B Margin'], ['crna', 'CRNA Distribution'], ['surgCenter', 'Surgical Center Dist']];
+  html += '<div style="margin-top:8px;margin-bottom:6px;font-size:0.72rem;color:var(--text-dim);">Non-Guaranteed Payments</div>';
+  ngLabels.forEach(([key, label]) => {
+    const val = ngAmounts[key] || '';
+    const fmtVal = val ? '$' + Number(val).toFixed(2) : '';
+    html += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
+    html += `<input type="text" value="${label}" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
+    html += `<input type="text" inputmode="text" id="peNG_${key}" placeholder="$0.00" value="${fmtVal}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
+    html += '<span style="width:26px;"></span>';
+    html += '</div>';
+  });
+
+  html += '<button class="btn btn-primary btn-sm" onclick="peStep3SaveStipends()" style="margin-top:4px;font-size:0.72rem;padding:4px 12px;">Save Stipends/Deductions</button>';
+
+  // Running total / Final deposit
+  html += '<div style="border-top:2px solid var(--border);margin-top:12px;padding-top:10px;">';
+  html += `<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Running total from entries above:</div>`;
+  html += `<div style="font-size:1.1rem;font-weight:700;color:var(--accent2);margin-bottom:10px;">$${runningTotal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>`;
+
+  html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Or enter the <strong>Actual Bank Deposit</strong> total from your pay stub to override:</div>';
+  html += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">';
+  html += `<span style="font-size:0.82rem;color:var(--text-dim);">$</span>`;
+  html += `<input type="number" id="peActualDeposit" step="0.01" placeholder="0.00" value="${existingDeposit != null ? existingDeposit : ''}" class="text-input" style="flex:1;font-size:0.9rem;padding:8px 10px;">`;
+  html += `<button class="btn btn-primary btn-sm" onclick="peStep3SaveDeposit()" style="font-size:0.75rem;padding:6px 14px;">Save</button>`;
+  html += '</div>';
+
+  html += `<div style="text-align:center;margin-top:4px;"><button class="btn btn-outline btn-sm" onclick="peStep3Skip()" style="font-size:0.7rem;padding:4px 12px;">Done — use calculated total</button></div>`;
+  html += '</div>';
+
+  return html;
+}
+
+// Step handlers
+function peStep1Save() {
+  const input = document.getElementById('pePointValue');
+  const val = parseFloat(input?.value) || 0;
+  const mk = stabMonthKey();
+  if (val > 0) {
+    if (!settings.pointValues) settings.pointValues = {};
+    settings.pointValues[mk] = val;
+    settings.pointValue = val;
+    saveSettings(settings);
+    const dashPV = document.getElementById('dashPointValue');
+    if (dashPV) dashPV.value = val;
+    showToast('Point value saved: $' + val.toFixed(2));
+  } else {
+    showToast('Enter a value');
+    return;
+  }
+  peStep = 2;
+  renderPaycheckEntry();
+  renderStabilization();
+}
+
+function peStep1Skip() {
+  const mk = stabMonthKey();
+  const [ty, tm] = mk.split('-').map(Number);
+  const prevDate = new Date(ty, tm - 2, 1);
+  const prevKey = prevDate.getFullYear() + '-' + String(prevDate.getMonth() + 1).padStart(2, '0');
+  const prevPV = getPointValueForMonth(prevKey);
+  const skipVal = prevPV > 0 ? prevPV : 14;
+  if (!settings.pointValues) settings.pointValues = {};
+  settings.pointValues[mk] = skipVal;
+  settings.pointValue = skipVal;
+  saveSettings(settings);
+  const dashPV = document.getElementById('dashPointValue');
+  if (dashPV) dashPV.value = skipVal;
+  peStep = 2;
+  renderPaycheckEntry();
+  renderStabilization();
+}
+
+function peStep2Save() {
+  const input = document.getElementById('peGrandTotal');
+  const valStr = input?.value.trim();
+  if (!valStr) { showToast('Enter a value'); return; }
+  const val = parseFloat(valStr.replace(/[$,]/g, ''));
+  if (isNaN(val)) { showToast('Enter a valid amount'); return; }
+  const mk = stabMonthKey();
+  if (!data.overrides) data.overrides = {};
+  if (!data.overrides[mk]) data.overrides[mk] = {};
+  data.overrides[mk].compTotal = val;
+  saveData(data);
+  showToast('Production total saved');
+  peStep = 3;
+  renderPaycheckEntry();
+  renderStabilization();
+}
+
+function peStep2Skip() {
+  peStep = 3;
+  renderPaycheckEntry();
+}
+
+function peStep3SaveStipends() {
+  // Reuse existing save logic but from PE containers
+  const mk = stabMonthKey();
+  if (!data.stipends) data.stipends = {};
+  if (!data.retirement) data.retirement = {};
+  if (!data.nonGuaranteed) data.nonGuaranteed = {};
+
+  const retInput = document.getElementById('peRetirement');
+  const retVal = retInput ? Math.abs(parseFloat(retInput.value.replace(/[$,]/g, '')) || 0) : 0;
+  data.retirement[mk] = retVal;
+
+  const container = document.getElementById('peStipendEntries');
+  const entries = [];
+  if (container) {
+    for (const row of container.children) {
+      const label = row.querySelector('.stip-label')?.value.trim() || '';
+      const amount = parseFloat(row.querySelector('.stip-amount')?.value.replace(/[$,]/g, '') || '') || 0;
+      if (label || amount !== 0) entries.push({ label, amount });
+    }
+  }
+  data.stipends[mk] = entries.length > 0 ? entries : [];
+
+  const ngKeys = ['classB', 'crna', 'surgCenter'];
+  const ngObj = {};
+  ngKeys.forEach(k => {
+    const el = document.getElementById('peNG_' + k);
+    const v = el ? parseFloat(el.value.replace(/[$,]/g, '')) || 0 : 0;
+    if (v !== 0) ngObj[k] = v;
+  });
+  data.nonGuaranteed[mk] = ngObj;
+
+  saveData(data);
+  showToast('Stipends saved');
+  renderPaycheckEntry(); // refresh running total
+  renderStabilization();
+}
+
+function peStep3SaveDeposit() {
+  const input = document.getElementById('peActualDeposit');
+  const valStr = input?.value.trim();
+  if (!valStr) { showToast('Enter an amount'); return; }
+  const val = parseFloat(valStr);
+  if (isNaN(val)) { showToast('Enter a valid amount'); return; }
+  const mk = stabMonthKey();
+  const [ty, tm] = mk.split('-').map(Number);
+  const payDate = new Date(ty, tm, 1);
+  const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
+  if (!data.paychecks) data.paychecks = {};
+  data.paychecks[payKey] = val;
+  saveData(data);
+  showToast('Actual deposit saved — this overrides all other values');
+  renderStabilization();
+  renderPaycheckChart();
+  renderPaycheckTable();
+  // Close the entry panel
+  const panel = document.getElementById('paycheckEntryPanel');
+  const link = document.getElementById('paycheckEntryToggle');
+  if (panel) panel.style.maxHeight = '0';
+  if (link) link.innerHTML = 'Paycheck Entry &#9660;';
+}
+
+function peStep3Skip() {
+  showToast('Paycheck entry complete');
+  renderStabilization();
+  // Close the entry panel
+  const panel = document.getElementById('paycheckEntryPanel');
+  const link = document.getElementById('paycheckEntryToggle');
+  if (panel) panel.style.maxHeight = '0';
+  if (link) link.innerHTML = 'Paycheck Entry &#9660;';
 }
 
 // Paycheck Projection month navigation
