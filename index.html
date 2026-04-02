@@ -12552,18 +12552,14 @@ async function peUploadCompReport(inputEl) {
     const { grandTotal, compDate } = parseCompReportOCR(text);
     let statusHtml = '';
 
-    // Date validation: comp date is the 1st of the month AFTER production
-    // e.g., comp date 2/1/2026 = January production. So expected comp month = production month + 1.
+    // Date validation: comp date IS the production month directly
+    // e.g., comp date 2/1/2026 = February production → March paycheck
     const mk = stabMonthKey();
     const [ty, tm] = mk.split('-').map(Number);
     if (compDate) {
-      const expectedDate = new Date(ty, tm, 1); // production month (0-indexed: tm-1) + 1 = tm
-      const expectedMonth = expectedDate.getMonth() + 1;
-      const expectedYear = expectedDate.getFullYear();
-      if (compDate.month !== expectedMonth || compDate.year !== expectedYear) {
+      if (compDate.month !== tm || compDate.year !== ty) {
         const monthNames = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        const prodMonthName = monthNames[tm];
-        statusHtml += '<div style="color:var(--danger);margin-bottom:4px;font-weight:600;">Date mismatch: Report compensation date is ' + compDate.month + '/1/' + compDate.year + ', but you\'re entering ' + prodMonthName + ' ' + ty + ' production (expected ' + expectedMonth + '/1/' + expectedYear + ').</div>';
+        statusHtml += '<div style="color:var(--danger);margin-bottom:4px;font-weight:600;">Date mismatch: Report is for ' + monthNames[compDate.month] + ' ' + compDate.year + ' production, but you\'re entering ' + monthNames[tm] + ' ' + ty + ' production.</div>';
       }
     }
 
