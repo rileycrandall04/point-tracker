@@ -12641,22 +12641,16 @@ async function peUploadPayStub(inputEl) {
 }
 
 // Paycheck Entry stepwise flow
-// Determine step progress from saved data for a given month
+// Track explicit step progress per month (only advances when user acts)
 function peGetMonthStep(mk) {
-  const [ty, tm] = mk.split('-').map(Number);
-  const payDate = new Date(ty, tm, 1);
-  const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
-  const hasPV = settings.pointValues && settings.pointValues[mk] != null;
-  const hasRevenue = data.overrides && data.overrides[mk] && data.overrides[mk].compTotal != null;
-  const hasStipends = data.stipends && data.stipends[mk] !== undefined && data.stipends[mk].length > 0;
-  const hasNG = data.nonGuaranteed && data.nonGuaranteed[mk] && Object.values(data.nonGuaranteed[mk]).some(v => v > 0);
-  const hasRetire = data.retirement && data.retirement[mk] != null && data.retirement[mk] > 0;
-  const hasDeposit = data.paychecks && data.paychecks[payKey] != null;
-  const hasStep3 = hasStipends || hasNG || hasRetire || hasDeposit;
-  if (hasStep3) return 4; // all complete
-  if (hasRevenue) return 3; // step 2 done, on step 3
-  if (hasPV) return 2; // step 1 done, on step 2
-  return 1; // start
+  if (!data.peProgress) data.peProgress = {};
+  return data.peProgress[mk] || 1;
+}
+
+function peSetMonthStep(mk, step) {
+  if (!data.peProgress) data.peProgress = {};
+  data.peProgress[mk] = step;
+  saveData(data);
 }
 
 let peStep = 1;
@@ -12990,6 +12984,10 @@ function peResetMonth() {
   if (data.paychecks && data.paychecks[payKey] != null) {
     delete data.paychecks[payKey];
   }
+  // Clear progress tracking
+  if (data.peProgress && data.peProgress[mk]) {
+    delete data.peProgress[mk];
+  }
   saveData(data);
   peStep = 1;
   renderPaycheckEntry();
@@ -13014,6 +13012,7 @@ function peStep1Save() {
     return;
   }
   peStep = 2;
+  peSetMonthStep(mk, 2);
   renderPaycheckEntry();
   renderStabilization();
   renderHistoricalComp();
@@ -13032,6 +13031,7 @@ function peStep1Skip() {
   saveSettings(settings);
   syncAllPointValueInputs(mk);
   peStep = 2;
+  peSetMonthStep(mk, 2);
   renderPaycheckEntry();
   renderStabilization();
   renderHistoricalComp();
@@ -13049,13 +13049,17 @@ function peStep2Save() {
   data.overrides[mk].compTotal = val;
   saveData(data);
   showToast('Production total saved');
+  const mk2 = stabMonthKey();
   peStep = 3;
+  peSetMonthStep(mk2, 3);
   renderPaycheckEntry();
   renderStabilization();
 }
 
 function peStep2Skip() {
+  const mk = stabMonthKey();
   peStep = 3;
+  peSetMonthStep(mk, 3);
   renderPaycheckEntry();
 }
 
@@ -13114,13 +13118,16 @@ function peStep3SaveDeposit() {
   renderPaycheckChart();
   renderPaycheckTable();
   peStep = 4;
+  peSetMonthStep(mk, 4);
   renderPaycheckEntry();
 }
 
 function peStep3Skip() {
+  const mk = stabMonthKey();
   showToast('Paycheck entry complete');
   renderStabilization();
   peStep = 4;
+  peSetMonthStep(mk, 4);
   renderPaycheckEntry();
 }
 
