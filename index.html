@@ -12600,7 +12600,7 @@ async function peUploadCompReport(inputEl) {
       }
     }
     if (grandTotal != null) {
-      items.push({ id: 'comp_grand', label: 'Grand Total for All Pools', value: grandTotal, dest: 'Production Earnings (Step 2)', checked: true });
+      items.push({ id: 'comp_grand', label: 'Grand Total for All Pools', value: grandTotal, dest: 'Production Earnings (Step 2)', checked: true, lockDest: true });
     }
     if (items.length > 0) {
       showOCRReviewPopup(items, dateWarning, function(accepted) {
@@ -12736,12 +12736,16 @@ function showOCRReviewPopup(items, dateWarning, onAccept) {
     html += '</div>';
     html += '<div style="display:flex;gap:6px;align-items:center;margin-left:22px;">';
     html += '<input type="text" data-ocr-value="' + i + '" value="' + (item.value < 0 ? '-' : '') + Math.abs(item.value).toFixed(2) + '" class="text-input" style="width:90px;font-size:0.82rem;padding:4px 6px;text-align:right;font-weight:600;">';
-    html += '<select data-ocr-dest="' + i + '" class="text-input" style="flex:1;font-size:0.7rem;padding:4px 4px;">';
-    destOptions.forEach(opt => {
-      const sel = opt === item.dest ? ' selected' : '';
-      html += '<option value="' + escHtml(opt) + '"' + sel + '>' + escHtml(opt) + '</option>';
-    });
-    html += '</select>';
+    if (item.lockDest) {
+      html += '<input type="hidden" data-ocr-dest="' + i + '" value="' + escHtml(item.dest) + '">';
+    } else {
+      html += '<select data-ocr-dest="' + i + '" class="text-input" style="flex:1;font-size:0.7rem;padding:4px 4px;">';
+      destOptions.forEach(opt => {
+        const sel = opt === item.dest ? ' selected' : '';
+        html += '<option value="' + escHtml(opt) + '"' + sel + '>' + escHtml(opt) + '</option>';
+      });
+      html += '</select>';
+    }
     html += '</div></div>';
   });
 
