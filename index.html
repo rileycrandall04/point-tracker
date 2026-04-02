@@ -12434,23 +12434,18 @@ let ocrWorker = null;
 
 async function getOCRWorker() {
   if (typeof Tesseract === 'undefined') {
-    // Try dynamic load fallback
-    if (typeof loadTesseract === 'function') {
-      await loadTesseract();
-    }
+    if (typeof loadTesseract === 'function') await loadTesseract();
     if (typeof Tesseract === 'undefined') {
       throw new Error('OCR library not loaded. Check your internet connection and reload the page.');
     }
   }
   if (ocrWorker) return ocrWorker;
-  try {
-    ocrWorker = await Tesseract.createWorker('eng');
-  } catch (e) {
-    // v4 fallback: createWorker() then loadLanguage + initialize
-    ocrWorker = await Tesseract.createWorker();
-    await ocrWorker.loadLanguage('eng');
-    await ocrWorker.initialize('eng');
-  }
+  const worker = await Tesseract.createWorker({
+    logger: m => { if (m.status === 'recognizing text') { /* progress */ } }
+  });
+  await worker.loadLanguage('eng');
+  await worker.initialize('eng');
+  ocrWorker = worker;
   return ocrWorker;
 }
 
@@ -12475,8 +12470,10 @@ async function ocrExtractText(file) {
     img.onerror = () => reject(new Error('Could not decode image. Try a PNG or JPG screenshot.'));
     img.src = dataUrl;
   });
+  // Convert canvas to blob for maximum compatibility
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
   const worker = await getOCRWorker();
-  const result = await worker.recognize(canvas);
+  const result = await worker.recognize(blob);
   return result.data.text;
 }
 
