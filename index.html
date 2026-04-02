@@ -12552,22 +12552,35 @@ function renderStabilization() {
   bdHtml += '<button class="btn btn-primary btn-sm" onclick="saveStabStipends()" style="margin-top:4px;font-size:0.72rem;padding:4px 12px;">Save Stipends/Deductions</button>';
   bdHtml += '</div>';
 
-  // Net total — Calculated Bank Deposit
-  if (revenueForCalc > 0 || pv > 0) {
-    // Calculate non-guaranteed vs guaranteed portions
-    const guaranteedAmt = paycheck - ngTotal;
+  // Actual paycheck entry
+  const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
+  const existingDeposit = (data.paychecks || {})[payKey];
+
+  // Displayed paycheck amount priority: actual deposit > calculated > estimate
+  let displayPaycheck = paycheck;
+  let paycheckSource = 'estimate';
+  if (existingDeposit != null) {
+    displayPaycheck = existingDeposit;
+    paycheckSource = 'actual';
+  } else if (revenueForCalc > 0 || stipend !== 0 || ngTotal > 0 || retirementAmt > 0) {
+    paycheckSource = 'calculated';
+  }
+
+  // Net total — Bank Deposit
+  if (displayPaycheck > 0 || pv > 0) {
+    const depositLabel = paycheckSource === 'actual' ? 'Actual Bank Deposit'
+      : paycheckSource === 'calculated' ? 'Calculated Bank Deposit'
+      : 'Estimated Bank Deposit';
     bdHtml += '<div style="border-top:2px solid var(--border);margin-top:10px;padding-top:8px;">';
-    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>Calculated Bank Deposit</span><span style="color:var(--accent2);">$${paycheck.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
-    if (ngTotal !== 0) {
+    bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;font-weight:700;"><span>${depositLabel}</span><span style="color:var(--accent2);">$${displayPaycheck.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
+    if (paycheckSource !== 'actual' && ngTotal !== 0) {
+      const guaranteedAmt = paycheck - ngTotal;
       bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-top:4px;color:var(--text-dim);"><span>Guaranteed</span><span>$${guaranteedAmt.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
       bdHtml += `<div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-top:2px;color:var(--text-dim);"><span>Non-Guaranteed</span><span>$${ngTotal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>`;
     }
     bdHtml += '</div>';
   }
 
-  // Actual paycheck entry
-  const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
-  const existingDeposit = (data.paychecks || {})[payKey];
   bdHtml += '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;">';
   const payMonthLabel = fullMonthNames[payDate.getMonth()] + ' ' + payDate.getFullYear();
   bdHtml += `<div style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:2px;">Actual Bank Deposit</div>`;
@@ -12698,30 +12711,33 @@ function renderStabilization() {
   if (!data.overrides) data.overrides = {};
   const compOv = data.overrides[targetKey] && data.overrides[targetKey].compTotal != null ? data.overrides[targetKey].compTotal : null;
 
-  if (revenueForCalc > 0 || (pv && pv > 0)) {
-    let totalPaycheck = paycheck;
+  if (displayPaycheck > 0 || (pv && pv > 0)) {
+    let totalPaycheck = displayPaycheck;
 
     if (isDecPaycheck) {
       totalPaycheck += bonusPaycheckAmt;
-      const revLabel = actualRevenue != null ? ' (actual)' : '';
-      earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue' + revLabel + ' + bonus → paid Dec 20';
+      earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue + bonus → paid Dec 20';
     } else {
-      const revLabel = actualRevenue != null ? ' (actual)' : '';
-      earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue' + revLabel + ' → paid ' + payMonthName + ' 20';
+      const srcLabel = paycheckSource === 'actual' ? ' (actual)' : (actualRevenue != null ? ' (actual revenue)' : '');
+      earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue' + srcLabel + ' → paid ' + payMonthName + ' 20';
     }
 
     document.getElementById('stabPaycheck').textContent = '$' + totalPaycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     // Summary line
     let parts = [];
-    const revDisplayLabel = actualRevenue != null ? 'Actual Revenue' : 'Revenue';
-    if (revenueForCalc > 0) parts.push(revDisplayLabel + ': $' + revenueForCalc.toLocaleString('en-US', {maximumFractionDigits: 0}));
-    if (stipend !== 0) {
-      const stipLabel = stipend > 0 ? 'Stipends: +$' + stipend.toLocaleString('en-US', {maximumFractionDigits: 0}) : 'Deductions: -$' + Math.abs(stipend).toLocaleString('en-US', {maximumFractionDigits: 0});
-      parts.push(stipLabel);
+    if (paycheckSource === 'actual') {
+      parts.push('Actual Deposit: $' + existingDeposit.toLocaleString('en-US', {maximumFractionDigits: 0}));
+    } else {
+      const revDisplayLabel = actualRevenue != null ? 'Actual Revenue' : 'Revenue';
+      if (revenueForCalc > 0) parts.push(revDisplayLabel + ': $' + revenueForCalc.toLocaleString('en-US', {maximumFractionDigits: 0}));
+      if (stipend !== 0) {
+        const stipLabel = stipend > 0 ? 'Stipends: +$' + stipend.toLocaleString('en-US', {maximumFractionDigits: 0}) : 'Deductions: -$' + Math.abs(stipend).toLocaleString('en-US', {maximumFractionDigits: 0});
+        parts.push(stipLabel);
+      }
+      if (retirementAmt > 0) parts.push('Retirement: -$' + retirementAmt.toLocaleString('en-US', {maximumFractionDigits: 0}));
+      if (ngTotal > 0) parts.push('Non-Guar: +$' + ngTotal.toLocaleString('en-US', {maximumFractionDigits: 0}));
     }
-    if (retirementAmt > 0) parts.push('Retirement: -$' + retirementAmt.toLocaleString('en-US', {maximumFractionDigits: 0}));
-    if (ngTotal > 0) parts.push('Non-Guar: +$' + ngTotal.toLocaleString('en-US', {maximumFractionDigits: 0}));
     if (isDecPaycheck) parts.push('Bonus: +$' + bonusPaycheckAmt.toLocaleString('en-US', {maximumFractionDigits: 0}));
     summaryEl.textContent = parts.join(' · ');
   } else {
