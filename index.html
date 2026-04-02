@@ -12587,26 +12587,32 @@ async function peUploadCompReport(inputEl) {
   try {
     const text = await ocrExtractText(file);
     const { grandTotal, compDate } = parseCompReportOCR(text);
-    let statusHtml = '';
-
-    // Date validation: comp date IS the production month directly
-    // e.g., comp date 2/1/2026 = February production → March paycheck
     const mk = stabMonthKey();
     const [ty, tm] = mk.split('-').map(Number);
+    const monthNames = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    // Build review popup
+    let items = [];
+    let dateWarning = '';
     if (compDate) {
       if (compDate.month !== tm || compDate.year !== ty) {
-        const monthNames = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        statusHtml += '<div style="color:var(--danger);margin-bottom:4px;font-weight:600;">Date mismatch: Report is for ' + monthNames[compDate.month] + ' ' + compDate.year + ' production, but you\'re entering ' + monthNames[tm] + ' ' + ty + ' production.</div>';
+        dateWarning = 'Report is for ' + monthNames[compDate.month] + ' ' + compDate.year + ' production, but you\'re entering ' + monthNames[tm] + ' ' + ty + '.';
       }
     }
-
     if (grandTotal != null) {
-      document.getElementById('peGrandTotal').value = grandTotal.toFixed(2);
-      statusHtml += '<div style="color:var(--accent);">Found: Grand Total = $' + grandTotal.toLocaleString('en-US', {minimumFractionDigits:2}) + '</div>';
-    } else {
-      statusHtml += '<div style="color:var(--danger);">Could not find Grand Total. Try entering manually.</div>';
+      items.push({ id: 'comp_grand', label: 'Grand Total for All Pools', value: grandTotal, dest: 'Production Earnings (Step 2)', checked: true });
     }
-    statusEl.innerHTML = statusHtml;
+    if (items.length > 0) {
+      showOCRReviewPopup(items, dateWarning, function(accepted) {
+        const gt = accepted.find(a => a.id === 'comp_grand');
+        if (gt) document.getElementById('peGrandTotal').value = gt.value.toFixed(2);
+        statusEl.innerHTML = '<div style="color:var(--accent);">Values applied.</div>';
+        refreshPaycheckEntryHeight();
+      });
+      statusEl.innerHTML = '';
+    } else {
+      statusEl.innerHTML = '<div style="color:var(--danger);">Could not find Grand Total. Try entering manually.</div>';
+    }
   } catch (e) {
     console.error('OCR comp report error:', e);
     const errMsg = e.message || (typeof e === 'string' ? e : JSON.stringify(e)) || 'Unknown error';
@@ -12624,57 +12630,129 @@ async function peUploadPayStub(inputEl) {
   try {
     const text = await ocrExtractText(file);
     const parsed = parsePayStubOCR(text);
-
-    // Populate retirement
-    if (parsed.retirement > 0) {
-      const retEl = document.getElementById('peRetirement');
-      if (retEl) retEl.value = '-$' + parsed.retirement.toFixed(2);
-    }
-
-    // Populate stipend rows
-    const container = document.getElementById('peStipendEntries');
-    if (container && (parsed.stipends.length > 0 || parsed.deductions.length > 0)) {
-      container.innerHTML = '';
-      parsed.stipends.forEach(s => addStabStipendRow(container, s.label, s.amount));
-      parsed.deductions.forEach(d => addStabStipendRow(container, d.label, d.amount));
-      if (container.children.length === 0) addStabStipendRow(container, '', '');
-    }
-
-    // Populate direct deposit
-    if (parsed.directDeposit != null) {
-      const depEl = document.getElementById('peActualDeposit');
-      if (depEl) depEl.value = parsed.directDeposit.toFixed(2);
-    }
-
-    let statusHtml = '';
-
-    // Date validation: deposit date should match the paycheck month
     const mk = stabMonthKey();
     const [ty, tm] = mk.split('-').map(Number);
-    const payDate = new Date(ty, tm, 1); // pay month = production month + 1
+    const monthNames = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const payDate = new Date(ty, tm, 1);
+
+    let dateWarning = '';
     if (parsed.depositDate) {
       const expectedPayMonth = payDate.getMonth() + 1;
       const expectedPayYear = payDate.getFullYear();
       if (parsed.depositDate.month !== expectedPayMonth || parsed.depositDate.year !== expectedPayYear) {
-        const monthNames = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        statusHtml += '<div style="color:var(--danger);margin-bottom:4px;font-weight:600;">Date mismatch: Pay stub deposit date is ' + monthNames[parsed.depositDate.month] + ' ' + parsed.depositDate.year + ', but you\'re entering the ' + monthNames[expectedPayMonth] + ' ' + expectedPayYear + ' paycheck.</div>';
+        dateWarning = 'Pay stub deposit date is ' + monthNames[parsed.depositDate.month] + ' ' + parsed.depositDate.year + ', but you\'re entering the ' + monthNames[expectedPayMonth] + ' ' + expectedPayYear + ' paycheck.';
       }
     }
 
-    let summary = [];
-    if (parsed.stipends.length > 0) summary.push(parsed.stipends.length + ' compensation items');
-    if (parsed.deductions.length > 0) summary.push(parsed.deductions.length + ' deductions');
-    if (parsed.retirement > 0) summary.push('Retirement: $' + parsed.retirement.toLocaleString('en-US', {minimumFractionDigits:2}));
-    if (parsed.directDeposit != null) summary.push('Deposit: $' + parsed.directDeposit.toLocaleString('en-US', {minimumFractionDigits:2}));
+    let items = [];
+    parsed.stipends.forEach((s, i) => {
+      items.push({ id: 'stip_' + i, label: s.label, value: s.amount, dest: 'Stipend', checked: true });
+    });
+    parsed.deductions.forEach((d, i) => {
+      items.push({ id: 'ded_' + i, label: d.label, value: d.amount, dest: 'Deduction', checked: true });
+    });
+    if (parsed.retirement > 0) {
+      items.push({ id: 'retire', label: 'Retirement (401k + Profit Sharing)', value: parsed.retirement, dest: 'Retirement', checked: true });
+    }
+    if (parsed.directDeposit != null) {
+      items.push({ id: 'deposit', label: 'Direct Deposit', value: parsed.directDeposit, dest: 'Actual Bank Deposit', checked: true });
+    }
 
-    statusHtml += '<div style="color:var(--accent);">Extracted: ' + (summary.length > 0 ? summary.join(' · ') : 'No data found') + '</div><div style="font-size:0.65rem;color:var(--text-dim);margin-top:2px;">Review and edit values above, then save.</div>';
-    statusEl.innerHTML = statusHtml;
+    if (items.length > 0) {
+      showOCRReviewPopup(items, dateWarning, function(accepted) {
+        // Apply accepted values
+        const retItem = accepted.find(a => a.id === 'retire');
+        if (retItem) {
+          const retEl = document.getElementById('peRetirement');
+          if (retEl) retEl.value = '-$' + retItem.value.toFixed(2);
+        }
+        const stipItems = accepted.filter(a => a.id.startsWith('stip_'));
+        const dedItems = accepted.filter(a => a.id.startsWith('ded_'));
+        if (stipItems.length > 0 || dedItems.length > 0) {
+          const container = document.getElementById('peStipendEntries');
+          if (container) {
+            container.innerHTML = '';
+            stipItems.forEach(s => addStabStipendRow(container, s.label, s.value));
+            dedItems.forEach(d => addStabStipendRow(container, d.label, d.value));
+            if (container.children.length === 0) addStabStipendRow(container, '', '');
+          }
+        }
+        const depItem = accepted.find(a => a.id === 'deposit');
+        if (depItem) {
+          const depEl = document.getElementById('peActualDeposit');
+          if (depEl) depEl.value = depItem.value.toFixed(2);
+        }
+        statusEl.innerHTML = '<div style="color:var(--accent);">' + accepted.length + ' value' + (accepted.length !== 1 ? 's' : '') + ' applied. Review and save.</div>';
+        refreshPaycheckEntryHeight();
+      });
+      statusEl.innerHTML = '';
+    } else {
+      statusEl.innerHTML = '<div style="color:var(--danger);">No values found. Try entering manually.</div>';
+    }
   } catch (e) {
     console.error('OCR pay stub error:', e);
     const errMsg = e.message || (typeof e === 'string' ? e : JSON.stringify(e)) || 'Unknown error';
     statusEl.innerHTML = '<div style="color:var(--danger);">Error: ' + escHtml(errMsg) + '</div><div style="font-size:0.65rem;color:var(--text-dim);margin-top:2px;">Try a PNG/JPG screenshot or enter the values manually.</div>';
   }
   refreshPaycheckEntryHeight();
+}
+
+// OCR Review Popup — shows extracted values for user to accept/reject
+function showOCRReviewPopup(items, dateWarning, onAccept) {
+  // Remove existing popup if any
+  const existing = document.getElementById('ocrReviewOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'ocrReviewOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+  const fmt = v => (v < 0 ? '-' : '') + '$' + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+  let html = '<div style="background:var(--surface);border-radius:12px;max-width:400px;width:100%;max-height:80vh;overflow-y:auto;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4);">';
+  html += '<div style="font-size:1rem;font-weight:700;margin-bottom:8px;">Review Extracted Values</div>';
+  html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:10px;">Check the values found in the document. Uncheck any you don\'t want to apply.</div>';
+
+  if (dateWarning) {
+    html += '<div style="background:rgba(239,68,68,0.1);border:1px solid var(--danger);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:0.75rem;color:var(--danger);font-weight:600;">' + escHtml(dateWarning) + '</div>';
+  }
+
+  items.forEach((item, i) => {
+    html += '<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--surface2);cursor:pointer;">';
+    html += '<input type="checkbox" ' + (item.checked ? 'checked' : '') + ' data-ocr-idx="' + i + '" style="margin-top:2px;width:18px;height:18px;accent-color:var(--primary);flex-shrink:0;">';
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<div style="font-size:0.82rem;font-weight:600;">' + escHtml(item.label) + '</div>';
+    html += '<div style="display:flex;justify-content:space-between;margin-top:2px;">';
+    html += '<span style="font-size:0.88rem;font-weight:700;color:var(--accent2);">' + fmt(item.value) + '</span>';
+    html += '<span style="font-size:0.68rem;color:var(--text-dim);background:var(--surface2);padding:1px 6px;border-radius:4px;">' + escHtml(item.dest) + '</span>';
+    html += '</div></div></label>';
+  });
+
+  html += '<div style="display:flex;gap:8px;margin-top:14px;">';
+  html += '<button class="btn btn-primary" id="ocrAcceptBtn" style="flex:1;padding:10px;font-size:0.85rem;">Apply Selected</button>';
+  html += '<button class="btn btn-outline" id="ocrCancelBtn" style="flex:1;padding:10px;font-size:0.85rem;">Cancel</button>';
+  html += '</div></div>';
+
+  overlay.innerHTML = html;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#ocrAcceptBtn').addEventListener('click', () => {
+    const accepted = [];
+    overlay.querySelectorAll('[data-ocr-idx]').forEach(cb => {
+      if (cb.checked) accepted.push(items[parseInt(cb.dataset.ocrIdx)]);
+    });
+    overlay.remove();
+    onAccept(accepted);
+  });
+
+  overlay.querySelector('#ocrCancelBtn').addEventListener('click', () => {
+    overlay.remove();
+  });
+
+  // Close on backdrop click
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
 }
 
 // Paycheck Entry stepwise flow
