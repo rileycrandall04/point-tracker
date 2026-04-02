@@ -12713,9 +12713,9 @@ function renderPEStep2(mk, ty, tm, payMonthName) {
   html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Upload a screenshot of your <strong>Compensation Summary Report</strong>, or enter the <strong>"Grand Total From all Pools"</strong> manually.</div>`;
 
   // Upload button
-  html += '<div style="margin-bottom:10px;">';
-  html += '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:8px 14px;font-size:0.78rem;color:var(--primary);transition:border-color 0.2s;">';
-  html += '<span style="font-size:1.1rem;">&#128247;</span> Upload Compensation Report';
+  html += '<div style="margin-bottom:10px;text-align:center;">';
+  html += '<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:6px 12px;font-size:0.72rem;color:var(--primary);transition:border-color 0.2s;">';
+  html += '<span style="font-size:0.9rem;">&#128247;</span> Upload Compensation Summary Report';
   html += '<input type="file" accept="image/*" capture="environment" onchange="peUploadCompReport(this)" style="display:none;">';
   html += '</label>';
   html += '</div>';
@@ -12765,9 +12765,9 @@ function renderPEStep3(mk, ty, tm, payKey, payMonthName) {
   html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Upload a screenshot of your <strong>pay stub</strong>, or enter stipends and deductions manually.</div>`;
 
   // Upload button
-  html += '<div style="margin-bottom:10px;">';
-  html += '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:8px 14px;font-size:0.78rem;color:var(--primary);transition:border-color 0.2s;">';
-  html += '<span style="font-size:1.1rem;">&#128247;</span> Upload Pay Stub';
+  html += '<div style="margin-bottom:10px;text-align:center;">';
+  html += '<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:6px 12px;font-size:0.72rem;color:var(--primary);transition:border-color 0.2s;">';
+  html += '<span style="font-size:0.9rem;">&#128247;</span> Upload Paystub';
   html += '<input type="file" accept="image/*" capture="environment" onchange="peUploadPayStub(this)" style="display:none;">';
   html += '</label>';
   html += '</div>';
