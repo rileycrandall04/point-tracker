@@ -10,6 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
@@ -12422,6 +12423,174 @@ function toggleStabBreakdown() {
   }
 }
 
+// ================================================================
+// OCR DOCUMENT SCANNING FOR PAYCHECK ENTRY
+// ================================================================
+let ocrWorker = null;
+
+async function getOCRWorker() {
+  if (ocrWorker) return ocrWorker;
+  ocrWorker = await Tesseract.createWorker('eng');
+  return ocrWorker;
+}
+
+async function ocrExtractText(file) {
+  const worker = await getOCRWorker();
+  const { data: { text } } = await worker.recognize(file);
+  return text;
+}
+
+function parseCompReportOCR(text) {
+  // Extract "Grand Total for All Pools" or "Grand Total" amount
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (/grand\s*total/i.test(line)) {
+      const match = line.match(/([\d,]+\.\d{2})/);
+      if (match) return parseFloat(match[1].replace(/,/g, ''));
+    }
+  }
+  // Fallback: look for "Total for Pool"
+  for (const line of lines) {
+    if (/total\s*for\s*pool/i.test(line)) {
+      const match = line.match(/([\d,]+\.\d{2})/);
+      if (match) return parseFloat(match[1].replace(/,/g, ''));
+    }
+  }
+  return null;
+}
+
+function parsePayStubOCR(text) {
+  const lines = text.split('\n');
+  const result = { stipends: [], deductions: [], retirement: 0, directDeposit: null };
+  let section = ''; // 'comp', 'deduct', 'deposit'
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Detect section headers (only if no dollar amount on the line)
+    const hasDollarAmt = /\d+\.\d{2}/.test(trimmed);
+    if (/^compensation\b/i.test(trimmed) && !hasDollarAmt) { section = 'comp'; continue; }
+    if (/^deductions?\b/i.test(trimmed) && !hasDollarAmt) { section = 'deduct'; continue; }
+    if (/^direct\s*deposit/i.test(trimmed) && !hasDollarAmt) { section = 'deposit'; continue; }
+    // Skip header rows
+    if (/^\s*current\s+ytd/i.test(trimmed) || /^\s*description\s+amount/i.test(trimmed)) continue;
+
+    // Extract amounts — look for "Label   Current   YTD" pattern (take Current column)
+    const amtMatch = trimmed.match(/^(.+?)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/);
+    if (amtMatch) {
+      const label = amtMatch[1].trim();
+      const current = parseFloat(amtMatch[2].replace(/,/g, ''));
+      if (current === 0) continue;
+
+      if (section === 'comp') {
+        // Skip the main compensation line (already in Step 2)
+        if (/compensation\s*\(new\)/i.test(label)) continue;
+        result.stipends.push({ label, amount: current });
+      } else if (section === 'deduct') {
+        // Retirement items
+        if (/401k|profit\s*sharing/i.test(label)) {
+          result.retirement += current;
+        } else {
+          result.deductions.push({ label, amount: -current });
+        }
+      } else if (section === 'deposit') {
+        result.directDeposit = current;
+      }
+      continue;
+    }
+
+    // Single amount pattern (e.g., "Label  Amount")
+    const singleMatch = trimmed.match(/^(.+?)\s+([\d,]+\.\d{2})\s*$/);
+    if (singleMatch) {
+      const label = singleMatch[1].trim();
+      const amount = parseFloat(singleMatch[2].replace(/,/g, ''));
+      if (amount === 0) continue;
+
+      // Net Compensation / Direct Deposit
+      if (/net\s*compensation/i.test(label) || /direct\s*deposit/i.test(label)) {
+        result.directDeposit = amount;
+      } else if (section === 'comp') {
+        if (/compensation\s*\(new\)/i.test(label)) continue;
+        result.stipends.push({ label, amount });
+      } else if (section === 'deduct') {
+        if (/401k|profit\s*sharing/i.test(label)) {
+          result.retirement += amount;
+        } else {
+          result.deductions.push({ label, amount: -amount });
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+async function peUploadCompReport(inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('peOcrStatus2');
+  statusEl.innerHTML = '<div style="display:flex;align-items:center;gap:6px;"><div class="spinner" style="width:14px;height:14px;border:2px solid transparent;border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;"></div> Reading document...</div>';
+  refreshPaycheckEntryHeight();
+  try {
+    const text = await ocrExtractText(file);
+    const grandTotal = parseCompReportOCR(text);
+    if (grandTotal != null) {
+      document.getElementById('peGrandTotal').value = grandTotal.toFixed(2);
+      statusEl.innerHTML = '<div style="color:var(--accent);">Found: Grand Total = $' + grandTotal.toLocaleString('en-US', {minimumFractionDigits:2}) + '</div>';
+    } else {
+      statusEl.innerHTML = '<div style="color:var(--danger);">Could not find Grand Total. Try entering manually.</div>';
+    }
+  } catch (e) {
+    statusEl.innerHTML = '<div style="color:var(--danger);">Error reading image. Try again or enter manually.</div>';
+  }
+  refreshPaycheckEntryHeight();
+}
+
+async function peUploadPayStub(inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('peOcrStatus3');
+  statusEl.innerHTML = '<div style="display:flex;align-items:center;gap:6px;"><div class="spinner" style="width:14px;height:14px;border:2px solid transparent;border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;"></div> Reading pay stub...</div>';
+  refreshPaycheckEntryHeight();
+  try {
+    const text = await ocrExtractText(file);
+    const parsed = parsePayStubOCR(text);
+
+    // Populate retirement
+    if (parsed.retirement > 0) {
+      const retEl = document.getElementById('peRetirement');
+      if (retEl) retEl.value = '-$' + parsed.retirement.toFixed(2);
+    }
+
+    // Populate stipend rows
+    const container = document.getElementById('peStipendEntries');
+    if (container && (parsed.stipends.length > 0 || parsed.deductions.length > 0)) {
+      container.innerHTML = '';
+      parsed.stipends.forEach(s => addStabStipendRow(container, s.label, s.amount));
+      parsed.deductions.forEach(d => addStabStipendRow(container, d.label, d.amount));
+      if (container.children.length === 0) addStabStipendRow(container, '', '');
+    }
+
+    // Populate direct deposit
+    if (parsed.directDeposit != null) {
+      const depEl = document.getElementById('peActualDeposit');
+      if (depEl) depEl.value = parsed.directDeposit.toFixed(2);
+    }
+
+    let summary = [];
+    if (parsed.stipends.length > 0) summary.push(parsed.stipends.length + ' compensation items');
+    if (parsed.deductions.length > 0) summary.push(parsed.deductions.length + ' deductions');
+    if (parsed.retirement > 0) summary.push('Retirement: $' + parsed.retirement.toLocaleString('en-US', {minimumFractionDigits:2}));
+    if (parsed.directDeposit != null) summary.push('Deposit: $' + parsed.directDeposit.toLocaleString('en-US', {minimumFractionDigits:2}));
+
+    statusEl.innerHTML = '<div style="color:var(--accent);">Extracted: ' + (summary.length > 0 ? summary.join(' · ') : 'No data found') + '</div><div style="font-size:0.65rem;color:var(--text-dim);margin-top:2px;">Review and edit values above, then save.</div>';
+  } catch (e) {
+    statusEl.innerHTML = '<div style="color:var(--danger);">Error reading image. Try again or enter manually.</div>';
+  }
+  refreshPaycheckEntryHeight();
+}
+
 // Paycheck Entry stepwise flow
 let peStep = 1; // current step (1-3)
 
@@ -12541,7 +12710,16 @@ function renderPEStep2(mk, ty, tm, payMonthName) {
   const existingOverride = data.overrides && data.overrides[mk] && data.overrides[mk].compTotal != null ? data.overrides[mk].compTotal : null;
 
   let html = '<div style="font-size:0.88rem;font-weight:700;color:var(--text);margin-bottom:4px;">Step 2: Total Production & Time Earnings</div>';
-  html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Open your <strong>Compensation Summary Report</strong> and enter the dollar value from the line showing <strong>"Grand Total From all Pools"</strong>.</div>`;
+  html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Upload a screenshot of your <strong>Compensation Summary Report</strong>, or enter the <strong>"Grand Total From all Pools"</strong> manually.</div>`;
+
+  // Upload button
+  html += '<div style="margin-bottom:10px;">';
+  html += '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:8px 14px;font-size:0.78rem;color:var(--primary);transition:border-color 0.2s;">';
+  html += '<span style="font-size:1.1rem;">&#128247;</span> Upload Compensation Report';
+  html += '<input type="file" accept="image/*" capture="environment" onchange="peUploadCompReport(this)" style="display:none;">';
+  html += '</label>';
+  html += '</div>';
+  html += '<div id="peOcrStatus2" style="margin-bottom:8px;font-size:0.75rem;"></div>';
 
   if (calcProduction > 0) {
     html += `<div style="font-size:0.72rem;color:var(--accent);margin-bottom:8px;font-style:italic;">App estimate: $${calcProduction.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} (${weighted.toFixed(1)} pts × $${pv.toFixed(2)})</div>`;
@@ -12584,7 +12762,16 @@ function renderPEStep3(mk, ty, tm, payKey, payMonthName) {
   const existingDeposit = (data.paychecks || {})[payKey];
 
   let html = '<div style="font-size:0.88rem;font-weight:700;color:var(--text);margin-bottom:4px;">Step 3: Stipends, Deductions & Final Total</div>';
-  html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:10px;">Enter all stipends and deductions from your actual pay stub.</div>`;
+  html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Upload a screenshot of your <strong>pay stub</strong>, or enter stipends and deductions manually.</div>`;
+
+  // Upload button
+  html += '<div style="margin-bottom:10px;">';
+  html += '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:8px 14px;font-size:0.78rem;color:var(--primary);transition:border-color 0.2s;">';
+  html += '<span style="font-size:1.1rem;">&#128247;</span> Upload Pay Stub';
+  html += '<input type="file" accept="image/*" capture="environment" onchange="peUploadPayStub(this)" style="display:none;">';
+  html += '</label>';
+  html += '</div>';
+  html += '<div id="peOcrStatus3" style="margin-bottom:8px;font-size:0.75rem;"></div>';
 
   // Retirement
   const existingRetire = (data.retirement || {})[mk] || 0;
