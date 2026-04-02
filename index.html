@@ -12548,10 +12548,10 @@ function renderPEStep2(mk, ty, tm, payMonthName) {
   }
 
   html += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">';
-  html += `<span style="font-size:0.82rem;color:var(--text-dim);">$</span>`;
-  html += `<input type="number" id="peGrandTotal" step="0.01" placeholder="0.00" value="${existingOverride != null ? existingOverride : ''}" class="text-input" style="flex:1;font-size:0.9rem;padding:8px 10px;">`;
-  html += `<button class="btn btn-primary btn-sm" onclick="peStep2Save()" style="font-size:0.75rem;padding:6px 14px;">Save</button>`;
+  html += `<span style="font-size:0.85rem;color:var(--text-dim);">$</span>`;
+  html += `<input type="number" id="peGrandTotal" step="0.01" placeholder="0.00" value="${existingOverride != null ? existingOverride : ''}" class="text-input" style="flex:1;font-size:0.9rem;padding:8px 12px;text-align:center;">`;
   html += '</div>';
+  html += `<div style="text-align:center;margin-bottom:10px;"><button class="btn btn-primary" onclick="peStep2Save()" style="font-size:0.85rem;padding:10px 28px;">Save & Continue</button></div>`;
 
   const skipLabel = calcProduction > 0 ? 'Skip (use app estimate)' : 'Skip';
   html += `<div style="text-align:center;"><button class="btn btn-outline btn-sm" onclick="peStep2Skip()" style="font-size:0.7rem;padding:4px 12px;">${skipLabel}</button></div>`;
@@ -12618,13 +12618,13 @@ function renderPEStep3(mk, ty, tm, payKey, payMonthName) {
   html += `<div style="font-size:1.1rem;font-weight:700;color:var(--accent2);margin-bottom:10px;">$${runningTotal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>`;
 
   html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Or enter the <strong>Actual Bank Deposit</strong> total from your pay stub to override:</div>';
-  html += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">';
-  html += `<span style="font-size:0.82rem;color:var(--text-dim);">$</span>`;
-  html += `<input type="number" id="peActualDeposit" step="0.01" placeholder="0.00" value="${existingDeposit != null ? existingDeposit : ''}" class="text-input" style="flex:1;font-size:0.9rem;padding:8px 10px;">`;
-  html += `<button class="btn btn-primary btn-sm" onclick="peStep3SaveDeposit()" style="font-size:0.75rem;padding:6px 14px;">Save</button>`;
+  html += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">';
+  html += `<span style="font-size:0.85rem;color:var(--text-dim);">$</span>`;
+  html += `<input type="number" id="peActualDeposit" step="0.01" placeholder="0.00" value="${existingDeposit != null ? existingDeposit : ''}" class="text-input" style="flex:1;font-size:0.9rem;padding:8px 12px;text-align:center;">`;
   html += '</div>';
+  html += `<div style="text-align:center;margin-bottom:10px;"><button class="btn btn-primary" onclick="peStep3SaveDeposit()" style="font-size:0.85rem;padding:10px 28px;">Save & Finish</button></div>`;
 
-  html += `<div style="text-align:center;margin-top:4px;"><button class="btn btn-outline btn-sm" onclick="peStep3Skip()" style="font-size:0.7rem;padding:4px 12px;">Done — use calculated total</button></div>`;
+  html += `<div style="text-align:center;"><button class="btn btn-outline btn-sm" onclick="peStep3Skip()" style="font-size:0.7rem;padding:4px 12px;">Done — use calculated total</button></div>`;
   html += '</div>';
 
   return html;
