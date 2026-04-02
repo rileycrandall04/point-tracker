@@ -12455,15 +12455,28 @@ async function getOCRWorker() {
 }
 
 async function ocrExtractText(file) {
-  // Read file into a data URL first to avoid mobile file access errors
+  // Convert image to canvas to handle all mobile formats (HEIC, WebP, etc.)
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Could not read the image file. Try saving the screenshot to your gallery first, then upload it.'));
+    reader.onerror = () => reject(new Error('Could not read file. Save the screenshot to your gallery first.'));
     reader.readAsDataURL(file);
   });
+  // Load into img → draw to canvas → get PNG data URL for Tesseract
+  const canvas = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      resolve(c);
+    };
+    img.onerror = () => reject(new Error('Could not decode image. Try a PNG or JPG screenshot.'));
+    img.src = dataUrl;
+  });
   const worker = await getOCRWorker();
-  const result = await worker.recognize(dataUrl);
+  const result = await worker.recognize(canvas);
   return result.data.text;
 }
 
@@ -12599,7 +12612,8 @@ async function peUploadCompReport(inputEl) {
     statusEl.innerHTML = statusHtml;
   } catch (e) {
     console.error('OCR comp report error:', e);
-    statusEl.innerHTML = '<div style="color:var(--danger);">Error: ' + escHtml(e.message || 'Could not read image') + '. Try again or enter manually.</div>';
+    const errMsg = e.message || (typeof e === 'string' ? e : JSON.stringify(e)) || 'Unknown error';
+    statusEl.innerHTML = '<div style="color:var(--danger);">Error: ' + escHtml(errMsg) + '</div><div style="font-size:0.65rem;color:var(--text-dim);margin-top:2px;">Try a PNG/JPG screenshot or enter the value manually.</div>';
   }
   refreshPaycheckEntryHeight();
 }
@@ -12660,7 +12674,8 @@ async function peUploadPayStub(inputEl) {
     statusEl.innerHTML = statusHtml;
   } catch (e) {
     console.error('OCR pay stub error:', e);
-    statusEl.innerHTML = '<div style="color:var(--danger);">Error: ' + escHtml(e.message || 'Could not read image') + '. Try again or enter manually.</div>';
+    const errMsg = e.message || (typeof e === 'string' ? e : JSON.stringify(e)) || 'Unknown error';
+    statusEl.innerHTML = '<div style="color:var(--danger);">Error: ' + escHtml(errMsg) + '</div><div style="font-size:0.65rem;color:var(--text-dim);margin-top:2px;">Try a PNG/JPG screenshot or enter the values manually.</div>';
   }
   refreshPaycheckEntryHeight();
 }
