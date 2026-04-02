@@ -12921,19 +12921,21 @@ function renderStabilization() {
 
     document.getElementById('stabPaycheck').textContent = '$' + totalPaycheck.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    // Summary line
+    // Summary line — show source and component breakdown
     let parts = [];
     if (paycheckSource === 'actual') {
-      parts.push('Actual Deposit: $' + existingDeposit.toLocaleString('en-US', {maximumFractionDigits: 0}));
-    } else {
-      const revDisplayLabel = actualRevenue != null ? 'Actual Revenue' : 'Revenue';
+      parts.push('Source: Actual pay stub deposit');
+    } else if (paycheckSource === 'calculated') {
+      const revDisplayLabel = actualRevenue != null ? 'Comp Report' : 'Est. Revenue';
       if (revenueForCalc > 0) parts.push(revDisplayLabel + ': $' + revenueForCalc.toLocaleString('en-US', {maximumFractionDigits: 0}));
       if (stipend !== 0) {
         const stipLabel = stipend > 0 ? 'Stipends: +$' + stipend.toLocaleString('en-US', {maximumFractionDigits: 0}) : 'Deductions: -$' + Math.abs(stipend).toLocaleString('en-US', {maximumFractionDigits: 0});
         parts.push(stipLabel);
       }
-      if (retirementAmt > 0) parts.push('Retirement: -$' + retirementAmt.toLocaleString('en-US', {maximumFractionDigits: 0}));
+      if (retirementAmt > 0) parts.push('Retire: -$' + retirementAmt.toLocaleString('en-US', {maximumFractionDigits: 0}));
       if (ngTotal > 0) parts.push('Non-Guar: +$' + ngTotal.toLocaleString('en-US', {maximumFractionDigits: 0}));
+    } else {
+      parts.push('Estimated from ' + weighted.toFixed(0) + ' pts × $' + pv.toFixed(2));
     }
     if (isDecPaycheck) parts.push('Bonus: +$' + bonusPaycheckAmt.toLocaleString('en-US', {maximumFractionDigits: 0}));
     summaryEl.textContent = parts.join(' · ');
