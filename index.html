@@ -12631,9 +12631,12 @@ function renderPaycheckEntry() {
   for (let s = 1; s <= 3; s++) {
     const active = s === peStep;
     const done = s < peStep;
+    const clickable = s < peStep;
     const bg = active ? 'var(--accent2)' : done ? 'var(--accent)' : 'var(--surface2)';
     const color = (active || done) ? '#fff' : 'var(--text-dim)';
-    html += `<div style="width:28px;height:28px;border-radius:50%;background:${bg};color:${color};display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:700;">${done ? '&#10003;' : s}</div>`;
+    const cursor = clickable ? 'cursor:pointer;' : '';
+    const onclick = clickable ? ` onclick="peGoToStep(${s})"` : '';
+    html += `<div style="width:28px;height:28px;border-radius:50%;background:${bg};color:${color};display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:700;${cursor}"${onclick}>${done ? '&#10003;' : s}</div>`;
     if (s < 3) html += '<div style="width:24px;height:2px;background:var(--border);align-self:center;"></div>';
   }
   html += '</div>';
@@ -12645,6 +12648,14 @@ function renderPaycheckEntry() {
   } else if (peStep === 3) {
     html += renderPEStep3(mk, ty, tm, payKey, payMonthName);
   }
+
+  // Back button on steps 2-3
+  if (peStep > 1) {
+    html += `<div style="text-align:center;margin-top:10px;"><a href="#" onclick="peGoToStep(${peStep - 1}); return false;" style="font-size:0.72rem;color:var(--text-dim);">&larr; Back to Step ${peStep - 1}</a></div>`;
+  }
+
+  // Reset button
+  html += '<div style="text-align:center;margin-top:14px;border-top:1px solid var(--border);padding-top:10px;"><a href="#" onclick="peResetMonth(); return false;" style="font-size:0.68rem;color:var(--danger);">Reset all entries for this month</a></div>';
 
   html += '</div>';
   panel.innerHTML = html;
@@ -12818,6 +12829,50 @@ function renderPEStep3(mk, ty, tm, payKey, payMonthName) {
 }
 
 // Step handlers
+function peGoToStep(step) {
+  peStep = step;
+  renderPaycheckEntry();
+}
+
+function peResetMonth() {
+  const mk = stabMonthKey();
+  const [ty, tm] = mk.split('-').map(Number);
+  const payDate = new Date(ty, tm, 1);
+  const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
+  if (!confirm('Reset all paycheck entries for this month? This clears point value, revenue override, stipends, NG payments, retirement, and actual deposit.')) return;
+  // Clear per-month point value
+  if (settings.pointValues && settings.pointValues[mk] != null) {
+    delete settings.pointValues[mk];
+    saveSettings(settings);
+  }
+  // Clear revenue override
+  if (data.overrides && data.overrides[mk]) {
+    delete data.overrides[mk];
+  }
+  // Clear stipends
+  if (data.stipends && data.stipends[mk] !== undefined) {
+    delete data.stipends[mk];
+  }
+  // Clear NG payments
+  if (data.nonGuaranteed && data.nonGuaranteed[mk] !== undefined) {
+    delete data.nonGuaranteed[mk];
+  }
+  // Clear retirement
+  if (data.retirement && data.retirement[mk] !== undefined) {
+    delete data.retirement[mk];
+  }
+  // Clear actual deposit
+  if (data.paychecks && data.paychecks[payKey] != null) {
+    delete data.paychecks[payKey];
+  }
+  saveData(data);
+  peStep = 1;
+  renderPaycheckEntry();
+  renderStabilization();
+  renderPaycheckChart();
+  renderPaycheckTable();
+  showToast('Paycheck entries reset');
+}
 function peStep1Save() {
   const input = document.getElementById('pePointValue');
   const val = parseFloat(input?.value) || 0;
