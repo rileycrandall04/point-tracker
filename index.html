@@ -16046,6 +16046,7 @@ function openCaseEdit(caseId) {
   document.getElementById('editCaseORCase').checked = c.isORCase || false;
 
   document.getElementById('caseEditModal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
 }
 
 document.getElementById('saveCaseEdit').addEventListener('click', () => {
@@ -16107,15 +16108,17 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
   renderDECaseList();
   updateDETally();
   document.getElementById('caseEditModal').classList.add('hidden');
+  document.body.style.overflow = '';
   showToast('Case updated');
 });
 
 document.getElementById('cancelCaseEdit').addEventListener('click', () => {
   document.getElementById('caseEditModal').classList.add('hidden');
+  document.body.style.overflow = '';
 });
 
 document.getElementById('caseEditModal').addEventListener('click', (e) => {
-  if (e.target.id === 'caseEditModal') document.getElementById('caseEditModal').classList.add('hidden');
+  if (e.target.id === 'caseEditModal') { document.getElementById('caseEditModal').classList.add('hidden'); document.body.style.overflow = ''; }
 });
 
 document.getElementById('deleteCaseEdit').addEventListener('click', () => {
@@ -16131,6 +16134,7 @@ document.getElementById('deleteCaseEdit').addEventListener('click', () => {
   renderDECaseList();
   updateDETally();
   document.getElementById('caseEditModal').classList.add('hidden');
+  document.body.style.overflow = '';
   showToast('Case deleted');
 });
 
