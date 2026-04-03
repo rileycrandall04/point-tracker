@@ -4301,18 +4301,27 @@ async function loadSharedCases() {
 
 async function loadSharedCaseOverrides() {
   try {
-    // Cache first, then server — same pattern as loadSharedCases
+    // Load from cache first (fast) so shared cases can start immediately
     try {
       const cacheSnap = await db.collection('sharedCaseOverrides').get({ source: 'cache' });
       sharedCaseOverridesCache = {};
       cacheSnap.forEach(doc => { sharedCaseOverridesCache[doc.id] = doc.data(); });
     } catch (e) { /* no cache */ }
+  } catch (err) {
+    console.error('Failed to load shared case overrides (cache):', err);
+  }
+}
+
+// Refresh overrides from server in the background (non-blocking)
+async function refreshSharedCaseOverrides() {
+  try {
     const snapshot = await db.collection('sharedCaseOverrides').get({ source: 'server' });
     sharedCaseOverridesCache = {};
     snapshot.forEach(doc => { sharedCaseOverridesCache[doc.id] = doc.data(); });
-    console.log('Loaded ' + Object.keys(sharedCaseOverridesCache).length + ' shared case overrides');
+    applySharedCaseOverrides();
+    console.log('Loaded ' + Object.keys(sharedCaseOverridesCache).length + ' shared case overrides (server)');
   } catch (err) {
-    console.error('Failed to load shared case overrides:', err);
+    console.error('Failed to load shared case overrides (server):', err);
   }
 }
 
@@ -20217,14 +20226,20 @@ auth.onAuthStateChanged(async (user) => {
 
     // Load shared cases, overrides, surgeon mappings, and user profiles from community pool (non-blocking)
     // Timeout ensures card renders even if Firestore hangs on flaky connections
+    // Load overrides from cache (fast), then start shared cases immediately.
+    // The overrides server refresh runs in parallel and won't block the chain.
     const sharedLoadPromise = loadSharedCaseOverrides().then(() => {
-      return loadSharedCases(); // applies overrides after loading
+      // Kick off server refresh in background (non-blocking)
+      refreshSharedCaseOverrides();
+      return loadSharedCases(); // applies cached overrides after loading
     }).then(() => {
       return Promise.all([loadSurgeonMappings(), loadUserProfiles(), loadAsaMasterCodes(), loadAsaCodeProcedures()]);
     });
     const sharedLoadTimeout = new Promise(resolve => setTimeout(() => {
       if (!sharedCasesLoaded) {
-        console.warn('Shared data loading timed out after 15s — will keep loading in background');
+        console.warn('Shared data loading timed out after 15s — marking loaded so UI is not stuck');
+        sharedCasesLoaded = true;
+        renderCollectiveCases();
       }
       resolve();
     }, 15000));
@@ -20240,6 +20255,15 @@ auth.onAuthStateChanged(async (user) => {
         renderSurgeonEfficiency();
       }
     });
+    // If the background load completes after timeout, re-render with fresh data
+    sharedLoadPromise.then(() => {
+      renderCollectiveCases();
+      const analyticsPage = document.getElementById('page-analytics');
+      if (analyticsPage && !analyticsPage.classList.contains('hidden')) {
+        renderTopProcedures();
+        renderSurgeonEfficiency();
+      }
+    }).catch(() => {});
 
     // Auto-sync calendar if last sync was >24 hours ago
     const lastSync = data.calendarLastSync ? new Date(data.calendarLastSync).getTime() : 0;
