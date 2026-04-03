@@ -6999,6 +6999,10 @@ function loadDataEntryPage() {
   renderDECaseList();
   updateDETally();
   initScanPage();
+  // Ensure community data is loaded for autocomplete suggestions
+  if (!sharedCasesLoaded || sharedCasesCache.length === 0) {
+    loadSharedCases().catch(() => {});
+  }
   // Show/hide back button based on where we came from
   const backBtn = document.getElementById('backToShiftLogsBtn');
   if (returnToToday) {
