@@ -4267,7 +4267,8 @@ function parseSharedCasesSnapshot(snapshot) {
   return cases;
 }
 
-async function loadSharedCases() {
+async function loadSharedCases(retryCount) {
+  retryCount = retryCount || 0;
   // Load from Firestore cache first for instant display, then refresh from server.
   // On slow/flaky connections, get() can hang waiting for the server — cache-first avoids this.
   try {
@@ -4283,8 +4284,10 @@ async function loadSharedCases() {
     } catch (cacheErr) {
       // No cache available — first load or cleared; fall through to server
     }
-    // Fetch fresh data from server
-    const serverSnap = await db.collection('sharedCases').get({ source: 'server' });
+    // Fetch fresh data from server (with 10s timeout so a hung connection triggers retry)
+    const serverFetch = db.collection('sharedCases').get({ source: 'server' });
+    const fetchTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Server fetch timed out')), 10000));
+    const serverSnap = await Promise.race([serverFetch, fetchTimeout]);
     sharedCasesCache = parseSharedCasesSnapshot(serverSnap);
     applySharedCaseOverrides();
     sharedCasesLoaded = true;
@@ -4293,6 +4296,15 @@ async function loadSharedCases() {
     return sharedCasesCache;
   } catch (err) {
     console.error('Failed to load shared cases:', err);
+    // Auto-retry: Firestore connection may not be ready on first attempt.
+    // Retry up to 3 times with increasing delays (3s, 6s, 12s).
+    if (retryCount < 3) {
+      const delay = 3000 * Math.pow(2, retryCount);
+      console.log('Will retry loading shared cases in ' + (delay / 1000) + 's (attempt ' + (retryCount + 2) + '/4)');
+      return new Promise(resolve => setTimeout(() => {
+        resolve(loadSharedCases(retryCount + 1));
+      }, delay));
+    }
     sharedCasesLoaded = true;
     renderCollectiveCases();
     return [];
