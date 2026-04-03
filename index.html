@@ -15217,6 +15217,10 @@ function renderCollectiveCases() {
     html += `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">`;
     html += `<div style="font-weight:600;font-size:0.85rem;margin-bottom:8px;">Admin: Search & Edit Cases</div>`;
     html += `<input type="text" id="adminCaseSearch" placeholder="Search surgeon or procedure..." autocomplete="off" style="width:100%;padding:8px 10px;font-size:0.85rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="renderAdminCaseSearch()">`;
+    html += `<div style="display:flex;gap:6px;margin-top:6px;">`;
+    html += `<button class="btn btn-outline btn-sm" onclick="renderAdminCaseSearch('surgeons')" style="flex:1;font-size:0.72rem;padding:4px 6px;">All Surgeons</button>`;
+    html += `<button class="btn btn-outline btn-sm" onclick="renderAdminCaseSearch('procedures')" style="flex:1;font-size:0.72rem;padding:4px 6px;">All Procedures</button>`;
+    html += `</div>`;
     html += `<div id="adminCaseSearchResults" style="margin-top:8px;"></div>`;
     html += `</div>`;
     html += `<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">`;
@@ -15230,13 +15234,14 @@ function renderCollectiveCases() {
 // ---- Admin: Inline Search & Edit Cases on Collective Cases card ----
 let adminSearchDirty = {};  // { docId_or_caseId: { surgeon?, procedure? } }
 
-function renderAdminCaseSearch() {
+function renderAdminCaseSearch(mode) {
   if (!isAdmin()) return;
   const el = document.getElementById('adminCaseSearchResults');
   if (!el) return;
   const query = (document.getElementById('adminCaseSearch') || {}).value;
-  if (!query || query.trim().length < 2) { el.innerHTML = ''; return; }
-  const q = query.trim().toLowerCase();
+  const showAll = mode === 'surgeons' || mode === 'procedures';
+  if (!showAll && (!query || query.trim().length < 2)) { el.innerHTML = ''; return; }
+  const q = showAll ? '' : query.trim().toLowerCase();
   adminSearchDirty = {};
 
   // Collect all cases (personal + shared)
@@ -15246,7 +15251,7 @@ function renderAdminCaseSearch() {
     if (c.caseType !== 'standard' || !c.procedure) return;
     const surgeon = (c.notes || '').trim();
     const procedure = (c.procedure || '').trim();
-    if (!surgeon.toLowerCase().includes(q) && !procedure.toLowerCase().includes(q)) return;
+    if (!showAll && !surgeon.toLowerCase().includes(q) && !procedure.toLowerCase().includes(q)) return;
     cases.push({
       _key: 'p_' + c.id, source: 'personal', id: c.id,
       surgeon, procedure, date: c.shiftDate || '',
@@ -15258,7 +15263,7 @@ function renderAdminCaseSearch() {
     if (sc.caseType !== 'standard' || !sc.procedure) return;
     const surgeon = (sc.surgeon || '').trim();
     const procedure = (sc.procedure || '').trim();
-    if (!surgeon.toLowerCase().includes(q) && !procedure.toLowerCase().includes(q)) return;
+    if (!showAll && !surgeon.toLowerCase().includes(q) && !procedure.toLowerCase().includes(q)) return;
     cases.push({
       _key: 's_' + sc._docId, source: 'shared', _docId: sc._docId,
       surgeon, procedure, date: sc.shiftDate || '',
@@ -15271,33 +15276,58 @@ function renderAdminCaseSearch() {
     return;
   }
 
-  // Group by unique surgeon+procedure combo for bulk editing
+  // Group by surgeon or procedure depending on mode
   const groups = {};
-  cases.forEach(c => {
-    const gKey = c.surgeon + '|||' + c.procedure;
-    if (!groups[gKey]) groups[gKey] = { surgeon: c.surgeon, procedure: c.procedure, cases: [] };
-    groups[gKey].cases.push(c);
-  });
+  if (mode === 'surgeons') {
+    cases.forEach(c => {
+      const gKey = c.surgeon || '(no surgeon)';
+      if (!groups[gKey]) groups[gKey] = { label: gKey, editField: 'surgeon', editValue: c.surgeon, cases: [] };
+      groups[gKey].cases.push(c);
+    });
+  } else if (mode === 'procedures') {
+    cases.forEach(c => {
+      const gKey = c.procedure;
+      if (!groups[gKey]) groups[gKey] = { label: gKey, editField: 'procedure', editValue: c.procedure, cases: [] };
+      groups[gKey].cases.push(c);
+    });
+  } else {
+    // Search mode: group by surgeon+procedure combo
+    cases.forEach(c => {
+      const gKey = c.surgeon + '|||' + c.procedure;
+      if (!groups[gKey]) groups[gKey] = { label: null, surgeon: c.surgeon, procedure: c.procedure, cases: [] };
+      groups[gKey].cases.push(c);
+    });
+  }
 
   const sorted = Object.values(groups).sort((a, b) => b.cases.length - a.cases.length);
-  let html = '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">' + cases.length + ' case' + (cases.length !== 1 ? 's' : '') + ' in ' + sorted.length + ' group' + (sorted.length !== 1 ? 's' : '') + '</div>';
+  const modeLabel = mode === 'surgeons' ? 'surgeon' : mode === 'procedures' ? 'procedure' : 'group';
+  let html = '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">' + cases.length + ' case' + (cases.length !== 1 ? 's' : '') + ' across ' + sorted.length + ' ' + modeLabel + (sorted.length !== 1 ? 's' : '') + '</div>';
 
   sorted.forEach((g, gi) => {
     const gId = 'acsg_' + gi;
+    const headerLabel = g.label !== null ? g.label : (escHtml(g.surgeon || '(no surgeon)') + ' — ' + escHtml(g.procedure));
     html += '<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden;">';
     html += '<div style="padding:8px 10px;background:var(--card-bg);display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleAdminCaseGroup(\'' + gId + '\')">';
-    html += '<div style="font-size:0.8rem;"><strong>' + escHtml(g.surgeon || '(no surgeon)') + '</strong> — ' + escHtml(g.procedure) + '</div>';
-    html += '<span style="font-size:0.7rem;color:var(--text-dim);">' + g.cases.length + ' case' + (g.cases.length !== 1 ? 's' : '') + ' &#9662;</span>';
+    html += '<div style="font-size:0.8rem;"><strong>' + escHtml(headerLabel) + '</strong></div>';
+    html += '<span style="font-size:0.7rem;color:var(--text-dim);">' + g.cases.length + ' &#9662;</span>';
     html += '</div>';
     html += '<div id="' + gId + '" style="display:none;padding:8px 10px;border-top:1px solid var(--border);background:var(--bg);">';
 
-    // Bulk rename inputs for this group
-    html += '<div style="display:flex;gap:6px;margin-bottom:6px;">';
-    html += '<div style="flex:1;"><label style="font-size:0.65rem;color:var(--text-dim);">Surgeon</label>';
-    html += '<input type="text" data-group="' + gi + '" data-field="surgeon" value="' + escHtml(g.surgeon) + '" style="width:100%;padding:5px 8px;font-size:0.8rem;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="markAdminGroupDirty(this)"></div>';
-    html += '<div style="flex:1;"><label style="font-size:0.65rem;color:var(--text-dim);">Procedure</label>';
-    html += '<input type="text" data-group="' + gi + '" data-field="procedure" value="' + escHtml(g.procedure) + '" style="width:100%;padding:5px 8px;font-size:0.8rem;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="markAdminGroupDirty(this)"></div>';
-    html += '</div>';
+    if (g.label !== null) {
+      // Single-field mode (All Surgeons or All Procedures)
+      html += '<div style="margin-bottom:6px;">';
+      html += '<label style="font-size:0.65rem;color:var(--text-dim);">Rename ' + g.editField + '</label>';
+      html += '<input type="text" data-group="' + gi + '" data-field="' + g.editField + '" value="' + escHtml(g.editValue) + '" style="width:100%;padding:5px 8px;font-size:0.8rem;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="markAdminGroupDirty(this)">';
+      html += '</div>';
+    } else {
+      // Search mode: both fields
+      html += '<div style="display:flex;gap:6px;margin-bottom:6px;">';
+      html += '<div style="flex:1;"><label style="font-size:0.65rem;color:var(--text-dim);">Surgeon</label>';
+      html += '<input type="text" data-group="' + gi + '" data-field="surgeon" value="' + escHtml(g.surgeon) + '" style="width:100%;padding:5px 8px;font-size:0.8rem;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="markAdminGroupDirty(this)"></div>';
+      html += '<div style="flex:1;"><label style="font-size:0.65rem;color:var(--text-dim);">Procedure</label>';
+      html += '<input type="text" data-group="' + gi + '" data-field="procedure" value="' + escHtml(g.procedure) + '" style="width:100%;padding:5px 8px;font-size:0.8rem;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="markAdminGroupDirty(this)"></div>';
+      html += '</div>';
+    }
     html += '<button class="btn btn-sm" id="acsg_save_' + gi + '" onclick="saveAdminCaseGroup(' + gi + ')" style="width:100%;font-size:0.75rem;padding:4px 8px;display:none;">Save Changes to All ' + g.cases.length + ' Cases</button>';
 
     // Individual case list
@@ -15305,9 +15335,12 @@ function renderAdminCaseSearch() {
     g.cases.slice(0, 20).forEach(c => {
       const contributor = c.uid === myUid ? 'You' :
         userProfilesCache[c.uid] ? userProfilesCache[c.uid].email : 'Other';
+      const detail = g.label !== null
+        ? (g.editField === 'surgeon' ? c.procedure : c.surgeon || '(no surgeon)')
+        : '';
       html += '<div style="padding:2px 0;display:flex;justify-content:space-between;">';
-      html += '<span>' + escHtml(c.date) + ' — ' + escHtml(contributor) + '</span>';
-      html += '<span>' + escHtml(c.asaCode) + '</span>';
+      html += '<span>' + escHtml(c.date) + (detail ? ' — ' + escHtml(detail) : '') + '</span>';
+      html += '<span>' + escHtml(contributor) + '</span>';
       html += '</div>';
     });
     if (g.cases.length > 20) {
@@ -15343,8 +15376,11 @@ async function saveAdminCaseGroup(groupIdx) {
   const newSurgeon = surgeonInput ? surgeonInput.value.trim() : null;
   const newProc = procInput ? procInput.value.trim() : null;
 
-  const surgeonChanged = newSurgeon !== null && newSurgeon !== group.surgeon;
-  const procChanged = newProc !== null && newProc !== group.procedure;
+  // In single-field mode (All Surgeons / All Procedures), compare against editValue
+  const origSurgeon = group.surgeon !== undefined ? group.surgeon : (group.editField === 'surgeon' ? group.editValue : null);
+  const origProc = group.procedure !== undefined ? group.procedure : (group.editField === 'procedure' ? group.editValue : null);
+  const surgeonChanged = newSurgeon !== null && newSurgeon !== origSurgeon;
+  const procChanged = newProc !== null && newProc !== origProc;
   if (!surgeonChanged && !procChanged) { showToast('No changes'); return; }
 
   const myUid = currentUser ? currentUser.uid : '';
@@ -15383,8 +15419,8 @@ async function saveAdminCaseGroup(groupIdx) {
   showToast(total + ' case' + (total !== 1 ? 's' : '') + ' updated');
 
   // Update the group data so UI reflects changes
-  if (surgeonChanged) group.surgeon = newSurgeon;
-  if (procChanged) group.procedure = newProc;
+  if (surgeonChanged) { group.surgeon = newSurgeon; if (group.editField === 'surgeon') group.editValue = newSurgeon; group.label = newSurgeon; }
+  if (procChanged) { group.procedure = newProc; if (group.editField === 'procedure') group.editValue = newProc; group.label = newProc; }
   group.cases.forEach(c => {
     if (surgeonChanged) c.surgeon = newSurgeon;
     if (procChanged) c.procedure = newProc;
