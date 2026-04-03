@@ -7435,7 +7435,15 @@ function getProcsForCode(code) {
       .filter(([name]) => name.toLowerCase().includes(query))
       .sort((a, b) => b[1].count - a[1].count)
       .slice(0, 8);
-    if (matches.length === 0) { hideSuggestions(); return; }
+    if (matches.length === 0) {
+      if (!sharedCasesLoaded) {
+        sugBox.innerHTML = '<div style="padding:8px 12px;font-size:0.72rem;color:var(--text-dim);">Community data still loading...</div>';
+        sugBox.classList.remove('hidden');
+      } else {
+        hideSuggestions();
+      }
+      return;
+    }
     activeIdx = -1;
     sugBox.innerHTML = matches.map(([name, d], i) =>
       `<div class="proc-item" data-idx="${i}" data-name="${escHtml(name)}" data-units="${escHtml(d.lastUnits)}" data-asa="${escHtml(d.lastASACode)}">${escHtml(name)}<span class="proc-units">${d.lastASACode ? d.lastASACode + ' ' : ''}${d.lastUnits ? d.lastUnits + 'u' : ''} (${d.count})</span></div>`
@@ -7941,7 +7949,15 @@ function autoLearnProcedureMapping(procedure, asaCode) {
         .filter(([name]) => name.toLowerCase().includes(query))
         .sort((a, b) => b[1] - a[1])
         .slice(0, 8);
-      if (matches.length === 0) { hideSurgSuggestions(); return; }
+      if (matches.length === 0) {
+        if (!sharedCasesLoaded) {
+          sugBox.innerHTML = '<div style="padding:8px 12px;font-size:0.72rem;color:var(--text-dim);">Community data still loading...</div>';
+          sugBox.classList.remove('hidden');
+        } else {
+          hideSurgSuggestions();
+        }
+        return;
+      }
       activeIdx = -1;
       sugBox.innerHTML = matches.map(([name, count], i) =>
         `<div class="surg-item" data-idx="${i}" data-name="${escHtml(name)}">${escHtml(name)}<span class="surg-count">(${count})</span></div>`
@@ -16185,7 +16201,15 @@ function deleteCaseFromList(id) {
       .filter(([name]) => name.toLowerCase().includes(query))
       .sort((a, b) => b[1].count - a[1].count)
       .slice(0, 8);
-    if (matches.length === 0) { hideSuggestions(); return; }
+    if (matches.length === 0) {
+      if (!sharedCasesLoaded) {
+        sugBox.innerHTML = '<div style="padding:8px 12px;font-size:0.72rem;color:var(--text-dim);">Community data still loading...</div>';
+        sugBox.classList.remove('hidden');
+      } else {
+        hideSuggestions();
+      }
+      return;
+    }
     activeIdx = -1;
     sugBox.innerHTML = matches.map(([name, d], i) =>
       `<div class="proc-item" data-idx="${i}" data-name="${escHtml(name)}" data-units="${escHtml(d.lastUnits)}" data-asa="${escHtml(d.lastASACode)}">${escHtml(name)}<span class="proc-units">${d.lastASACode ? d.lastASACode + ' ' : ''}${d.lastUnits ? d.lastUnits + 'u' : ''} (${d.count})</span></div>`
