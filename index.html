@@ -20165,12 +20165,10 @@ auth.onAuthStateChanged(async (user) => {
     });
     const sharedLoadTimeout = new Promise(resolve => setTimeout(() => {
       if (!sharedCasesLoaded) {
-        console.warn('Shared data loading timed out after 8s');
-        sharedCasesLoaded = true;
-        renderCollectiveCases();
+        console.warn('Shared data loading timed out after 15s — will keep loading in background');
       }
       resolve();
-    }, 8000));
+    }, 15000));
     Promise.race([sharedLoadPromise, sharedLoadTimeout]).catch(err => {
       console.error('Shared data loading error:', err);
       sharedCasesLoaded = true;
