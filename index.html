@@ -20224,6 +20224,23 @@ auth.onAuthStateChanged(async (user) => {
     loadAsaMasterCodes().catch(() => {});
     loadAsaCodeProcedures().catch(() => {});
 
+    // Auto-retry community data if the initial load didn't get results.
+    // On startup, Firestore's connection may not be ready yet — the same
+    // loadSharedCases() call that fails initially works seconds later
+    // (which is why the manual Retry button works). This mimics that.
+    setTimeout(() => {
+      if (!sharedCasesLoaded || sharedCasesCache.length === 0) {
+        console.log('Auto-retrying community data load...');
+        loadSharedCases().then(() => refreshSharedViews()).catch(() => {});
+      }
+    }, 3000);
+    setTimeout(() => {
+      if (!sharedCasesLoaded || sharedCasesCache.length === 0) {
+        console.log('Auto-retrying community data load (2nd)...');
+        loadSharedCases().then(() => refreshSharedViews()).catch(() => {});
+      }
+    }, 8000);
+
     // Auto-sync calendar if last sync was >24 hours ago
     const lastSync = data.calendarLastSync ? new Date(data.calendarLastSync).getTime() : 0;
     if (Date.now() - lastSync > 24 * 60 * 60 * 1000) {
