@@ -14540,12 +14540,30 @@ function renderProcLookup() {
     procNames[c.name].push(c);
   });
 
-  if (filtered.length === 0) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No matching procedures or surgeons found.</p>'; return; }
+  if (filtered.length === 0) {
+    let noResultHtml = '<p style="color:var(--text-dim);font-size:0.82rem;">No matching procedures or surgeons found.</p>';
+    if (!sharedCasesLoaded) {
+      noResultHtml += '<p style="font-size:0.72rem;color:var(--accent2);margin-top:4px;">Community data is still loading. <a href="#" onclick="loadSharedCases().then(()=>renderProcLookup()); return false;" style="color:var(--primary);">Retry</a></p>';
+    } else {
+      const localCount = allCases.filter(c => !c.isFromShared).length;
+      const sharedCount = allCases.filter(c => c.isFromShared).length;
+      noResultHtml += '<p style="font-size:0.68rem;color:var(--text-dim);margin-top:4px;">Searched ' + localCount + ' local + ' + sharedCount + ' community cases.</p>';
+    }
+    el.innerHTML = noResultHtml;
+    return;
+  }
 
   // Determine if the primary match is a surgeon name (not a procedure name)
   const isSurgeonSearch = surgeonMatch && !procMatch;
 
   let html = '';
+  const localCount = allCases.filter(c => !c.isFromShared).length;
+  const sharedCount = allCases.filter(c => c.isFromShared).length;
+  if (sharedCasesLoaded) {
+    html += '<div style="font-size:0.65rem;color:var(--text-dim);margin-bottom:6px;text-align:right;">' + localCount + ' local + ' + sharedCount + ' community cases</div>';
+  } else {
+    html += '<div style="font-size:0.65rem;color:var(--accent2);margin-bottom:6px;text-align:right;">Community data loading... <a href="#" onclick="loadSharedCases().then(()=>renderProcLookup()); return false;" style="color:var(--primary);">Retry</a></div>';
+  }
 
   if (isSurgeonSearch) {
     // Group by surgeon first, then list procedures under each surgeon
