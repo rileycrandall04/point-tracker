@@ -7537,7 +7537,15 @@ let asaRefReturnPage = null;
 
   function showAsaSuggestions(code) {
     const procs = getProcsForCode(code);
-    if (procs.length === 0) { hideAsaSuggestions(); return; }
+    if (procs.length === 0) {
+      if (!sharedCasesLoaded) {
+        asaSugBox.innerHTML = '<div style="padding:8px 12px;font-size:0.72rem;color:var(--text-dim);">Community data still loading...</div>';
+        asaSugBox.classList.remove('hidden');
+      } else {
+        hideAsaSuggestions();
+      }
+      return;
+    }
     asaActiveIdx = -1;
     asaSugBox.innerHTML = procs.map(([name, count], i) =>
       `<div class="proc-item" data-idx="${i}" data-name="${escHtml(name)}">${escHtml(name)}<span class="proc-units">(${count})</span></div>`
@@ -7914,24 +7922,43 @@ function autoLearnProcedureMapping(procedure, asaCode) {
       c.procedure && c.procedure.toLowerCase() === procLower
     );
     // Also check shared cases
-    if (!found && typeof sharedCasesCache !== 'undefined' && sharedCasesCache.length) {
+    if (!found && sharedCasesLoaded && sharedCasesCache.length) {
       found = sharedCasesCache.some(sc =>
         normalizeSurgeonName((sc.surgeon || '').trim()) === lastSurgeon &&
         sc.procedure && sc.procedure.toLowerCase() === procLower
       );
     }
-    if (found) {
-      notesEl.value = lastSurgeon;
-      notesEl.style.setProperty('background', 'rgba(250,204,21,0.15)', 'important');
-      notesEl.style.setProperty('border-color', '#facc15', 'important');
-      if (notesEl._clearHighlight) notesEl.removeEventListener('focus', notesEl._clearHighlight);
-      notesEl._clearHighlight = () => {
-        notesEl.style.removeProperty('background');
-        notesEl.style.removeProperty('border-color');
-        notesEl.removeEventListener('focus', notesEl._clearHighlight);
-        notesEl._clearHighlight = null;
+    function applySurgeonAutoFill(el, surgeon) {
+      el.value = surgeon;
+      el.style.setProperty('background', 'rgba(250,204,21,0.15)', 'important');
+      el.style.setProperty('border-color', '#facc15', 'important');
+      if (el._clearHighlight) el.removeEventListener('focus', el._clearHighlight);
+      el._clearHighlight = () => {
+        el.style.removeProperty('background');
+        el.style.removeProperty('border-color');
+        el.removeEventListener('focus', el._clearHighlight);
+        el._clearHighlight = null;
       };
-      notesEl.addEventListener('focus', notesEl._clearHighlight);
+      el.addEventListener('focus', el._clearHighlight);
+    }
+    if (found) {
+      applySurgeonAutoFill(notesEl, lastSurgeon);
+    }
+    // If community data hasn't loaded yet, retry once it does
+    if (!found && !sharedCasesLoaded) {
+      const checkWhenLoaded = setInterval(() => {
+        if (sharedCasesLoaded) {
+          clearInterval(checkWhenLoaded);
+          const notesEl2 = document.getElementById('caseNotes');
+          if (!notesEl2 || notesEl2.value.trim()) return; // User already typed something
+          const communityFound = sharedCasesCache.some(sc =>
+            normalizeSurgeonName((sc.surgeon || '').trim()) === lastSurgeon &&
+            sc.procedure && sc.procedure.toLowerCase() === procLower
+          );
+          if (communityFound) applySurgeonAutoFill(notesEl2, lastSurgeon);
+        }
+      }, 500);
+      setTimeout(() => clearInterval(checkWhenLoaded), 20000);
     }
   };
 
@@ -16280,7 +16307,15 @@ function deleteCaseFromList(id) {
 
   function showAsaSuggestions(code) {
     const procs = getProcsForCode(code);
-    if (procs.length === 0) { hideAsaSuggestions(); return; }
+    if (procs.length === 0) {
+      if (!sharedCasesLoaded) {
+        asaSugBox.innerHTML = '<div style="padding:8px 12px;font-size:0.72rem;color:var(--text-dim);">Community data still loading...</div>';
+        asaSugBox.classList.remove('hidden');
+      } else {
+        hideAsaSuggestions();
+      }
+      return;
+    }
     asaActiveIdx = -1;
     asaSugBox.innerHTML = procs.map(([name, count], i) =>
       `<div class="proc-item" data-idx="${i}" data-name="${escHtml(name)}">${escHtml(name)}<span class="proc-units">(${count})</span></div>`
