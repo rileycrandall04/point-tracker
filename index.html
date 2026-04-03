@@ -20205,43 +20205,24 @@ auth.onAuthStateChanged(async (user) => {
       saveSettings(settings);
     }
 
-    // Load shared cases, overrides, surgeon mappings, and user profiles from community pool (non-blocking)
-    // All use default get() — Firestore handles cache vs server automatically.
+    // Load all shared data in parallel — no sequential chaining.
+    // Each fetch is independent so one hanging doesn't block the others.
     // loadSharedCases has built-in retry (3x with backoff) if the first attempt fails.
-    const sharedLoadPromise = loadSharedCaseOverrides().then(() => {
-      return loadSharedCases();
-    }).then(() => {
-      return Promise.all([loadSurgeonMappings(), loadUserProfiles(), loadAsaMasterCodes(), loadAsaCodeProcedures()]);
-    });
-    const sharedLoadTimeout = new Promise(resolve => setTimeout(() => {
-      if (!sharedCasesLoaded) {
-        console.warn('Shared data loading timed out after 15s — marking loaded so UI is not stuck');
-        sharedCasesLoaded = true;
-        renderCollectiveCases();
-      }
-      resolve();
-    }, 15000));
-    Promise.race([sharedLoadPromise, sharedLoadTimeout]).catch(err => {
-      console.error('Shared data loading error:', err);
-      sharedCasesLoaded = true;
-    }).then(() => {
-      renderCollectiveCases();
-      // Re-render analytics if currently visible
-      const analyticsPage = document.getElementById('page-analytics');
-      if (analyticsPage && !analyticsPage.classList.contains('hidden')) {
-        renderTopProcedures();
-        renderSurgeonEfficiency();
-      }
-    });
-    // If the background load completes after timeout, re-render with fresh data
-    sharedLoadPromise.then(() => {
+    function refreshSharedViews() {
       renderCollectiveCases();
       const analyticsPage = document.getElementById('page-analytics');
       if (analyticsPage && !analyticsPage.classList.contains('hidden')) {
         renderTopProcedures();
         renderSurgeonEfficiency();
       }
-    }).catch(() => {});
+    }
+    // Fire all loads at once
+    loadSharedCaseOverrides().catch(() => {});
+    loadSharedCases().then(() => refreshSharedViews()).catch(() => {});
+    loadSurgeonMappings().catch(() => {});
+    loadUserProfiles().catch(() => {});
+    loadAsaMasterCodes().catch(() => {});
+    loadAsaCodeProcedures().catch(() => {});
 
     // Auto-sync calendar if last sync was >24 hours ago
     const lastSync = data.calendarLastSync ? new Date(data.calendarLastSync).getTime() : 0;
