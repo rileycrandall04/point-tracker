@@ -4269,35 +4269,18 @@ function parseSharedCasesSnapshot(snapshot) {
 
 async function loadSharedCases(retryCount) {
   retryCount = retryCount || 0;
-  // Load from Firestore cache first for instant display, then refresh from server.
-  // On slow/flaky connections, get() can hang waiting for the server — cache-first avoids this.
   try {
-    try {
-      const cacheSnap = await db.collection('sharedCases').get({ source: 'cache' });
-      sharedCasesCache = parseSharedCasesSnapshot(cacheSnap);
-      applySharedCaseOverrides();
-      if (sharedCasesCache.length > 0) {
-        sharedCasesLoaded = true;
-        renderCollectiveCases();
-        console.log('Loaded ' + sharedCasesCache.length + ' shared cases (cache)');
-      }
-    } catch (cacheErr) {
-      // No cache available — first load or cleared; fall through to server
-    }
-    // Fetch fresh data from server (with 10s timeout so a hung connection triggers retry)
-    const serverFetch = db.collection('sharedCases').get({ source: 'server' });
-    const fetchTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Server fetch timed out')), 10000));
-    const serverSnap = await Promise.race([serverFetch, fetchTimeout]);
-    sharedCasesCache = parseSharedCasesSnapshot(serverSnap);
+    // Use default get() — Firestore handles cache vs server automatically.
+    // Forced source:'server' can hang if the WebSocket isn't connected yet.
+    const snap = await db.collection('sharedCases').get();
+    sharedCasesCache = parseSharedCasesSnapshot(snap);
     applySharedCaseOverrides();
     sharedCasesLoaded = true;
     renderCollectiveCases();
-    console.log('Loaded ' + sharedCasesCache.length + ' shared cases (server)');
+    console.log('Loaded ' + sharedCasesCache.length + ' shared cases');
     return sharedCasesCache;
   } catch (err) {
     console.error('Failed to load shared cases:', err);
-    // Auto-retry: Firestore connection may not be ready on first attempt.
-    // Retry up to 3 times with increasing delays (3s, 6s, 12s).
     if (retryCount < 3) {
       const delay = 3000 * Math.pow(2, retryCount);
       console.log('Will retry loading shared cases in ' + (delay / 1000) + 's (attempt ' + (retryCount + 2) + '/4)');
@@ -4313,29 +4296,15 @@ async function loadSharedCases(retryCount) {
 
 async function loadSharedCaseOverrides() {
   try {
-    // Load from cache first (fast) so shared cases can start immediately
-    try {
-      const cacheSnap = await db.collection('sharedCaseOverrides').get({ source: 'cache' });
-      sharedCaseOverridesCache = {};
-      cacheSnap.forEach(doc => { sharedCaseOverridesCache[doc.id] = doc.data(); });
-    } catch (e) { /* no cache */ }
+    const snap = await db.collection('sharedCaseOverrides').get();
+    sharedCaseOverridesCache = {};
+    snap.forEach(doc => { sharedCaseOverridesCache[doc.id] = doc.data(); });
+    console.log('Loaded ' + Object.keys(sharedCaseOverridesCache).length + ' shared case overrides');
   } catch (err) {
-    console.error('Failed to load shared case overrides (cache):', err);
+    console.error('Failed to load shared case overrides:', err);
   }
 }
 
-// Refresh overrides from server in the background (non-blocking)
-async function refreshSharedCaseOverrides() {
-  try {
-    const snapshot = await db.collection('sharedCaseOverrides').get({ source: 'server' });
-    sharedCaseOverridesCache = {};
-    snapshot.forEach(doc => { sharedCaseOverridesCache[doc.id] = doc.data(); });
-    applySharedCaseOverrides();
-    console.log('Loaded ' + Object.keys(sharedCaseOverridesCache).length + ' shared case overrides (server)');
-  } catch (err) {
-    console.error('Failed to load shared case overrides (server):', err);
-  }
-}
 
 function applySharedCaseOverrides() {
   sharedCasesCache.forEach(sc => {
@@ -20237,13 +20206,10 @@ auth.onAuthStateChanged(async (user) => {
     }
 
     // Load shared cases, overrides, surgeon mappings, and user profiles from community pool (non-blocking)
-    // Timeout ensures card renders even if Firestore hangs on flaky connections
-    // Load overrides from cache (fast), then start shared cases immediately.
-    // The overrides server refresh runs in parallel and won't block the chain.
+    // All use default get() — Firestore handles cache vs server automatically.
+    // loadSharedCases has built-in retry (3x with backoff) if the first attempt fails.
     const sharedLoadPromise = loadSharedCaseOverrides().then(() => {
-      // Kick off server refresh in background (non-blocking)
-      refreshSharedCaseOverrides();
-      return loadSharedCases(); // applies cached overrides after loading
+      return loadSharedCases();
     }).then(() => {
       return Promise.all([loadSurgeonMappings(), loadUserProfiles(), loadAsaMasterCodes(), loadAsaCodeProcedures()]);
     });
