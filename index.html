@@ -1745,6 +1745,21 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <p class="auth-loading hidden" id="authLoading">Signing in...</p>
 </div>
 
+<!-- ===== ONE-TIME FEATURE NOTIFICATION ===== -->
+<div class="tutorial-overlay hidden" id="featureNoticeOverlay" style="z-index:10001;">
+  <div class="tutorial-card" style="max-width:340px;text-align:center;padding:28px 24px;">
+    <span style="font-size:2rem;">&#128274;</span>
+    <h3 style="margin:12px 0 8px;">New: Demo Mode</h3>
+    <p style="font-size:0.85rem;color:var(--text-dim);line-height:1.5;margin-bottom:16px;">
+      You can now hide all monetary values when showing the app to others. Your data stays safe — it's just hidden from view.
+    </p>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="btn btn-primary" onclick="dismissFeatureNotice(true)" style="width:100%;padding:10px;font-size:0.9rem;">Try It in Settings</button>
+      <button class="btn btn-outline" onclick="dismissFeatureNotice(false)" style="width:100%;padding:10px;font-size:0.85rem;">Got It</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== TUTORIAL OVERLAY ===== -->
 <div class="tutorial-overlay hidden" id="tutorialOverlay">
   <div class="tutorial-card">
@@ -11143,6 +11158,24 @@ function updateTutorialStep() {
   }
 }
 
+function dismissFeatureNotice(goToSettings) {
+  document.getElementById('featureNoticeOverlay').classList.add('hidden');
+  settings.dismissedNotice_demoMode = true;
+  saveSettings(settings);
+  if (goToSettings) {
+    document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const settingsBtn = document.querySelector('.bottom-nav button[data-page="settings"]');
+    if (settingsBtn) settingsBtn.classList.add('active');
+    document.getElementById('page-settings').classList.add('active');
+    // Scroll to the Display card with the toggle
+    setTimeout(() => {
+      const toggle = document.getElementById('hideMonetaryToggle');
+      if (toggle) toggle.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 200);
+  }
+}
+
 function tutorialNext() {
   if (tutorialStep >= TUTORIAL_TOTAL - 1) {
     finishTutorial();
@@ -20446,6 +20479,9 @@ auth.onAuthStateChanged(async (user) => {
     // Show tutorial for brand-new users (no data at all)
     if (Object.keys(data.shifts).length === 0 && data.cases.length === 0) {
       showTutorial();
+    } else if (!settings.dismissedNotice_demoMode) {
+      // One-time notification about new demo mode feature
+      document.getElementById('featureNoticeOverlay').classList.remove('hidden');
     }
 
     // Backfill shared cases on first run (or after re-enabling), or re-sync for schema v2
