@@ -2720,7 +2720,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 
   <!-- 3. Production Pipeline -->
-  <div class="card">
+  <div class="card monetary-hide">
     <h2>Production Pipeline</h2>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:0 0 12px;padding:10px 12px;background:var(--surface2);border-radius:8px;">
       <div style="text-align:center;">
@@ -7988,16 +7988,66 @@ function autoLearnProcedureMapping(procedure, asaCode) {
     }
   };
 
+  // Helper: check if a name matches "X. LastName" format
+  function isInitialDotFormat(name) {
+    return /^[A-Za-z]\.\s/.test(name);
+  }
+
+  // Helper: extract last name from "X. LastName" or return the full name
+  function extractLastName(name) {
+    const m = name.match(/^[A-Za-z]\.\s+(.+)$/);
+    return m ? m[1] : name;
+  }
+
+  // Helper: check if input looks like a bare last name (no first initial)
+  function isBareLastName(query) {
+    return query.length >= 2 && !/^[A-Za-z]\.\s/.test(query) && !/\./.test(query);
+  }
+
   function initSurgeonAutocomplete(textareaId, sugBoxId) {
     const textarea = document.getElementById(textareaId);
     const sugBox = document.getElementById(sugBoxId);
     if (!textarea || !sugBox) return;
     let activeIdx = -1;
+    let userErasedInitial = false; // Track if user deliberately removed a first initial
 
     function showSurgSuggestions() {
-      const query = textarea.value.trim().toLowerCase();
-      if (!query) { hideSurgSuggestions(); return; }
+      const raw = textarea.value.trim();
+      const query = raw.toLowerCase();
+      if (!query) { hideSurgSuggestions(); userErasedInitial = false; return; }
       const history = getSurgeonHistory();
+
+      // If user typed a bare last name (no initial), look for "X. LastName" matches
+      if (isBareLastName(raw) && !userErasedInitial) {
+        const lastNameMatches = Object.entries(history)
+          .filter(([name]) => {
+            if (!isInitialDotFormat(name)) return false;
+            const ln = extractLastName(name).toLowerCase();
+            return ln === query || ln.startsWith(query);
+          })
+          .sort((a, b) => b[1] - a[1]);
+
+        if (lastNameMatches.length === 1) {
+          // Exactly one surgeon with this last name — auto-complete the first initial
+          textarea.value = lastNameMatches[0][0];
+          hideSurgSuggestions();
+          // Place cursor at end
+          textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+          return;
+        } else if (lastNameMatches.length > 1) {
+          // Multiple surgeons with same last name — show them as choices
+          activeIdx = -1;
+          sugBox.innerHTML = '<div style="padding:6px 12px;font-size:0.7rem;color:var(--text-dim);border-bottom:1px solid var(--border);">Multiple surgeons with this last name:</div>' +
+            lastNameMatches.slice(0, 8).map(([name, count], i) =>
+              `<div class="surg-item" data-idx="${i}" data-name="${escHtml(name)}">${escHtml(name)}<span class="surg-count">(${count})</span></div>`
+            ).join('');
+          sugBox.classList.remove('hidden');
+          return;
+        }
+        // No "X. LastName" matches — fall through to normal search
+      }
+
+      // Standard search: match anywhere in the name
       const matches = Object.entries(history)
         .filter(([name]) => name.toLowerCase().includes(query))
         .sort((a, b) => b[1] - a[1])
@@ -8022,12 +8072,39 @@ function autoLearnProcedureMapping(procedure, asaCode) {
 
     function selectSurgItem(el) {
       textarea.value = el.dataset.name;
+      userErasedInitial = false;
       hideSurgSuggestions();
       textarea.focus();
     }
 
-    textarea.addEventListener('input', showSurgSuggestions);
+    textarea.addEventListener('input', function() {
+      const val = textarea.value;
+      // Detect if user erased a first initial (e.g. "J. Smith" → "Smith")
+      // by checking if previous value had an initial and current doesn't
+      if (textarea._prevVal && isInitialDotFormat(textarea._prevVal) && !isInitialDotFormat(val.trim()) && val.trim().length > 0) {
+        userErasedInitial = true;
+      }
+      textarea._prevVal = val;
+      showSurgSuggestions();
+    });
     textarea.addEventListener('focus', () => { if (textarea.value.trim()) showSurgSuggestions(); });
+
+    // On blur: if the value is a bare last name and there's exactly one match, auto-format
+    textarea.addEventListener('blur', function() {
+      if (userErasedInitial) return; // User deliberately removed initial
+      const raw = textarea.value.trim();
+      if (!raw || !isBareLastName(raw)) return;
+      const history = getSurgeonHistory();
+      const lastNameMatches = Object.entries(history)
+        .filter(([name]) => {
+          if (!isInitialDotFormat(name)) return false;
+          const ln = extractLastName(name).toLowerCase();
+          return ln === raw.toLowerCase();
+        });
+      if (lastNameMatches.length === 1) {
+        textarea.value = lastNameMatches[0][0];
+      }
+    });
 
     textarea.addEventListener('keydown', function(e) {
       const items = sugBox.querySelectorAll('.surg-item');
