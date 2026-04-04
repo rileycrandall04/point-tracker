@@ -11818,7 +11818,7 @@ function renderHistoricalTrends() {
   }
 
   const scales = {
-    y: { beginAtZero: true, ticks: { color: '#94a3b8', callback: function(v) { return '$' + v.toLocaleString(); } }, grid: { color: 'rgba(71,85,105,0.3)' } },
+    y: { beginAtZero: true, ticks: { color: '#94a3b8', callback: function(v) { return settings.hideMonetary ? '' : '$' + v.toLocaleString(); } }, grid: { color: 'rgba(71,85,105,0.3)' } },
     x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
   };
 
@@ -11839,6 +11839,7 @@ function renderHistoricalTrends() {
       plugins: {
         legend: { display: false },
         tooltip: {
+          enabled: !settings.hideMonetary,
           callbacks: {
             label: function(context) {
               const idx = context.dataIndex;
