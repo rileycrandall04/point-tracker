@@ -1723,6 +1723,9 @@ input.mil-time.invalid {
   .form-row-3 { grid-template-columns: 1fr 1fr; }
   .template-grid { grid-template-columns: 1fr; }
 }
+/* Demo mode: hide monetary values */
+body.hide-monetary .monetary { visibility: hidden !important; }
+body.hide-monetary .monetary-hide { display: none !important; }
 </style>
 </head>
 <body>
@@ -2336,7 +2339,7 @@ input.mil-time.invalid {
     <span style="font-size:0.85rem; font-weight:600;"><span id="todayPVReminderText"></span> <a href="#" onclick="goToPVHistory(); return false;" style="color:#000; text-decoration:underline; font-weight:400;">Update now</a> <a href="#" onclick="skipPVReminder(); return false;" style="color:#000; text-decoration:underline; font-weight:400; opacity:0.7; margin-left:6px;">Skip</a></span>
     <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
-  <div class="card hidden" id="paycheckEntryReminder" style="background:var(--primary); color:#fff; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+  <div class="card hidden monetary-hide" id="paycheckEntryReminder" style="background:var(--primary); color:#fff; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
     <span style="font-size:0.85rem; font-weight:600;"><span id="paycheckEntryReminderText"></span> <a href="#" onclick="goToPaycheckEntry(); return false;" style="color:#fff; text-decoration:underline; font-weight:400;">Enter now</a> <a href="#" onclick="skipPaycheckReminder(); return false;" style="color:#fff; text-decoration:underline; font-weight:400; opacity:0.7; margin-left:6px;">Skip</a></span>
     <button onclick="dismissPaycheckReminder()" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
   </div>
@@ -2351,7 +2354,7 @@ input.mil-time.invalid {
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <h2 style="margin:0;">This Week</h2>
       <div style="display:flex;align-items:center;gap:6px;">
-        <button class="btn btn-sm btn-outline" id="weeklyToggleBtn" style="padding:2px 8px;font-size:0.7rem;min-width:32px;">$</button>
+        <button class="btn btn-sm btn-outline monetary-hide" id="weeklyToggleBtn" style="padding:2px 8px;font-size:0.7rem;min-width:32px;">$</button>
       </div>
     </div>
     <div style="position:relative;height:200px;margin:8px 0;">
@@ -2437,7 +2440,7 @@ input.mil-time.invalid {
   <div id="dtab-analytics" class="hidden">
     <!-- Top Producing Cases -->
     <div class="card" style="position:relative;">
-      <button class="dollar-toggle" id="caseMixDollarToggle" onclick="toggleCaseMixDollars()" style="position:absolute;top:16px;right:16px;">Show $</button>
+      <button class="dollar-toggle monetary-hide" id="caseMixDollarToggle" onclick="toggleCaseMixDollars()" style="position:absolute;top:16px;right:16px;">Show $</button>
       <h2>Top Producing Cases</h2>
       <div id="caseMixContent">
         <div class="empty-state"><p>No case data.</p></div>
@@ -2446,7 +2449,7 @@ input.mil-time.invalid {
 
     <!-- Procedure Efficiency -->
     <div class="card" style="position:relative;">
-      <button class="dollar-toggle" id="procEffDollarToggle" onclick="toggleCaseMixDollars()" style="position:absolute;top:16px;right:16px;">Show $</button>
+      <button class="dollar-toggle monetary-hide" id="procEffDollarToggle" onclick="toggleCaseMixDollars()" style="position:absolute;top:16px;right:16px;">Show $</button>
       <h2 id="procEffHeading">Procedure Efficiency (pts/hr)</h2>
       <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
         <button class="tab-btn active" id="peTabTop" onclick="switchProcTab('top')">Top Procedures</button>
@@ -2663,7 +2666,7 @@ input.mil-time.invalid {
   </div>
 
   <!-- 2. Paycheck Projection (with $/point inline) -->
-  <div class="card">
+  <div class="card monetary-hide">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
       <h2 style="margin:0;">Paycheck Projection <span class="info-icon" data-tip="Based on a weighted blend of the last 5 months, not just this month alone.">i</span></h2>
       <div style="display:flex;align-items:center;gap:8px;">
@@ -2756,7 +2759,7 @@ input.mil-time.invalid {
   </div>
 
   <!-- 5. Historical Compensation — prior month data -->
-  <div class="card collapse-section" id="histCompCard">
+  <div class="card collapse-section monetary-hide" id="histCompCard">
     <div class="collapse-header" onclick="toggleCollapse('histComp')">
       <h3>Points History</h3>
       <span class="arrow" id="histCompArrow">&#9660;</span>
@@ -2819,7 +2822,7 @@ input.mil-time.invalid {
   </div>
 
   <!-- 6. Paycheck Tracking — current month (collapsible) -->
-  <div class="card collapse-section" id="paycheckTrackingCard">
+  <div class="card collapse-section monetary-hide" id="paycheckTrackingCard">
     <div class="collapse-header" onclick="toggleCollapse('paycheckTrack')">
       <h3>Paycheck History</h3>
       <span class="arrow" id="paycheckTrackArrow">&#9660;</span>
@@ -2848,7 +2851,7 @@ input.mil-time.invalid {
   </div>
 
   <!-- 7. Earnings Estimator — projections (collapsible) -->
-  <div class="card collapse-section" id="earningsEstimatorCard">
+  <div class="card collapse-section monetary-hide" id="earningsEstimatorCard">
     <div class="collapse-header" onclick="toggleCollapse('earningsEst')">
       <h3>Annual Earning Pace</h3>
       <span class="arrow" id="earningsEstArrow">&#9660;</span>
@@ -2868,7 +2871,7 @@ input.mil-time.invalid {
   </div>
 
   <!-- 8. Annual Tax Breakdown -->
-  <div class="card collapse-section" id="annualTaxCard">
+  <div class="card collapse-section monetary-hide" id="annualTaxCard">
     <div class="collapse-header" onclick="toggleCollapse('annualTax')">
       <h3>Annual Tax Breakdown</h3>
       <span class="arrow" id="annualTaxArrow">&#9660;</span>
@@ -2895,7 +2898,7 @@ input.mil-time.invalid {
       <label>Name</label>
       <input type="text" id="settingsName" placeholder="Your name (labels exports)">
     </div>
-    <div class="settings-field" style="margin-top:12px;">
+    <div class="settings-field monetary-hide" style="margin-top:12px;">
       <label>Point Value Estimate ($/pt)</label>
       <input type="number" id="settingsPointValue" min="0" step="0.01" style="max-width:140px;">
     </div>
@@ -2948,7 +2951,7 @@ input.mil-time.invalid {
     <p style="font-size:0.72rem;color:var(--accent2);margin-bottom:8px;">
       &#9888; Your API key is stored in your device settings and synced with your account data. Each AI analysis costs ~$0.01-0.05. You are responsible for your own usage.
     </p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+    <div class="monetary-hide" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
       <div class="settings-field">
         <label style="font-size:0.8rem;color:var(--text-dim);">Personal Time Value ($/hr)</label>
         <input type="number" id="settingsPersonalTimeValue" min="0" step="1" placeholder="100"
@@ -3035,6 +3038,20 @@ input.mil-time.invalid {
     </label>
     <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
       Shares de-identified case data (procedure, times, ASA code) with your group for surgeon efficiency and procedure time lookups. No personal notes are shared.
+    </p>
+  </div>
+
+  <div class="card" style="margin-top:12px;">
+    <h2>Display</h2>
+    <label class="toggle-row">
+      <span>Hide monetary values (demo mode)</span>
+      <span class="toggle-switch">
+        <input type="checkbox" id="hideMonetaryToggle">
+        <span class="slider"></span>
+      </span>
+    </label>
+    <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
+      Hides all dollar amounts, compensation, and paycheck data throughout the app. Useful when showing the app to others. Your data is not erased.
     </p>
   </div>
 
@@ -8260,7 +8277,7 @@ function renderToday() {
   bdHtml += `<span id="todayLivePts" style="font-size:1.9rem;font-weight:700;line-height:1;">${result.total.toFixed(ptsPrecision)}</span>`;
   bdHtml += `<span style="font-size:0.85rem;color:var(--text-dim);">pts</span>`;
   bdHtml += estTag;
-  bdHtml += `<span id="todayLiveDollars" style="font-size:1.1rem;font-weight:600;color:var(--text-dim);margin-left:auto;">$${dollarTotal.toFixed(2)}</span>`;
+  bdHtml += `<span id="todayLiveDollars" class="monetary" style="font-size:1.1rem;font-weight:600;color:var(--text-dim);margin-left:auto;">$${dollarTotal.toFixed(2)}</span>`;
   bdHtml += `</div>`;
 
   // Component breakdown chips
@@ -8521,7 +8538,7 @@ function updateTodayRateChips() {
     } else {
       html += `AR: ${currentRate.toFixed(0)} pts/hr`;
     }
-    html += ` <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">($${round2(totalRate * pv).toFixed(0)}/hr)</span>`;
+    html += ` <span class="monetary" style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">($${round2(totalRate * pv).toFixed(0)}/hr)</span>`;
     html += `</div>`;
   }
 
@@ -8531,7 +8548,7 @@ function updateTodayRateChips() {
     const dailyDollarsHr = round2(dailyPtsHr * pv);
     html += `<div style="padding:4px 10px;background:rgba(255,255,255,0.06);border-radius:12px;color:var(--text-dim);font-weight:600;">`;
     html += `Day: ${dailyPtsHr.toFixed(1)} pts/hr`;
-    html += ` <span style="font-weight:400;font-size:0.72rem;">($${dailyDollarsHr.toFixed(0)}/hr)</span>`;
+    html += ` <span class="monetary" style="font-weight:400;font-size:0.72rem;">($${dailyDollarsHr.toFixed(0)}/hr)</span>`;
     html += `</div>`;
   }
 
@@ -15969,7 +15986,7 @@ function showCaseBreakdown(caseId) {
   // Dollar value
   if (pv > 0) {
     const totalDollars = totalPts * pv;
-    html += `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:0.82rem;color:var(--accent);"><span>Dollar Value (${pv.toFixed(2)}/pt)</span><span style="font-weight:700;">$${totalDollars.toFixed(2)}</span></div>`;
+    html += `<div class="monetary-hide" style="display:flex;justify-content:space-between;padding:4px 0;font-size:0.82rem;color:var(--accent);"><span>Dollar Value (${pv.toFixed(2)}/pt)</span><span style="font-weight:700;">$${totalDollars.toFixed(2)}</span></div>`;
   }
 
   document.getElementById('caseBreakdownBody').innerHTML = html;
@@ -15981,6 +15998,7 @@ let activeProcTab = 'top';
 let showDollars = false;
 
 function toggleCaseMixDollars() {
+  if (settings.hideMonetary) return;
   showDollars = !showDollars;
   const label = showDollars ? 'Show Pts' : 'Show $';
   document.getElementById('caseMixDollarToggle').textContent = label;
@@ -16768,6 +16786,25 @@ shareToggle.addEventListener('change', () => {
   } else {
     deleteAllUserSharedCases();
     showToast('Data sharing disabled — shared cases removed');
+  }
+});
+
+// Hide monetary values toggle (demo mode)
+const hideMonetaryToggle = document.getElementById('hideMonetaryToggle');
+hideMonetaryToggle.checked = !!settings.hideMonetary;
+if (settings.hideMonetary) document.body.classList.add('hide-monetary');
+hideMonetaryToggle.addEventListener('change', () => {
+  settings.hideMonetary = hideMonetaryToggle.checked;
+  saveSettings(settings);
+  if (settings.hideMonetary) {
+    document.body.classList.add('hide-monetary');
+    // Reset dollar toggles to points mode
+    if (weeklyShowDollars) { weeklyShowDollars = false; document.getElementById('weeklyToggleBtn').textContent = '$'; renderWeeklyChart(); }
+    if (showDollars) { showDollars = false; renderCaseMix(); renderProcTabContent(); }
+    showToast('Monetary values hidden');
+  } else {
+    document.body.classList.remove('hide-monetary');
+    showToast('Monetary values visible');
   }
 });
 
