@@ -11880,7 +11880,7 @@ function renderHistoricalTrends() {
   legendHtml += '<div data-open="0" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;">';
   legendHtml += '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin:6px 0;font-size:0.72rem;">' + legendItems + '</div>';
   legendHtml += '</div>';
-  legendHtml += avg > 0 ? '<div style="margin-top:4px;">Avg Monthly Compensation: $' + avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + '</div>' : '';
+  legendHtml += avg > 0 ? '<div class="monetary-hide" style="margin-top:4px;">Avg Monthly Compensation: $' + avg.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + '</div>' : '';
   summaryEl.innerHTML = legendHtml;
 }
 
