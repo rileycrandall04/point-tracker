@@ -1730,6 +1730,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
 </head>
 <body>
 
+<!-- Demo mode banner -->
+<div id="demoBanner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:rgba(250,204,21,0.95);color:#1a1a1a;text-align:center;padding:4px 12px;font-size:0.75rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;">
+  <span>Demo Mode — monetary values hidden</span>
+  <a href="#" onclick="document.getElementById('hideMonetaryToggle').checked=false;settings.hideMonetary=false;saveSettings(settings);document.body.classList.remove('hide-monetary');document.getElementById('demoBanner').classList.add('hidden');document.body.style.paddingTop='';showToast('Monetary values visible');renderHistoricalTrends();return false;" style="color:#1a1a1a;text-decoration:underline;font-weight:400;">Turn off</a>
+</div>
+
 <!-- ===== AUTH OVERLAY ===== -->
 <div class="auth-overlay" id="authOverlay">
   <h1>MWA Point Tracker</h1>
@@ -16903,18 +16909,28 @@ shareToggle.addEventListener('change', () => {
 // Hide monetary values toggle (demo mode)
 const hideMonetaryToggle = document.getElementById('hideMonetaryToggle');
 hideMonetaryToggle.checked = !!settings.hideMonetary;
-if (settings.hideMonetary) document.body.classList.add('hide-monetary');
+if (settings.hideMonetary) {
+  document.body.classList.add('hide-monetary');
+  document.getElementById('demoBanner').classList.remove('hidden');
+  document.body.style.paddingTop = '28px';
+}
 hideMonetaryToggle.addEventListener('change', () => {
   settings.hideMonetary = hideMonetaryToggle.checked;
   saveSettings(settings);
   if (settings.hideMonetary) {
     document.body.classList.add('hide-monetary');
+    document.getElementById('demoBanner').classList.remove('hidden');
+    document.body.style.paddingTop = '28px';
     // Reset dollar toggles to points mode
     if (weeklyShowDollars) { weeklyShowDollars = false; document.getElementById('weeklyToggleBtn').textContent = '$'; renderWeeklyChart(); }
     if (showDollars) { showDollars = false; renderCaseMix(); renderProcTabContent(); }
+    renderHistoricalTrends();
     showToast('Monetary values hidden');
   } else {
     document.body.classList.remove('hide-monetary');
+    document.getElementById('demoBanner').classList.add('hidden');
+    document.body.style.paddingTop = '';
+    renderHistoricalTrends();
     showToast('Monetary values visible');
   }
 });
