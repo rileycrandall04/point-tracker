@@ -6463,6 +6463,10 @@ document.querySelectorAll('.bottom-nav button[data-page]').forEach(btn => {
     if (btn.dataset.page === 'today') { returnToDailyTab = false; renderToday(); }
     if (btn.dataset.page === 'dashboard') { switchDashboardTab(activeDashTab); }
     if (btn.dataset.page === 'compensation') renderProjections();
+    // Ensure community data is loaded on any tab navigation
+    if (!sharedCasesLoaded || sharedCasesCache.length === 0) {
+      reloadCommunityData();
+    }
   });
 });
 
@@ -20647,6 +20651,24 @@ auth.onAuthStateChanged(async (user) => {
   }
 });
 
+// Reload community data (shared cases, overrides, surgeon mappings, etc.)
+function reloadCommunityData() {
+  if (!currentUser || !firestoreSyncEnabled) return;
+  function refreshSharedViews() {
+    renderCollectiveCases();
+    const analyticsPage = document.getElementById('page-analytics');
+    if (analyticsPage && !analyticsPage.classList.contains('hidden')) {
+      renderTopProcedures();
+      renderSurgeonEfficiency();
+    }
+  }
+  sharedCasesLoaded = false;
+  loadSharedCaseOverrides().catch(() => {});
+  loadSharedCases().then(() => refreshSharedViews()).catch(() => {});
+  loadSurgeonMappings().catch(() => {});
+  loadUserProfiles().catch(() => {});
+}
+
 // Session guard: refresh auth token when user returns after extended absence
 let lastHiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
@@ -20659,10 +20681,15 @@ document.addEventListener('visibilitychange', () => {
         firestoreSyncEnabled = true;
         hideSessionExpiredBanner();
         showToast('Session refreshed');
+        // Reload community data after idle
+        reloadCommunityData();
       }).catch(() => {
         firestoreSyncEnabled = false;
         showSessionExpiredBanner();
       });
+    } else if (elapsed > 30 * 1000) {
+      // Even for shorter idle periods (>30s), refresh community data
+      reloadCommunityData();
     }
   }
 });
