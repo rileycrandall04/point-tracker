@@ -7032,6 +7032,11 @@ function updateDEStickyHeaderSpacer() {
 
 function loadDataEntryPage() {
   loadShiftForDate();
+  // Default case type based on shift (e.g. labor epidural for OB/SF1 shifts)
+  const defaultType = getDefaultCaseType();
+  selectedCaseType = defaultType;
+  document.getElementById('caseTypeSelect').value = defaultType;
+  applyCaseTypeVisibility(defaultType);
   updateORCaseVisibility();
   updateDataEntryState();
   renderDECaseList();
@@ -8264,10 +8269,19 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   updateDETally();
 });
 
+function getDefaultCaseType() {
+  const shift = data.shifts[workingDate];
+  if (shift && ['SF1', 'OB_restricted'].includes(shift.assignmentType)) {
+    return 'labor_epidural';
+  }
+  return 'standard';
+}
+
 function resetCaseForm() {
-  selectedCaseType = 'standard';
-  document.getElementById('caseTypeSelect').value = 'standard';
-  applyCaseTypeVisibility('standard');
+  const defaultType = getDefaultCaseType();
+  selectedCaseType = defaultType;
+  document.getElementById('caseTypeSelect').value = defaultType;
+  applyCaseTypeVisibility(defaultType);
   document.getElementById('caseProcedure').value = '';
   document.getElementById('caseASACode').value = '';
   document.getElementById('caseBaseUnits').value = '';
