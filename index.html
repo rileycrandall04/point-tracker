@@ -15561,7 +15561,7 @@ async function saveAdminCaseGroup(groupIdx) {
     }
   }
 
-  if (personalCount > 0) saveData();
+  if (personalCount > 0) saveData(data);
 
   const total = personalCount + sharedCount;
   showToast(total + ' case' + (total !== 1 ? 's' : '') + ' updated');
