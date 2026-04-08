@@ -13029,14 +13029,17 @@ function renderPaycheckEntry() {
   const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
   const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const payMonthName = fullMonthNames[payDate.getMonth()] + ' ' + payDate.getFullYear();
+  const isDecPaycheck = payDate.getMonth() === 11;
+  const totalSteps = isDecPaycheck ? 4 : 3;
+  const completeStep = totalSteps + 1; // step 4 (normal) or step 5 (December)
 
   const completedStep = peGetMonthStep(mk);
 
-  // Step indicator — all steps clickable when visited or complete
+  // Step indicator
   let html = '<div style="padding:12px 0 8px;">';
   html += '<div style="display:flex;justify-content:center;gap:6px;margin-bottom:12px;">';
-  for (let s = 1; s <= 3; s++) {
-    const active = s === peStep && peStep <= 3;
+  for (let s = 1; s <= totalSteps; s++) {
+    const active = s === peStep && peStep <= totalSteps;
     const done = s < completedStep;
     const clickable = s <= completedStep || s < peStep;
     const bg = active ? 'var(--accent2)' : done ? 'var(--accent)' : 'var(--surface2)';
@@ -13044,11 +13047,11 @@ function renderPaycheckEntry() {
     const cursor = clickable ? 'cursor:pointer;' : '';
     const onclick = clickable ? ` onclick="peGoToStep(${s})"` : '';
     html += `<div style="width:28px;height:28px;border-radius:50%;background:${bg};color:${color};display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:700;${cursor}"${onclick}>${done ? '&#10003;' : s}</div>`;
-    if (s < 3) html += '<div style="width:24px;height:2px;background:' + (s < completedStep ? 'var(--accent)' : 'var(--border)') + ';align-self:center;"></div>';
+    if (s < totalSteps) html += '<div style="width:24px;height:2px;background:' + (s < completedStep ? 'var(--accent)' : 'var(--border)') + ';align-self:center;"></div>';
   }
   html += '</div>';
 
-  if (peStep === 4) {
+  if (peStep >= completeStep) {
     // All steps complete view
     html += renderPEComplete(mk, ty, tm, payKey, payMonthName);
   } else if (peStep === 1) {
@@ -13057,10 +13060,12 @@ function renderPaycheckEntry() {
     html += renderPEStep2(mk, ty, tm, payMonthName);
   } else if (peStep === 3) {
     html += renderPEStep3(mk, ty, tm, payKey, payMonthName);
+  } else if (peStep === 4 && isDecPaycheck) {
+    html += renderPEStep4DecBonus(ty, payDate.getFullYear());
   }
 
-  // Back button on steps 2-3
-  if (peStep > 1 && peStep <= 3) {
+  // Back button on steps 2+
+  if (peStep > 1 && peStep <= totalSteps) {
     html += `<div style="text-align:center;margin-top:10px;"><a href="#" onclick="peGoToStep(${peStep - 1}); return false;" style="font-size:0.72rem;color:var(--text-dim);">&larr; Back to Step ${peStep - 1}</a></div>`;
   }
 
@@ -13075,6 +13080,20 @@ function renderPaycheckEntry() {
     const container = document.getElementById('peStipendEntries');
     if (container) {
       const entries = getStipendEntriesForMonth(mk);
+      if (entries.length === 0) {
+        addStabStipendRow(container, '', '');
+      } else {
+        entries.forEach(e => addStabStipendRow(container, e.label, e.amount));
+      }
+    }
+  }
+
+  // Populate stipend rows for step 4 (December bonus)
+  if (peStep === 4 && isDecPaycheck) {
+    const bonusKey = payDate.getFullYear() + '-12b';
+    const container = document.getElementById('peBonusStipendEntries');
+    if (container) {
+      const entries = (data.stipends && data.stipends[bonusKey]) || [];
       if (entries.length === 0) {
         addStabStipendRow(container, '', '');
       } else {
@@ -13130,10 +13149,29 @@ function renderPEComplete(mk, ty, tm, payKey, payMonthName) {
     if (retireAmt > 0) parts.push('Retire: -' + fmt(retireAmt));
     step3Val = parts.length > 0 ? parts.join(' · ') : '—';
   }
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;">';
+  const step3Border = (payDate.getMonth() === 11) ? 'border-bottom:1px solid var(--surface2);' : '';
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;${step3Border}">`;
   html += '<div><span style="font-size:0.72rem;color:var(--accent);font-weight:700;">3.</span> <span style="font-size:0.78rem;">Stipends & Total</span></div>';
   html += '<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:0.78rem;">' + step3Val + '</span>';
   html += '<a href="#" onclick="peGoToStep(3); return false;" style="font-size:0.68rem;color:var(--primary);">Edit</a></div></div>';
+
+  // Step 4 (December only): Bonus Paycheck
+  const payDate = new Date(ty, tm, 1);
+  if (payDate.getMonth() === 11) {
+    const bonusKey = payDate.getFullYear() + '-12b';
+    const existingBonusDeposit = (data.paychecks || {})[bonusKey];
+    let step4Val = '';
+    if (existingBonusDeposit != null) {
+      step4Val = fmt(existingBonusDeposit) + ' <span style="font-size:0.65rem;color:var(--text-dim);">(deposit)</span>';
+    } else {
+      const bonusEst = computeDecBonusEstimate(payDate.getFullYear());
+      step4Val = bonusEst > 0 ? fmt(bonusEst) + ' <span style="font-size:0.65rem;color:var(--text-dim);">(est.)</span>' : '—';
+    }
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;">';
+    html += '<div><span style="font-size:0.72rem;color:var(--accent);font-weight:700;">4.</span> <span style="font-size:0.78rem;">Bonus Paycheck</span></div>';
+    html += '<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:0.78rem;">' + step4Val + '</span>';
+    html += '<a href="#" onclick="peGoToStep(4); return false;" style="font-size:0.68rem;color:var(--primary);">Edit</a></div></div>';
+  }
 
   html += '</div>';
   return html;
@@ -13286,6 +13324,75 @@ function renderPEStep3(mk, ty, tm, payKey, payMonthName) {
   html += `<div style="text-align:center;margin-bottom:10px;"><button class="btn btn-primary" onclick="peStep3SaveDeposit()" style="font-size:0.85rem;padding:10px 28px;">Save & Finish</button></div>`;
 
   html += `<div style="text-align:center;"><button class="btn btn-outline btn-sm" onclick="peStep3Skip()" style="font-size:0.7rem;padding:4px 12px;">Done — use calculated total</button></div>`;
+  html += '</div>';
+
+  return html;
+}
+
+function renderPEStep4DecBonus(ty, bonusYear) {
+  const bonusKey = bonusYear + '-12b';
+  const bonusEstimate = computeDecBonusEstimate(bonusYear);
+  const bonusStipEntries = (data.stipends && data.stipends[bonusKey]) || [];
+  const bonusStipTotal = bonusStipEntries.reduce((s, e) => s + (e.amount || 0), 0);
+  const bonusRetireAmt = (data.retirement && data.retirement[bonusKey]) || 0;
+  const bonusNgAmounts = getNonGuaranteedForMonth(bonusKey);
+  const bonusNgTotal = Object.values(bonusNgAmounts).reduce((s, v) => s + (v || 0), 0);
+  const existingBonusDeposit = (data.paychecks || {})[bonusKey];
+
+  // Running total: estimate + stipends + NG - retirement
+  const baseAmt = existingBonusDeposit != null ? existingBonusDeposit : bonusEstimate;
+  const runningTotal = round2(baseAmt + bonusStipTotal + bonusNgTotal - bonusRetireAmt);
+
+  let html = '<div style="font-size:0.88rem;font-weight:700;color:var(--text);margin-bottom:4px;">Step 4: December Bonus Paycheck</div>';
+  html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">December includes a 2nd bonus paycheck. Upload a screenshot of your <strong>bonus pay stub</strong>, or enter the values manually.</div>';
+
+  if (bonusEstimate > 0) {
+    html += `<div style="font-size:0.72rem;color:var(--accent);margin-bottom:8px;font-style:italic;">App estimate: $${bonusEstimate.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} (average of ${bonusYear} paychecks)</div>`;
+  }
+
+  // Upload button
+  html += '<div style="margin-bottom:10px;text-align:center;">';
+  html += '<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:6px 12px;font-size:0.72rem;color:var(--primary);transition:border-color 0.2s;">';
+  html += '<span style="font-size:0.9rem;">&#128247;</span> Upload Bonus Pay Stub';
+  html += '<input type="file" accept="image/*" onchange="peUploadBonusPayStub(this)" style="display:none;">';
+  html += '</label>';
+  html += '</div>';
+  html += '<div id="peOcrStatus4" style="margin-bottom:8px;font-size:0.75rem;"></div>';
+
+  // Retirement
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:0.75rem;color:var(--text-dim);">Stipends & Deductions</span>';
+  html += `<button type="button" class="add-entry-btn" onclick="addStabStipendRow(document.getElementById('peBonusStipendEntries'),'','');refreshPaycheckEntryHeight();" style="font-size:0.7rem;padding:2px 8px;">+ Add</button></div>`;
+  html += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
+  html += `<input type="text" value="Retirement" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
+  html += `<input type="text" inputmode="text" id="peBonusRetirement" placeholder="$0.00" value="${bonusRetireAmt ? '-$' + bonusRetireAmt.toFixed(2) : ''}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
+  html += '<span style="width:26px;"></span>';
+  html += '</div>';
+  html += '<div id="peBonusStipendEntries"></div>';
+
+  // Non-guaranteed payments
+  const ngLabels = [['classB', 'Class B Margin'], ['crna', 'CRNA Distribution'], ['surgCenter', 'Surgical Center Dist']];
+  html += '<div style="margin-top:8px;margin-bottom:6px;font-size:0.72rem;color:var(--text-dim);">Non-Guaranteed Payments</div>';
+  ngLabels.forEach(([key, label]) => {
+    const val = bonusNgAmounts[key] || '';
+    const fmtVal = val ? '$' + Number(val).toFixed(2) : '';
+    html += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">';
+    html += `<input type="text" value="${label}" class="text-input" style="flex:2;min-width:80px;font-size:0.78rem;padding:5px 8px;opacity:0.6;" readonly>`;
+    html += `<input type="text" inputmode="text" id="peBonusNG_${key}" placeholder="$0.00" value="${fmtVal}" class="text-input" style="flex:1;min-width:60px;font-size:0.78rem;padding:5px 8px;">`;
+    html += '<span style="width:26px;"></span>';
+    html += '</div>';
+  });
+
+  html += '<button class="btn btn-primary btn-sm" onclick="peStep4SaveStipends()" style="margin-top:4px;font-size:0.72rem;padding:4px 12px;">Save Stipends/Deductions</button>';
+
+  // Actual bank deposit
+  html += '<div style="border-top:2px solid var(--border);margin-top:12px;padding-top:10px;">';
+  html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Enter the <strong>Actual Bank Deposit</strong> from the bonus pay stub:</div>';
+  html += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">';
+  html += `<span style="font-size:0.85rem;color:var(--text-dim);">$</span>`;
+  html += `<input type="number" id="peBonusActualDeposit" step="0.01" placeholder="0.00" value="${existingBonusDeposit != null ? existingBonusDeposit : ''}" class="text-input" style="flex:1;font-size:0.9rem;padding:8px 12px;text-align:center;">`;
+  html += '</div>';
+  html += `<div style="text-align:center;margin-bottom:10px;"><button class="btn btn-primary" onclick="peStep4SaveDeposit()" style="font-size:0.85rem;padding:10px 28px;">Save & Finish</button></div>`;
+  html += `<div style="text-align:center;"><button class="btn btn-outline btn-sm" onclick="peStep4Skip()" style="font-size:0.7rem;padding:4px 12px;">Skip — use estimate</button></div>`;
   html += '</div>';
 
   return html;
@@ -13461,18 +13568,163 @@ function peStep3SaveDeposit() {
   renderStabilization();
   renderPaycheckChart();
   renderPaycheckTable();
-  peStep = 4;
-  peSetMonthStep(mk, 4);
+  const isDecPaycheck = payDate.getMonth() === 11;
+  const nextStep = isDecPaycheck ? 4 : 4; // both go to 4, but 4 = bonus for Dec, complete for others
+  peStep = nextStep;
+  peSetMonthStep(mk, nextStep);
   renderPaycheckEntry();
 }
 
 function peStep3Skip() {
   const mk = stabMonthKey();
-  showToast('Paycheck entry complete');
+  const [ty, tm] = mk.split('-').map(Number);
+  const payDate = new Date(ty, tm, 1);
+  const isDecPaycheck = payDate.getMonth() === 11;
+  if (!isDecPaycheck) showToast('Paycheck entry complete');
   renderStabilization();
   peStep = 4;
   peSetMonthStep(mk, 4);
   renderPaycheckEntry();
+}
+
+function peStep4SaveStipends() {
+  const mk = stabMonthKey();
+  const [ty, tm] = mk.split('-').map(Number);
+  const payDate = new Date(ty, tm, 1);
+  const bonusKey = payDate.getFullYear() + '-12b';
+  if (!data.stipends) data.stipends = {};
+  if (!data.retirement) data.retirement = {};
+  if (!data.nonGuaranteed) data.nonGuaranteed = {};
+
+  // Retirement
+  const retInput = document.getElementById('peBonusRetirement');
+  const retVal = retInput ? Math.abs(parseFloat(retInput.value.replace(/[$,]/g, '')) || 0) : 0;
+  data.retirement[bonusKey] = retVal;
+
+  // Stipend entries
+  const container = document.getElementById('peBonusStipendEntries');
+  const entries = [];
+  if (container) {
+    for (const row of container.children) {
+      const label = row.querySelector('.stip-label')?.value.trim() || '';
+      const amount = parseFloat(row.querySelector('.stip-amount')?.value.replace(/[$,]/g, '')) || 0;
+      if (label || amount !== 0) entries.push({ label, amount });
+    }
+  }
+  data.stipends[bonusKey] = entries;
+
+  // NG payments
+  const ngKeys = ['classB', 'crna', 'surgCenter'];
+  const ngObj = {};
+  ngKeys.forEach(k => {
+    const el = document.getElementById('peBonusNG_' + k);
+    const v = el ? parseFloat(el.value.replace(/[$,]/g, '')) || 0 : 0;
+    if (v !== 0) ngObj[k] = v;
+  });
+  data.nonGuaranteed[bonusKey] = ngObj;
+
+  saveData(data);
+  showToast('Bonus stipends saved');
+  renderPaycheckEntry();
+  renderStabilization();
+}
+
+function peStep4SaveDeposit() {
+  const input = document.getElementById('peBonusActualDeposit');
+  const valStr = input?.value.trim();
+  if (!valStr) { showToast('Enter an amount'); return; }
+  const val = parseFloat(valStr);
+  if (isNaN(val)) { showToast('Enter a valid amount'); return; }
+  const mk = stabMonthKey();
+  const [ty, tm] = mk.split('-').map(Number);
+  const payDate = new Date(ty, tm, 1);
+  const bonusKey = payDate.getFullYear() + '-12b';
+  if (!data.paychecks) data.paychecks = {};
+  data.paychecks[bonusKey] = val;
+  saveData(data);
+  showToast('Bonus deposit saved');
+  renderStabilization();
+  renderPaycheckChart();
+  renderPaycheckTable();
+  peStep = 5;
+  peSetMonthStep(mk, 5);
+  renderPaycheckEntry();
+}
+
+function peStep4Skip() {
+  const mk = stabMonthKey();
+  showToast('Paycheck entry complete');
+  renderStabilization();
+  peStep = 5;
+  peSetMonthStep(mk, 5);
+  renderPaycheckEntry();
+}
+
+async function peUploadBonusPayStub(inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('peOcrStatus4');
+  statusEl.innerHTML = '<div style="display:flex;align-items:center;gap:6px;"><div class="spinner" style="width:14px;height:14px;border:2px solid transparent;border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;"></div> Reading bonus pay stub...</div>';
+  refreshPaycheckEntryHeight();
+  try {
+    const text = await ocrExtractText(file);
+    const parsed = parsePayStubOCR(text);
+
+    let items = [];
+    parsed.stipends.forEach((s, i) => {
+      items.push({ id: 'stip_' + i, label: s.label, value: s.amount, dest: 'Stipend', checked: true });
+    });
+    parsed.deductions.forEach((d, i) => {
+      items.push({ id: 'ded_' + i, label: d.label, value: d.amount, dest: 'Deduction', checked: true });
+    });
+    if (parsed.retirement > 0) {
+      items.push({ id: 'retire', label: 'Retirement (401k + Profit Sharing)', value: parsed.retirement, dest: 'Retirement', checked: true });
+    }
+    if (parsed.directDeposit != null) {
+      items.push({ id: 'deposit', label: 'Direct Deposit', value: parsed.directDeposit, dest: 'Actual Bank Deposit', checked: true });
+    }
+
+    if (items.length > 0) {
+      showOCRReviewPopup(items, '', function(accepted) {
+        const stipends = [];
+        const ngMap = { 'Class B Margin': 'classB', 'CRNA Distribution': 'crna', 'Surgical Center Dist': 'surgCenter' };
+        accepted.forEach(a => {
+          const d = a.dest;
+          if (d === 'Retirement') {
+            const retEl = document.getElementById('peBonusRetirement');
+            if (retEl) retEl.value = '-$' + Math.abs(a.value).toFixed(2);
+          } else if (d === 'Actual Bank Deposit') {
+            const depEl = document.getElementById('peBonusActualDeposit');
+            if (depEl) depEl.value = Math.abs(a.value).toFixed(2);
+          } else if (ngMap[d]) {
+            const ngEl = document.getElementById('peBonusNG_' + ngMap[d]);
+            if (ngEl) ngEl.value = '$' + Math.abs(a.value).toFixed(2);
+          } else if (d === 'Stipend') {
+            stipends.push({ label: a.label, amount: a.value });
+          } else if (d === 'Deduction') {
+            stipends.push({ label: a.label, amount: a.value < 0 ? a.value : -Math.abs(a.value) });
+          }
+        });
+        if (stipends.length > 0) {
+          const container = document.getElementById('peBonusStipendEntries');
+          if (container) {
+            container.innerHTML = '';
+            stipends.forEach(s => addStabStipendRow(container, s.label, s.amount));
+          }
+        }
+        statusEl.innerHTML = '<div style="color:var(--accent);">' + accepted.length + ' value' + (accepted.length !== 1 ? 's' : '') + ' applied. Review and save.</div>';
+        refreshPaycheckEntryHeight();
+      });
+      statusEl.innerHTML = '';
+    } else {
+      statusEl.innerHTML = '<div style="color:var(--danger);">No values found. Try entering manually.</div>';
+    }
+  } catch (e) {
+    console.error('OCR bonus pay stub error:', e);
+    const errMsg = e.message || (typeof e === 'string' ? e : JSON.stringify(e)) || 'Unknown error';
+    statusEl.innerHTML = '<div style="color:var(--danger);">Error: ' + escHtml(errMsg) + '</div><div style="font-size:0.65rem;color:var(--text-dim);margin-top:2px;">Try a PNG/JPG screenshot or enter the values manually.</div>';
+  }
+  refreshPaycheckEntryHeight();
 }
 
 // Paycheck Projection month navigation
