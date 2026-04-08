@@ -5641,8 +5641,8 @@ function calcARPoints(shift) {
     if (!isHol && !isWknd) {
       preCallAR = Math.max(preCallAR, 20 * 4);
     }
-    // Evening minimum: based on evening assignment type (mole/SF1: no minimum)
-    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1') {
+    // Evening minimum: based on evening assignment type (mole/SF1/SF2: no minimum)
+    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
       const isOBRate = shift.assignmentType === 'OB_restricted';
       const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
       eveningAR = Math.max(eveningAR, eveningMin);
@@ -5697,8 +5697,8 @@ function calcARPoints(shift) {
   callPoints += tcPts.pagerAdj;
   arPoints += tcPts.ar;
 
-  // Guaranteed minimums for clocked-in time (weekday, non-mole, non-SF1)
-  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1') {
+  // Guaranteed minimums for clocked-in time (weekday, non-mole, non-SF1, non-SF2)
+  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
     const isOBRate = shift.assignmentType === 'OB_restricted';
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     arPoints = Math.max(arPoints, minPoints);
@@ -5873,8 +5873,8 @@ function calcARBreakdown(shift) {
     if (!isHol && !isWknd) {
       preCallAR = Math.max(preCallAR, 20 * 4);
     }
-    // Evening minimum: based on evening assignment type (mole/SF1: no minimum)
-    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1') {
+    // Evening minimum: based on evening assignment type (mole/SF1/SF2: no minimum)
+    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
       const isOBRate = shift.assignmentType === 'OB_restricted';
       const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
       eveningAR = Math.max(eveningAR, eveningMin);
@@ -5924,8 +5924,8 @@ function calcARBreakdown(shift) {
   callPoints += tcPtsBd.pagerAdj;
   arPoints += tcPtsBd.ar;
 
-  // SF1: no AR minimum — accrues at 13/hr from start. All others get 4-hr minimum.
-  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1') {
+  // SF1/SF2: no AR minimum — accrues at actual rate from start. All others get 4-hr minimum.
+  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
     const isOBRate = shift.assignmentType === 'OB_restricted';
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     arPoints = Math.max(arPoints, minPoints);
@@ -8789,10 +8789,10 @@ function tickLiveUpdate() {
   });
 
   // Determine if in guaranteed minimum period (first 4 hours of shift)
-  // SF1: no minimum enforced on ticker — AR ticks at 13/hr from start
-  // SF2/others: flat minimum (80 pts) for AR during first 4 hrs, prod/supv still tick
-  const isSF1 = shift.assignmentType === 'SF1';
-  const minApplies = !isSF1 && !isHol && !isWknd && shift.assignmentType !== 'mole';
+  // SF1/SF2: no minimum enforced on ticker — AR ticks at actual rate from start
+  // Others: flat minimum (80 pts) for AR during first 4 hrs, prod/supv still tick
+  const isSFShift = shift.assignmentType === 'SF1' || shift.assignmentType === 'SF2';
+  const minApplies = !isSFShift && !isHol && !isWknd && shift.assignmentType !== 'mole';
   const minPoints = 80; // 20 pts/hr × 4 hrs (SF1 excluded above)
   let inMinPeriod = false;
   if (minApplies) {
@@ -9983,7 +9983,7 @@ function getShiftPayBreakdown(shift) {
       }
 
       let eveningResult = eveningRows;
-      if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1') {
+      if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
         const eveningTotal = eveningRows.reduce((sum, r) => sum + r.amount, 0);
         const isOBRate = shift.assignmentType === 'OB_restricted';
         const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
@@ -10001,8 +10001,8 @@ function getShiftPayBreakdown(shift) {
       preCallResult.forEach(r => consolidated.push(r));
       eveningResult.forEach(r => consolidated.push(r));
       pagerRows.forEach(r => consolidated.push(r));
-    } else if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1') {
-      // Non-pre-call: single 4hr minimum (SF1 excluded — no minimum)
+    } else if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
+      // Non-pre-call: single 4hr minimum (SF1/SF2 excluded — no minimum)
       const isOBRate = shift.assignmentType === 'OB_restricted';
       const minPoints = isOBRate ? 13 * 4 : 20 * 4;
       const arRows = consolidated.filter(r => !r.isPager);
