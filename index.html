@@ -12738,8 +12738,12 @@ function parsePayStubOCR(text) {
   const depositPatterns = [/net\s*compensation/i, /direct\s*deposit/i, /deposit\s*account/i];
 
   for (const line of lines) {
-    const trimmed = line.trim();
+    let trimmed = line.trim();
     if (!trimmed) continue;
+
+    // Pre-process: fix OCR reading commas as periods in amounts (e.g. "6.248.76" → "6,248.76")
+    // Pattern: digit(s) + period + exactly 3 digits + period + 2 digits (thousands separator as dot)
+    trimmed = trimmed.replace(/(\d+)\.(\d{3})\.(\d{2})/g, '$1,$2.$3');
 
     // Detect section headers (only if no dollar amount on the line)
     const hasDollarAmt = /\d+\.\d{2}/.test(trimmed);
@@ -12759,24 +12763,6 @@ function parsePayStubOCR(text) {
     let m;
     while ((m = amtRegex.exec(trimmed)) !== null) {
       allAmounts.push({ value: parseFloat(m[1].replace(/,/g, '')), index: m.index, len: m[0].length });
-    }
-
-    // Fix OCR-mangled amounts where comma became period: "6.248.76" → 6248.76
-    // This shows up as a digit+period right before a matched amount (e.g. "6." before "248.76")
-    // Merge them back into a single proper amount
-    for (let i = allAmounts.length - 1; i >= 0; i--) {
-      const a = allAmounts[i];
-      const before = trimmed.substring(0, a.index);
-      const prefixMatch = before.match(/(\d+)\.\s*$/);
-      if (prefixMatch) {
-        // "6." + "248.76" → 6248.76
-        const merged = parseFloat(prefixMatch[1] + a.value.toFixed(2).replace('.', '').replace(/^0+/, '') + '.' + a.value.toFixed(2).split('.')[1]);
-        // Simpler: just prepend the prefix digits to the integer part
-        const intPart = Math.floor(a.value);
-        const decPart = a.value.toFixed(2).split('.')[1];
-        const fullValue = parseFloat(prefixMatch[1] + intPart + '.' + decPart);
-        allAmounts[i] = { value: fullValue, index: before.length - prefixMatch[0].length, len: prefixMatch[0].length + a.len, fixed: true };
-      }
     }
 
     // Also look for OCR-mangled amounts where decimal was dropped (e.g. "25102" = 251.02)
