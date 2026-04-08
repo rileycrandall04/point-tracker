@@ -12905,7 +12905,9 @@ async function peUploadPayStub(inputEl) {
   refreshPaycheckEntryHeight();
   try {
     const text = await ocrExtractText(file);
+    console.log('=== PAY STUB OCR RAW TEXT ===\n' + text + '\n=== END OCR TEXT ===');
     const parsed = parsePayStubOCR(text);
+    console.log('=== PARSED RESULT ===', JSON.stringify(parsed, null, 2));
     const mk = stabMonthKey();
     const [ty, tm] = mk.split('-').map(Number);
     const monthNames = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
