@@ -12725,8 +12725,7 @@ function parsePayStubOCR(text) {
 
   // Known labels to help with fuzzy matching when OCR garbles text
   const retirementPatterns = [/401k/i, /profit\s*shar/i];
-  const skipCompPatterns = [/^compensation\s*\(new\)/i, /^compensation\s*new\b/i];
-  const mainCompPatterns = [/^compensation$/i, /^compensation\s+[\d,]+/i];
+  const mainCompPatterns = [/^compensation$/i];
   const depositPatterns = [/net\s*compensation/i, /direct\s*deposit/i, /deposit\s*account/i];
 
   for (const line of lines) {
@@ -12745,12 +12744,30 @@ function parsePayStubOCR(text) {
     if (/^(provider|stub\s*no|period\s*end|deposit\s*date)/i.test(trimmed)) continue;
 
     // Extract all dollar amounts from the line (handles OCR spacing issues)
-    const allAmounts = [];
+    let allAmounts = [];
     // Match proper amounts (with decimal): 1,234.56 or 1234.56
     const amtRegex = /([\d,]+\.\d{2})/g;
     let m;
     while ((m = amtRegex.exec(trimmed)) !== null) {
       allAmounts.push({ value: parseFloat(m[1].replace(/,/g, '')), index: m.index, len: m[0].length });
+    }
+
+    // Fix OCR-mangled amounts where comma became period: "6.248.76" → 6248.76
+    // This shows up as a digit+period right before a matched amount (e.g. "6." before "248.76")
+    // Merge them back into a single proper amount
+    for (let i = allAmounts.length - 1; i >= 0; i--) {
+      const a = allAmounts[i];
+      const before = trimmed.substring(0, a.index);
+      const prefixMatch = before.match(/(\d+)\.\s*$/);
+      if (prefixMatch) {
+        // "6." + "248.76" → 6248.76
+        const merged = parseFloat(prefixMatch[1] + a.value.toFixed(2).replace('.', '').replace(/^0+/, '') + '.' + a.value.toFixed(2).split('.')[1]);
+        // Simpler: just prepend the prefix digits to the integer part
+        const intPart = Math.floor(a.value);
+        const decPart = a.value.toFixed(2).split('.')[1];
+        const fullValue = parseFloat(prefixMatch[1] + intPart + '.' + decPart);
+        allAmounts[i] = { value: fullValue, index: before.length - prefixMatch[0].length, len: prefixMatch[0].length + a.len, fixed: true };
+      }
     }
 
     // Also look for OCR-mangled amounts where decimal was dropped (e.g. "25102" = 251.02)
@@ -12769,14 +12786,11 @@ function parsePayStubOCR(text) {
       }
     }
 
-    // Also handle lines where OCR garbled the decimal in the amount (e.g. "6.248.76" or "6248 76")
+    // Fallback: handle lines where no amounts matched at all
     if (allAmounts.length === 0) {
-      // Try matching "digits separator digits.digits" patterns like "6.248.76" or "6,248 76"
       const fuzzyMatch = trimmed.match(/^(.+?)\s+(\d[\d.,\s]*\d)\s*$/);
       if (fuzzyMatch) {
-        // Clean and try to parse: remove all but last decimal, treat spaces/extra dots as thousands sep
         let numStr = fuzzyMatch[2];
-        // Find the last period — that's the decimal point
         const lastDot = numStr.lastIndexOf('.');
         if (lastDot >= 0) {
           const intPart = numStr.substring(0, lastDot).replace(/[.,\s]/g, '');
@@ -12819,8 +12833,6 @@ function parsePayStubOCR(text) {
 
     // Handle compensation section
     if (section === 'comp') {
-      // Skip "Compensation (New)" — already factored into production
-      if (skipCompPatterns.some(p => p.test(label))) continue;
       // Route main "Compensation" line to production earnings (Step 2)
       if (mainCompPatterns.some(p => p.test(label))) {
         result.productionEarnings = current;
