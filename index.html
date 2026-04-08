@@ -8407,11 +8407,11 @@ function renderToday() {
 
   // Component breakdown chips
   const comps = [];
-  if (result.ar > 0) comps.push({ label: 'AR', val: result.ar });
+  const arWithSupv = result.ar + result.supervision;
+  if (arWithSupv > 0) comps.push({ label: 'AR', val: arWithSupv });
   if (result.prod > 0) comps.push({ label: 'Prod', val: result.prod });
   if (result.call > 0) comps.push({ label: 'Pager', val: result.call });
   if (result.subspec > 0) comps.push({ label: 'Sub', val: result.subspec });
-  if (result.supervision > 0) comps.push({ label: 'Supv', val: result.supervision });
   if (comps.length > 0) {
     bdHtml += `<div id="todayCompChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">`;
     comps.forEach(c => {
@@ -8653,10 +8653,10 @@ function updateTodayRateChips() {
       }
     });
 
-    const totalRate = currentRate + supRate + pagerRate + prodRate;
+    const displayARRate = currentRate + supRate;
+    const totalRate = displayARRate + pagerRate + prodRate;
     const parts = [];
-    parts.push('AR ' + currentRate.toFixed(0));
-    if (supRate > 0) parts.push('Supv +7');
+    parts.push('AR ' + displayARRate.toFixed(0));
     if (pagerRate > 0) parts.push('Pager 3.5');
     if (prodRate > 0) parts.push('Prod ' + prodRate.toFixed(1));
     const hasExtras = pagerRate > 0 || prodRate > 0;
@@ -8666,7 +8666,7 @@ function updateTodayRateChips() {
       html += `Rate: ${totalRate.toFixed(1)} pts/hr`;
       html += ` <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">(${parts.join(' + ')})</span>`;
     } else {
-      html += `AR: ${currentRate.toFixed(0)} pts/hr`;
+      html += `AR: ${displayARRate.toFixed(0)} pts/hr`;
     }
     html += ` <span class="monetary" style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">($${round2(totalRate * pv).toFixed(0)}/hr)</span>`;
     html += `</div>`;
@@ -8847,16 +8847,14 @@ function tickLiveUpdate() {
   // Update component breakdown chips
   const compEl = document.getElementById('todayCompChips');
   if (compEl) {
-    const arLive = inMinPeriod ? minPoints : (result.ar + (effectiveARRate * secFraction));
+    const arLive = inMinPeriod ? minPoints : (result.ar + result.supervision + ((effectiveARRate + supRate) * secFraction));
     const callLive = result.call + (pagerRate * secFraction);
     const prodLive = result.prod + (prodRate * secFraction);
-    const supLive = result.supervision + (supRate * secFraction);
     const comps = [];
     if (arLive > 0) comps.push({ label: 'AR', val: arLive });
     if (prodLive > 0) comps.push({ label: 'Prod', val: prodLive });
     if (callLive > 0) comps.push({ label: 'Pager', val: callLive });
     if (result.subspec > 0) comps.push({ label: 'Sub', val: result.subspec });
-    if (supLive > 0) comps.push({ label: 'Supv', val: supLive });
     let chipHtml = '';
     comps.forEach(c => {
       const chipColor = c.label === 'Pager' ? 'rgba(245,166,35,0.15)' : 'rgba(255,255,255,0.06)';
