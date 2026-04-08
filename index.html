@@ -12746,17 +12746,57 @@ function parsePayStubOCR(text) {
 
     // Extract all dollar amounts from the line (handles OCR spacing issues)
     const allAmounts = [];
+    // Match proper amounts (with decimal): 1,234.56 or 1234.56
     const amtRegex = /([\d,]+\.\d{2})/g;
     let m;
     while ((m = amtRegex.exec(trimmed)) !== null) {
-      allAmounts.push({ value: parseFloat(m[1].replace(/,/g, '')), index: m.index });
+      allAmounts.push({ value: parseFloat(m[1].replace(/,/g, '')), index: m.index, len: m[0].length });
     }
+
+    // Also look for OCR-mangled amounts where decimal was dropped (e.g. "25102" = 251.02)
+    // These appear as 4+ digit numbers at the end of the label, before a proper amount
+    if (allAmounts.length >= 1) {
+      const beforeFirst = trimmed.substring(0, allAmounts[0].index);
+      const mangledMatch = beforeFirst.match(/(\d{4,})\s*$/);
+      if (mangledMatch) {
+        const digits = mangledMatch[1];
+        // Insert decimal before last 2 digits: "25102" → 251.02, "624876" → 6248.76
+        const fixed = parseFloat(digits.slice(0, -2) + '.' + digits.slice(-2));
+        if (fixed > 0 && fixed < allAmounts[0].value) {
+          // Mangled amount is smaller than the next amount (current < YTD), use it
+          allAmounts.unshift({ value: fixed, index: mangledMatch.index, len: mangledMatch[0].length, mangled: true });
+        }
+      }
+    }
+
+    // Also handle lines where OCR garbled the decimal in the amount (e.g. "6.248.76" or "6248 76")
+    if (allAmounts.length === 0) {
+      // Try matching "digits separator digits.digits" patterns like "6.248.76" or "6,248 76"
+      const fuzzyMatch = trimmed.match(/^(.+?)\s+(\d[\d.,\s]*\d)\s*$/);
+      if (fuzzyMatch) {
+        // Clean and try to parse: remove all but last decimal, treat spaces/extra dots as thousands sep
+        let numStr = fuzzyMatch[2];
+        // Find the last period — that's the decimal point
+        const lastDot = numStr.lastIndexOf('.');
+        if (lastDot >= 0) {
+          const intPart = numStr.substring(0, lastDot).replace(/[.,\s]/g, '');
+          const decPart = numStr.substring(lastDot + 1);
+          if (decPart.length === 2 && /^\d+$/.test(intPart)) {
+            const val = parseFloat(intPart + '.' + decPart);
+            if (val > 0) {
+              allAmounts.push({ value: val, index: fuzzyMatch.index + fuzzyMatch[1].length, len: fuzzyMatch[2].length });
+            }
+          }
+        }
+      }
+    }
+
     if (allAmounts.length === 0) continue;
 
     // Extract label: everything before the first amount, cleaned up
     let label = trimmed.substring(0, allAmounts[0].index).trim();
-    // Clean label: remove trailing dashes, dots, pipes, account numbers
-    label = label.replace(/[#*]+\d*\s*$/, '').replace(/[\s\-—.:|]+$/, '').trim();
+    // Clean label: remove trailing dashes, dots, pipes, account numbers, mangled digits
+    label = label.replace(/[#*]+\d*\s*$/, '').replace(/\d{4,}\s*$/, '').replace(/[\s\-—.:|]+$/, '').trim();
     if (!label || label.length < 2) continue;
 
     // Pick the "current" amount: first amount if 2+ amounts, only amount if just 1
