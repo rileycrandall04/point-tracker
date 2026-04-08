@@ -12925,11 +12925,19 @@ async function peUploadPayStub(inputEl) {
       }
     }
 
+    // Skip compensation items that match the Step 2 value (already entered as production earnings)
+    const step2Value = data.overrides && data.overrides[mk] && data.overrides[mk].compTotal != null ? data.overrides[mk].compTotal : null;
+
     let items = [];
     if (parsed.productionEarnings != null) {
-      items.push({ id: 'prod', label: 'Compensation (Production)', value: parsed.productionEarnings, dest: 'Production Earnings (Step 2)', checked: true });
+      // Only offer production earnings if Step 2 hasn't been filled
+      if (step2Value == null) {
+        items.push({ id: 'prod', label: 'Compensation (Production)', value: parsed.productionEarnings, dest: 'Production Earnings (Step 2)', checked: true });
+      }
     }
     parsed.stipends.forEach((s, i) => {
+      // Skip compensation-labeled items whose amount matches the Step 2 value
+      if (step2Value != null && /compensation/i.test(s.label) && Math.abs(s.amount - step2Value) < 0.02) return;
       items.push({ id: 'stip_' + i, label: s.label, value: s.amount, dest: 'Stipend', checked: true });
     });
     parsed.deductions.forEach((d, i) => {
