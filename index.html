@@ -7333,6 +7333,15 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     };
   });
   saveData(data);
+  // Auto-fill supervision end time when shift ends with open supervision
+  if (datesToSave.length === 1 && !isVacation && !isForcedOff) {
+    const savedShift = data.shifts[date];
+    if (savedShift && savedShift.endTime && savedShift.supervisionStart && !savedShift.supervisionEnd) {
+      savedShift.supervisionEnd = savedShift.endTime;
+      document.getElementById('supervisionEnd').value = savedShift.endTime;
+      saveData(data);
+    }
+  }
   // Auto-fill open epidural end times when shift end time is set
   if (datesToSave.length === 1 && !isVacation && !isForcedOff) {
     const savedShift = data.shifts[date];
