@@ -6264,9 +6264,18 @@ function calcSupervisionPoints(shift) {
     return round2(pts);
   }
   // Overlay on OR/SF1/SF2: +7/hr only (base AR already counted in calcARPoints)
-  if (shift.supervisionStart && shift.supervisionEnd) {
+  if (shift.supervisionStart) {
     let startMin = timeToMinutes(shift.supervisionStart);
-    let endMin = timeToMinutes(shift.supervisionEnd);
+    let endMin;
+    if (shift.supervisionEnd) {
+      endMin = timeToMinutes(shift.supervisionEnd);
+    } else if (shift.date === effectiveWorkDate()) {
+      // No end time yet — estimate to current time
+      const now = new Date();
+      endMin = now.getHours() * 60 + now.getMinutes();
+    } else {
+      return 0; // past date with no end — can't calculate
+    }
     if (endMin <= startMin) endMin += 1440;
     return round2((endMin - startMin) / 60 * 7);
   }
@@ -8597,12 +8606,17 @@ function updateTodayRateChips() {
     let supRate = 0;
     if (shift.assignmentType === 'CRNA_supervision') {
       supRate = 7;
-    } else if (shift.supervisionStart && shift.supervisionEnd) {
+    } else if (shift.supervisionStart) {
       let supStart = timeToMinutes(shift.supervisionStart);
-      let supEnd = timeToMinutes(shift.supervisionEnd);
-      if (supEnd <= supStart) supEnd += 1440;
-      const nowAdj = currentMin < supStart && supEnd > 1440 ? currentMin + 1440 : currentMin;
-      if (nowAdj >= supStart && nowAdj < supEnd) supRate = 7;
+      if (shift.supervisionEnd) {
+        let supEnd = timeToMinutes(shift.supervisionEnd);
+        if (supEnd <= supStart) supEnd += 1440;
+        const nowAdj = currentMin < supStart && supEnd > 1440 ? currentMin + 1440 : currentMin;
+        if (nowAdj >= supStart && nowAdj < supEnd) supRate = 7;
+      } else {
+        const nowAdj = currentMin < supStart ? currentMin + 1440 : currentMin;
+        if (nowAdj >= supStart) supRate = 7;
+      }
     }
     const isWkndOrHol = isWknd || isHol;
     const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
@@ -8749,12 +8763,18 @@ function tickLiveUpdate() {
   let supRate = 0;
   if (shift.assignmentType === 'CRNA_supervision') {
     supRate = 7;
-  } else if (shift.supervisionStart && shift.supervisionEnd) {
+  } else if (shift.supervisionStart) {
     let supStart = timeToMinutes(shift.supervisionStart);
-    let supEnd = timeToMinutes(shift.supervisionEnd);
-    if (supEnd <= supStart) supEnd += 1440;
-    const nowAdj = currentMin < supStart && supEnd > 1440 ? currentMin + 1440 : currentMin;
-    if (nowAdj >= supStart && nowAdj < supEnd) supRate = 7;
+    if (shift.supervisionEnd) {
+      let supEnd = timeToMinutes(shift.supervisionEnd);
+      if (supEnd <= supStart) supEnd += 1440;
+      const nowAdj = currentMin < supStart && supEnd > 1440 ? currentMin + 1440 : currentMin;
+      if (nowAdj >= supStart && nowAdj < supEnd) supRate = 7;
+    } else {
+      // No end time yet — currently supervising, tick at +7/hr
+      const nowAdj = currentMin < supStart ? currentMin + 1440 : currentMin;
+      if (nowAdj >= supStart) supRate = 7;
+    }
   }
   const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
   let inPagerWindow = false;
