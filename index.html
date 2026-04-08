@@ -12714,14 +12714,20 @@ function parseCompReportOCR(text) {
 
 function parsePayStubOCR(text) {
   const lines = text.split('\n');
-  const result = { stipends: [], deductions: [], retirement: 0, directDeposit: null, depositDate: null };
+  const result = { stipends: [], deductions: [], retirement: 0, directDeposit: null, depositDate: null, productionEarnings: null };
   // Extract deposit date (e.g., "Deposit Date 03/20/2026" or "Deposit Date: 03/20/2026")
   const depDateMatch = text.match(/deposit\s*date[:\s]+(\d{1,2}\/\d{1,2}\/\d{4})/i);
   if (depDateMatch) {
     const [m, d, y] = depDateMatch[1].split('/').map(Number);
     result.depositDate = { month: m, year: y };
   }
-  let section = ''; // 'comp', 'deduct', 'deposit'
+  let section = ''; // 'comp', 'deduct', 'deposit', 'summary'
+
+  // Known labels to help with fuzzy matching when OCR garbles text
+  const retirementPatterns = [/401k/i, /profit\s*shar/i];
+  const skipCompPatterns = [/^compensation\s*\(new\)/i, /^compensation\s*new\b/i];
+  const mainCompPatterns = [/^compensation$/i, /^compensation\s+[\d,]+/i];
+  const depositPatterns = [/net\s*compensation/i, /direct\s*deposit/i, /deposit\s*account/i];
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -12732,53 +12738,66 @@ function parsePayStubOCR(text) {
     if (/^compensation\b/i.test(trimmed) && !hasDollarAmt) { section = 'comp'; continue; }
     if (/^deductions?\b/i.test(trimmed) && !hasDollarAmt) { section = 'deduct'; continue; }
     if (/^direct\s*deposit/i.test(trimmed) && !hasDollarAmt) { section = 'deposit'; continue; }
+    if (/^total\s*compensation/i.test(trimmed) || /^net\s*compensation/i.test(trimmed)) { section = 'summary'; }
     // Skip header rows
     if (/^\s*current\s+ytd/i.test(trimmed) || /^\s*description\s+amount/i.test(trimmed)) continue;
+    // Skip provider/address/stub info
+    if (/^(provider|stub\s*no|period\s*end|deposit\s*date)/i.test(trimmed)) continue;
 
-    // Extract amounts — look for "Label   Current   YTD" pattern (take Current column)
-    const amtMatch = trimmed.match(/^(.+?)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/);
-    if (amtMatch) {
-      const label = amtMatch[1].trim();
-      const current = parseFloat(amtMatch[2].replace(/,/g, ''));
-      if (current === 0) continue;
+    // Extract all dollar amounts from the line (handles OCR spacing issues)
+    const allAmounts = [];
+    const amtRegex = /([\d,]+\.\d{2})/g;
+    let m;
+    while ((m = amtRegex.exec(trimmed)) !== null) {
+      allAmounts.push({ value: parseFloat(m[1].replace(/,/g, '')), index: m.index });
+    }
+    if (allAmounts.length === 0) continue;
 
-      if (section === 'comp') {
-        // Skip the main compensation line (already in Step 2)
-        if (/compensation\s*\(new\)/i.test(label)) continue;
-        result.stipends.push({ label, amount: current });
-      } else if (section === 'deduct') {
-        // Retirement items
-        if (/401k|profit\s*sharing/i.test(label)) {
-          result.retirement += current;
-        } else {
-          result.deductions.push({ label, amount: -current });
-        }
-      } else if (section === 'deposit') {
+    // Extract label: everything before the first amount, cleaned up
+    let label = trimmed.substring(0, allAmounts[0].index).trim();
+    // Clean label: remove trailing dashes, dots, pipes, account numbers
+    label = label.replace(/[#*]+\d*\s*$/, '').replace(/[\s\-—.:|]+$/, '').trim();
+    if (!label || label.length < 2) continue;
+
+    // Pick the "current" amount: first amount if 2+ amounts, only amount if just 1
+    const current = allAmounts[0].value;
+    if (current === 0) continue;
+
+    // Handle summary section (Total Comp, Net Comp, Total Deductions)
+    if (section === 'summary') {
+      if (/net\s*compensation/i.test(label)) {
         result.directDeposit = current;
       }
       continue;
     }
 
-    // Single amount pattern (e.g., "Label  Amount")
-    const singleMatch = trimmed.match(/^(.+?)\s+([\d,]+\.\d{2})\s*$/);
-    if (singleMatch) {
-      const label = singleMatch[1].trim();
-      const amount = parseFloat(singleMatch[2].replace(/,/g, ''));
-      if (amount === 0) continue;
+    // Handle deposit section
+    if (section === 'deposit' || depositPatterns.some(p => p.test(label))) {
+      result.directDeposit = current;
+      continue;
+    }
 
-      // Net Compensation / Direct Deposit
-      if (/net\s*compensation/i.test(label) || /direct\s*deposit/i.test(label)) {
-        result.directDeposit = amount;
-      } else if (section === 'comp') {
-        if (/compensation\s*\(new\)/i.test(label)) continue;
-        result.stipends.push({ label, amount });
-      } else if (section === 'deduct') {
-        if (/401k|profit\s*sharing/i.test(label)) {
-          result.retirement += amount;
-        } else {
-          result.deductions.push({ label, amount: -amount });
-        }
+    // Handle compensation section
+    if (section === 'comp') {
+      // Skip "Compensation (New)" — already factored into production
+      if (skipCompPatterns.some(p => p.test(label))) continue;
+      // Route main "Compensation" line to production earnings (Step 2)
+      if (mainCompPatterns.some(p => p.test(label))) {
+        result.productionEarnings = current;
+        continue;
       }
+      result.stipends.push({ label, amount: current });
+      continue;
+    }
+
+    // Handle deductions section
+    if (section === 'deduct') {
+      if (retirementPatterns.some(p => p.test(label))) {
+        result.retirement += current;
+      } else {
+        result.deductions.push({ label, amount: -current });
+      }
+      continue;
     }
   }
 
@@ -12855,6 +12874,9 @@ async function peUploadPayStub(inputEl) {
     }
 
     let items = [];
+    if (parsed.productionEarnings != null) {
+      items.push({ id: 'prod', label: 'Compensation (Production)', value: parsed.productionEarnings, dest: 'Production Earnings (Step 2)', checked: true });
+    }
     parsed.stipends.forEach((s, i) => {
       items.push({ id: 'stip_' + i, label: s.label, value: s.amount, dest: 'Stipend', checked: true });
     });
