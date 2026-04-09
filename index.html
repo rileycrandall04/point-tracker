@@ -8682,8 +8682,10 @@ function updateTodayRateChips() {
   }
 
   // Daily pts/hr chip
-  if (shiftHrs > 0) {
-    const dailyPtsHr = result.total / shiftHrs;
+  const isCallShift = shift && ['mole','1st_call','2nd_call','3rd_call','4th_call','endo','SF1','SF2'].includes(shift.assignmentType);
+  const dayDenominator = isCallShift ? 24 : shiftHrs;
+  if (dayDenominator > 0) {
+    const dailyPtsHr = result.total / dayDenominator;
     const dailyDollarsHr = round2(dailyPtsHr * pv);
     html += `<div style="padding:4px 10px;background:rgba(255,255,255,0.06);border-radius:12px;color:var(--text-dim);font-weight:600;">`;
     html += `Day: ${dailyPtsHr.toFixed(1)} pts/hr`;
