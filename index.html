@@ -1916,6 +1916,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <label>Assignment Type</label>
         <select id="shiftAssignmentType">
           <option value="OR">OR / General</option>
+          <option value="OR_float">General OR - Float</option>
           <option value="OB_restricted">UVH OB</option>
           <option value="cardiac_liver">Cardiac / Liver</option>
           <option value="mole">Mole</option>
@@ -2121,6 +2122,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
           <option value="standard" selected>Standard Case</option>
           <option value="labor_epidural">Labor Epidural</option>
           <option value="acute_pain_procedure">Acute Pain Procedure</option>
+          <option value="icu_er_lines">ICU/ER Lines (30 pts bonus)</option>
           <option value="epidural_blood_patch">Epidural Blood Patch</option>
           <option value="emergency_intubation">Emergency Intubation</option>
           <option value="01996">Epidural Rounding (01996)</option>
@@ -2129,6 +2131,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
           <option value="supervision_block">Supervision Block (2.63 pts)</option>
           <option value="aps_rounding">APS Rounding</option>
         </select>
+        <div id="caseTypeHint" class="hidden" style="margin-top:6px;padding:8px 10px;background:rgba(59,130,246,0.1);border-radius:8px;font-size:0.72rem;color:var(--primary);line-height:1.4;"></div>
       </div>
 
       <div id="standardFields">
@@ -3620,6 +3623,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <option value="standard" selected>Standard Case</option>
         <option value="labor_epidural">Labor Epidural</option>
         <option value="acute_pain_procedure">Acute Pain Procedure</option>
+        <option value="icu_er_lines">ICU/ER Lines (30 pts bonus)</option>
         <option value="epidural_blood_patch">Epidural Blood Patch</option>
         <option value="emergency_intubation">Emergency Intubation</option>
         <option value="01996">Epidural Rounding (01996)</option>
@@ -3820,6 +3824,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <label>Assignment Type</label>
       <select id="editShiftType">
         <option value="OR">OR / General</option>
+        <option value="OR_float">General OR - Float</option>
         <option value="OB_restricted">UVH OB</option>
         <option value="cardiac_liver">Cardiac / Liver</option>
         <option value="mole">Mole</option>
@@ -4954,6 +4959,7 @@ let calMappingResolve = null;
 
 const ASSIGNMENT_TYPE_OPTIONS = [
   { value: 'OR', label: 'OR / General' },
+  { value: 'OR_float', label: 'General OR - Float' },
   { value: 'OB_restricted', label: 'UVH OB' },
   { value: 'cardiac_liver', label: 'Cardiac / Liver' },
   { value: 'mole', label: 'Mole' },
@@ -5121,7 +5127,7 @@ function getPagerPayWindow(assignmentType, isWkndOrHol, dateStr) {
 
 function getAssignmentTypeName(type) {
   const names = {
-    OR: 'OR / General', OB_restricted: 'UVH OB', cardiac_liver: 'Cardiac / Liver',
+    OR: 'OR / General', OR_float: 'General OR - Float', OB_restricted: 'UVH OB', cardiac_liver: 'Cardiac / Liver',
     mole: 'Mole', '1st_call': '1st Call', '2nd_call': '2nd Call', '3rd_call': '3rd Call', '4th_call': '4th Call',
     endo: 'Endo', SF1: 'SF 1', SF2: 'SF 2', ACS: 'ACS', NORA: 'NORA',
     pre_call: 'Pre-Call',
@@ -6006,10 +6012,26 @@ function calcOtherPartyPoints(caseData, shift) {
 function calcCasePoints(caseData, shift, ignoreManual) {
   if (!ignoreManual && caseData.manualPoints != null) return round2(Number(caseData.manualPoints));
   const ct = caseData.caseType;
+  if (ct === 'icu_er_lines') return 30;
   if (ct === 'epidural_blood_patch') return 5;
   if (ct === 'emergency_intubation') return 4;
   if (ct === '01996') return 3;
-  if (ct === '99231') return 2;
+  // Pain Rounding: after April 1 2026, add 10 min AR if not clocked in
+  if (ct === '99231') {
+    let pts = 2;
+    const caseDate = caseData.shiftDate || (shift && shift.date);
+    if (caseDate && caseDate >= '2026-04-01') {
+      const shiftEntries = shift ? (shift.timeEntries || []) : [];
+      const isClockedIn = shiftEntries.length > 0 && shiftEntries[0].start;
+      if (!isClockedIn) {
+        const isHol = shift ? shift.isHoliday : false;
+        const isWknd = shift ? isWeekend(shift.date) : false;
+        const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720) : 20;
+        pts += round2(arRate * (10 / 60));
+      }
+    }
+    return round2(pts);
+  }
   if (ct === 'tee') return 22;
   if (ct === 'supervision_block') return 2.63;
 
@@ -6100,10 +6122,26 @@ function calcCasePoints(caseData, shift, ignoreManual) {
 function getCaseBreakdown(caseData, shift) {
   const ct = caseData.caseType;
   const bd = [];
+  if (ct === 'icu_er_lines') { bd.push({label:'ICU/ER Lines Call-In Bonus', pts:30}); return bd; }
   if (ct === 'epidural_blood_patch') { bd.push({label:'Epidural Blood Patch', pts:5}); return bd; }
   if (ct === 'emergency_intubation') { bd.push({label:'Emergency Intubation', pts:4}); return bd; }
   if (ct === '01996') { bd.push({label:'Epidural Rounding (01996)', pts:3}); return bd; }
-  if (ct === '99231') { bd.push({label:'Pain Rounding (99231)', pts:2}); return bd; }
+  if (ct === '99231') {
+    bd.push({label:'Pain Rounding (99231)', pts:2});
+    const caseDate = caseData.shiftDate || (shift && shift.date);
+    if (caseDate && caseDate >= '2026-04-01') {
+      const shiftEntries = shift ? (shift.timeEntries || []) : [];
+      const isClockedIn = shiftEntries.length > 0 && shiftEntries[0].start;
+      if (!isClockedIn) {
+        const isHol = shift ? shift.isHoliday : false;
+        const isWknd = shift ? isWeekend(shift.date) : false;
+        const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720) : 20;
+        const bonus = round2(arRate * (10 / 60));
+        bd.push({label:'10-min AR bonus (not clocked in)', pts: bonus});
+      }
+    }
+    return bd;
+  }
   if (ct === 'tee') { bd.push({label:'TEE Exam', pts:22}); return bd; }
 
   if (ct === 'aps_rounding') {
@@ -6335,7 +6373,8 @@ function calcShiftTotal(shift) {
   shiftCases.forEach(c => { if (!c.unbilled) prodPts += calcCasePoints(c, shift); });
   const subspecPts = (shift.assignmentType === 'cardiac_liver') ? calcSubspecPoints(shift) : 0;
   const supervisionPts = calcSupervisionPoints(shift);
-  const calcTotal = round2(arPts + prodPts + callPts + subspecPts + supervisionPts);
+  const floatBonus = shift.assignmentType === 'OR_float' ? 30 : 0;
+  const calcTotal = round2(arPts + prodPts + callPts + subspecPts + supervisionPts + floatBonus);
   // Per-row overrides: adjust total by difference between overridden and calculated row amounts
   const hasRowOverrides = shift.manualAmounts && Object.keys(shift.manualAmounts).length > 0;
   let total = calcTotal;
@@ -6380,7 +6419,7 @@ function getCaseTypeName(type, caseData) {
   if (type === 'labor_epidural' && caseData && caseData.isSharedLabor) return 'Labor Epidural (Handoff)';
   const names = {
     standard: 'Standard Case', labor_epidural: 'Labor Epidural',
-    acute_pain_procedure: 'Acute Pain Procedure',
+    acute_pain_procedure: 'Acute Pain Procedure', icu_er_lines: 'ICU/ER Lines',
     aps_rounding: 'APS Rounding', epidural_blood_patch: 'Epidural Blood Patch',
     emergency_intubation: 'Emergency Intubation', '01996': 'Epidural Rounding (01996)',
     '99231': 'Pain Rounding (99231)', tee: 'TEE Exam',
@@ -7398,6 +7437,25 @@ function applyCaseTypeVisibility(ct) {
   document.getElementById('laborEpiduralFields').classList.toggle('hidden', !isLabor);
   document.getElementById('apsRoundingFields').classList.toggle('hidden', !isAPS);
   document.getElementById('simpleFields').classList.toggle('hidden', isStd || isLabor || isAPS || isAcutePain);
+  // Case type hints
+  const hintEl = document.getElementById('caseTypeHint');
+  if (hintEl) {
+    let hint = '';
+    if (ct === 'icu_er_lines') {
+      hint = '<strong>ICU/ER Lines:</strong> Use when called in from home solely to intubate, place a central line, or arterial line. Awards 30 bonus points for coming in, plus standard AR and production. Clock in as usual and enter additional cases normally.';
+    } else if (ct === '99231') {
+      const shift = data.shifts[workingDate];
+      const entries = shift ? (shift.timeEntries || []) : [];
+      const isClockedIn = entries.length > 0 && entries[0].start;
+      if (isClockedIn) {
+        hint = '<strong>Pain Rounding:</strong> You are clocked in — points will accrue at your normal AR rate. 2 pts per entry.';
+      } else {
+        hint = '<strong>Pain Rounding:</strong> Not clocked in — each entry adds 10 minutes of AR points at your shift rate in addition to the 2 pts per entry.';
+      }
+    }
+    hintEl.innerHTML = hint;
+    hintEl.classList.toggle('hidden', !hint);
+  }
   updateORCaseVisibility();
 }
 
@@ -8225,9 +8283,10 @@ function updatePointPreview() {
 function buildCaseFromForm() {
   const isLabor = selectedCaseType === 'labor_epidural';
   const isAPS = selectedCaseType === 'aps_rounding';
+  const isICUER = selectedCaseType === 'icu_er_lines';
   return {
     caseType: selectedCaseType,
-    procedure: isLabor ? 'Labor Epidural' : (isAPS ? 'APS Rounding' : (document.getElementById('caseProcedure')?.value || selectedCaseType)),
+    procedure: isLabor ? 'Labor Epidural' : (isAPS ? 'APS Rounding' : (isICUER ? 'ICU/ER Lines' : (document.getElementById('caseProcedure')?.value || selectedCaseType))),
     asaCode: document.getElementById('caseASACode')?.value || '',
     baseUnits: document.getElementById('caseBaseUnits')?.value || '',
     physicalStatus: document.getElementById('casePhysicalStatus')?.value || 'P2',
@@ -10050,11 +10109,21 @@ function getShiftPayBreakdown(shift) {
     }
   }
 
+  // Float bonus for OR_float shifts
+  if (shift.assignmentType === 'OR_float') {
+    consolidated.push({
+      clockIn: '', clockOut: '',
+      payCode: 'Float Bonus',
+      durationMin: 0, payRate: 0, amount: 30,
+      isSubRow: false
+    });
+  }
+
   return consolidated;
 }
 
 function getShiftBadgeClass(type) {
-  if (type === 'OR' || type === 'cardiac_liver' || type === 'NORA' || type === 'ACS' || type === 'pre_call') return 'sl-badge-or';
+  if (type === 'OR' || type === 'OR_float' || type === 'cardiac_liver' || type === 'NORA' || type === 'ACS' || type === 'pre_call') return 'sl-badge-or';
   if (type === 'OB_restricted') return 'sl-badge-ob';
   if (type.includes('call')) return 'sl-badge-call';
   if (type === 'endo') return 'sl-badge-endo';
@@ -12034,7 +12103,7 @@ function renderHistoricalComp() {
 // Avg pts/shift uses all historical data; shifts/week uses last 3 months
 // divided by total calendar weeks (vacation naturally dilutes the rate).
 
-const EE_TYPE_ORDER = ['OR','OB_restricted','cardiac_liver','mole','1st_call','2nd_call','3rd_call','4th_call','endo','SF1','SF2','ACS','NORA','pre_call','CRNA_supervision'];
+const EE_TYPE_ORDER = ['OR','OR_float','OB_restricted','cardiac_liver','mole','1st_call','2nd_call','3rd_call','4th_call','endo','SF1','SF2','ACS','NORA','pre_call','CRNA_supervision'];
 
 function updateEEResult() {
   recalcEETotals();
