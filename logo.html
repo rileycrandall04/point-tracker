@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POINT TRACKER — Syringe Logo</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:#04080f;
+  font-family:'Sora',sans-serif;
+  padding:52px 16px 80px;
+  display:flex;flex-direction:column;
+  align-items:center;gap:52px;
+}
+.tag{
+  font-family:'DM Mono',monospace;font-size:9px;
+  letter-spacing:.2em;text-transform:uppercase;text-align:center;
+}
+.row{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+
+@keyframes markIn{from{opacity:0;transform:scaleY(0)}to{opacity:1;transform:scaleY(1)}}
+.t{transform-box:fill-box;transform-origin:50% 50%;animation:markIn .15s ease both}
+.t:nth-child(1){animation-delay:.10s}.t:nth-child(2){animation-delay:.18s}
+.t:nth-child(3){animation-delay:.26s}.t:nth-child(4){animation-delay:.34s}
+.t:nth-child(5){animation-delay:.42s}.t:nth-child(6){animation-delay:.56s}
+.t:nth-child(7){animation-delay:.64s}.t:nth-child(8){animation-delay:.72s}
+.t:nth-child(9){animation-delay:.80s}.t:nth-child(10){animation-delay:.88s}
+.t:nth-child(11){animation-delay:1.0s}.t:nth-child(12){animation-delay:1.08s}
+.t:nth-child(13){animation-delay:1.16s}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.wmlabel{animation:fadeUp .4s ease 1.25s both}
+</style>
+</head>
+<body>
+
+<div style="text-align:center">
+  <p class="tag" style="color:#162840;margin-bottom:6px">Point Tracker · Logo</p>
+</div>
+
+<!--
+  Syringe axis y=68. Barrel bottom y=89, flange bottom y=96.
+  Needle tip: (305, 68).
+  Drops fall from (305, 70) → surface at y=152 (~82px below tip, ~56px below syringe bottom).
+  ViewBox: 0 0 320 162
+-->
+<div>
+  <p class="tag" style="color:#1e3d5a;margin-bottom:14px">Primary · Animated</p>
+
+  <svg width="320" height="162" viewBox="0 0 320 162"
+       fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <clipPath id="inn">
+        <rect x="62" y="49" width="158" height="38" rx="1"/>
+      </clipPath>
+      <linearGradient id="fG" x1="92" y1="68" x2="220" y2="68" gradientUnits="userSpaceOnUse">
+        <stop offset="0%"   stop-color="#00d4c8" stop-opacity=".18"/>
+        <stop offset="100%" stop-color="#00d4c8" stop-opacity=".28"/>
+      </linearGradient>
+      <linearGradient id="sV" x1="60" y1="47" x2="60" y2="89" gradientUnits="userSpaceOnUse">
+        <stop offset="0%"   stop-color="#00d4c8" stop-opacity=".12"/>
+        <stop offset="50%"  stop-color="#00d4c8" stop-opacity=".03"/>
+        <stop offset="100%" stop-color="#00d4c8" stop-opacity=".09"/>
+      </linearGradient>
+    </defs>
+
+    <!-- THUMB RING -->
+    <circle cx="15" cy="68" r="13" stroke="#00d4c8" stroke-width="2" fill="none"/>
+    <circle cx="15" cy="68" r="6"  stroke="#00d4c8" stroke-width="1" fill="none" opacity=".3"/>
+    <line x1="2" y1="68" x2="28" y2="68" stroke="#00d4c8" stroke-width=".7" opacity=".14"/>
+
+    <!-- PLUNGER ROD -->
+    <rect x="28" y="65.5" width="23" height="5" rx="2.5"
+          fill="#0d2235" stroke="#00d4c8" stroke-width="1.1"/>
+    <line x1="30" y1="68" x2="49" y2="68" stroke="#00d4c8" stroke-width=".6" opacity=".22"/>
+
+    <!-- PLUNGER FLANGE -->
+    <rect x="51" y="56" width="10" height="24" rx="1.5"
+          fill="#0d2235" stroke="#00d4c8" stroke-width="1.8"/>
+    <line x1="55" y1="58" x2="55" y2="78" stroke="#00d4c8" stroke-width=".7" opacity=".2"/>
+
+    <!-- FINGER FLANGES -->
+    <rect x="60" y="40" width="17" height="12" rx="2" fill="#0d2235" stroke="#00d4c8" stroke-width="1.8"/>
+    <rect x="60" y="84" width="17" height="12" rx="2" fill="#0d2235" stroke="#00d4c8" stroke-width="1.8"/>
+
+    <!-- BARREL -->
+    <rect x="60" y="47" width="162" height="42" rx="2.5"
+          fill="#04080f" stroke="#00d4c8" stroke-width="2"/>
+    <rect x="60" y="47" width="162" height="42" rx="2.5" fill="url(#sV)"/>
+    <line x1="63" y1="50"   x2="220" y2="50"   stroke="#00d4c8" stroke-width=".8" opacity=".14"/>
+    <line x1="63" y1="86"   x2="220" y2="86"   stroke="#00d4c8" stroke-width=".8" opacity=".1"/>
+
+    <!-- RUBBER STOPPER -->
+    <rect x="74" y="49" width="18" height="38"
+          fill="#0c1c2c" stroke="#00d4c8" stroke-width="1.1" clip-path="url(#inn)"/>
+    <g clip-path="url(#inn)" stroke="#00d4c8" stroke-width=".8" opacity=".4">
+      <line x1="74" y1="57" x2="92" y2="57"/><line x1="74" y1="63" x2="92" y2="63"/>
+      <line x1="74" y1="68" x2="92" y2="68"/><line x1="74" y1="74" x2="92" y2="74"/>
+      <line x1="74" y1="80" x2="92" y2="80"/>
+    </g>
+    <line x1="92" y1="49" x2="92" y2="87"
+          stroke="#00d4c8" stroke-width="1.5" opacity=".18" clip-path="url(#inn)"/>
+
+    <!-- FLUID FILL -->
+    <rect x="92" y="49" width="128" height="38"
+          fill="url(#fG)" clip-path="url(#inn)"/>
+
+    <!-- TALLY MARKS -->
+    <g clip-path="url(#inn)" stroke="#00d4c8" stroke-linecap="round">
+      <line class="t" x1="100" y1="53" x2="100" y2="67" stroke-width="1.7"/>
+      <line class="t" x1="104" y1="53" x2="104" y2="67" stroke-width="1.7"/>
+      <line class="t" x1="108" y1="53" x2="108" y2="67" stroke-width="1.7"/>
+      <line class="t" x1="112" y1="53" x2="112" y2="67" stroke-width="1.7"/>
+      <line class="t" x1="97"  y1="66" x2="115" y2="54" stroke-width="1.7"/>
+      <line class="t" x1="128" y1="53" x2="128" y2="67" stroke-width="1.7"/>
+      <line class="t" x1="132" y1="53" x2="132" y2="67" stroke-width="1.7"/>
+      <line class="t" x1="136" y1="53" x2="136" y2="67" stroke-width="1.7"/>
+      <line class="t" x1="140" y1="53" x2="140" y2="67" stroke-width="1.7"/>
+      <line class="t" x1="125" y1="66" x2="143" y2="54" stroke-width="1.7"/>
+      <line class="t" x1="156" y1="53" x2="156" y2="67" stroke-width="1.7"/>
+      <line class="t" x1="160" y1="53" x2="160" y2="67" stroke-width="1.7"/>
+      <line class="t" x1="164" y1="53" x2="164" y2="67" stroke-width="1.7"/>
+    </g>
+
+    <!-- DIVIDER -->
+    <line x1="94" y1="72" x2="218" y2="72"
+          stroke="#00d4c8" stroke-width=".6" opacity=".18" clip-path="url(#inn)"/>
+
+    <!-- TEXT INSIDE BARREL -->
+    <g class="wmlabel" clip-path="url(#inn)">
+      <text x="155" y="79"  text-anchor="middle"
+            font-family="'Sora',sans-serif" font-size="10.5" font-weight="300"
+            fill="#00d4c8" letter-spacing=".16em">POINT</text>
+      <text x="155" y="87" text-anchor="middle"
+            font-family="'Sora',sans-serif" font-size="10.5" font-weight="800"
+            fill="#00d4c8" letter-spacing=".13em">TRACKER</text>
+    </g>
+
+    <!-- TAPER -->
+    <path d="M 222 47 L 233 58 L 233 78 L 222 89"
+          stroke="#00d4c8" stroke-width="1.7" fill="none"/>
+
+    <!-- LUER LOCK HUB -->
+    <rect x="233" y="58" width="18" height="20" rx="1.5"
+          fill="#04080f" stroke="#00d4c8" stroke-width="1.7"/>
+    <g stroke="#00d4c8" stroke-width=".65" opacity=".32">
+      <line x1="233" y1="63" x2="251" y2="63"/>
+      <line x1="233" y1="68" x2="251" y2="68"/>
+      <line x1="233" y1="73" x2="251" y2="73"/>
+    </g>
+    <line x1="236" y1="59" x2="236" y2="77" stroke="#00d4c8" stroke-width=".6" opacity=".18"/>
+
+    <!-- NEEDLE (single straight line) -->
+    <line x1="251" y1="68" x2="305" y2="68"
+          stroke="#00d4c8" stroke-width="1.6" stroke-linecap="round"/>
+    <line x1="300" y1="65.8" x2="305" y2="68"
+          stroke="#00d4c8" stroke-width="1.1" stroke-linecap="round" opacity=".72"/>
+
+    <!-- DROPS: JS animated below SVG -->
+
+    <!-- SURFACE & PUDDLE -->
+    <line x1="258" y1="152" x2="320" y2="152"
+          stroke="#00d4c8" stroke-width=".7" opacity=".15"/>
+    <!-- Drop canvas overlay drawn by JS -->
+    <g id="dropLayer"></g>
+
+  </svg>
+</div>
+
+<!-- VARIANTS -->
+<div>
+  <p class="tag" style="color:#1e3d5a;margin-bottom:14px">Variants</p>
+  <div class="row">
+
+    <!-- AMBER -->
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+      <p class="tag" style="color:#f59e0b">Amber</p>
+      <svg width="190" height="96" viewBox="0 0 320 162" fill="none">
+        <defs><clipPath id="inA"><rect x="62" y="49" width="158" height="38" rx="1"/></clipPath></defs>
+        <circle cx="15" cy="68" r="13" stroke="#f59e0b" stroke-width="2"/><circle cx="15" cy="68" r="6" stroke="#f59e0b" stroke-width="1" opacity=".3"/>
+        <rect x="28" y="65.5" width="23" height="5" rx="2.5" fill="#1a1000" stroke="#f59e0b" stroke-width="1.1"/>
+        <rect x="51" y="56" width="10" height="24" rx="1.5" fill="#1a1000" stroke="#f59e0b" stroke-width="1.8"/>
+        <rect x="60" y="40" width="17" height="12" rx="2" fill="#1a1000" stroke="#f59e0b" stroke-width="1.8"/>
+        <rect x="60" y="84" width="17" height="12" rx="2" fill="#1a1000" stroke="#f59e0b" stroke-width="1.8"/>
+        <rect x="60" y="47" width="162" height="42" rx="2.5" fill="#04080f" stroke="#f59e0b" stroke-width="2"/>
+        <line x1="63" y1="50" x2="220" y2="50" stroke="#f59e0b" stroke-width=".8" opacity=".13"/>
+        <line x1="63" y1="86" x2="220" y2="86" stroke="#f59e0b" stroke-width=".8" opacity=".1"/>
+        <rect x="74" y="49" width="18" height="38" fill="#1a1000" stroke="#f59e0b" stroke-width="1" clip-path="url(#inA)"/>
+        <g clip-path="url(#inA)" stroke="#f59e0b" stroke-width=".8" opacity=".4"><line x1="74" y1="57" x2="92" y2="57"/><line x1="74" y1="63" x2="92" y2="63"/><line x1="74" y1="68" x2="92" y2="68"/><line x1="74" y1="74" x2="92" y2="74"/><line x1="74" y1="80" x2="92" y2="80"/></g>
+        <line x1="92" y1="49" x2="92" y2="87" stroke="#f59e0b" stroke-width="1.5" opacity=".18" clip-path="url(#inA)"/>
+        <rect x="92" y="49" width="128" height="38" fill="#f59e0b" opacity=".13" clip-path="url(#inA)"/>
+        <g clip-path="url(#inA)" stroke="#f59e0b" stroke-linecap="round" stroke-width="1.7">
+          <line x1="100" y1="53" x2="100" y2="67"/><line x1="104" y1="53" x2="104" y2="67"/><line x1="108" y1="53" x2="108" y2="67"/><line x1="112" y1="53" x2="112" y2="67"/><line x1="97" y1="66" x2="115" y2="54"/>
+          <line x1="128" y1="53" x2="128" y2="67"/><line x1="132" y1="53" x2="132" y2="67"/><line x1="136" y1="53" x2="136" y2="67"/><line x1="140" y1="53" x2="140" y2="67"/><line x1="125" y1="66" x2="143" y2="54"/>
+          <line x1="156" y1="53" x2="156" y2="67"/><line x1="160" y1="53" x2="160" y2="67"/><line x1="164" y1="53" x2="164" y2="67"/>
+        </g>
+        <line x1="94" y1="72" x2="218" y2="72" stroke="#f59e0b" stroke-width=".6" opacity=".18" clip-path="url(#inA)"/>
+        <text x="155" y="79" text-anchor="middle" font-family="'Sora',sans-serif" font-size="10.5" font-weight="300" fill="#5a4010" letter-spacing=".16em" clip-path="url(#inA)">POINT</text>
+        <text x="155" y="87" text-anchor="middle" font-family="'Sora',sans-serif" font-size="10.5" font-weight="800" fill="#f59e0b" letter-spacing=".13em" clip-path="url(#inA)">TRACKER</text>
+        <path d="M 222 47 L 233 58 L 233 78 L 222 89" stroke="#f59e0b" stroke-width="1.7"/>
+        <rect x="233" y="58" width="18" height="20" rx="1.5" fill="#04080f" stroke="#f59e0b" stroke-width="1.7"/>
+        <g stroke="#f59e0b" stroke-width=".65" opacity=".32"><line x1="233" y1="63" x2="251" y2="63"/><line x1="233" y1="68" x2="251" y2="68"/><line x1="233" y1="73" x2="251" y2="73"/></g>
+        <line x1="251" y1="68" x2="305" y2="68" stroke="#f59e0b" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="300" y1="65.8" x2="305" y2="68" stroke="#f59e0b" stroke-width="1.1" stroke-linecap="round" opacity=".72"/>
+        <path d="M 305 68 C 298 73 298 83 305 86 C 312 83 312 73 305 68 Z" fill="#f59e0b" opacity=".9"/>
+        <line x1="258" y1="152" x2="320" y2="152" stroke="#f59e0b" stroke-width=".7" opacity=".15"/>
+        <ellipse cx="305" cy="153" rx="10" ry="1.6" fill="#f59e0b" opacity=".07"/>
+      </svg>
+    </div>
+
+    <!-- LIGHT -->
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+      <p class="tag" style="color:#8aacbe">Light</p>
+      <svg width="190" height="96" viewBox="0 0 320 162" fill="none"
+           style="background:#edf3f8;border-radius:8px">
+        <defs><clipPath id="inL"><rect x="62" y="49" width="158" height="38" rx="1"/></clipPath></defs>
+        <circle cx="15" cy="68" r="13" stroke="#1a5080" stroke-width="2"/><circle cx="15" cy="68" r="6" stroke="#1a5080" stroke-width="1" opacity=".3"/>
+        <rect x="28" y="65.5" width="23" height="5" rx="2.5" fill="#c8dce8" stroke="#1a5080" stroke-width="1.1"/>
+        <rect x="51" y="56" width="10" height="24" rx="1.5" fill="#d8eaf4" stroke="#1a5080" stroke-width="1.8"/>
+        <rect x="60" y="40" width="17" height="12" rx="2" fill="#d8eaf4" stroke="#1a5080" stroke-width="1.8"/>
+        <rect x="60" y="84" width="17" height="12" rx="2" fill="#d8eaf4" stroke="#1a5080" stroke-width="1.8"/>
+        <rect x="60" y="47" width="162" height="42" rx="2.5" fill="#edf3f8" stroke="#1a5080" stroke-width="2"/>
+        <line x1="63" y1="50" x2="220" y2="50" stroke="#1a5080" stroke-width=".8" opacity=".16"/>
+        <line x1="63" y1="86" x2="220" y2="86" stroke="#1a5080" stroke-width=".8" opacity=".11"/>
+        <rect x="74" y="49" width="18" height="38" fill="#c8dce8" stroke="#1a5080" stroke-width="1" clip-path="url(#inL)"/>
+        <g clip-path="url(#inL)" stroke="#1a5080" stroke-width=".8" opacity=".35"><line x1="74" y1="57" x2="92" y2="57"/><line x1="74" y1="63" x2="92" y2="63"/><line x1="74" y1="68" x2="92" y2="68"/><line x1="74" y1="74" x2="92" y2="74"/><line x1="74" y1="80" x2="92" y2="80"/></g>
+        <line x1="92" y1="49" x2="92" y2="87" stroke="#1a5080" stroke-width="1.5" opacity=".18" clip-path="url(#inL)"/>
+        <rect x="92" y="49" width="128" height="38" fill="#1a5080" opacity=".10" clip-path="url(#inL)"/>
+        <g clip-path="url(#inL)" stroke="#1a5080" stroke-linecap="round" stroke-width="1.7">
+          <line x1="100" y1="53" x2="100" y2="67"/><line x1="104" y1="53" x2="104" y2="67"/><line x1="108" y1="53" x2="108" y2="67"/><line x1="112" y1="53" x2="112" y2="67"/><line x1="97" y1="66" x2="115" y2="54"/>
+          <line x1="128" y1="53" x2="128" y2="67"/><line x1="132" y1="53" x2="132" y2="67"/><line x1="136" y1="53" x2="136" y2="67"/><line x1="140" y1="53" x2="140" y2="67"/><line x1="125" y1="66" x2="143" y2="54"/>
+          <line x1="156" y1="53" x2="156" y2="67"/><line x1="160" y1="53" x2="160" y2="67"/><line x1="164" y1="53" x2="164" y2="67"/>
+        </g>
+        <line x1="94" y1="72" x2="218" y2="72" stroke="#1a5080" stroke-width=".6" opacity=".18" clip-path="url(#inL)"/>
+        <text x="155" y="79" text-anchor="middle" font-family="'Sora',sans-serif" font-size="10.5" font-weight="300" fill="#7aaac4" letter-spacing=".16em" clip-path="url(#inL)">POINT</text>
+        <text x="155" y="87" text-anchor="middle" font-family="'Sora',sans-serif" font-size="10.5" font-weight="800" fill="#1a5080" letter-spacing=".13em" clip-path="url(#inL)">TRACKER</text>
+        <path d="M 222 47 L 233 58 L 233 78 L 222 89" stroke="#1a5080" stroke-width="1.7"/>
+        <rect x="233" y="58" width="18" height="20" rx="1.5" fill="#edf3f8" stroke="#1a5080" stroke-width="1.7"/>
+        <g stroke="#1a5080" stroke-width=".65" opacity=".28"><line x1="233" y1="63" x2="251" y2="63"/><line x1="233" y1="68" x2="251" y2="68"/><line x1="233" y1="73" x2="251" y2="73"/></g>
+        <line x1="251" y1="68" x2="305" y2="68" stroke="#1a5080" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="300" y1="65.8" x2="305" y2="68" stroke="#1a5080" stroke-width="1.1" stroke-linecap="round" opacity=".72"/>
+        <path d="M 305 68 C 298 73 298 81 305 84 C 312 81 312 73 305 68 Z" fill="#1a5080" opacity=".9"/>
+        <line x1="258" y1="152" x2="320" y2="152" stroke="#1a5080" stroke-width=".7" opacity=".15"/>
+        <ellipse cx="305" cy="153" rx="10" ry="1.6" fill="#1a5080" opacity=".06"/>
+      </svg>
+    </div>
+
+  </div>
+</div>
+
+<!-- APP ICON -->
+<div>
+  <p class="tag" style="color:#1e3d5a;margin-bottom:12px">App Icon</p>
+  <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
+    <rect width="120" height="120" rx="26" fill="#070d1a"/>
+    <defs><clipPath id="icI"><rect x="26" y="48" width="62" height="24" rx="1"/></clipPath></defs>
+    <circle cx="10" cy="60" r="9" stroke="#00d4c8" stroke-width="1.7" fill="none"/>
+    <circle cx="10" cy="60" r="4" stroke="#00d4c8" stroke-width=".9" fill="none" opacity=".3"/>
+    <rect x="19" y="57.5" width="10" height="5" rx="2" fill="#0d2235" stroke="#00d4c8" stroke-width="1"/>
+    <rect x="29" y="52" width="7" height="16" rx="1.5" fill="#0d2235" stroke="#00d4c8" stroke-width="1.5"/>
+    <rect x="26" y="39" width="14" height="9.5" rx="1.8" fill="#0d2235" stroke="#00d4c8" stroke-width="1.5"/>
+    <rect x="26" y="71.5" width="14" height="9.5" rx="1.8" fill="#0d2235" stroke="#00d4c8" stroke-width="1.5"/>
+    <rect x="26" y="48" width="62" height="24" rx="2" fill="#04080f" stroke="#00d4c8" stroke-width="1.7"/>
+    <line x1="28" y1="50.2" x2="86" y2="50.2" stroke="#00d4c8" stroke-width=".6" opacity=".14"/>
+    <line x1="28" y1="69.8" x2="86" y2="69.8" stroke="#00d4c8" stroke-width=".6" opacity=".1"/>
+    <rect x="34" y="48" width="12" height="24" fill="#0c1c2c" stroke="#00d4c8" stroke-width=".8" clip-path="url(#icI)"/>
+    <g clip-path="url(#icI)" stroke="#00d4c8" stroke-width=".6" opacity=".4"><line x1="34" y1="54" x2="46" y2="54"/><line x1="34" y1="60" x2="46" y2="60"/><line x1="34" y1="66" x2="46" y2="66"/></g>
+    <rect x="46" y="48" width="40" height="24" fill="#00d4c8" opacity=".17" clip-path="url(#icI)"/>
+    <g clip-path="url(#icI)" stroke="#00d4c8" stroke-linecap="round" stroke-width="1.4">
+      <line x1="51" y1="52" x2="51" y2="62"/><line x1="54.5" y1="52" x2="54.5" y2="62"/>
+      <line x1="58"  y1="52" x2="58"  y2="62"/><line x1="61.5" y1="52" x2="61.5" y2="62"/>
+      <line x1="48.5" y1="61" x2="64" y2="53"/>
+      <line x1="68"  y1="52" x2="68"  y2="62"/><line x1="71.5" y1="52" x2="71.5" y2="62"/>
+      <line x1="75"  y1="52" x2="75"  y2="62"/>
+    </g>
+    <line x1="47" y1="65.5" x2="84" y2="65.5" stroke="#00d4c8" stroke-width=".5" opacity=".2" clip-path="url(#icI)"/>
+    <text x="65" y="70" text-anchor="middle" font-family="'Sora',sans-serif" font-size="5" font-weight="800" fill="#00d4c8" letter-spacing=".12em" clip-path="url(#icI)">TRACKER</text>
+    <path d="M 88 48 L 94 54.5 L 94 65.5 L 88 72" stroke="#00d4c8" stroke-width="1.4"/>
+    <rect x="94" y="54.5" width="10" height="11" rx="1" fill="#04080f" stroke="#00d4c8" stroke-width="1.4"/>
+    <g stroke="#00d4c8" stroke-width=".55" opacity=".3"><line x1="94" y1="58" x2="104" y2="58"/><line x1="94" y1="60" x2="104" y2="60"/><line x1="94" y1="62.5" x2="104" y2="62.5"/></g>
+    <line x1="104" y1="60" x2="114" y2="60" stroke="#00d4c8" stroke-width="1.3" stroke-linecap="round"/>
+    <line x1="111" y1="58.2" x2="114" y2="60" stroke="#00d4c8" stroke-width=".9" stroke-linecap="round" opacity=".7"/>
+    <text x="60" y="104" text-anchor="middle" font-family="'Sora',sans-serif" font-size="10" font-weight="800" fill="#00d4c8" letter-spacing=".22em">PT</text>
+  </svg>
+</div>
+
+<script>
+// ── Drop animation engine ──────────────────────────────────────
+// Needle tip: SVG coords (305, 68). Surface: y=152. Fall distance: 84px.
+// Phases: FORM(0.8s) → FALL(1.4s) → SPLASH(0.5s) → PAUSE(0.5s) → repeat
+// One drop at a time, sequential.
+
+const NS = 'http://www.w3.org/2000/svg';
+const layer = document.getElementById('dropLayer');
+const TIP_X = 305, TIP_Y = 70;
+const SURFACE_Y = 152;
+const FALL_DIST = SURFACE_Y - TIP_Y - 17; // 17 = approx drop height
+const COLOR = '#00d4c8';
+
+const FORM_MS  = 700;
+const FALL_MS  = 1200;
+const SPLASH_MS = 500;
+const PAUSE_MS = 400;
+const CYCLE_MS = FORM_MS + FALL_MS + SPLASH_MS + PAUSE_MS;
+
+// Ease-in curve for falling (gravity feel)
+function easeIn(t) { return t * t; }
+
+let startTime = null;
+
+// SVG helpers
+function el(tag, attrs) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k,v] of Object.entries(attrs)) e.setAttribute(k, v);
+  return e;
+}
+
+// Build persistent elements, show/hide/move each frame
+const bead  = el('circle', { cx: TIP_X, cy: TIP_Y + 2, r: 0, fill: COLOR, opacity: 0 });
+const drop  = el('path',   { d: dropPath(TIP_X, TIP_Y), fill: COLOR, opacity: 0 });
+const ring  = el('ellipse',{ cx: TIP_X, cy: SURFACE_Y, rx: 0, ry: 0, fill: COLOR, opacity: 0 });
+const dotL  = el('circle', { cx: TIP_X, cy: SURFACE_Y, r: 1.5, fill: COLOR, opacity: 0 });
+const dotR  = el('circle', { cx: TIP_X, cy: SURFACE_Y, r: 1.5, fill: COLOR, opacity: 0 });
+const surf  = el('line',   { x1: 258, y1: SURFACE_Y, x2: 320, y2: SURFACE_Y,
+                              stroke: COLOR, 'stroke-width': .7, opacity: .15 });
+[surf, bead, drop, ring, dotL, dotR].forEach(e => layer.appendChild(e));
+
+function dropPath(x, y) {
+  // Teardrop: pointed top at (x,y), height 17, half-width 6
+  return `M ${x} ${y} C ${x-6} ${y+4} ${x-6} ${y+13} ${x} ${y+17} C ${x+6} ${y+13} ${x+6} ${y+4} ${x} ${y} Z`;
+}
+
+function set(e, attrs) {
+  for (const [k,v] of Object.entries(attrs)) e.setAttribute(k, v);
+}
+
+function frame(ts) {
+  if (!startTime) startTime = ts;
+  const elapsed = (ts - startTime) % CYCLE_MS;
+
+  if (elapsed < FORM_MS) {
+    // ── FORMING: bead grows at tip ──
+    const t = elapsed / FORM_MS;
+    const r = t < 0.5 ? t * 2 * 4 : (1 - (t - 0.5) * 2) * 4; // grow then shrink back
+    set(bead, { r: r.toFixed(2), cy: TIP_Y + 2 + t * 2, opacity: t < 0.1 ? 0 : 1 });
+    set(drop, { opacity: 0 });
+    set(ring, { rx: 0, ry: 0, opacity: 0 });
+    set(dotL, { opacity: 0 }); set(dotR, { opacity: 0 });
+
+  } else if (elapsed < FORM_MS + FALL_MS) {
+    // ── FALLING: drop moves down ──
+    const t = easeIn((elapsed - FORM_MS) / FALL_MS);
+    const dy = t * FALL_DIST;
+    set(bead, { r: 0, opacity: 0 });
+    set(drop, { d: dropPath(TIP_X, TIP_Y + dy), opacity: 1 });
+    set(ring, { rx: 0, ry: 0, opacity: 0 });
+    set(dotL, { opacity: 0 }); set(dotR, { opacity: 0 });
+
+  } else if (elapsed < FORM_MS + FALL_MS + SPLASH_MS) {
+    // ── SPLASH: drop hits surface ──
+    const t = (elapsed - FORM_MS - FALL_MS) / SPLASH_MS;
+    set(bead, { r: 0, opacity: 0 });
+    set(drop, { opacity: 0 });
+    // Ring expands outward, fades
+    const rx = t * 22;
+    const ry = Math.max(0, 2.5 * (1 - t * 1.4));
+    set(ring, { rx: rx.toFixed(1), ry: ry.toFixed(2), opacity: (1 - t).toFixed(2) });
+    // Spray dots arc out
+    const sd = t * 16;
+    const sy = -t * 8;
+    const sdOp = t > 0.7 ? 0 : (1 - t / 0.7).toFixed(2);
+    set(dotL, { cx: TIP_X - sd, cy: SURFACE_Y + sy, opacity: sdOp });
+    set(dotR, { cx: TIP_X + sd, cy: SURFACE_Y + sy, opacity: sdOp });
+
+  } else {
+    // ── PAUSE ──
+    set(bead, { r: 0, opacity: 0 });
+    set(drop, { opacity: 0 });
+    set(ring, { rx: 0, ry: 0, opacity: 0 });
+    set(dotL, { opacity: 0 }); set(dotR, { opacity: 0 });
+  }
+
+  requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
