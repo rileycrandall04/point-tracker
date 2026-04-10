@@ -21253,15 +21253,19 @@ initApp();
   function mk(tag, a) { const e = document.createElementNS(NS, tag); for (const [k,v] of Object.entries(a)) e.setAttribute(k, v); return e; }
   function s(e, a) { for (const [k,v] of Object.entries(a)) e.setAttribute(k, v); }
   function dp(x, y) { return `M ${x} ${y} C ${x-6} ${y+4} ${x-6} ${y+13} ${x} ${y+17} C ${x+6} ${y+13} ${x+6} ${y+4} ${x} ${y} Z`; }
+  // Static puddle under needle
+  const puddle = mk('ellipse', { cx:TX, cy:SY+1, rx:10, ry:1.6, fill:C, opacity:'.07' });
   const bd = mk('circle', { cx:TX, cy:TY+2, r:0, fill:C, opacity:0 });
   const dr = mk('path', { d:dp(TX,TY), fill:C, opacity:0 });
   const rn = mk('ellipse', { cx:TX, cy:SY, rx:0, ry:0, fill:C, opacity:0 });
   const dL = mk('circle', { cx:TX, cy:SY, r:1.5, fill:C, opacity:0 });
   const dR = mk('circle', { cx:TX, cy:SY, r:1.5, fill:C, opacity:0 });
-  [bd, dr, rn, dL, dR].forEach(e => layer.appendChild(e));
+  [puddle, bd, dr, rn, dL, dR].forEach(e => layer.appendChild(e));
   let st = null;
+  let running = false;
   function frame(ts) {
-    if (!document.getElementById('authOverlay') || document.getElementById('authOverlay').classList.contains('hidden')) return;
+    const overlay = document.getElementById('authOverlay');
+    if (!overlay || overlay.classList.contains('hidden')) { running = false; return; }
     if (!st) st = ts;
     const el = (ts - st) % CYC;
     if (el < FM) {
@@ -21285,7 +21289,14 @@ initApp();
     }
     requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
+  function startAnim() { if (!running) { running = true; st = null; requestAnimationFrame(frame); } }
+  // Start on load
+  startAnim();
+  // Restart when overlay becomes visible again (e.g. sign-out)
+  new MutationObserver(function() {
+    const overlay = document.getElementById('authOverlay');
+    if (overlay && !overlay.classList.contains('hidden')) startAnim();
+  }).observe(document.getElementById('authOverlay'), { attributes: true, attributeFilter: ['class'] });
 })();
 </script>
 
