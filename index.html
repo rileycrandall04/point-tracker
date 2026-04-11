@@ -14129,7 +14129,7 @@ async function peUploadBonusPayStub(inputEl) {
 }
 
 // Paycheck Projection month navigation
-let stabMonthOffset = 0; // 0 = current month, 1 = next month, -1 = last month, etc.
+let stabMonthOffset = new Date().getMonth() === 11 ? 1 : 0; // Skip January paycheck (no income) when in December
 function stabMonthKey() {
   const now = new Date();
   const d = new Date(now.getFullYear(), now.getMonth() + stabMonthOffset, 1);
