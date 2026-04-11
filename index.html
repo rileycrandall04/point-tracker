@@ -13283,6 +13283,14 @@ function renderPaycheckEntry() {
   const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
   const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const payMonthName = fullMonthNames[payDate.getMonth()] + ' ' + payDate.getFullYear();
+  const isJanPaycheck = payDate.getMonth() === 0;
+
+  // January: simplified single-value entry (typically no income)
+  if (isJanPaycheck) {
+    renderPEJanuary(panel, mk, payKey, payMonthName);
+    return;
+  }
+
   const isDecPaycheck = payDate.getMonth() === 11;
   const totalSteps = isDecPaycheck ? 4 : 3;
   const completeStep = totalSteps + 1; // step 4 (normal) or step 5 (December)
@@ -13429,6 +13437,77 @@ function renderPEComplete(mk, ty, tm, payKey, payMonthName) {
 
   html += '</div>';
   return html;
+}
+
+function renderPEJanuary(panel, mk, payKey, payMonthName) {
+  const existingDeposit = (data.paychecks || {})[payKey];
+  const fmt = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  let html = '<div style="padding:12px 0 8px;">';
+
+  if (existingDeposit != null) {
+    // Value has been entered — show summary
+    html += '<div style="text-align:center;margin-bottom:10px;">';
+    html += '<div style="font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">' + payMonthName + ' Paycheck</div>';
+    html += '<div style="font-size:1.3rem;font-weight:700;color:var(--accent2);margin-bottom:8px;">' + fmt(existingDeposit) + '</div>';
+    html += '</div>';
+    html += '<div style="text-align:center;margin-bottom:8px;">';
+    html += '<button class="btn btn-outline btn-sm" onclick="peJanClear()" style="font-size:0.72rem;padding:4px 14px;">Remove &amp; revert to no income</button>';
+    html += '</div>';
+  } else {
+    // Default: no income expected
+    html += '<div style="text-align:center;margin-bottom:10px;">';
+    html += '<div style="font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">' + payMonthName + ' Paycheck</div>';
+    html += '<div style="font-size:0.82rem;color:var(--text-dim);margin-bottom:10px;">January typically has no paycheck. Enter an amount below if you received one.</div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">';
+    html += '<span style="font-size:0.85rem;color:var(--text-dim);">$</span>';
+    html += '<input type="number" id="peJanDeposit" step="0.01" placeholder="0.00" class="text-input" style="flex:1;font-size:0.9rem;padding:8px 12px;text-align:center;">';
+    html += '</div>';
+    html += '<div style="text-align:center;">';
+    html += '<button class="btn btn-primary" onclick="peJanSave()" style="font-size:0.85rem;padding:10px 28px;">Save</button>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  panel.innerHTML = html;
+  refreshPaycheckEntryHeight();
+}
+
+function peJanSave() {
+  const input = document.getElementById('peJanDeposit');
+  const valStr = input?.value.trim();
+  if (!valStr) { showToast('Enter an amount'); return; }
+  const val = parseFloat(valStr);
+  if (isNaN(val)) { showToast('Enter a valid amount'); return; }
+  const mk = stabMonthKey();
+  const [ty, tm] = mk.split('-').map(Number);
+  const payDate = new Date(ty, tm, 1);
+  const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
+  if (!data.paychecks) data.paychecks = {};
+  data.paychecks[payKey] = val;
+  saveData(data);
+  showToast('January paycheck saved');
+  renderStabilization();
+  renderPaycheckChart();
+  renderPaycheckTable();
+  renderPaycheckEntry();
+  peCompleteAndClose();
+}
+
+function peJanClear() {
+  const mk = stabMonthKey();
+  const [ty, tm] = mk.split('-').map(Number);
+  const payDate = new Date(ty, tm, 1);
+  const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
+  if (data.paychecks && data.paychecks[payKey] != null) {
+    delete data.paychecks[payKey];
+    saveData(data);
+  }
+  showToast('January paycheck removed');
+  renderStabilization();
+  renderPaycheckChart();
+  renderPaycheckTable();
+  renderPaycheckEntry();
 }
 
 function renderPEStep1(mk, ty, tm) {
@@ -13663,10 +13742,11 @@ function updatePECompleteIndicator() {
   const completedStep = peGetMonthStep(mk);
   const [ty, tm] = mk.split('-').map(Number);
   const payDate = new Date(ty, tm, 1);
+  const isJanPaycheck = payDate.getMonth() === 0;
   const isDecPaycheck = payDate.getMonth() === 11;
   const totalSteps = isDecPaycheck ? 4 : 3;
   const completeStep = totalSteps + 1;
-  const isComplete = completedStep >= completeStep;
+  const isComplete = isJanPaycheck || (completedStep >= completeStep);
 
   const panel = document.getElementById('paycheckEntryPanel');
   const isOpen = panel && panel.style.maxHeight && panel.style.maxHeight !== '0px';
@@ -13680,7 +13760,17 @@ function updatePECompleteIndicator() {
     toggleEl.parentElement.style.display = 'none';
     const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     const payMonthName = fullMonthNames[payDate.getMonth()] + ' ' + payDate.getFullYear();
-    document.getElementById('peCompleteSubtext').textContent = payMonthName + ' paycheck entry is finalized.';
+    if (isJanPaycheck) {
+      const existingDeposit = (data.paychecks || {})[payDate.getFullYear() + '-01'];
+      if (existingDeposit != null) {
+        const fmt = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+        document.getElementById('peCompleteSubtext').textContent = payMonthName + ': ' + fmt(existingDeposit);
+      } else {
+        document.getElementById('peCompleteSubtext').textContent = payMonthName + ': No income (typical).';
+      }
+    } else {
+      document.getElementById('peCompleteSubtext').textContent = payMonthName + ' paycheck entry is finalized.';
+    }
   } else {
     completeEl.classList.add('hidden');
     toggleEl.parentElement.style.display = '';
