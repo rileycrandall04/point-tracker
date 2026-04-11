@@ -2622,6 +2622,21 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
     <div id="dailyCalendarContainer" style="margin-top:12px;"></div>
     <div id="dailyMonthSummary" style="margin-top:12px;font-size:0.85rem;color:var(--text-dim);text-align:center;"></div>
+
+    <!-- Monthly Point Totals Card -->
+    <div class="card" style="margin-top:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 style="margin:0;font-size:0.9rem;">Monthly Points</h3>
+        <div style="display:flex;gap:4px;" id="monthlyPtsRangeBtns">
+          <button class="btn btn-outline btn-sm active" onclick="setMonthlyPtsRange(3)" style="padding:3px 10px;font-size:0.7rem;">3m</button>
+          <button class="btn btn-outline btn-sm" onclick="setMonthlyPtsRange(6)" style="padding:3px 10px;font-size:0.7rem;">6m</button>
+          <button class="btn btn-outline btn-sm" onclick="setMonthlyPtsRange(12)" style="padding:3px 10px;font-size:0.7rem;">12m</button>
+        </div>
+      </div>
+      <div style="height:180px;"><canvas id="monthlyPtsChart"></canvas></div>
+      <div id="monthlyPtsTable" style="margin-top:8px;"></div>
+    </div>
+
     <button class="edit-assignments-btn" id="editAssignmentsBtn" onclick="toggleAssignmentEditor()">&#9998; Edit Assignments</button>
     <div id="assignEditorContainer" class="hidden"></div>
   </div>
@@ -15720,6 +15735,92 @@ function renderDailyTab() {
   const avgPerShift = pastShiftCount > 0 ? (pastMonthTotal / pastShiftCount).toFixed(1) : '—';
   document.getElementById('dailyMonthSummary').innerHTML =
     `<span style="font-size:1.3rem;font-weight:700;color:var(--accent);">${round2(monthTotal).toFixed(1)}</span> <span style="color:var(--text-dim);">total pts</span> &bull; <strong>${shiftCount}</strong> shifts &bull; <strong>${avgPerShift}</strong> avg pts/shift`;
+
+  renderMonthlyPtsCard();
+}
+
+// ================================================================
+// MONTHLY POINTS CHART (Daily tab)
+// ================================================================
+let monthlyPtsChartInstance = null;
+let monthlyPtsRange = 3;
+
+function setMonthlyPtsRange(n) {
+  monthlyPtsRange = n;
+  document.querySelectorAll('#monthlyPtsRangeBtns .btn').forEach(b => b.classList.toggle('active', parseInt(b.textContent) === n));
+  renderMonthlyPtsCard();
+}
+
+function renderMonthlyPtsCard() {
+  const mt = getMonthlyTotals();
+  const now = new Date();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const labels = [];
+  const values = [];
+
+  for (let i = monthlyPtsRange - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const mk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    labels.push(monthNames[d.getMonth()] + ' ' + d.getFullYear());
+    values.push(round2(mt[mk] || 0));
+  }
+
+  // Chart
+  const ctx = document.getElementById('monthlyPtsChart');
+  if (!ctx) return;
+  if (monthlyPtsChartInstance) monthlyPtsChartInstance.destroy();
+
+  const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+
+  monthlyPtsChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: values.map(v => v >= avg ? 'rgba(59,130,246,0.7)' : 'rgba(59,130,246,0.3)'),
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) { return ctx.raw.toFixed(1) + ' pts'; }
+          }
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(71,85,105,0.2)' } },
+        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } }
+      }
+    }
+  });
+
+  // Table
+  let html = '<table style="width:100%;font-size:0.75rem;border-collapse:collapse;">';
+  html += '<tr style="color:var(--text-dim);border-bottom:1px solid var(--border);">';
+  html += '<th style="text-align:left;padding:4px 0;font-weight:500;">Month</th>';
+  html += '<th style="text-align:right;padding:4px 0;font-weight:500;">Points</th>';
+  html += '</tr>';
+  for (let i = labels.length - 1; i >= 0; i--) {
+    const isCurrentMonth = i === labels.length - 1;
+    const style = isCurrentMonth ? 'font-weight:600;color:var(--accent);' : '';
+    html += `<tr style="border-bottom:1px solid var(--surface2);">`;
+    html += `<td style="padding:4px 0;${style}">${labels[i]}</td>`;
+    html += `<td style="text-align:right;padding:4px 0;${style}">${values[i].toFixed(1)}</td>`;
+    html += '</tr>';
+  }
+  // Average row
+  html += `<tr style="border-top:2px solid var(--border);">`;
+  html += `<td style="padding:4px 0;font-weight:600;font-size:0.72rem;color:var(--text-dim);">Average</td>`;
+  html += `<td style="text-align:right;padding:4px 0;font-weight:600;font-size:0.72rem;color:var(--text-dim);">${avg.toFixed(1)}</td>`;
+  html += '</tr>';
+  html += '</table>';
+  document.getElementById('monthlyPtsTable').innerHTML = html;
 }
 
 // ================================================================
