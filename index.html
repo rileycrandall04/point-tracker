@@ -14278,12 +14278,26 @@ function renderStabilization() {
   const earningLabel = document.getElementById('stabEarningLabel');
   const summaryEl = document.getElementById('stabPaycheckBreakdownSummary');
   const payMonthName = monthNames[payDate.getMonth()];
+  const isJanPaycheck = payDate.getMonth() === 0;
 
   // Check for comp total overrides
   if (!data.overrides) data.overrides = {};
   const compOv = data.overrides[targetKey] && data.overrides[targetKey].compTotal != null ? data.overrides[targetKey].compTotal : null;
 
-  if (displayPaycheck > 0 || (pv && pv > 0)) {
+  if (isJanPaycheck) {
+    // January: typically no paycheck
+    const janPayKey = payDate.getFullYear() + '-01';
+    const janDeposit = (data.paychecks || {})[janPayKey];
+    if (janDeposit != null) {
+      document.getElementById('stabPaycheck').textContent = '$' + janDeposit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      earningLabel.textContent = 'January ' + payDate.getFullYear() + ' paycheck (manually entered)';
+      summaryEl.textContent = '';
+    } else {
+      document.getElementById('stabPaycheck').textContent = '$0.00';
+      earningLabel.textContent = 'No paycheck in January (typical)';
+      summaryEl.textContent = 'December revenue is paid in the December paycheck.';
+    }
+  } else if (displayPaycheck > 0 || (pv && pv > 0)) {
     let totalPaycheck = displayPaycheck;
 
     if (isDecPaycheck) {
