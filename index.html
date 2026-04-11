@@ -13876,13 +13876,11 @@ function peStep3SaveDeposit() {
   renderPaycheckChart();
   renderPaycheckTable();
   const isDecPaycheck = payDate.getMonth() === 11;
-  peStep = 4;
-  peSetMonthStep(mk, 4);
-  if (isDecPaycheck) {
-    renderPaycheckEntry();
-  } else {
-    peCompleteAndClose();
-  }
+  const nextStep = isDecPaycheck ? 4 : 4; // both go to 4, but 4 = bonus for Dec, complete for others
+  peStep = nextStep;
+  peSetMonthStep(mk, nextStep);
+  renderPaycheckEntry();
+  if (!isDecPaycheck) peCompleteAndClose();
 }
 
 function peStep3Skip() {
@@ -13890,15 +13888,12 @@ function peStep3Skip() {
   const [ty, tm] = mk.split('-').map(Number);
   const payDate = new Date(ty, tm, 1);
   const isDecPaycheck = payDate.getMonth() === 11;
+  if (!isDecPaycheck) showToast('Paycheck entry complete');
   renderStabilization();
   peStep = 4;
   peSetMonthStep(mk, 4);
-  if (isDecPaycheck) {
-    renderPaycheckEntry();
-  } else {
-    showToast('Paycheck entry complete');
-    peCompleteAndClose();
-  }
+  renderPaycheckEntry();
+  if (!isDecPaycheck) peCompleteAndClose();
 }
 
 function peStep4SaveStipends() {
@@ -13962,6 +13957,7 @@ function peStep4SaveDeposit() {
   renderPaycheckTable();
   peStep = 5;
   peSetMonthStep(mk, 5);
+  renderPaycheckEntry();
   peCompleteAndClose();
 }
 
@@ -13971,6 +13967,7 @@ function peStep4Skip() {
   renderStabilization();
   peStep = 5;
   peSetMonthStep(mk, 5);
+  renderPaycheckEntry();
   peCompleteAndClose();
 }
 
