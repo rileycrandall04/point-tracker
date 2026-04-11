@@ -13269,7 +13269,7 @@ function togglePaycheckEntry() {
 
 function refreshPaycheckEntryHeight() {
   const panel = document.getElementById('paycheckEntryPanel');
-  if (panel && panel.style.maxHeight && panel.style.maxHeight !== '0px') {
+  if (panel && panel.style.maxHeight && panel.style.maxHeight !== '0px' && panel.style.maxHeight !== '0') {
     panel.style.maxHeight = panel.scrollHeight + 'px';
   }
 }
@@ -13749,7 +13749,7 @@ function updatePECompleteIndicator() {
   const isComplete = isJanPaycheck || (completedStep >= completeStep);
 
   const panel = document.getElementById('paycheckEntryPanel');
-  const isOpen = panel && panel.style.maxHeight && panel.style.maxHeight !== '0px';
+  const isOpen = panel && panel.style.maxHeight && panel.style.maxHeight !== '0px' && panel.style.maxHeight !== '0';
   const completeEl = document.getElementById('paycheckEntryComplete');
   const toggleEl = document.getElementById('paycheckEntryToggle');
 
@@ -14141,7 +14141,7 @@ document.getElementById('stabNextMonth').addEventListener('click', () => { stabM
 
 function renderPaycheckEntryIfOpen() {
   const panel = document.getElementById('paycheckEntryPanel');
-  if (panel && panel.style.maxHeight && panel.style.maxHeight !== '0px') {
+  if (panel && panel.style.maxHeight && panel.style.maxHeight !== '0px' && panel.style.maxHeight !== '0') {
     peStep = peGetMonthStep(stabMonthKey());
     renderPaycheckEntry();
   } else {
