@@ -2834,6 +2834,11 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div style="margin-top:8px;text-align:center;">
       <a href="#" id="paycheckEntryToggle" onclick="togglePaycheckEntry(); return false;" style="font-size:0.8rem;color:var(--accent2);font-weight:600;">Paycheck Entry &#9660;</a>
     </div>
+    <div id="paycheckEntryComplete" class="hidden" style="margin-top:8px;text-align:center;padding:12px 16px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);border-radius:var(--radius);">
+      <div style="font-size:0.95rem;color:#22c55e;font-weight:700;margin-bottom:2px;">&#10003; Paycheck Entry Complete</div>
+      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;" id="peCompleteSubtext"></div>
+      <button class="btn btn-outline btn-sm" onclick="peEditFinalized()" style="font-size:0.75rem;padding:5px 16px;">Edit</button>
+    </div>
     <div id="paycheckEntryPanel" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;"></div>
   </div>
 
@@ -13252,7 +13257,9 @@ function togglePaycheckEntry() {
   if (panel.style.maxHeight && panel.style.maxHeight !== '0px') {
     panel.style.maxHeight = '0';
     link.innerHTML = 'Paycheck Entry &#9660;';
+    updatePECompleteIndicator();
   } else {
+    document.getElementById('paycheckEntryComplete')?.classList.add('hidden');
     peStep = peGetMonthStep(stabMonthKey());
     renderPaycheckEntry();
     panel.style.maxHeight = panel.scrollHeight + 'px';
@@ -13651,6 +13658,59 @@ function peGoToStep(step) {
   renderPaycheckEntry();
 }
 
+function updatePECompleteIndicator() {
+  const mk = stabMonthKey();
+  const completedStep = peGetMonthStep(mk);
+  const [ty, tm] = mk.split('-').map(Number);
+  const payDate = new Date(ty, tm, 1);
+  const isDecPaycheck = payDate.getMonth() === 11;
+  const totalSteps = isDecPaycheck ? 4 : 3;
+  const completeStep = totalSteps + 1;
+  const isComplete = completedStep >= completeStep;
+
+  const panel = document.getElementById('paycheckEntryPanel');
+  const isOpen = panel && panel.style.maxHeight && panel.style.maxHeight !== '0px';
+  const completeEl = document.getElementById('paycheckEntryComplete');
+  const toggleEl = document.getElementById('paycheckEntryToggle');
+
+  if (!completeEl || !toggleEl) return;
+
+  if (isComplete && !isOpen) {
+    completeEl.classList.remove('hidden');
+    toggleEl.parentElement.style.display = 'none';
+    const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const payMonthName = fullMonthNames[payDate.getMonth()] + ' ' + payDate.getFullYear();
+    document.getElementById('peCompleteSubtext').textContent = payMonthName + ' paycheck entry is finalized.';
+  } else {
+    completeEl.classList.add('hidden');
+    toggleEl.parentElement.style.display = '';
+  }
+}
+
+function peCompleteAndClose() {
+  const panel = document.getElementById('paycheckEntryPanel');
+  const link = document.getElementById('paycheckEntryToggle');
+  if (panel) panel.style.maxHeight = '0';
+  if (link) link.innerHTML = 'Paycheck Entry &#9660;';
+  updatePECompleteIndicator();
+}
+
+function peEditFinalized() {
+  const mk = stabMonthKey();
+  peStep = peGetMonthStep(mk);
+
+  document.getElementById('paycheckEntryComplete')?.classList.add('hidden');
+  const toggleEl = document.getElementById('paycheckEntryToggle');
+  if (toggleEl) {
+    toggleEl.parentElement.style.display = '';
+    toggleEl.innerHTML = 'Paycheck Entry &#9650;';
+  }
+
+  const panel = document.getElementById('paycheckEntryPanel');
+  renderPaycheckEntry();
+  if (panel) panel.style.maxHeight = panel.scrollHeight + 'px';
+}
+
 function peResetMonth() {
   const mk = stabMonthKey();
   const [ty, tm] = mk.split('-').map(Number);
@@ -13816,10 +13876,13 @@ function peStep3SaveDeposit() {
   renderPaycheckChart();
   renderPaycheckTable();
   const isDecPaycheck = payDate.getMonth() === 11;
-  const nextStep = isDecPaycheck ? 4 : 4; // both go to 4, but 4 = bonus for Dec, complete for others
-  peStep = nextStep;
-  peSetMonthStep(mk, nextStep);
-  renderPaycheckEntry();
+  peStep = 4;
+  peSetMonthStep(mk, 4);
+  if (isDecPaycheck) {
+    renderPaycheckEntry();
+  } else {
+    peCompleteAndClose();
+  }
 }
 
 function peStep3Skip() {
@@ -13827,11 +13890,15 @@ function peStep3Skip() {
   const [ty, tm] = mk.split('-').map(Number);
   const payDate = new Date(ty, tm, 1);
   const isDecPaycheck = payDate.getMonth() === 11;
-  if (!isDecPaycheck) showToast('Paycheck entry complete');
   renderStabilization();
   peStep = 4;
   peSetMonthStep(mk, 4);
-  renderPaycheckEntry();
+  if (isDecPaycheck) {
+    renderPaycheckEntry();
+  } else {
+    showToast('Paycheck entry complete');
+    peCompleteAndClose();
+  }
 }
 
 function peStep4SaveStipends() {
@@ -13895,7 +13962,7 @@ function peStep4SaveDeposit() {
   renderPaycheckTable();
   peStep = 5;
   peSetMonthStep(mk, 5);
-  renderPaycheckEntry();
+  peCompleteAndClose();
 }
 
 function peStep4Skip() {
@@ -13904,7 +13971,7 @@ function peStep4Skip() {
   renderStabilization();
   peStep = 5;
   peSetMonthStep(mk, 5);
-  renderPaycheckEntry();
+  peCompleteAndClose();
 }
 
 async function peUploadBonusPayStub(inputEl) {
@@ -13990,6 +14057,8 @@ function renderPaycheckEntryIfOpen() {
   if (panel && panel.style.maxHeight && panel.style.maxHeight !== '0px') {
     peStep = peGetMonthStep(stabMonthKey());
     renderPaycheckEntry();
+  } else {
+    updatePECompleteIndicator();
   }
 }
 
@@ -14163,6 +14232,8 @@ function renderStabilization() {
     earningLabel.textContent = fullMonthNames[targetDate.getMonth()] + ' revenue → paid ' + payMonthName + ' 20';
     summaryEl.textContent = pv ? '' : 'Set $/pt to see estimate';
   }
+
+  updatePECompleteIndicator();
 }
 
 // ================================================================
