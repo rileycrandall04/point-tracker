@@ -9380,27 +9380,44 @@ function renderWeeklyChart() {
     plugins: [monthBoundaryPlugin, barValueLabels, assignmentLabelPlugin]
   });
 
-  // Compute month total
+  // Compute month total split into time and production
   const monthPrefix = workingDate.substring(0, 7);
   let monthTotal = 0;
+  let monthTime = 0;
+  let monthProd = 0;
   Object.keys(data.shifts).forEach(d => {
     if (d.substring(0, 7) === monthPrefix) {
       const r = getShiftPointsForDate(d, true);
-      let v = r.total;
+      let vTotal = r.total;
+      let vTime = (r.ar || 0) + (r.call || 0) + (r.subspec || 0) + (r.supervision || 0);
+      let vProd = r.prod || 0;
       if (weeklyShowDollars) {
         const pv = getPointValueForMonth(monthPrefix);
-        v = round2(v * pv);
+        vTotal = round2(vTotal * pv);
+        vTime = round2(vTime * pv);
+        vProd = round2(vProd * pv);
       }
-      monthTotal += v;
+      monthTotal += vTotal;
+      monthTime += vTime;
+      monthProd += vProd;
     }
   });
   monthTotal = round2(monthTotal);
+  monthTime = round2(monthTime);
+  monthProd = round2(monthProd);
 
   const prefix = weeklyShowDollars ? '$' : '';
   const suffix = weeklyShowDollars ? '' : ' pts';
   const monthName = new Date(workingDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' });
   const weekHrs = round2(hoursArr.reduce((a, b) => a + b, 0));
-  document.getElementById('weeklySummary').textContent = 'Week: ' + prefix + weekTotal.toFixed(2) + suffix + '  \u00B7  ' + monthName + ': ' + prefix + monthTotal.toFixed(2) + suffix + '  \u00B7  ' + weekHrs.toFixed(1) + ' hrs';
+  const summaryEl = document.getElementById('weeklySummary');
+  summaryEl.innerHTML =
+    '<div>Week: ' + prefix + weekTotal.toFixed(2) + suffix + '  \u00B7  ' + weekHrs.toFixed(1) + ' hrs</div>' +
+    '<div style="margin-top:4px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;">' +
+      '<span>' + monthName + ' Total: <strong style="color:var(--accent);">' + prefix + monthTotal.toFixed(2) + suffix + '</strong></span>' +
+      '<span>Time (AR): <strong style="color:var(--text);">' + prefix + monthTime.toFixed(2) + suffix + '</strong></span>' +
+      '<span>Prod: <strong style="color:var(--text);">' + prefix + monthProd.toFixed(2) + suffix + '</strong></span>' +
+    '</div>';
 }
 
 document.getElementById('weeklyToggleBtn').addEventListener('click', () => {
