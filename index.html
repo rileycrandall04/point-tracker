@@ -2623,6 +2623,9 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div id="dailyCalendarContainer" style="margin-top:12px;"></div>
     <div id="dailyMonthSummary" style="margin-top:12px;font-size:0.85rem;color:var(--text-dim);text-align:center;"></div>
 
+    <button class="edit-assignments-btn" id="editAssignmentsBtn" onclick="toggleAssignmentEditor()">&#9998; Edit Assignments</button>
+    <div id="assignEditorContainer" class="hidden"></div>
+
     <!-- Monthly Point Totals Card -->
     <div class="card" style="margin-top:16px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -2636,9 +2639,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <div style="height:180px;"><canvas id="monthlyPtsChart"></canvas></div>
       <div id="monthlyPtsTable" style="margin-top:8px;"></div>
     </div>
-
-    <button class="edit-assignments-btn" id="editAssignmentsBtn" onclick="toggleAssignmentEditor()">&#9998; Edit Assignments</button>
-    <div id="assignEditorContainer" class="hidden"></div>
   </div>
 
   <!-- Reconcile Tab -->
@@ -15769,72 +15769,116 @@ function setMonthlyPtsRange(n) {
 }
 
 function renderMonthlyPtsCard() {
-  const mt = getMonthlyTotals();
+  // Compute per-month time/prod breakdown (same logic as getMonthlyTotals)
+  const monthBreakdowns = {};
+  Object.values(data.shifts).forEach(shift => {
+    if (isFuturePagerOnly(shift)) return;
+    const mk = shift.date.substring(0, 7);
+    if (!monthBreakdowns[mk]) monthBreakdowns[mk] = { time: 0, prod: 0 };
+    const t = calcShiftTotal(shift);
+    monthBreakdowns[mk].time += t.ar + t.call + t.subspec + t.supervision;
+    monthBreakdowns[mk].prod += t.prod;
+  });
+  // Apply overrides
+  const overrides = (data.overrides || {});
+  Object.keys(overrides).forEach(mk => {
+    const ov = overrides[mk];
+    if (!monthBreakdowns[mk]) monthBreakdowns[mk] = { time: 0, prod: 0 };
+    if (ov.timePoints != null) monthBreakdowns[mk].time = ov.timePoints;
+    if (ov.prodPoints != null) monthBreakdowns[mk].prod = ov.prodPoints;
+  });
+
   const now = new Date();
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const labels = [];
-  const values = [];
+  const totals = [];
+  const timeVals = [];
+  const prodVals = [];
 
   for (let i = monthlyPtsRange - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const mk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     labels.push(monthNames[d.getMonth()] + ' ' + d.getFullYear());
-    values.push(round2(mt[mk] || 0));
+    const bd = monthBreakdowns[mk] || { time: 0, prod: 0 };
+    timeVals.push(round2(bd.time));
+    prodVals.push(round2(bd.prod));
+    totals.push(round2(bd.time + bd.prod));
   }
 
-  // Chart
+  // Chart — stacked bar with time + prod
   const ctx = document.getElementById('monthlyPtsChart');
   if (!ctx) return;
   if (monthlyPtsChartInstance) monthlyPtsChartInstance.destroy();
 
-  const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+  const avgTotal = totals.length > 0 ? totals.reduce((a, b) => a + b, 0) / totals.length : 0;
+  const avgTime = timeVals.length > 0 ? timeVals.reduce((a, b) => a + b, 0) / timeVals.length : 0;
+  const avgProd = prodVals.length > 0 ? prodVals.reduce((a, b) => a + b, 0) / prodVals.length : 0;
 
   monthlyPtsChartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
       labels,
-      datasets: [{
-        data: values,
-        backgroundColor: values.map(v => v >= avg ? 'rgba(59,130,246,0.7)' : 'rgba(59,130,246,0.3)'),
-        borderRadius: 4
-      }]
+      datasets: [
+        {
+          label: 'Time (AR)',
+          data: timeVals,
+          backgroundColor: 'rgba(59,130,246,0.75)',
+          borderRadius: 4
+        },
+        {
+          label: 'Production',
+          data: prodVals,
+          backgroundColor: 'rgba(34,197,94,0.75)',
+          borderRadius: 4
+        }
+      ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: { display: true, labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 10, padding: 8 } },
         tooltip: {
           callbacks: {
-            label: function(ctx) { return ctx.raw.toFixed(1) + ' pts'; }
+            label: function(ctx) { return ctx.dataset.label + ': ' + ctx.raw.toFixed(1) + ' pts'; },
+            footer: function(items) {
+              const total = items.reduce((s, it) => s + it.raw, 0);
+              return 'Total: ' + total.toFixed(1) + ' pts';
+            }
           }
         }
       },
       scales: {
-        y: { beginAtZero: true, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(71,85,105,0.2)' } },
-        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } }
+        y: { stacked: true, beginAtZero: true, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(71,85,105,0.2)' } },
+        x: { stacked: true, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } }
       }
     }
   });
 
-  // Table
+  // Table with Time / Prod / Total columns
   let html = '<table style="width:100%;font-size:0.75rem;border-collapse:collapse;">';
   html += '<tr style="color:var(--text-dim);border-bottom:1px solid var(--border);">';
   html += '<th style="text-align:left;padding:4px 0;font-weight:500;">Month</th>';
-  html += '<th style="text-align:right;padding:4px 0;font-weight:500;">Points</th>';
+  html += '<th style="text-align:right;padding:4px 4px;font-weight:500;">Time</th>';
+  html += '<th style="text-align:right;padding:4px 4px;font-weight:500;">Prod</th>';
+  html += '<th style="text-align:right;padding:4px 0;font-weight:500;">Total</th>';
   html += '</tr>';
   for (let i = labels.length - 1; i >= 0; i--) {
     const isCurrentMonth = i === labels.length - 1;
     const style = isCurrentMonth ? 'font-weight:600;color:var(--accent);' : '';
     html += `<tr style="border-bottom:1px solid var(--surface2);">`;
     html += `<td style="padding:4px 0;${style}">${labels[i]}</td>`;
-    html += `<td style="text-align:right;padding:4px 0;${style}">${values[i].toFixed(1)}</td>`;
+    html += `<td style="text-align:right;padding:4px 4px;${style}">${timeVals[i].toFixed(1)}</td>`;
+    html += `<td style="text-align:right;padding:4px 4px;${style}">${prodVals[i].toFixed(1)}</td>`;
+    html += `<td style="text-align:right;padding:4px 0;${style}">${totals[i].toFixed(1)}</td>`;
     html += '</tr>';
   }
   // Average row
   html += `<tr style="border-top:2px solid var(--border);">`;
   html += `<td style="padding:4px 0;font-weight:600;font-size:0.72rem;color:var(--text-dim);">Average</td>`;
-  html += `<td style="text-align:right;padding:4px 0;font-weight:600;font-size:0.72rem;color:var(--text-dim);">${avg.toFixed(1)}</td>`;
+  html += `<td style="text-align:right;padding:4px 4px;font-weight:600;font-size:0.72rem;color:var(--text-dim);">${avgTime.toFixed(1)}</td>`;
+  html += `<td style="text-align:right;padding:4px 4px;font-weight:600;font-size:0.72rem;color:var(--text-dim);">${avgProd.toFixed(1)}</td>`;
+  html += `<td style="text-align:right;padding:4px 0;font-weight:600;font-size:0.72rem;color:var(--text-dim);">${avgTotal.toFixed(1)}</td>`;
   html += '</tr>';
   html += '</table>';
   document.getElementById('monthlyPtsTable').innerHTML = html;
