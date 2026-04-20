@@ -7528,18 +7528,14 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     showToast('Shift saved!');
   }
   deShiftEditing = false;
-  if (returnToShiftLogs) {
-    returnToToday = false;
-    navigateToShiftLogs();
-  } else {
-    returnToToday = false;
-    document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    const todayBtn = document.querySelector('.bottom-nav button[data-page="today"]');
-    if (todayBtn) todayBtn.classList.add('active');
-    document.getElementById('page-today').classList.add('active');
-    renderToday();
-  }
+  returnToToday = false;
+  returnToShiftLogs = false;
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const todayBtn = document.querySelector('.bottom-nav button[data-page="today"]');
+  if (todayBtn) todayBtn.classList.add('active');
+  document.getElementById('page-today').classList.add('active');
+  renderToday();
 });
 
 // ================================================================
