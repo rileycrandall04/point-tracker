@@ -11253,6 +11253,22 @@ function getStipendEntriesForMonth(monthKey) {
   return [];
 }
 
+// Retirement is stored keyed by the PRODUCTION month (e.g. "2026-03"),
+// but the paycheck history chart/table key entries by the PAYCHECK month
+// (e.g. "2026-04"). Dec bonus ("YYYY-12b") is stored directly under the
+// same key in both maps. This helper bridges the two for display.
+function getRetirementForPayKey(payKey) {
+  if (!data.retirement) return 0;
+  if (!payKey) return 0;
+  if (payKey.endsWith('b')) return data.retirement[payKey] || 0;
+  const [yStr, mStr] = payKey.split('-');
+  const y = parseInt(yStr), m = parseInt(mStr);
+  if (!y || !m) return 0;
+  const prod = new Date(y, m - 2, 1);
+  const prodKey = prod.getFullYear() + '-' + String(prod.getMonth() + 1).padStart(2, '0');
+  return data.retirement[prodKey] || 0;
+}
+
 // Get retirement amount for a month, carrying over from prior months if not set
 function getRetirementForMonth(monthKey) {
   if (!data.retirement) data.retirement = {};
@@ -12644,7 +12660,7 @@ function renderPaycheckChart() {
     return (isBonus ? 'Dec Bonus ' : monthNames[moNum - 1] + ' ') + y.slice(2);
   });
   const values = months.map(m => data.paychecks[m] || 0);
-  const retValues = months.map(m => (data.retirement || {})[m] || 0);
+  const retValues = months.map(m => getRetirementForPayKey(m));
 
   if (paycheckChartInstance) paycheckChartInstance.destroy();
 
@@ -12754,7 +12770,7 @@ function renderPaycheckTable() {
     return;
   }
 
-  const hasRetirement = months.some(m => ((data.retirement || {})[m] || 0) > 0);
+  const hasRetirement = months.some(m => getRetirementForPayKey(m) > 0);
   const fmt = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
   let html = '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">';
@@ -12769,7 +12785,7 @@ function renderPaycheckTable() {
   let totalDeposit = 0, totalRetire = 0;
   months.forEach((m, i) => {
     const amt = data.paychecks[m] || 0;
-    const ret = (data.retirement || {})[m] || 0;
+    const ret = getRetirementForPayKey(m);
     totalDeposit += amt;
     totalRetire += ret;
     const rowTotal = amt + ret;
