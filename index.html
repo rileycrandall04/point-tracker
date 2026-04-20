@@ -13833,9 +13833,38 @@ function updatePECompleteIndicator() {
 function peCompleteAndClose() {
   const panel = document.getElementById('paycheckEntryPanel');
   const link = document.getElementById('paycheckEntryToggle');
+  const completeEl = document.getElementById('paycheckEntryComplete');
   if (panel) panel.style.maxHeight = '0';
-  if (link) link.innerHTML = 'Paycheck Entry &#9660;';
-  updatePECompleteIndicator();
+  if (link) {
+    link.innerHTML = 'Paycheck Entry &#9660;';
+    if (link.parentElement) link.parentElement.style.display = 'none';
+  }
+  // Explicitly show the completion banner with populated subtext so the
+  // user sees everything is done without depending on the isOpen race.
+  if (completeEl) {
+    const mk = stabMonthKey();
+    const [ty, tm] = mk.split('-').map(Number);
+    const payDate = new Date(ty, tm, 1);
+    const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
+    const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const payMonthName = fullMonthNames[payDate.getMonth()] + ' ' + payDate.getFullYear();
+    const isJanPaycheck = payDate.getMonth() === 0;
+    const subtextEl = document.getElementById('peCompleteSubtext');
+    if (subtextEl) {
+      if (isJanPaycheck) {
+        const existingDeposit = (data.paychecks || {})[payKey];
+        if (existingDeposit != null) {
+          const fmt = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+          subtextEl.textContent = payMonthName + ': ' + fmt(existingDeposit);
+        } else {
+          subtextEl.textContent = payMonthName + ': No income (typical).';
+        }
+      } else {
+        subtextEl.textContent = payMonthName + ' paycheck entry is finalized.';
+      }
+    }
+    completeEl.classList.remove('hidden');
+  }
 }
 
 function peEditFinalized() {
