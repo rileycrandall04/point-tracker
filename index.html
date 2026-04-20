@@ -2849,10 +2849,16 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div style="margin-top:8px;text-align:center;">
       <a href="#" id="paycheckEntryToggle" onclick="togglePaycheckEntry(); return false;" style="font-size:0.8rem;color:var(--accent2);font-weight:600;">Paycheck Entry &#9660;</a>
     </div>
-    <div id="paycheckEntryComplete" class="hidden" style="margin-top:8px;text-align:center;padding:12px 16px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);border-radius:var(--radius);">
-      <div style="font-size:0.95rem;color:#22c55e;font-weight:700;margin-bottom:2px;">&#10003; Paycheck Entry Complete</div>
-      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;" id="peCompleteSubtext"></div>
-      <button class="btn btn-outline btn-sm" onclick="peEditFinalized()" style="font-size:0.75rem;padding:5px 16px;">Edit</button>
+    <div id="paycheckEntryComplete" class="hidden" style="margin-top:8px;padding:12px 16px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);border-radius:var(--radius);">
+      <div style="text-align:center;">
+        <div style="font-size:0.95rem;color:#22c55e;font-weight:700;margin-bottom:2px;">&#10003; Paycheck Entry Complete</div>
+        <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;" id="peCompleteSubtext"></div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" id="peCompleteViewBtn" onclick="togglePECompleteBreakdown()" style="font-size:0.75rem;padding:5px 16px;">View details</button>
+          <button class="btn btn-outline btn-sm" onclick="peEditFinalized()" style="font-size:0.75rem;padding:5px 16px;">Edit</button>
+        </div>
+      </div>
+      <div id="peCompleteBreakdown" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;"></div>
     </div>
     <div id="paycheckEntryPanel" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;"></div>
   </div>
@@ -13439,6 +13445,7 @@ function renderPaycheckEntry() {
 function renderPEComplete(mk, ty, tm, payKey, payMonthName) {
   const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const prodMonth = fullMonthNames[tm - 1] + ' ' + ty;
+  const payDate = new Date(ty, tm, 1);
   const pv = getPointValueForMonth(mk);
   const actualRev = data.overrides && data.overrides[mk] && data.overrides[mk].compTotal != null ? data.overrides[mk].compTotal : null;
   const stipEntries = getStipendEntriesForMonth(mk);
@@ -13487,7 +13494,6 @@ function renderPEComplete(mk, ty, tm, payKey, payMonthName) {
   html += '<a href="#" onclick="peGoToStep(3); return false;" style="font-size:0.68rem;color:var(--primary);">Edit</a></div></div>';
 
   // Step 4 (December only): Bonus Paycheck
-  const payDate = new Date(ty, tm, 1);
   if (payDate.getMonth() === 11) {
     const bonusKey = payDate.getFullYear() + '-12b';
     const existingBonusDeposit = (data.paychecks || {})[bonusKey];
@@ -13844,6 +13850,129 @@ function updatePECompleteIndicator() {
     completeEl.classList.add('hidden');
     toggleEl.parentElement.style.display = '';
   }
+  resetPECompleteBreakdown();
+}
+
+// Builds a read-only breakdown of every entered value for the current
+// stabilization month. Linked in from the completion banner so the user
+// can inspect entries without reopening the editor.
+function renderPECompleteBreakdownHTML() {
+  const mk = stabMonthKey();
+  const [ty, tm] = mk.split('-').map(Number);
+  const payDate = new Date(ty, tm, 1);
+  const payKey = payDate.getFullYear() + '-' + String(payDate.getMonth() + 1).padStart(2, '0');
+  const fullMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const prodMonthName = fullMonthNames[tm - 1] + ' ' + ty;
+  const isJanPaycheck = payDate.getMonth() === 0;
+  const isDecPaycheck = payDate.getMonth() === 11;
+  const fmt = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const dim = 'color:var(--text-dim);';
+  const row = (label, val, opts) => {
+    const valColor = opts && opts.valueColor ? opts.valueColor : 'var(--text);';
+    return `<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--surface2);font-size:0.78rem;"><span style="${dim}">${label}</span><span style="font-weight:600;color:${valColor}">${val}</span></div>`;
+  };
+  const header = label => `<div style="font-size:0.7rem;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin:10px 0 2px;">${label}</div>`;
+
+  let html = '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;text-align:left;">';
+
+  if (isJanPaycheck) {
+    const dep = (data.paychecks || {})[payKey];
+    html += row('January Paycheck', dep != null ? fmt(dep) : 'No income');
+    html += '</div>';
+    return html;
+  }
+
+  // Regular section: keyed by production month
+  html += header(prodMonthName + ' production');
+  const pv = getPointValueForMonth(mk);
+  html += row('Point value', pv > 0 ? fmt(pv) + '/pt' : '—');
+  const actualRev = data.overrides && data.overrides[mk] && data.overrides[mk].compTotal != null ? data.overrides[mk].compTotal : null;
+  html += row('Production earnings', actualRev != null ? fmt(actualRev) : '—');
+
+  const stipEntries = getStipendEntriesForMonth(mk);
+  if (stipEntries.length > 0) {
+    const stipTotal = stipEntries.reduce((s, e) => s + (e.amount || 0), 0);
+    html += row('Stipends total', fmt(stipTotal));
+    stipEntries.forEach(e => {
+      if (!e.label && !e.amount) return;
+      html += `<div style="display:flex;justify-content:space-between;gap:12px;padding:2px 0 2px 14px;font-size:0.72rem;${dim}"><span>&rsaquo; ${escHtml(e.label || '(unlabeled)')}</span><span>${fmt(e.amount || 0)}</span></div>`;
+    });
+  } else {
+    html += row('Stipends', '—');
+  }
+
+  const ngAmounts = getNonGuaranteedForMonth(mk);
+  const ngLabels = { classB: 'Class B', crna: 'CRNA', surgCenter: 'Surgery Center' };
+  const ngEntries = Object.keys(ngLabels).filter(k => (ngAmounts[k] || 0) !== 0);
+  if (ngEntries.length > 0) {
+    const ngTotal = ngEntries.reduce((s, k) => s + (ngAmounts[k] || 0), 0);
+    html += row('Non-guaranteed', fmt(ngTotal));
+    ngEntries.forEach(k => {
+      html += `<div style="display:flex;justify-content:space-between;gap:12px;padding:2px 0 2px 14px;font-size:0.72rem;${dim}"><span>&rsaquo; ${ngLabels[k]}</span><span>${fmt(ngAmounts[k] || 0)}</span></div>`;
+    });
+  }
+
+  const retireAmt = (data.retirement || {})[mk] || 0;
+  if (retireAmt > 0) html += row('Retirement', '-' + fmt(retireAmt), { valueColor: '#22c55e' });
+
+  const dep = (data.paychecks || {})[payKey];
+  html += row('Actual deposit', dep != null ? fmt(dep) : '—', { valueColor: 'var(--accent2)' });
+
+  // December bonus section
+  if (isDecPaycheck) {
+    const bonusKey = payDate.getFullYear() + '-12b';
+    html += header('December bonus');
+    const bStips = (data.stipends && data.stipends[bonusKey]) || [];
+    if (bStips.length > 0) {
+      const bStipTotal = bStips.reduce((s, e) => s + (e.amount || 0), 0);
+      html += row('Bonus stipends total', fmt(bStipTotal));
+      bStips.forEach(e => {
+        if (!e.label && !e.amount) return;
+        html += `<div style="display:flex;justify-content:space-between;gap:12px;padding:2px 0 2px 14px;font-size:0.72rem;${dim}"><span>&rsaquo; ${escHtml(e.label || '(unlabeled)')}</span><span>${fmt(e.amount || 0)}</span></div>`;
+      });
+    }
+    const bNG = (data.nonGuaranteed && data.nonGuaranteed[bonusKey]) || {};
+    const bNGEntries = Object.keys(ngLabels).filter(k => (bNG[k] || 0) !== 0);
+    if (bNGEntries.length > 0) {
+      const bNGTotal = bNGEntries.reduce((s, k) => s + (bNG[k] || 0), 0);
+      html += row('Bonus non-guaranteed', fmt(bNGTotal));
+      bNGEntries.forEach(k => {
+        html += `<div style="display:flex;justify-content:space-between;gap:12px;padding:2px 0 2px 14px;font-size:0.72rem;${dim}"><span>&rsaquo; ${ngLabels[k]}</span><span>${fmt(bNG[k] || 0)}</span></div>`;
+      });
+    }
+    const bRet = (data.retirement && data.retirement[bonusKey]) || 0;
+    if (bRet > 0) html += row('Bonus retirement', '-' + fmt(bRet), { valueColor: '#22c55e' });
+    const bDep = (data.paychecks || {})[bonusKey];
+    html += row('Bonus deposit', bDep != null ? fmt(bDep) : '—', { valueColor: 'var(--accent2)' });
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function togglePECompleteBreakdown() {
+  const panel = document.getElementById('peCompleteBreakdown');
+  const btn = document.getElementById('peCompleteViewBtn');
+  if (!panel) return;
+  const isOpen = panel.style.maxHeight && panel.style.maxHeight !== '0px' && panel.style.maxHeight !== '0';
+  if (isOpen) {
+    panel.style.maxHeight = '0';
+    if (btn) btn.textContent = 'View details';
+  } else {
+    panel.innerHTML = renderPECompleteBreakdownHTML();
+    panel.style.maxHeight = panel.scrollHeight + 'px';
+    if (btn) btn.textContent = 'Hide details';
+  }
+}
+
+function resetPECompleteBreakdown() {
+  const panel = document.getElementById('peCompleteBreakdown');
+  const btn = document.getElementById('peCompleteViewBtn');
+  if (panel) {
+    panel.style.maxHeight = '0';
+    panel.innerHTML = '';
+  }
+  if (btn) btn.textContent = 'View details';
 }
 
 function peCompleteAndClose() {
@@ -13881,6 +14010,9 @@ function peCompleteAndClose() {
     }
     completeEl.classList.remove('hidden');
   }
+  // Reset the read-only breakdown (collapsed, empty) so it opens fresh
+  // when the user clicks View details.
+  resetPECompleteBreakdown();
 }
 
 function peEditFinalized() {
@@ -13888,6 +14020,7 @@ function peEditFinalized() {
   peStep = peGetMonthStep(mk);
 
   document.getElementById('paycheckEntryComplete')?.classList.add('hidden');
+  resetPECompleteBreakdown();
   const toggleEl = document.getElementById('paycheckEntryToggle');
   if (toggleEl) {
     toggleEl.parentElement.style.display = '';
