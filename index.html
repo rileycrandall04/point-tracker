@@ -6518,12 +6518,12 @@ function calcShiftTotal(shift) {
     total = shift.manualTotal;
     isManual = true;
   }
-  return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, supervision: supervisionPts, total: total, calcTotal: calcTotal, isManual: isManual };
+  return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, supervision: supervisionPts, floatBonus: floatBonus, total: total, calcTotal: calcTotal, isManual: isManual };
 }
 
 function getShiftPointsForDate(dateStr, estimate) {
   const shift = data.shifts[dateStr];
-  if (!shift) return { total: 0, isInProgress: false, ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0 };
+  if (!shift) return { total: 0, isInProgress: false, ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0, floatBonus: 0 };
   const entries = shift.timeEntries || [];
   const lastEntry = entries.length > 0 ? entries[entries.length - 1] : null;
   const hasNoEnd = lastEntry && lastEntry.start && !lastEntry.end;
@@ -6538,10 +6538,10 @@ function getShiftPointsForDate(dateStr, estimate) {
     }
     clone.timeEntries = cloneEntries;
     const totals = calcShiftTotal(clone);
-    return { total: totals.total, isInProgress: true, ar: totals.ar, prod: totals.prod, call: totals.call, subspec: totals.subspec, supervision: totals.supervision };
+    return { total: totals.total, isInProgress: true, ar: totals.ar, prod: totals.prod, call: totals.call, subspec: totals.subspec, supervision: totals.supervision, floatBonus: totals.floatBonus };
   }
   const totals = calcShiftTotal(shift);
-  return { total: totals.total, isInProgress: isInProgress, ar: totals.ar, prod: totals.prod, call: totals.call, subspec: totals.subspec, supervision: totals.supervision };
+  return { total: totals.total, isInProgress: isInProgress, ar: totals.ar, prod: totals.prod, call: totals.call, subspec: totals.subspec, supervision: totals.supervision, floatBonus: totals.floatBonus };
 }
 
 function getCaseTypeName(type, caseData) {
@@ -7528,21 +7528,17 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     showToast('Shift saved!');
   }
   deShiftEditing = false;
-  if (returnToToday) {
+  if (returnToShiftLogs) {
     returnToToday = false;
-    returnToShiftLogs = false;
+    navigateToShiftLogs();
+  } else {
+    returnToToday = false;
     document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const todayBtn = document.querySelector('.bottom-nav button[data-page="today"]');
     if (todayBtn) todayBtn.classList.add('active');
     document.getElementById('page-today').classList.add('active');
     renderToday();
-  } else if (returnToShiftLogs) {
-    navigateToShiftLogs();
-  } else {
-    updateDataEntryState();
-    renderDECaseList();
-    updateDETally();
   }
 });
 
@@ -9082,6 +9078,7 @@ function renderWeeklyChart() {
 
   const baseValues = [];
   const pagerValues = [];
+  const floatValues = [];
   const totalValues = [];
   const rawPts = [];
   const hoursArr = [];
@@ -9089,6 +9086,8 @@ function renderWeeklyChart() {
   const baseBorderColors = [];
   const pagerBgColors = [];
   const pagerBorderColors = [];
+  const floatBgColors = [];
+  const floatBorderColors = [];
   const inProgressFlags = [];
   let weekTotal = 0;
 
@@ -9096,7 +9095,7 @@ function renderWeeklyChart() {
     const shift = data.shifts[d];
     // Skip future pager-only shifts — don't show pager pay on chart before it's earned
     const futPager = shift && isFuturePagerOnly(shift);
-    const result = futPager ? { total: 0, isInProgress: false, ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0 } : getShiftPointsForDate(d, true);
+    const result = futPager ? { total: 0, isInProgress: false, ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0, floatBonus: 0 } : getShiftPointsForDate(d, true);
     let hrs = shift ? calcShiftHours(shift) : 0;
     // If shift is in progress (has open time entry today), add elapsed hours using current time
     if (shift && result.isInProgress) {
@@ -9115,18 +9114,22 @@ function renderWeeklyChart() {
 
     const baseRaw = result.ar + result.prod + result.subspec + result.supervision;
     const pagerRaw = result.call;
+    const floatRaw = result.floatBonus || 0;
     let baseVal = baseRaw;
     let pagerVal = pagerRaw;
+    let floatVal = floatRaw;
     if (weeklyShowDollars) {
       const monthKey = d.substring(0, 7);
       const pv = getPointValueForMonth(monthKey);
       baseVal = round2(baseRaw * pv);
       pagerVal = round2(pagerRaw * pv);
+      floatVal = round2(floatRaw * pv);
     }
     baseValues.push(baseVal);
     pagerValues.push(pagerVal);
-    totalValues.push(round2(baseVal + pagerVal));
-    weekTotal += baseVal + pagerVal;
+    floatValues.push(floatVal);
+    totalValues.push(round2(baseVal + pagerVal + floatVal));
+    weekTotal += baseVal + pagerVal + floatVal;
     inProgressFlags.push(result.isInProgress);
 
     if (result.isInProgress) {
@@ -9134,16 +9137,22 @@ function renderWeeklyChart() {
       baseBorderColors.push('rgba(66,133,244,0.6)');
       pagerBgColors.push('rgba(245,166,35,0.45)');
       pagerBorderColors.push('rgba(245,166,35,0.8)');
+      floatBgColors.push('rgba(139,92,246,0.45)');
+      floatBorderColors.push('rgba(139,92,246,0.8)');
     } else if (d === today) {
       baseBgColors.push('rgba(66,133,244,0.85)');
       baseBorderColors.push('rgba(66,133,244,1)');
       pagerBgColors.push('rgba(245,166,35,0.85)');
       pagerBorderColors.push('rgba(245,166,35,1)');
+      floatBgColors.push('rgba(139,92,246,0.85)');
+      floatBorderColors.push('rgba(139,92,246,1)');
     } else {
       baseBgColors.push('rgba(66,133,244,0.3)');
       baseBorderColors.push('rgba(66,133,244,0.6)');
       pagerBgColors.push('rgba(245,166,35,0.3)');
       pagerBorderColors.push('rgba(245,166,35,0.6)');
+      floatBgColors.push('rgba(139,92,246,0.3)');
+      floatBorderColors.push('rgba(139,92,246,0.6)');
     }
   });
 
@@ -9286,9 +9295,9 @@ function renderWeeklyChart() {
           borderWidth: 1,
           borderRadius: function(ctx) {
             const i = ctx.dataIndex;
-            const hasPager = pagerValues[i] > 0;
-            // Base gets top rounding only if no pager segment above it
-            return hasPager ? { bottomLeft: 3, bottomRight: 3, topLeft: 0, topRight: 0 }
+            const hasAbove = pagerValues[i] > 0 || floatValues[i] > 0;
+            // Base gets top rounding only if nothing is stacked above it
+            return hasAbove ? { bottomLeft: 3, bottomRight: 3, topLeft: 0, topRight: 0 }
                             : { bottomLeft: 3, bottomRight: 3, topLeft: 3, topRight: 3 };
           },
           borderSkipped: false,
@@ -9302,10 +9311,26 @@ function renderWeeklyChart() {
           borderWidth: 1,
           borderRadius: function(ctx) {
             const i = ctx.dataIndex;
-            const hasBase = baseValues[i] > 0;
-            // Pager gets bottom rounding only if no base segment below it
-            return hasBase ? { bottomLeft: 0, bottomRight: 0, topLeft: 3, topRight: 3 }
-                           : { bottomLeft: 3, bottomRight: 3, topLeft: 3, topRight: 3 };
+            const hasBelow = baseValues[i] > 0;
+            const hasAbove = floatValues[i] > 0;
+            const bottom = hasBelow ? 0 : 3;
+            const top = hasAbove ? 0 : 3;
+            return { bottomLeft: bottom, bottomRight: bottom, topLeft: top, topRight: top };
+          },
+          borderSkipped: false,
+          stack: 'stack0'
+        },
+        {
+          label: 'Float Bonus',
+          data: floatValues,
+          backgroundColor: floatBgColors,
+          borderColor: floatBorderColors,
+          borderWidth: 1,
+          borderRadius: function(ctx) {
+            const i = ctx.dataIndex;
+            const hasBelow = baseValues[i] > 0 || pagerValues[i] > 0;
+            return hasBelow ? { bottomLeft: 0, bottomRight: 0, topLeft: 3, topRight: 3 }
+                            : { bottomLeft: 3, bottomRight: 3, topLeft: 3, topRight: 3 };
           },
           borderSkipped: false,
           stack: 'stack0'
