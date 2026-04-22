@@ -6242,7 +6242,9 @@ function calcCasePoints(caseData, shift, ignoreManual) {
   if (ct === 'supervision_block') return 2.63;
 
   if (ct === 'acute_pain_procedure') {
-    return round2(calcAddOnPoints(caseData));
+    const procType = caseData.acutePainProcType || '';
+    const procDefault = (procType === 'Thoracic Injection' || procType === 'Lumbar Injection') ? 3.75 : 0;
+    return round2(calcAddOnPoints(caseData) + procDefault);
   }
 
   if (ct === 'aps_rounding') {
@@ -7629,12 +7631,21 @@ document.getElementById('caseTypeSelect').addEventListener('change', function() 
 document.getElementById('caseAcutePainProcType')?.addEventListener('change', function() {
   const row = document.getElementById('caseAcutePainOtherRow');
   if (row) row.classList.toggle('hidden', this.value !== '__other__');
+  updateAcutePainPointsHint('caseAcutePainPoints', this.value);
 });
 
 document.getElementById('editCaseAcutePainProcType')?.addEventListener('change', function() {
   const row = document.getElementById('editCaseAcutePainOtherRow');
   if (row) row.classList.toggle('hidden', this.value !== '__other__');
+  updateAcutePainPointsHint('editCaseAcutePainPoints', this.value);
 });
+
+function updateAcutePainPointsHint(inputId, procType) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  const hasDefault = procType === 'Thoracic Injection' || procType === 'Lumbar Injection';
+  inp.placeholder = hasDefault ? '3.75 (default for this procedure)' : 'Leave blank to use calculated value';
+}
 
 function applyCaseTypeVisibility(ct) {
   const isStd = ct === 'standard';
@@ -17591,6 +17602,7 @@ function openCaseEdit(caseId) {
   }
   const apPointsInp = document.getElementById('editCaseAcutePainPoints');
   if (apPointsInp) apPointsInp.value = (isAcutePain && c.manualPoints != null) ? c.manualPoints : '';
+  updateAcutePainPointsHint('editCaseAcutePainPoints', c.acutePainProcType || '');
 
   // Fill fields
   document.getElementById('editCaseProcedure').value = c.procedure || '';
