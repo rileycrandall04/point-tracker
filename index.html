@@ -2419,6 +2419,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
           <label>Procedure Name</label>
           <input type="text" id="caseAcutePainProcOther" placeholder="Enter procedure">
         </div>
+        <div class="form-group">
+          <label>Points <span style="color:var(--text-dim);font-weight:400;font-size:0.72rem;">(optional &mdash; override if known)</span></label>
+          <input type="number" id="caseAcutePainPoints" min="0" step="0.1" placeholder="Leave blank to use calculated value">
+        </div>
       </div>
 
       <div id="simpleFields" class="hidden">
@@ -3973,6 +3977,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <div class="form-group hidden" id="editCaseAcutePainOtherRow">
         <label>Procedure Name</label>
         <input type="text" id="editCaseAcutePainProcOther" placeholder="Enter procedure">
+      </div>
+      <div class="form-group">
+        <label>Points <span style="color:var(--text-dim);font-weight:400;font-size:0.72rem;">(optional &mdash; override if known)</span></label>
+        <input type="number" id="editCaseAcutePainPoints" min="0" step="0.1" placeholder="Leave blank to use calculated value">
       </div>
     </div>
     <div id="editSimpleFields" class="hidden">
@@ -8520,7 +8528,11 @@ function buildCaseFromForm() {
     laborInitialStart: isLabor ? (document.getElementById('laborInitialStart')?.value || '') : '',
     notes: document.getElementById('caseNotes')?.value || '',
     caseNotes: document.getElementById('caseCaseNotes')?.value || '',
-    shiftDate: workingDate
+    shiftDate: workingDate,
+    ...(isAcutePainProc && (() => {
+      const v = document.getElementById('caseAcutePainPoints')?.value.trim();
+      return v !== '' && !isNaN(parseFloat(v)) ? { manualPoints: parseFloat(v) } : {};
+    })())
   };
 }
 
@@ -8606,6 +8618,7 @@ function resetCaseForm() {
     document.getElementById('caseAcutePainProcType').value = '';
     document.getElementById('caseAcutePainProcOther').value = '';
     document.getElementById('caseAcutePainOtherRow').classList.add('hidden');
+    document.getElementById('caseAcutePainPoints').value = '';
   }
   document.getElementById('casePointPreview').classList.add('hidden');
   document.getElementById('modifiersSection').removeAttribute('open');
@@ -17576,6 +17589,8 @@ function openCaseEdit(caseId) {
       apProcOtherInp.value = '';
     }
   }
+  const apPointsInp = document.getElementById('editCaseAcutePainPoints');
+  if (apPointsInp) apPointsInp.value = (isAcutePain && c.manualPoints != null) ? c.manualPoints : '';
 
   // Fill fields
   document.getElementById('editCaseProcedure').value = c.procedure || '';
@@ -17684,6 +17699,12 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
     c.acutePainProcType = procType;
     c.procedure = procType || 'Acute Pain Procedure';
     c.notes = document.getElementById('editCaseNotes').value;
+    const ptsStr = document.getElementById('editCaseAcutePainPoints')?.value.trim();
+    if (ptsStr !== '' && !isNaN(parseFloat(ptsStr))) {
+      c.manualPoints = parseFloat(ptsStr);
+    } else {
+      delete c.manualPoints;
+    }
   } else {
     c.notes = document.getElementById('editSimpleNotes').value || document.getElementById('editCaseNotes').value;
   }
