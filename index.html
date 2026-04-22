@@ -2389,6 +2389,38 @@ body.hide-monetary .monetary-hide { display: none !important; }
         </div>
       </div>
 
+      <div id="acutePainFields" class="hidden">
+        <div class="form-group">
+          <label>Procedure Type</label>
+          <select id="caseAcutePainProcType">
+            <option value="">-- Select --</option>
+            <option value="Brachial Plexus Block">Brachial Plexus Block</option>
+            <option value="Interscalene Block">Interscalene Block</option>
+            <option value="Supraclavicular Block">Supraclavicular Block</option>
+            <option value="Axillary Block">Axillary Block</option>
+            <option value="Femoral Nerve Block">Femoral Nerve Block</option>
+            <option value="Adductor Canal Block">Adductor Canal Block</option>
+            <option value="Sciatic/Popliteal Block">Sciatic/Popliteal Block</option>
+            <option value="TAP Block">TAP Block</option>
+            <option value="Quadratus Lumborum Block">Quadratus Lumborum Block</option>
+            <option value="Erector Spinae Plane Block">Erector Spinae Plane Block</option>
+            <option value="Paravertebral Block">Paravertebral Block</option>
+            <option value="Pecs/Serratus Block">Pecs/Serratus Block</option>
+            <option value="Fascia Iliaca Block">Fascia Iliaca Block</option>
+            <option value="Continuous Peripheral Catheter">Continuous Peripheral Catheter</option>
+            <option value="Lumbar Injection">Lumbar Injection</option>
+            <option value="Thoracic Injection">Thoracic Injection</option>
+            <option value="Epidural Steroid Injection">Epidural Steroid Injection</option>
+            <option value="Intrathecal Morphine">Intrathecal Morphine</option>
+            <option value="__other__">Other&hellip;</option>
+          </select>
+        </div>
+        <div class="form-group hidden" id="caseAcutePainOtherRow">
+          <label>Procedure Name</label>
+          <input type="text" id="caseAcutePainProcOther" placeholder="Enter procedure">
+        </div>
+      </div>
+
       <div id="simpleFields" class="hidden">
         <div class="form-group">
           <label>Procedure Notes (optional)</label>
@@ -3910,6 +3942,37 @@ body.hide-monetary .monetary-hide { display: none !important; }
           <label>Pain Rounds (2 pts each)</label>
           <input type="number" id="editApsPainCount" min="0" step="1" value="0">
         </div>
+      </div>
+    </div>
+    <div id="editAcutePainFields" class="hidden">
+      <div class="form-group">
+        <label>Procedure Type</label>
+        <select id="editCaseAcutePainProcType">
+          <option value="">-- Select --</option>
+          <option value="Brachial Plexus Block">Brachial Plexus Block</option>
+          <option value="Interscalene Block">Interscalene Block</option>
+          <option value="Supraclavicular Block">Supraclavicular Block</option>
+          <option value="Axillary Block">Axillary Block</option>
+          <option value="Femoral Nerve Block">Femoral Nerve Block</option>
+          <option value="Adductor Canal Block">Adductor Canal Block</option>
+          <option value="Sciatic/Popliteal Block">Sciatic/Popliteal Block</option>
+          <option value="TAP Block">TAP Block</option>
+          <option value="Quadratus Lumborum Block">Quadratus Lumborum Block</option>
+          <option value="Erector Spinae Plane Block">Erector Spinae Plane Block</option>
+          <option value="Paravertebral Block">Paravertebral Block</option>
+          <option value="Pecs/Serratus Block">Pecs/Serratus Block</option>
+          <option value="Fascia Iliaca Block">Fascia Iliaca Block</option>
+          <option value="Continuous Peripheral Catheter">Continuous Peripheral Catheter</option>
+          <option value="Lumbar Injection">Lumbar Injection</option>
+          <option value="Thoracic Injection">Thoracic Injection</option>
+          <option value="Epidural Steroid Injection">Epidural Steroid Injection</option>
+          <option value="Intrathecal Morphine">Intrathecal Morphine</option>
+          <option value="__other__">Other&hellip;</option>
+        </select>
+      </div>
+      <div class="form-group hidden" id="editCaseAcutePainOtherRow">
+        <label>Procedure Name</label>
+        <input type="text" id="editCaseAcutePainProcOther" placeholder="Enter procedure">
       </div>
     </div>
     <div id="editSimpleFields" class="hidden">
@@ -7555,6 +7618,16 @@ document.getElementById('caseTypeSelect').addEventListener('change', function() 
   updatePointPreview();
 });
 
+document.getElementById('caseAcutePainProcType')?.addEventListener('change', function() {
+  const row = document.getElementById('caseAcutePainOtherRow');
+  if (row) row.classList.toggle('hidden', this.value !== '__other__');
+});
+
+document.getElementById('editCaseAcutePainProcType')?.addEventListener('change', function() {
+  const row = document.getElementById('editCaseAcutePainOtherRow');
+  if (row) row.classList.toggle('hidden', this.value !== '__other__');
+});
+
 function applyCaseTypeVisibility(ct) {
   const isStd = ct === 'standard';
   const isLabor = ct === 'labor_epidural';
@@ -7563,6 +7636,7 @@ function applyCaseTypeVisibility(ct) {
   document.getElementById('standardFields').classList.toggle('hidden', !isStd);
   document.getElementById('laborEpiduralFields').classList.toggle('hidden', !isLabor);
   document.getElementById('apsRoundingFields').classList.toggle('hidden', !isAPS);
+  document.getElementById('acutePainFields').classList.toggle('hidden', !isAcutePain);
   document.getElementById('simpleFields').classList.toggle('hidden', isStd || isLabor || isAPS || isAcutePain);
   // Case type hints
   const hintEl = document.getElementById('caseTypeHint');
@@ -8411,9 +8485,14 @@ function buildCaseFromForm() {
   const isLabor = selectedCaseType === 'labor_epidural';
   const isAPS = selectedCaseType === 'aps_rounding';
   const isICUER = selectedCaseType === 'icu_er_lines';
+  const isAcutePainProc = selectedCaseType === 'acute_pain_procedure';
+  const apProcTypeRaw = document.getElementById('caseAcutePainProcType')?.value || '';
+  const apProcOther = document.getElementById('caseAcutePainProcOther')?.value.trim() || '';
+  const apProcType = apProcTypeRaw === '__other__' ? apProcOther : apProcTypeRaw;
   return {
     caseType: selectedCaseType,
-    procedure: isLabor ? 'Labor Epidural' : (isAPS ? 'APS Rounding' : (isICUER ? 'ICU/ER Lines' : (document.getElementById('caseProcedure')?.value || selectedCaseType))),
+    procedure: isLabor ? 'Labor Epidural' : (isAPS ? 'APS Rounding' : (isICUER ? 'ICU/ER Lines' : (isAcutePainProc ? (apProcType || 'Acute Pain Procedure') : (document.getElementById('caseProcedure')?.value || selectedCaseType)))),
+    acutePainProcType: isAcutePainProc ? apProcType : '',
     asaCode: document.getElementById('caseASACode')?.value || '',
     baseUnits: document.getElementById('caseBaseUnits')?.value || '',
     physicalStatus: document.getElementById('casePhysicalStatus')?.value || 'P2',
@@ -8465,6 +8544,9 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   }
   if (caseData.caseType === 'aps_rounding') {
     if (!(parseInt(caseData.epiduralRounds) > 0) && !(parseInt(caseData.painRounds) > 0)) { showToast('Enter at least one round count'); return; }
+  }
+  if (caseData.caseType === 'acute_pain_procedure') {
+    if (!caseData.acutePainProcType) { showToast('Please select a procedure type'); return; }
   }
   data.cases.push(caseData);
   saveData(data);
@@ -8520,6 +8602,11 @@ function resetCaseForm() {
   document.getElementById('caseNotes').value = '';
   document.getElementById('caseCaseNotes').value = '';
   document.getElementById('simpleNotes').value = '';
+  if (document.getElementById('caseAcutePainProcType')) {
+    document.getElementById('caseAcutePainProcType').value = '';
+    document.getElementById('caseAcutePainProcOther').value = '';
+    document.getElementById('caseAcutePainOtherRow').classList.add('hidden');
+  }
   document.getElementById('casePointPreview').classList.add('hidden');
   document.getElementById('modifiersSection').removeAttribute('open');
   updateModifierTags();
@@ -17429,10 +17516,12 @@ document.getElementById('editCaseTypeSelect').addEventListener('change', functio
   const isStd = editCaseType === 'standard';
   const isLabor = editCaseType === 'labor_epidural';
   const isAPS = editCaseType === 'aps_rounding';
+  const isAcutePain = editCaseType === 'acute_pain_procedure';
   document.getElementById('editStandardFields').classList.toggle('hidden', !isStd);
   document.getElementById('editLaborEpiduralFields').classList.toggle('hidden', !isLabor);
   document.getElementById('editApsRoundingFields').classList.toggle('hidden', !isAPS);
-  document.getElementById('editSimpleFields').classList.toggle('hidden', isStd || isLabor || isAPS);
+  document.getElementById('editAcutePainFields').classList.toggle('hidden', !isAcutePain);
+  document.getElementById('editSimpleFields').classList.toggle('hidden', isStd || isLabor || isAPS || isAcutePain);
 });
 
 document.getElementById('editCaseAcutePain').addEventListener('change', function() {
@@ -17454,10 +17543,39 @@ function openCaseEdit(caseId) {
   const isStd = editCaseType === 'standard';
   const isLabor = editCaseType === 'labor_epidural';
   const isAPS = editCaseType === 'aps_rounding';
+  const isAcutePain = editCaseType === 'acute_pain_procedure';
   document.getElementById('editStandardFields').classList.toggle('hidden', !isStd);
   document.getElementById('editLaborEpiduralFields').classList.toggle('hidden', !isLabor);
   document.getElementById('editApsRoundingFields').classList.toggle('hidden', !isAPS);
-  document.getElementById('editSimpleFields').classList.toggle('hidden', isStd || isLabor || isAPS);
+  document.getElementById('editAcutePainFields').classList.toggle('hidden', !isAcutePain);
+  document.getElementById('editSimpleFields').classList.toggle('hidden', isStd || isLabor || isAPS || isAcutePain);
+
+  // Populate acute pain procedure type
+  const apProcTypeSel = document.getElementById('editCaseAcutePainProcType');
+  const apProcOtherRow = document.getElementById('editCaseAcutePainOtherRow');
+  const apProcOtherInp = document.getElementById('editCaseAcutePainProcOther');
+  if (apProcTypeSel && apProcOtherRow && apProcOtherInp) {
+    const storedProcType = c.acutePainProcType || '';
+    const knownOption = Array.from(apProcTypeSel.options).some(o => o.value === storedProcType && o.value !== '' && o.value !== '__other__');
+    if (storedProcType && knownOption) {
+      apProcTypeSel.value = storedProcType;
+      apProcOtherRow.classList.add('hidden');
+      apProcOtherInp.value = '';
+    } else if (storedProcType) {
+      apProcTypeSel.value = '__other__';
+      apProcOtherRow.classList.remove('hidden');
+      apProcOtherInp.value = storedProcType;
+    } else if (isAcutePain && c.procedure) {
+      // Legacy case without acutePainProcType — fall back to procedure name as "Other"
+      apProcTypeSel.value = '__other__';
+      apProcOtherRow.classList.remove('hidden');
+      apProcOtherInp.value = c.procedure;
+    } else {
+      apProcTypeSel.value = '';
+      apProcOtherRow.classList.add('hidden');
+      apProcOtherInp.value = '';
+    }
+  }
 
   // Fill fields
   document.getElementById('editCaseProcedure').value = c.procedure || '';
@@ -17558,6 +17676,13 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
     c.procedure = 'APS Rounding';
     c.epiduralRounds = document.getElementById('editApsEpiduralCount').value;
     c.painRounds = document.getElementById('editApsPainCount').value;
+    c.notes = document.getElementById('editCaseNotes').value;
+  } else if (editCaseType === 'acute_pain_procedure') {
+    const procTypeRaw = document.getElementById('editCaseAcutePainProcType')?.value || '';
+    const procOther = document.getElementById('editCaseAcutePainProcOther')?.value.trim() || '';
+    const procType = procTypeRaw === '__other__' ? procOther : procTypeRaw;
+    c.acutePainProcType = procType;
+    c.procedure = procType || 'Acute Pain Procedure';
     c.notes = document.getElementById('editCaseNotes').value;
   } else {
     c.notes = document.getElementById('editSimpleNotes').value || document.getElementById('editCaseNotes').value;
