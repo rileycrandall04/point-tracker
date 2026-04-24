@@ -14688,89 +14688,95 @@ function renderProjectedAnnual() {
   const thisYear = now.getFullYear();
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  // YTD revenue received: only count paychecks already received (received on 20th of pay month)
+  // Walk every paycheck month (Jan\u2013Dec) of thisYear.
+  // A paycheck month is "past" once we are past the 23rd of that month.
+  // Past months take the actual revenue if entered; otherwise they are
+  // treated as $0 (no calc fallback). Future months are projected later.
   let ytdRevenue = 0;
   let ytdMonths = 0;
   const receivedMonths = [];
-  for (let i = -1; i <= 11; i++) {
-    const workDate = new Date(thisYear, i, 1);
-    const wYear = workDate.getFullYear();
-    const wMonth = workDate.getMonth();
+  for (let pm = 0; pm < 12; pm++) {
+    const cutoff = new Date(thisYear, pm, 23, 23, 59, 59);
+    if (now <= cutoff) continue; // future paycheck \u2014 handled in projection loop
+    const wYear = pm === 0 ? thisYear - 1 : thisYear;
+    const wMonth = pm === 0 ? 11 : pm - 1;
     const workKey = wYear + '-' + String(wMonth + 1).padStart(2, '0');
-    const recvDate = new Date(wYear, wMonth + 1, 20);
-    if (recvDate.getFullYear() !== thisYear || recvDate > now) continue;
-    if (!mt[workKey]) continue;
     const ov = data.overrides && data.overrides[workKey];
     const stip = getMonthlyStipendTotal(workKey);
     let amt, source;
     if (ov && ov.compTotal != null) {
-      amt = ov.compTotal; source = 'actual';
+      amt = ov.compTotal + stip; source = 'actual';
     } else {
-      amt = mt[workKey] * getPointValueForMonth(workKey) + stip;
-      source = 'calc';
+      amt = 0; source = 'no value';
     }
     ytdRevenue += amt;
     ytdMonths++;
-    receivedMonths.push({ payMonth: recvDate.getMonth(), amt, source });
+    receivedMonths.push({ payMonth: pm, amt, source });
   }
 
-  // Include December bonus paycheck if received
+  // Include December bonus paycheck if past Dec 23 cutoff and entered
   const bonusKey = thisYear + '-12b';
   const bonusDeposit = data.paychecks && data.paychecks[bonusKey];
-  const bonusRecvDate = new Date(thisYear, 11, 20);
+  const bonusCutoff = new Date(thisYear, 11, 23, 23, 59, 59);
   let bonusIncluded = false;
-  if (bonusDeposit != null && bonusDeposit > 0 && now >= bonusRecvDate) {
+  if (bonusDeposit != null && bonusDeposit > 0 && now > bonusCutoff) {
     ytdRevenue += bonusDeposit;
     bonusIncluded = true;
   }
 
-  // Average of current-year received months where amt > $0
+  // Average of past months that actually had a non-zero actual
   const nonZeroMonths = receivedMonths.filter(r => r.amt > 0);
   const avgComp = nonZeroMonths.length > 0 ? round2(nonZeroMonths.reduce((a, r) => a + r.amt, 0) / nonZeroMonths.length) : 0;
 
-  // Don't show annual projection before first check is received (Feb 20)
-  const firstCheckDate = new Date(thisYear, 1, 20);
-  const hasReceivedFirstCheck = now >= firstCheckDate && ytdMonths > 0;
+  // Gate: don't show annual projection until at least one non-zero paycheck has been seen
+  const hasReceivedFirstCheck = avgComp > 0;
 
-  // Always show YTD earnings if any paychecks received
+  // Always show YTD earnings if we've passed any cutoff
   document.getElementById('projYTDRevenue').textContent = ytdMonths > 0
     ? '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 })
     : '\u2014';
 
-  if (hasReceivedFirstCheck && avgComp > 0) {
-    // 13 total paychecks per year (12 regular + 1 December bonus)
-    const paychecksRemaining = 12 - ytdMonths;
-    let projRemaining = round2(avgComp * paychecksRemaining);
+  if (hasReceivedFirstCheck) {
+    // Project every future paycheck month. Future January is always $0
+    // (no predicted calculation since January is typically no-income).
+    let projRemaining = 0;
+    const projectedMonths = [];
+    for (let pm = 0; pm < 12; pm++) {
+      const cutoff = new Date(thisYear, pm, 23, 23, 59, 59);
+      if (now > cutoff) continue; // already in receivedMonths
+      const projAmt = pm === 0 ? 0 : avgComp;
+      const source = pm === 0 ? 'no value' : 'proj';
+      projRemaining += projAmt;
+      projectedMonths.push({ payMonth: pm, amt: projAmt, source });
+    }
 
-    // Add projected December bonus if not yet received
-    const receivedMap = {};
-    receivedMonths.forEach(r => { receivedMap[r.payMonth] = r; });
-    if (!bonusIncluded && !receivedMap[11]) {
-      // December bonus estimate = average of year's paychecks
-      projRemaining = round2(projRemaining + avgComp);
+    // December bonus: actual if past cutoff and entered, else projected
+    let bonusProj = 0;
+    if (!bonusIncluded && now <= bonusCutoff) {
+      bonusProj = avgComp;
+      projRemaining += bonusProj;
     }
 
     const annual = round2(ytdRevenue + projRemaining);
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
     // Build month-by-month breakdown tooltip
-    const receivedMap2 = {};
-    receivedMonths.forEach(r => { receivedMap2[r.payMonth] = r; });
+    const allMonths = {};
+    receivedMonths.forEach(r => { allMonths[r.payMonth] = r; });
+    projectedMonths.forEach(r => { allMonths[r.payMonth] = r; });
     const breakdownLines = [];
     for (let pm = 0; pm < 12; pm++) {
+      const r = allMonths[pm];
       const label = monthNames[pm];
-      if (receivedMap2[pm]) {
-        const r = receivedMap2[pm];
-        breakdownLines.push(label + ': $' + r.amt.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (' + r.source + ')');
-      } else {
-        breakdownLines.push(label + ': $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj)');
-      }
+      if (!r) continue;
+      breakdownLines.push(label + ': $' + r.amt.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (' + r.source + ')');
     }
-    // December bonus line
     if (bonusIncluded) {
       breakdownLines.push('Dec Bonus: $' + bonusDeposit.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (actual)');
+    } else if (bonusProj > 0) {
+      breakdownLines.push('Dec Bonus: $' + bonusProj.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj, avg)');
     } else {
-      breakdownLines.push('Dec Bonus: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj, avg)');
+      breakdownLines.push('Dec Bonus: $0 (no value)');
     }
     breakdownLines.push('');
     breakdownLines.push('Avg: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo (' + nonZeroMonths.length + ' month' + (nonZeroMonths.length !== 1 ? 's' : '') + ')');
