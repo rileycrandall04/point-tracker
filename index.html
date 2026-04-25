@@ -14690,18 +14690,20 @@ function renderProjectedAnnual() {
 
   // Walk every paycheck month (Jan\u2013Dec) of thisYear.
   // - "Past" once we are past the 23rd of the paycheck month:
-  //     - Jan: deposit if entered, else $0 (no comp summary report exists for Jan).
+  //     - Jan: deposit if entered, else $0 (no comp summary report for Jan).
   //     - Other months: gross from the compensation summary report
   //       (compTotal + stipends) if entered, else deposit, else $0.
-  // - "Future" months use estimated revenue from computePaycheckData
-  //   (the same gross production + stipend calc the rest of the app uses):
+  // - "Future" months use a rolling average of past gross income
+  //   (compTotal + stipends \u2014 pre-deduction, pre-retirement):
   //     - Jan: forced to $0 (no predicted calculation).
-  //     - Dec: doubled to include the annual bonus paid alongside.
-  //     - Other months: the per-month estimated revenue.
+  //     - Dec: 2 \u00d7 avg to include the annual bonus paid alongside.
+  //     - Other months: the rolling avg.
+  // The avg itself excludes Jan (no comp report) and Dec (bonus skews).
   let ytdRevenue = 0;
   let ytdMonths = 0;
   const receivedMonths = [];
-  const projectedMonths = [];
+  const grossAmounts = []; // past gross (compTotal + stip) for projection avg, Feb\u2013Nov only
+  const futurePayMonths = [];
   for (let pm = 0; pm < 12; pm++) {
     const cutoff = new Date(thisYear, pm, 23, 23, 59, 59);
     const wYear = pm === 0 ? thisYear - 1 : thisYear;
@@ -14728,25 +14730,34 @@ function renderProjectedAnnual() {
       ytdRevenue += amt;
       ytdMonths++;
       receivedMonths.push({ payMonth: pm, amt, source });
-    } else {
-      let amt, source;
-      if (pm === 0) {
-        amt = 0; source = 'no value';
-      } else {
-        const cd = computePaycheckData(workKey, mt);
-        const baseEst = cd.calcPaycheck; // production + stipend (gross)
-        if (pm === 11) {
-          amt = round2(baseEst * 2); source = 'est \u00d7 2 (incl. bonus)';
-        } else {
-          amt = round2(baseEst); source = 'est';
-        }
+      // Feed the projection avg from gross comp summary only (Feb\u2013Nov).
+      if (pm !== 0 && pm !== 11 && ov && ov.compTotal != null) {
+        grossAmounts.push(ov.compTotal + stip);
       }
-      projectedMonths.push({ payMonth: pm, amt, source });
+    } else {
+      futurePayMonths.push(pm);
     }
   }
 
+  // Rolling avg of gross income before deductions and retirement
+  const avgComp = grossAmounts.length > 0 ? round2(grossAmounts.reduce((a, v) => a + v, 0) / grossAmounts.length) : 0;
+
+  // Project each future month from the rolling avg, with Jan/Dec rules
+  const projectedMonths = [];
+  futurePayMonths.forEach(pm => {
+    let amt, source;
+    if (pm === 0) {
+      amt = 0; source = 'no value';
+    } else if (pm === 11) {
+      amt = round2(avgComp * 2); source = 'avg \u00d7 2 (incl. bonus)';
+    } else {
+      amt = avgComp; source = 'avg';
+    }
+    projectedMonths.push({ payMonth: pm, amt, source });
+  });
+
   // December bonus actual: counted on top of YTD if past cutoff and entered.
-  // Otherwise it's already baked into the doubled December estimate.
+  // Otherwise it's already baked into the doubled December projection.
   const bonusKey = thisYear + '-12b';
   const bonusDeposit = data.paychecks && data.paychecks[bonusKey];
   const bonusCutoff = new Date(thisYear, 11, 23, 23, 59, 59);
@@ -14785,6 +14796,9 @@ function renderProjectedAnnual() {
       breakdownLines.push('Dec Bonus: $0 (no value)');
     }
     breakdownLines.push('');
+    if (avgComp > 0) {
+      breakdownLines.push('Avg: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo gross (' + grossAmounts.length + ' month' + (grossAmounts.length !== 1 ? 's' : '') + ', Feb\u2013Nov)');
+    }
     breakdownLines.push('Total: $' + annual.toLocaleString('en-US', {maximumFractionDigits:0}));
     document.getElementById('projAnnualTip').setAttribute('data-tip', breakdownLines.join('\n'));
   } else {
