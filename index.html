@@ -14730,8 +14730,10 @@ function renderProjectedAnnual() {
     bonusIncluded = true;
   }
 
-  // Average of past months that actually had a non-zero actual
-  const nonZeroMonths = receivedMonths.filter(r => r.amt > 0);
+  // Average of past months that actually had a non-zero actual.
+  // Exclude January (typically no income) and December (bonus skews it)
+  // so the rolling average reflects a typical "regular" paycheck.
+  const nonZeroMonths = receivedMonths.filter(r => r.amt > 0 && r.payMonth !== 0 && r.payMonth !== 11);
   const avgComp = nonZeroMonths.length > 0 ? round2(nonZeroMonths.reduce((a, r) => a + r.amt, 0) / nonZeroMonths.length) : 0;
 
   // Gate: don't show annual projection until at least one non-zero paycheck has been seen
@@ -14744,24 +14746,25 @@ function renderProjectedAnnual() {
 
   if (hasReceivedFirstCheck) {
     // Project every future paycheck month. Future January is always $0
-    // (no predicted calculation since January is typically no-income).
+    // (no predicted calculation). Future December is doubled to account
+    // for the annual bonus being paid alongside the regular paycheck.
     let projRemaining = 0;
     const projectedMonths = [];
     for (let pm = 0; pm < 12; pm++) {
       const cutoff = new Date(thisYear, pm, 23, 23, 59, 59);
       if (now > cutoff) continue; // already in receivedMonths
-      const projAmt = pm === 0 ? 0 : avgComp;
-      const source = pm === 0 ? 'no value' : 'proj';
+      let projAmt, source;
+      if (pm === 0) { projAmt = 0; source = 'no value'; }
+      else if (pm === 11) { projAmt = round2(avgComp * 2); source = 'proj \u00d7 2 (incl. bonus)'; }
+      else { projAmt = avgComp; source = 'proj'; }
       projRemaining += projAmt;
       projectedMonths.push({ payMonth: pm, amt: projAmt, source });
     }
 
-    // December bonus: actual if past cutoff and entered, else projected
-    let bonusProj = 0;
-    if (!bonusIncluded && now <= bonusCutoff) {
-      bonusProj = avgComp;
-      projRemaining += bonusProj;
-    }
+    // The December bonus actual is added on top whenever it's been
+    // entered (and past cutoff). If it's not yet entered, the future
+    // December slot above already projects 2\u00d7 avgComp to cover it.
+    const projectedDec = projectedMonths.find(r => r.payMonth === 11);
 
     const annual = round2(ytdRevenue + projRemaining);
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -14779,13 +14782,13 @@ function renderProjectedAnnual() {
     }
     if (bonusIncluded) {
       breakdownLines.push('Dec Bonus: $' + bonusDeposit.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (actual)');
-    } else if (bonusProj > 0) {
-      breakdownLines.push('Dec Bonus: $' + bonusProj.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (proj, avg)');
+    } else if (projectedDec) {
+      breakdownLines.push('Dec Bonus: included in December estimate');
     } else {
       breakdownLines.push('Dec Bonus: $0 (no value)');
     }
     breakdownLines.push('');
-    breakdownLines.push('Avg: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo (' + nonZeroMonths.length + ' month' + (nonZeroMonths.length !== 1 ? 's' : '') + ')');
+    breakdownLines.push('Avg: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo (' + nonZeroMonths.length + ' month' + (nonZeroMonths.length !== 1 ? 's' : '') + ', Feb\u2013Nov)');
     breakdownLines.push('Total: $' + annual.toLocaleString('en-US', {maximumFractionDigits:0}));
     document.getElementById('projAnnualTip').setAttribute('data-tip', breakdownLines.join('\n'));
   } else {
