@@ -3090,6 +3090,11 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="card">
     <h2>Settings</h2>
     <div class="settings-field">
+      <label>Site</label>
+      <input type="text" id="settingsSite" disabled placeholder="—" style="opacity:0.85;">
+      <p style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">Your group's location. Contact the admin to change.</p>
+    </div>
+    <div class="settings-field">
       <label>Name</label>
       <input type="text" id="settingsName" placeholder="Your name (labels exports)">
     </div>
@@ -4533,6 +4538,8 @@ let sharedCaseOverridesCache = {}; // { docId: { surgeon, procedure, updatedAt }
 let surgeonMappingsCache = {};
 let surgeonMappingsLoaded = false;
 let userProfilesCache = {}; // { uid: { email, displayName } }
+let sitesCache = {};       // { siteId: { id, name, members[], owner, ... } }
+let sitesLoaded = false;
 
 function parseSharedCasesSnapshot(snapshot) {
   const cases = [];
@@ -4654,6 +4661,25 @@ async function loadUserProfiles() {
     console.error('Failed to load user profiles:', err);
     userProfilesCache = {};
   }
+}
+
+async function loadSites() {
+  try {
+    const snapshot = await db.collection('sites').get();
+    sitesCache = {};
+    snapshot.forEach(doc => { sitesCache[doc.id] = doc.data(); });
+    sitesLoaded = true;
+    console.log('Loaded ' + Object.keys(sitesCache).length + ' sites');
+  } catch (err) {
+    console.error('Failed to load sites:', err);
+    sitesCache = {};
+    sitesLoaded = true;
+  }
+}
+
+function getCurrentSiteName() {
+  const sid = getCurrentSiteId();
+  return (sitesCache[sid] && sitesCache[sid].name) || sid;
 }
 
 function normalizeSurgeonName(rawName) {
@@ -18194,6 +18220,12 @@ function downloadFile(content, filename, type) {
 // ================================================================
 // SETTINGS
 // ================================================================
+function renderSiteRow() {
+  const el = document.getElementById('settingsSite');
+  if (el) el.value = getCurrentSiteName();
+}
+renderSiteRow();
+
 const nameInput = document.getElementById('settingsName');
 nameInput.value = settings.name || '';
 nameInput.addEventListener('change', () => {
@@ -21970,6 +22002,7 @@ auth.onAuthStateChanged(async (user) => {
     loadSharedCases().then(() => refreshSharedViews()).catch(() => {});
     loadSurgeonMappings().catch(() => {});
     loadUserProfiles().catch(() => {});
+    loadSites().then(() => renderSiteRow()).catch(() => {});
     loadAsaMasterCodes().catch(() => {});
     loadAsaCodeProcedures().catch(() => {});
 
