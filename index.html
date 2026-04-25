@@ -14689,16 +14689,21 @@ function renderProjectedAnnual() {
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   // Walk every paycheck month (Jan\u2013Dec) of thisYear.
-  // A paycheck month is "past" once we are past the 23rd of that month.
-  // Past months take the actual revenue if entered; otherwise they are
-  // treated as $0 (no calc fallback). Future months are projected later.
+  // - "Past" once we are past the 23rd of the paycheck month:
+  //     - Jan: deposit if entered, else $0 (no comp summary report exists for Jan).
+  //     - Other months: gross from the compensation summary report
+  //       (compTotal + stipends) if entered, else deposit, else $0.
+  // - "Future" months use estimated revenue from computePaycheckData
+  //   (the same gross production + stipend calc the rest of the app uses):
+  //     - Jan: forced to $0 (no predicted calculation).
+  //     - Dec: doubled to include the annual bonus paid alongside.
+  //     - Other months: the per-month estimated revenue.
   let ytdRevenue = 0;
   let ytdMonths = 0;
   const receivedMonths = [];
-  const grossAmounts = []; // gross (compTotal + stipends) for projection average; Feb\u2013Nov only
+  const projectedMonths = [];
   for (let pm = 0; pm < 12; pm++) {
     const cutoff = new Date(thisYear, pm, 23, 23, 59, 59);
-    if (now <= cutoff) continue; // future paycheck \u2014 handled in projection loop
     const wYear = pm === 0 ? thisYear - 1 : thisYear;
     const wMonth = pm === 0 ? 11 : pm - 1;
     const workKey = wYear + '-' + String(wMonth + 1).padStart(2, '0');
@@ -14706,32 +14711,42 @@ function renderProjectedAnnual() {
     const ov = data.overrides && data.overrides[workKey];
     const stip = getMonthlyStipendTotal(workKey);
     const deposit = data.paychecks && data.paychecks[payKey];
-    let amt, source;
-    if (pm !== 0 && ov && ov.compTotal != null) {
-      // Prefer the gross compensation summary value for past months when
-      // available so the YTD figure matches the basis used for the
-      // projection average.
-      amt = ov.compTotal + stip; source = 'actual';
-    } else if (deposit != null) {
-      // Fallback (and the canonical source for January, whose simplified
-      // editor only writes a deposit).
-      amt = deposit; source = 'actual';
-    } else if (ov && ov.compTotal != null) {
-      amt = ov.compTotal + stip; source = 'actual';
+    const isPast = now > cutoff;
+
+    if (isPast) {
+      let amt, source;
+      if (pm === 0) {
+        if (deposit != null) { amt = deposit; source = 'actual'; }
+        else { amt = 0; source = 'no value'; }
+      } else if (ov && ov.compTotal != null) {
+        amt = ov.compTotal + stip; source = 'actual';
+      } else if (deposit != null) {
+        amt = deposit; source = 'actual';
+      } else {
+        amt = 0; source = 'no value';
+      }
+      ytdRevenue += amt;
+      ytdMonths++;
+      receivedMonths.push({ payMonth: pm, amt, source });
     } else {
-      amt = 0; source = 'no value';
-    }
-    ytdRevenue += amt;
-    ytdMonths++;
-    receivedMonths.push({ payMonth: pm, amt, source });
-    // Gross from the compensation summary report drives the projection
-    // average. Skip January (no comp report) and December (bonus skews).
-    if (pm !== 0 && pm !== 11 && ov && ov.compTotal != null) {
-      grossAmounts.push(ov.compTotal + stip);
+      let amt, source;
+      if (pm === 0) {
+        amt = 0; source = 'no value';
+      } else {
+        const cd = computePaycheckData(workKey, mt);
+        const baseEst = cd.calcPaycheck; // production + stipend (gross)
+        if (pm === 11) {
+          amt = round2(baseEst * 2); source = 'est \u00d7 2 (incl. bonus)';
+        } else {
+          amt = round2(baseEst); source = 'est';
+        }
+      }
+      projectedMonths.push({ payMonth: pm, amt, source });
     }
   }
 
-  // Include December bonus paycheck if past Dec 23 cutoff and entered
+  // December bonus actual: counted on top of YTD if past cutoff and entered.
+  // Otherwise it's already baked into the doubled December estimate.
   const bonusKey = thisYear + '-12b';
   const bonusDeposit = data.paychecks && data.paychecks[bonusKey];
   const bonusCutoff = new Date(thisYear, 11, 23, 23, 59, 59);
@@ -14741,45 +14756,14 @@ function renderProjectedAnnual() {
     bonusIncluded = true;
   }
 
-  // Rolling average uses the GROSS value from the compensation summary
-  // report (compTotal + stipends), not the post-deduction deposit, so
-  // future-month projections aren't dragged down by retirement/etc.
-  // January and December are excluded (Jan: no comp report; Dec: bonus
-  // would skew it).
-  const avgComp = grossAmounts.length > 0 ? round2(grossAmounts.reduce((a, v) => a + v, 0) / grossAmounts.length) : 0;
-  const nonZeroMonths = receivedMonths.filter(r => r.amt > 0);
+  const projRemaining = projectedMonths.reduce((s, r) => s + r.amt, 0);
 
-  // Gate: don't show annual projection until at least one non-zero paycheck has been seen
-  const hasReceivedFirstCheck = avgComp > 0;
-
-  // Always show YTD earnings if we've passed any cutoff
   document.getElementById('projYTDRevenue').textContent = ytdMonths > 0
     ? '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 })
     : '\u2014';
 
-  if (hasReceivedFirstCheck) {
-    // Project every future paycheck month. Future January is always $0
-    // (no predicted calculation). Future December is doubled to account
-    // for the annual bonus being paid alongside the regular paycheck.
-    let projRemaining = 0;
-    const projectedMonths = [];
-    for (let pm = 0; pm < 12; pm++) {
-      const cutoff = new Date(thisYear, pm, 23, 23, 59, 59);
-      if (now > cutoff) continue; // already in receivedMonths
-      let projAmt, source;
-      if (pm === 0) { projAmt = 0; source = 'no value'; }
-      else if (pm === 11) { projAmt = round2(avgComp * 2); source = 'proj \u00d7 2 (incl. bonus)'; }
-      else { projAmt = avgComp; source = 'proj'; }
-      projRemaining += projAmt;
-      projectedMonths.push({ payMonth: pm, amt: projAmt, source });
-    }
-
-    // The December bonus actual is added on top whenever it's been
-    // entered (and past cutoff). If it's not yet entered, the future
-    // December slot above already projects 2\u00d7 avgComp to cover it.
-    const projectedDec = projectedMonths.find(r => r.payMonth === 11);
-
-    const annual = round2(ytdRevenue + projRemaining);
+  const annual = round2(ytdRevenue + projRemaining);
+  if (annual > 0) {
     document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
     // Build month-by-month breakdown tooltip
@@ -14789,10 +14773,10 @@ function renderProjectedAnnual() {
     const breakdownLines = [];
     for (let pm = 0; pm < 12; pm++) {
       const r = allMonths[pm];
-      const label = monthNames[pm];
       if (!r) continue;
-      breakdownLines.push(label + ': $' + r.amt.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (' + r.source + ')');
+      breakdownLines.push(monthNames[pm] + ': $' + r.amt.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (' + r.source + ')');
     }
+    const projectedDec = projectedMonths.find(r => r.payMonth === 11);
     if (bonusIncluded) {
       breakdownLines.push('Dec Bonus: $' + bonusDeposit.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (actual)');
     } else if (projectedDec) {
@@ -14801,7 +14785,6 @@ function renderProjectedAnnual() {
       breakdownLines.push('Dec Bonus: $0 (no value)');
     }
     breakdownLines.push('');
-    breakdownLines.push('Avg: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo gross (' + grossAmounts.length + ' month' + (grossAmounts.length !== 1 ? 's' : '') + ', Feb\u2013Nov)');
     breakdownLines.push('Total: $' + annual.toLocaleString('en-US', {maximumFractionDigits:0}));
     document.getElementById('projAnnualTip').setAttribute('data-tip', breakdownLines.join('\n'));
   } else {
