@@ -14695,6 +14695,7 @@ function renderProjectedAnnual() {
   let ytdRevenue = 0;
   let ytdMonths = 0;
   const receivedMonths = [];
+  const grossAmounts = []; // gross (compTotal + stipends) for projection average; Feb\u2013Nov only
   for (let pm = 0; pm < 12; pm++) {
     const cutoff = new Date(thisYear, pm, 23, 23, 59, 59);
     if (now <= cutoff) continue; // future paycheck \u2014 handled in projection loop
@@ -14707,7 +14708,7 @@ function renderProjectedAnnual() {
     const deposit = data.paychecks && data.paychecks[payKey];
     let amt, source;
     if (deposit != null) {
-      // User-entered actual deposit is the canonical actual (also the
+      // User-entered actual deposit is the canonical YTD value (also the
       // only source for January, whose simplified editor writes here).
       amt = deposit; source = 'actual';
     } else if (ov && ov.compTotal != null) {
@@ -14718,6 +14719,11 @@ function renderProjectedAnnual() {
     ytdRevenue += amt;
     ytdMonths++;
     receivedMonths.push({ payMonth: pm, amt, source });
+    // Gross from the compensation summary report drives the projection
+    // average. Skip January (no comp report) and December (bonus skews).
+    if (pm !== 0 && pm !== 11 && ov && ov.compTotal != null) {
+      grossAmounts.push(ov.compTotal + stip);
+    }
   }
 
   // Include December bonus paycheck if past Dec 23 cutoff and entered
@@ -14730,11 +14736,13 @@ function renderProjectedAnnual() {
     bonusIncluded = true;
   }
 
-  // Average of past months that actually had a non-zero actual.
-  // Exclude January (typically no income) and December (bonus skews it)
-  // so the rolling average reflects a typical "regular" paycheck.
-  const nonZeroMonths = receivedMonths.filter(r => r.amt > 0 && r.payMonth !== 0 && r.payMonth !== 11);
-  const avgComp = nonZeroMonths.length > 0 ? round2(nonZeroMonths.reduce((a, r) => a + r.amt, 0) / nonZeroMonths.length) : 0;
+  // Rolling average uses the GROSS value from the compensation summary
+  // report (compTotal + stipends), not the post-deduction deposit, so
+  // future-month projections aren't dragged down by retirement/etc.
+  // January and December are excluded (Jan: no comp report; Dec: bonus
+  // would skew it).
+  const avgComp = grossAmounts.length > 0 ? round2(grossAmounts.reduce((a, v) => a + v, 0) / grossAmounts.length) : 0;
+  const nonZeroMonths = receivedMonths.filter(r => r.amt > 0);
 
   // Gate: don't show annual projection until at least one non-zero paycheck has been seen
   const hasReceivedFirstCheck = avgComp > 0;
@@ -14788,7 +14796,7 @@ function renderProjectedAnnual() {
       breakdownLines.push('Dec Bonus: $0 (no value)');
     }
     breakdownLines.push('');
-    breakdownLines.push('Avg: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo (' + nonZeroMonths.length + ' month' + (nonZeroMonths.length !== 1 ? 's' : '') + ', Feb\u2013Nov)');
+    breakdownLines.push('Avg: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo gross (' + grossAmounts.length + ' month' + (grossAmounts.length !== 1 ? 's' : '') + ', Feb\u2013Nov)');
     breakdownLines.push('Total: $' + annual.toLocaleString('en-US', {maximumFractionDigits:0}));
     document.getElementById('projAnnualTip').setAttribute('data-tip', breakdownLines.join('\n'));
   } else {
