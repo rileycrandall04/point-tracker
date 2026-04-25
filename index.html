@@ -16106,6 +16106,7 @@ function setMonthlyPtsRange(n) {
 function renderMonthlyPtsCard() {
   // Compute per-month time/prod breakdown (same logic as getMonthlyTotals)
   const monthBreakdowns = {};
+  const monthMetrics = {}; // pts/hr — { allPts, allHrs, nonCallPts, nonCallHrs }
   Object.values(data.shifts).forEach(shift => {
     if (isFuturePagerOnly(shift)) return;
     const mk = shift.date.substring(0, 7);
@@ -16113,6 +16114,17 @@ function renderMonthlyPtsCard() {
     const t = calcShiftTotal(shift);
     monthBreakdowns[mk].time += t.ar + t.call + t.subspec + t.supervision;
     monthBreakdowns[mk].prod += t.prod;
+    if (!monthMetrics[mk]) monthMetrics[mk] = { allPts: 0, allHrs: 0, nonCallPts: 0, nonCallHrs: 0 };
+    const hrs = calcShiftHours(shift);
+    const pts = t.total;
+    monthMetrics[mk].allPts += pts;
+    monthMetrics[mk].allHrs += hrs;
+    const isWkndOrHol = isWeekend(shift.date) || !!shift.isHoliday;
+    const isCall = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date) !== null;
+    if (!isCall) {
+      monthMetrics[mk].nonCallPts += pts;
+      monthMetrics[mk].nonCallHrs += hrs;
+    }
   });
   // Apply overrides
   const overrides = (data.overrides || {});
@@ -16130,6 +16142,7 @@ function renderMonthlyPtsCard() {
   const timeVals = [];
   const prodVals = [];
 
+  let rangeAllPts = 0, rangeAllHrs = 0, rangeNonCallPts = 0, rangeNonCallHrs = 0;
   for (let i = monthlyPtsRange - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const mk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -16138,7 +16151,16 @@ function renderMonthlyPtsCard() {
     timeVals.push(round2(bd.time));
     prodVals.push(round2(bd.prod));
     totals.push(round2(bd.time + bd.prod));
+    const m = monthMetrics[mk];
+    if (m) {
+      rangeAllPts += m.allPts;
+      rangeAllHrs += m.allHrs;
+      rangeNonCallPts += m.nonCallPts;
+      rangeNonCallHrs += m.nonCallHrs;
+    }
   }
+  const avgAllPph = rangeAllHrs > 0 ? rangeAllPts / rangeAllHrs : 0;
+  const avgNonCallPph = rangeNonCallHrs > 0 ? rangeNonCallPts / rangeNonCallHrs : 0;
 
   // Chart — stacked bar with time + prod
   const ctx = document.getElementById('monthlyPtsChart');
@@ -16216,6 +16238,11 @@ function renderMonthlyPtsCard() {
   html += `<td style="text-align:right;padding:4px 0;font-weight:600;font-size:0.72rem;color:var(--text-dim);">${avgTotal.toFixed(1)}</td>`;
   html += '</tr>';
   html += '</table>';
+  // Pts/hr summary across the displayed range
+  html += `<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--surface2);font-size:0.72rem;color:var(--text-dim);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">`;
+  html += `<span>Avg pts/hr (all): <strong style="color:var(--text);">${avgAllPph.toFixed(2)}</strong></span>`;
+  html += `<span>Avg pts/hr (non-call): <strong style="color:var(--text);">${avgNonCallPph.toFixed(2)}</strong></span>`;
+  html += `</div>`;
   document.getElementById('monthlyPtsTable').innerHTML = html;
 }
 
