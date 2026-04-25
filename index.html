@@ -4366,6 +4366,36 @@ const PROD_KEY = 'mwa_production';
 const RECON_DECISIONS_KEY = 'mwa_recon_decisions';
 const SHIFT_RECON_DECISIONS_KEY = 'mwa_shift_recon_decisions';
 
+// Multi-site: every user belongs to exactly one site. Existing users default
+// to UVH; new sites are created admin-side. Each shift/case is stamped with
+// the user's siteId at save time and never silently re-stamped, so historical
+// data keeps the rules of the site it was entered under.
+const DEFAULT_SITE_ID = 'UVH';
+function getCurrentSiteId() {
+  // try/catch guards against `settings` being in the temporal dead zone
+  // when this is called during initial loadData() (before `let settings = ...`).
+  try { return (settings && settings.siteId) || DEFAULT_SITE_ID; }
+  catch (e) { return DEFAULT_SITE_ID; }
+}
+
+// Stamp siteId on every shift/case in `data` that lacks one. Idempotent:
+// records already stamped are left alone, so this is safe to run on every load.
+function backfillSiteIds(d) {
+  if (!d) return d;
+  const sid = getCurrentSiteId();
+  if (d.shifts) {
+    for (const k in d.shifts) {
+      if (d.shifts[k] && !d.shifts[k].siteId) d.shifts[k].siteId = sid;
+    }
+  }
+  if (Array.isArray(d.cases)) {
+    for (const c of d.cases) {
+      if (c && !c.siteId) c.siteId = sid;
+    }
+  }
+  return d;
+}
+
 function loadData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -4376,6 +4406,7 @@ function loadData() {
       if (!d.calendarAssignments) d.calendarAssignments = {};
       if (!d.paychecks) d.paychecks = {};
       if (!d.retirement) d.retirement = {};
+      backfillSiteIds(d);
       return d;
     }
   } catch(e) {}
@@ -4425,6 +4456,7 @@ function syncToFirestore(docName, payload) {
 function buildSharedCase(caseData, shift) {
   return {
     uid: currentUser ? currentUser.uid : '',
+    siteId: caseData.siteId || (shift && shift.siteId) || getCurrentSiteId(),
     caseType: caseData.caseType || '',
     shiftDate: caseData.shiftDate || '',
     timestamp: caseData.timestamp || new Date().toISOString(),
@@ -4663,6 +4695,7 @@ async function loadFromFirestore(uid) {
       if (!d.retirement) d.retirement = {};
       // Ensure cases is an array
       if (!Array.isArray(d.cases)) d.cases = [];
+      backfillSiteIds(d);
       data = d;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       return 'loaded';
@@ -7598,6 +7631,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     }
     data.shifts[dt] = {
       date: dt, assignmentType: effectiveType,
+      siteId: data.shifts[dt]?.siteId || getCurrentSiteId(),
       startTime: allTimeEntries[0]?.start || '',
       endTime: allTimeEntries[allTimeEntries.length - 1]?.end || '',
       timeEntries: allTimeEntries,
@@ -8615,6 +8649,7 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   if (caseData.caseType === 'acute_pain_procedure') {
     if (!caseData.acutePainProcType) { showToast('Please select a procedure type'); return; }
   }
+  caseData.siteId = data.shifts[date]?.siteId || getCurrentSiteId();
   data.cases.push(caseData);
   saveData(data);
   writeSharedCase(caseData, data.shifts[date]);
@@ -16421,6 +16456,7 @@ function syncPagerShift(dateStr, type) {
   // Create or update placeholder shift for any assignment type
   data.shifts[dateStr] = {
     date: dateStr, assignmentType: type,
+    siteId: data.shifts[dateStr]?.siteId || getCurrentSiteId(),
     startTime: '', endTime: '',
     timeEntries: isVacOrOff ? [{ start: '', end: '' }] : [],
     isHoliday: shift ? shift.isHoliday : false,
@@ -18825,6 +18861,7 @@ function applyQgendaToShift(d) {
     const reconTimeEntries = timeEntries.length > 0 ? timeEntries : reconHasPager ? [] : [{ start: earliest, end: latest }];
     data.shifts[d.date] = {
       date: d.date, assignmentType: reconAssignType,
+      siteId: data.shifts[d.date]?.siteId || getCurrentSiteId(),
       startTime: timeEntries.length > 0 ? earliest : '',
       endTime: timeEntries.length > 0 ? latest : '',
       timeEntries: reconTimeEntries, isHoliday: false, forcedOff: false,
@@ -19602,6 +19639,7 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
       data.shifts[s.date] = {
         date: s.date,
         assignmentType: s.assignmentType,
+        siteId: data.shifts[s.date]?.siteId || getCurrentSiteId(),
         startTime: s.startTime,
         endTime: s.endTime,
         timeEntries: s.timeEntries || [{ start: s.startTime, end: s.endTime }],
@@ -19922,6 +19960,7 @@ function showCSVImportConfirmation(result) {
         const en = caseDates[date].latest || '17:00';
         data.shifts[date] = {
           date, assignmentType: 'OR',
+          siteId: data.shifts[date]?.siteId || getCurrentSiteId(),
           startTime: st, endTime: en,
           timeEntries: [{ start: st, end: en }],
           isHoliday: false,
@@ -19932,6 +19971,7 @@ function showCSVImportConfirmation(result) {
       }
     });
 
+    newCases.forEach(c => { c.siteId = data.shifts[c.shiftDate]?.siteId || getCurrentSiteId(); });
     data.cases.push(...newCases);
     saveData(data);
     newCases.forEach(c => writeSharedCase(c, data.shifts[c.shiftDate]));
@@ -21768,6 +21808,7 @@ document.getElementById('scanImportBtn').addEventListener('click', () => {
     const en = latest || '17:00';
     data.shifts[scanDate] = {
       date: scanDate, assignmentType: 'OR',
+      siteId: data.shifts[scanDate]?.siteId || getCurrentSiteId(),
       startTime: st, endTime: en,
       timeEntries: [{ start: st, end: en }],
       isHoliday: false, forcedOff: false, subspecCoverage: false,
@@ -21776,6 +21817,7 @@ document.getElementById('scanImportBtn').addEventListener('click', () => {
     showToast(`Created placeholder OR shift for ${formatDateShort(scanDate)}`);
   }
 
+  newCases.forEach(c => { c.siteId = data.shifts[c.shiftDate]?.siteId || getCurrentSiteId(); });
   data.cases.push(...newCases);
   saveData(data);
   newCases.forEach(c => writeSharedCase(c, data.shifts[c.shiftDate]));
