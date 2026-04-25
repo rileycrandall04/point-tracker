@@ -4669,11 +4669,13 @@ async function loadSites() {
     sitesCache = {};
     snapshot.forEach(doc => { sitesCache[doc.id] = doc.data(); });
     sitesLoaded = true;
+    invalidateResolvedRulesCache();
     console.log('Loaded ' + Object.keys(sitesCache).length + ' sites');
   } catch (err) {
     console.error('Failed to load sites:', err);
     sitesCache = {};
     sitesLoaded = true;
+    invalidateResolvedRulesCache();
   }
 }
 
@@ -5413,16 +5415,46 @@ function clearCalendarMappings() {
 // ================================================================
 // CONSTANTS & HELPERS
 // ================================================================
-const UNRESTRICTED_CALL_TYPES = new Set(
-  Object.entries(DEFAULT_SHIFT_RULES)
-    .filter(([, r]) => r.unrestrictedCall)
-    .map(([type]) => type)
-);
+
+// Deep-merge two plain objects. Override values fully replace base if
+// they're not plain objects (so e.g. `pagerWindow: null` removes pager pay).
+function _deepMerge(base, override) {
+  if (override === undefined) return base;
+  if (override === null) return null;
+  if (typeof override !== 'object' || Array.isArray(override)) return override;
+  if (base === null || typeof base !== 'object' || Array.isArray(base)) return override;
+  const out = { ...base };
+  for (const k of Object.keys(override)) {
+    out[k] = _deepMerge(base[k], override[k]);
+  }
+  return out;
+}
+
+// Per-site resolved rules: DEFAULT_SHIFT_RULES + sites/{siteId}.shiftRulesOverride.
+// Cached per siteId; cleared whenever sitesCache is repopulated.
+const _resolvedRulesCache = new Map();
+function getResolvedShiftRules(siteId) {
+  if (!siteId) siteId = getCurrentSiteId();
+  if (_resolvedRulesCache.has(siteId)) return _resolvedRulesCache.get(siteId);
+  const override = (sitesCache[siteId] && sitesCache[siteId].shiftRulesOverride) || {};
+  const merged = { ...DEFAULT_SHIFT_RULES };
+  for (const [type, ruleOverride] of Object.entries(override)) {
+    merged[type] = _deepMerge(DEFAULT_SHIFT_RULES[type] || {}, ruleOverride);
+  }
+  _resolvedRulesCache.set(siteId, merged);
+  return merged;
+}
+function invalidateResolvedRulesCache() { _resolvedRulesCache.clear(); }
+
+function isUnrestrictedCallType(type, siteId) {
+  const rule = getResolvedShiftRules(siteId)[type];
+  return !!(rule && rule.unrestrictedCall);
+}
 
 // Returns true if the given minute is eligible for unrestricted call pay (3.5 pts/hr)
 // minuteOfDay: 0-1439, isWeekendOrHoliday: boolean
-function isUnrestrictedCallEligible(assignmentType, minuteOfDay, isWeekendOrHoliday) {
-  const rule = DEFAULT_SHIFT_RULES[assignmentType];
+function isUnrestrictedCallEligible(assignmentType, minuteOfDay, isWeekendOrHoliday, siteId) {
+  const rule = getResolvedShiftRules(siteId)[assignmentType];
   if (!rule || !rule.unrestrictedCall) return false;
   const dayRule = isWeekendOrHoliday ? rule.unrestrictedCall.weekend : rule.unrestrictedCall.weekday;
   if (!dayRule) return false;
@@ -5433,19 +5465,19 @@ function isUnrestrictedCallEligible(assignmentType, minuteOfDay, isWeekendOrHoli
 
 // Returns the pager pay eligible window {start, end} in minutes for a shift type.
 // end can be >1440 for cross-midnight windows. Returns null if not eligible.
-function getPagerPayWindow(assignmentType, isWkndOrHol, dateStr) {
+function getPagerPayWindow(assignmentType, isWkndOrHol, dateStr, siteId) {
   // "Post" assignments (Post SF1, Post Call, Post Mole, etc.) never get pager pay
   if (dateStr && data.calendarAssignments && data.calendarAssignments[dateStr]) {
     const cal = data.calendarAssignments[dateStr];
     if (cal.label && /^Post\s/i.test(cal.label)) return null;
   }
-  const rule = DEFAULT_SHIFT_RULES[assignmentType];
+  const rule = getResolvedShiftRules(siteId)[assignmentType];
   if (!rule || !rule.pagerWindow) return null;
   return isWkndOrHol ? rule.pagerWindow.weekend : rule.pagerWindow.weekday;
 }
 
-function getAssignmentTypeName(type) {
-  const rule = DEFAULT_SHIFT_RULES[type];
+function getAssignmentTypeName(type, siteId) {
+  const rule = getResolvedShiftRules(siteId)[type];
   return rule ? rule.label : type;
 }
 
@@ -5804,9 +5836,9 @@ document.getElementById('addTimeEntryBtn').addEventListener('click', addTimeEntr
 // ================================================================
 // POINT CALCULATION ENGINE (preserved from v1)
 // ================================================================
-function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
+function getARRate(assignmentType, isHol, isWknd, timeMinutes, siteId) {
   const isDaytime = timeMinutes >= 420 && timeMinutes < 1020;
-  const rule = DEFAULT_SHIFT_RULES[assignmentType];
+  const rule = getResolvedShiftRules(siteId)[assignmentType];
   const mode = rule && rule.arRate ? rule.arRate.mode : 'general';
   let baseRate;
   if (mode === 'sf1') {
@@ -5833,7 +5865,7 @@ function calcARPoints(shift) {
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
 
   // Temp coverage (covering): pager + AR scoped entirely to coverage interval
   if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
@@ -5850,7 +5882,7 @@ function calcARPoints(shift) {
       let ee = timeToMinutes(e.end);
       if (ee <= es) ee += 1440;
       for (let m = es; m < ee; m++) {
-        arPts += getARRate(shift.assignmentType, isHol, isWknd, m % 1440) / 60;
+        arPts += getARRate(shift.assignmentType, isHol, isWknd, m % 1440, shift.siteId) / 60;
       }
     });
     return round2(pagerPts + arPts);
@@ -5945,7 +5977,7 @@ function calcARPoints(shift) {
       }
       if (clockedIn) {
         if (m >= preCallRange.start && m < preCallRange.end) {
-          preCallAR += getARRate('OR', isHol, isWknd, normalizedMin) / 60;
+          preCallAR += getARRate('OR', isHol, isWknd, normalizedMin, shift.siteId) / 60;
         } else {
           let rateType = shift.assignmentType;
           if (isSF) {
@@ -5953,7 +5985,7 @@ function calcARPoints(shift) {
               if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
             }
           }
-          eveningAR += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
+          eveningAR += getARRate(rateType, isHol, isWknd, normalizedMin, shift.siteId) / 60;
         }
       }
     }
@@ -6001,7 +6033,7 @@ function calcARPoints(shift) {
           if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
         }
       }
-      arPoints += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
+      arPoints += getARRate(rateType, isHol, isWknd, normalizedMin, shift.siteId) / 60;
     }
   }
 
@@ -6051,7 +6083,7 @@ function calcARBreakdown(shift) {
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
 
   // Temp coverage (covering): pager + AR scoped entirely to coverage interval
   if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
@@ -6068,7 +6100,7 @@ function calcARBreakdown(shift) {
       let ee = timeToMinutes(e.end);
       if (ee <= es) ee += 1440;
       for (let m = es; m < ee; m++) {
-        arPts += getARRate(shift.assignmentType, isHol, isWknd, m % 1440) / 60;
+        arPts += getARRate(shift.assignmentType, isHol, isWknd, m % 1440, shift.siteId) / 60;
       }
     });
     return { ar: round2(arPts), call: round2(pagerPts) };
@@ -6177,7 +6209,7 @@ function calcARBreakdown(shift) {
       }
       if (clockedIn) {
         if (m >= preCallRange.start && m < preCallRange.end) {
-          preCallAR += getARRate('OR', isHol, isWknd, normalizedMin) / 60;
+          preCallAR += getARRate('OR', isHol, isWknd, normalizedMin, shift.siteId) / 60;
         } else {
           let rateType = shift.assignmentType;
           if (isSF) {
@@ -6185,7 +6217,7 @@ function calcARBreakdown(shift) {
               if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
             }
           }
-          eveningAR += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
+          eveningAR += getARRate(rateType, isHol, isWknd, normalizedMin, shift.siteId) / 60;
         }
       }
     }
@@ -6228,7 +6260,7 @@ function calcARBreakdown(shift) {
           if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
         }
       }
-      arPoints += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
+      arPoints += getARRate(rateType, isHol, isWknd, normalizedMin, shift.siteId) / 60;
     }
   }
 
@@ -6340,7 +6372,7 @@ function calcCasePoints(caseData, shift, ignoreManual) {
       if (!isClockedIn) {
         const isHol = shift ? shift.isHoliday : false;
         const isWknd = shift ? isWeekend(shift.date) : false;
-        const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720) : 20;
+        const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720, shift.siteId) : 20;
         pts += round2(arRate * (10 / 60));
       }
     }
@@ -6451,7 +6483,7 @@ function getCaseBreakdown(caseData, shift) {
       if (!isClockedIn) {
         const isHol = shift ? shift.isHoliday : false;
         const isWknd = shift ? isWeekend(shift.date) : false;
-        const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720) : 20;
+        const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720, shift.siteId) : 20;
         const bonus = round2(arRate * (10 / 60));
         bd.push({label:'10-min AR bonus (not clocked in)', pts: bonus});
       }
@@ -6612,7 +6644,7 @@ function calcSupervisionPoints(shift) {
     let pts = 0;
     clockedRanges.forEach(r => {
       for (let m = r.start; m < r.end; m++) {
-        pts += (getARRate('OR', isHol, isWknd, m % 1440) + 7) / 60;
+        pts += (getARRate('OR', isHol, isWknd, m % 1440, shift.siteId) + 7) / 60;
       }
     });
     return round2(pts);
@@ -6672,7 +6704,7 @@ function calcTempCoveragePoints(shift) {
         let ee = timeToMinutes(e.end);
         if (ee <= es) ee += 1440;
         for (let m = es; m < ee; m++) {
-          ar += getARRate(shift.assignmentType, isHol, isWknd, m % 1440) / 60;
+          ar += getARRate(shift.assignmentType, isHol, isWknd, m % 1440, shift.siteId) / 60;
         }
       });
     }
@@ -7343,7 +7375,7 @@ function loadShiftForDate() {
       populateTimeEntries([{ start: '', end: '' }]);
     } else {
       let defaultStart = '07:10';
-      if (UNRESTRICTED_CALL_TYPES.has(calType)) {
+      if (isUnrestrictedCallType(calType)) {
         if (calType === 'mole') {
           const wkndOrHol = isWeekend(date);
           defaultStart = wkndOrHol ? '21:00' : '19:00';
@@ -7443,8 +7475,8 @@ function updateDataEntryState() {
     const badge = document.getElementById('deSSBBadge');
     const hasPreCallOverlay = (shift.preCallStart || shift.preCallEnd) && ['mole','OB_restricted'].includes(shift.assignmentType);
     badge.textContent = hasPreCallOverlay
-      ? 'Pre-Call + ' + getAssignmentTypeName(shift.assignmentType)
-      : getAssignmentTypeName(isForcedOff ? 'forced_off' : shift.assignmentType);
+      ? 'Pre-Call + ' + getAssignmentTypeName(shift.assignmentType, shift.siteId)
+      : getAssignmentTypeName(isForcedOff ? 'forced_off' : shift.assignmentType, shift.siteId);
     badge.classList.toggle('vacation', isVacation);
     const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
     if (isVacation) {
@@ -8792,7 +8824,7 @@ function renderToday() {
   const pv = getPointValueForMonth(monthKey);
   const dollarTotal = round2(result.total * pv);
   const dCalLabel = data.calendarAssignments[date];
-  const typeName = dCalLabel ? dCalLabel.label : getAssignmentTypeName(shift.assignmentType);
+  const typeName = dCalLabel ? dCalLabel.label : getAssignmentTypeName(shift.assignmentType, shift.siteId);
 
   let bdHtml = '<div style="margin-top:6px;">';
 
@@ -9017,7 +9049,7 @@ function updateTodayRateChips() {
 
   // Current rate chip (only when clocked in — shift in progress)
   if (date === effectiveWorkDate() && result.isInProgress) {
-    const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
+    const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin, shift.siteId);
     // CRNA supervision bonus: +7/hr for standalone CRNA_supervision or overlay during supervision window
     let supRate = 0;
     if (shift.assignmentType === 'CRNA_supervision') {
@@ -9035,7 +9067,7 @@ function updateTodayRateChips() {
       }
     }
     const isWkndOrHol = isWknd || isHol;
-    const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
+    const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
     let inPagerWindow = false;
     if (pagerWin) {
       const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
@@ -9176,7 +9208,7 @@ function tickLiveUpdate() {
   const isHol = shift.isHoliday || false;
   const isWkndOrHol = isWknd || isHol;
 
-  const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
+  const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin, shift.siteId);
   // CRNA supervision bonus: +7/hr for standalone CRNA_supervision or overlay during supervision window
   let supRate = 0;
   if (shift.assignmentType === 'CRNA_supervision') {
@@ -9194,7 +9226,7 @@ function tickLiveUpdate() {
       if (nowAdj >= supStart) supRate = 7;
     }
   }
-  const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
+  const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
   let inPagerWindow = false;
   if (pagerWin) {
     const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
@@ -9749,7 +9781,7 @@ function renderHistory() {
       <div class="day-list-item${schedClass}" onclick="showDayDetail('${shift.date}')">
         <div>
           <div class="date">${formatDate(shift.date)}${schedBadge}</div>
-          <div class="meta">${data.calendarAssignments[shift.date] ? escHtml(data.calendarAssignments[shift.date].label) : getAssignmentTypeName(shift.assignmentType)} | ${timeStr} | ${caseCount} cases</div>
+          <div class="meta">${data.calendarAssignments[shift.date] ? escHtml(data.calendarAssignments[shift.date].label) : getAssignmentTypeName(shift.assignmentType, shift.siteId)} | ${timeStr} | ${caseCount} cases</div>
         </div>
         <span class="point-badge large">${totals.total.toFixed(1)}</span>
       </div>`;
@@ -9788,7 +9820,7 @@ function showDayDetail(dateStr) {
   const detailEntries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
   const detailTimeStr = detailEntries.map(e => `${e.start}-${e.end || '?'}`).join(', ');
   let html = `
-    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">${data.calendarAssignments[dateStr] ? escHtml(data.calendarAssignments[dateStr].label) : getAssignmentTypeName(shift.assignmentType)} | ${detailTimeStr}${detailEntries.length > 1 ? ' (' + detailEntries.length + ' entries)' : ''}</p>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">${data.calendarAssignments[dateStr] ? escHtml(data.calendarAssignments[dateStr].label) : getAssignmentTypeName(shift.assignmentType, shift.siteId)} | ${detailTimeStr}${detailEntries.length > 1 ? ' (' + detailEntries.length + ' entries)' : ''}</p>
     <div class="summary-grid" style="margin-bottom:12px;">
       <div class="summary-item"><div class="label">AR</div><div class="value blue">${totals.ar.toFixed(1)}</div></div>
       <div class="summary-item"><div class="label">Prod</div><div class="value green">${totals.prod.toFixed(1)}</div></div>
@@ -10163,7 +10195,7 @@ function getShiftPayBreakdown(shift) {
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
-  const pagerWindowEarly = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
+  const pagerWindowEarly = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
 
   // Temp coverage (covering): only coverage-scoped rows
   if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
@@ -10188,7 +10220,7 @@ function getShiftPayBreakdown(shift) {
       if (ee <= es) ee += 1440;
       const eDurMin = ee - es;
       const normMin = es % 1440;
-      const rate = getARRate(shift.assignmentType, isHol, isWknd, normMin);
+      const rate = getARRate(shift.assignmentType, isHol, isWknd, normMin, shift.siteId);
       coverageRows.push({
         clockIn: e.start, clockOut: e.end,
         payCode: 'Temp Coverage AR',
@@ -10316,7 +10348,7 @@ function getShiftPayBreakdown(shift) {
         }
       }
       const payCode = isPreCallSeg ? 'Pre-Call ' + getPayCodeName(normSeg, 'OR', isWknd, isHol) : getPayCodeName(normSeg, rateType, isWknd, isHol);
-      let payRate = getARRate(rateType, isHol, isWknd, normSeg);
+      let payRate = getARRate(rateType, isHol, isWknd, normSeg, shift.siteId);
 
       // CRNA supervision bonus: +7/hr
       let supBonus = 0;
@@ -10348,7 +10380,7 @@ function getShiftPayBreakdown(shift) {
   });
 
   // Pager pay: guaranteed full window duration (does not stop when clocked in)
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
   if (pagerWindow) {
     const durMin = pagerWindow.end - pagerWindow.start;
     if (durMin > 0) {
@@ -10398,7 +10430,7 @@ function getShiftPayBreakdown(shift) {
           if (ee <= es) ee += 1440;
           const eDurMin = ee - es;
           const normMin = es % 1440;
-          const rate = getARRate(shift.assignmentType, isHol, isWknd, normMin);
+          const rate = getARRate(shift.assignmentType, isHol, isWknd, normMin, shift.siteId);
           rows.push({
             clockIn: e.start, clockOut: e.end,
             payCode: 'Temp Coverage AR',
@@ -10472,7 +10504,7 @@ function getShiftPayBreakdown(shift) {
         if (eveningTotal > 0 && eveningTotal < eveningMin) {
           eveningResult = [{
             clockIn: eveningRows[0]?.clockIn || '', clockOut: eveningRows[eveningRows.length - 1]?.clockOut || '',
-            payCode: getAssignmentTypeName(shift.assignmentType) + ' 4-Hour Minimum',
+            payCode: getAssignmentTypeName(shift.assignmentType, shift.siteId) + ' 4-Hour Minimum',
             durationMin: 240, payRate: isOBRate ? 13 : 20, amount: eveningMin,
             isSubRow: false
           }];
@@ -10553,7 +10585,7 @@ function renderShiftLogTable() {
     slWatchHtml += '<div class="watching-box"><h4>&#x1f4b2; Watching for Billing (' + watchShifts.length + ')</h4>';
     watchShifts.sort((a,b) => a.date.localeCompare(b.date)).forEach(s => {
       const wCalLabel = data.calendarAssignments[s.date];
-      const typeName = wCalLabel ? wCalLabel.label : getAssignmentTypeName(s.assignmentType);
+      const typeName = wCalLabel ? wCalLabel.label : getAssignmentTypeName(s.assignmentType, s.siteId);
       const entries = s.timeEntries || [];
       const timeStr = entries.length > 0 && entries[0].start
         ? entries.map(e => e.start + (e.end ? '-' + e.end : '')).join(', ')
@@ -10629,7 +10661,7 @@ function renderShiftLogTable() {
     const day = d.getDate();
     const dateLabel = `${dayName} ${month}/${day}`;
     const calLabel = data.calendarAssignments[shift.date];
-    const typeName = calLabel ? calLabel.label : getAssignmentTypeName(shift.assignmentType);
+    const typeName = calLabel ? calLabel.label : getAssignmentTypeName(shift.assignmentType, shift.siteId);
     const badgeClass = getShiftBadgeClass(shift.assignmentType);
     const hasPreCall = shift.preCallStart && shift.preCallEnd;
     const totalHrs = calcShiftHours(shift);
@@ -11153,7 +11185,7 @@ function renderFlaggedPage() {
     const d = new Date(s.date + 'T12:00:00');
     const dateStr = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
     const fCalLabel = data.calendarAssignments[s.date];
-    const typeName = fCalLabel ? fCalLabel.label : getAssignmentTypeName(s.assignmentType);
+    const typeName = fCalLabel ? fCalLabel.label : getAssignmentTypeName(s.assignmentType, s.siteId);
     const entries = s.timeEntries || [];
     const times = entries.length > 0 && entries[0].start
       ? entries.map(e => e.start + (e.end ? '\u2013' + e.end : '')).join(', ')
@@ -15595,7 +15627,7 @@ function renderTimeSummary() {
     totalPoints += st.total;
     totalClockedHrs += hrs;
     // Availability: 24 hrs for pager-pay-eligible call shifts
-    if (UNRESTRICTED_CALL_TYPES.has(s.assignmentType)) {
+    if (isUnrestrictedCallType(s.assignmentType, s.siteId)) {
       totalAvailHrs += 24;
     } else {
       totalAvailHrs += hrs;
@@ -16230,7 +16262,7 @@ function renderMonthlyPtsCard() {
     monthMetrics[mk].allPts += pts;
     monthMetrics[mk].allHrs += hrs;
     const isWkndOrHol = isWeekend(shift.date) || !!shift.isHoliday;
-    const isCall = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date) !== null;
+    const isCall = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId) !== null;
     if (!isCall) {
       monthMetrics[mk].nonCallPts += pts;
       monthMetrics[mk].nonCallHrs += hrs;
@@ -16578,7 +16610,7 @@ function renderDayDetailContent() {
   let html = '';
   // Shift bar
   html += `<div class="dd-shift-bar">
-    <span class="dd-badge${isVacation ? ' vacation' : ''}">${escHtml(getAssignmentTypeName(shift.assignmentType))}</span>
+    <span class="dd-badge${isVacation ? ' vacation' : ''}">${escHtml(getAssignmentTypeName(shift.assignmentType, shift.siteId))}</span>
     <span class="dd-times">${escHtml(timesText)}</span>
     <button class="btn btn-outline btn-sm" onclick="openShiftEdit('${dateStr}')" style="padding:4px 10px;font-size:0.72rem;">Edit</button>
   </div>`;
@@ -17362,7 +17394,7 @@ function calcCaseARContribution(c, shift) {
   if (e <= s) e += 1440;
   let ar = 0;
   for (let m = s; m < e; m++) {
-    ar += getARRate(shift.assignmentType, isHol, isWknd, m % 1440) / 60;
+    ar += getARRate(shift.assignmentType, isHol, isWknd, m % 1440, shift.siteId) / 60;
   }
   return round2(ar);
 }
@@ -18113,7 +18145,7 @@ document.getElementById('exportCSVBtn').addEventListener('click', () => {
   monthShifts.forEach(shift => {
     const totals = calcShiftTotal(shift);
     const shiftCases = data.cases.filter(c => c.shiftDate === shift.date).sort((a,b) => (a.startTime||'').localeCompare(b.startTime||''));
-    const assign = getAssignmentTypeName(shift.assignmentType);
+    const assign = getAssignmentTypeName(shift.assignmentType, shift.siteId);
     if (shiftCases.length === 0) {
       csv += `${shift.date},${csvEsc(assign)},,,,,,,,${totals.total.toFixed(2)}\n`;
     } else {
@@ -19668,7 +19700,7 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
   body.innerHTML = `<p>Import <strong>${toImport}</strong> shift${toImport > 1 ? 's' : ''} from QGenda?</p>` +
     (toSkip > 0 ? `<p style="font-size:0.8rem;color:var(--text-dim);">${toSkip} date${toSkip > 1 ? 's' : ''} already have shifts and will be skipped.</p>` : '') +
     `<div style="max-height:200px;overflow-y:auto;margin-top:8px;font-size:0.8rem;">` +
-    shiftsToCreate.map(s => `<div style="padding:4px 0;border-bottom:1px solid var(--border);">${formatDateShort(s.date)} &mdash; ${getAssignmentTypeName(s.assignmentType)}${s.startTime ? ` (${s.startTime}-${s.endTime})` : ' (pager only)'}</div>`).join('') +
+    shiftsToCreate.map(s => `<div style="padding:4px 0;border-bottom:1px solid var(--border);">${formatDateShort(s.date)} &mdash; ${getAssignmentTypeName(s.assignmentType, s.siteId)}${s.startTime ? ` (${s.startTime}-${s.endTime})` : ' (pager only)'}</div>`).join('') +
     `</div>`;
   document.getElementById('importConfirmTitle').textContent = 'Import Shifts';
 
