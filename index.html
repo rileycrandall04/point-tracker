@@ -4553,7 +4553,9 @@ async function loadSharedCases(retryCount) {
   try {
     // Use default get() — Firestore handles cache vs server automatically.
     // Forced source:'server' can hang if the WebSocket isn't connected yet.
-    const snap = await db.collection('sharedCases').get();
+    const snap = await db.collection('sharedCases')
+      .where('siteId', '==', getCurrentSiteId())
+      .get();
     sharedCasesCache = parseSharedCasesSnapshot(snap);
     applySharedCaseOverrides();
     sharedCasesLoaded = true;
@@ -4577,7 +4579,9 @@ async function loadSharedCases(retryCount) {
 
 async function loadSharedCaseOverrides() {
   try {
-    const snap = await db.collection('sharedCaseOverrides').get();
+    const snap = await db.collection('sharedCaseOverrides')
+      .where('siteId', '==', getCurrentSiteId())
+      .get();
     sharedCaseOverridesCache = {};
     snap.forEach(doc => { sharedCaseOverridesCache[doc.id] = doc.data(); });
     console.log('Loaded ' + Object.keys(sharedCaseOverridesCache).length + ' shared case overrides');
@@ -4623,7 +4627,8 @@ function approxSharedCasePoints(sc) {
 
 async function loadSurgeonMappings() {
   try {
-    const doc = await db.collection('surgeonMappings').doc('canonical').get();
+    const sid = getCurrentSiteId();
+    const doc = await db.collection('surgeonMappings').doc(sid).get();
     if (doc.exists) {
       surgeonMappingsCache = doc.data().mappings || {};
     } else {
@@ -16841,7 +16846,7 @@ async function saveAdminCaseGroup(groupIdx) {
       writeSharedCase(caseObj, shift);
       personalCount++;
     } else if (c.source === 'shared' && c._docId) {
-      const overrideObj = { updatedAt: new Date().toISOString() };
+      const overrideObj = { siteId: getCurrentSiteId(), updatedAt: new Date().toISOString() };
       if (surgeonChanged) overrideObj.surgeon = newSurgeon;
       if (procChanged) overrideObj.procedure = newProc;
       // Update local caches
@@ -17008,8 +17013,9 @@ async function saveSurgeonMappings() {
     });
   });
   try {
-    await db.collection('surgeonMappings').doc('canonical').set({
+    await db.collection('surgeonMappings').doc(getCurrentSiteId()).set({
       mappings: newMappings,
+      siteId: getCurrentSiteId(),
       updatedAt: new Date().toISOString(),
       updatedBy: currentUser.uid
     });
@@ -17029,7 +17035,7 @@ async function resetSurgeonMappings() {
   if (!isAdmin()) return;
   if (!confirm('Reset all surgeon name mappings? Original names will be restored. This cannot be undone.')) return;
   try {
-    await db.collection('surgeonMappings').doc('canonical').delete();
+    await db.collection('surgeonMappings').doc(getCurrentSiteId()).delete();
     surgeonMappingsCache = {};
     showToast('Surgeon mappings reset');
     closeSurgeonMappingModal();
@@ -17272,7 +17278,7 @@ async function saveSCEChanges() {
       writeSharedCase(caseObj, shift);
       personalUpdated++;
     } else if (c.source === 'shared' && c._docId) {
-      const overrideObj = {};
+      const overrideObj = { siteId: getCurrentSiteId() };
       if (fields.surgeon !== undefined) { overrideObj.surgeon = fields.surgeon; c.surgeon = fields.surgeon; }
       if (fields.procedure !== undefined) { overrideObj.procedure = fields.procedure; c.procedure = fields.procedure; }
       overrideObj.updatedAt = new Date().toISOString();
