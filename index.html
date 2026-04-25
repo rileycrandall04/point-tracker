@@ -21863,8 +21863,24 @@ auth.onAuthStateChanged(async (user) => {
       showToast('Data loaded from cloud');
     }
 
-    // Show tutorial for brand-new users (no data at all)
+    // Show tutorial for brand-new users (no data at all). Brand-new users
+    // are auto-opted-out of any historical update notifications so they
+    // see only the tutorial, not changelogs about features that predate
+    // their account.
     if (Object.keys(data.shifts).length === 0 && data.cases.length === 0) {
+      let dismissedAny = false;
+      Object.keys(settings).forEach(k => {
+        if (k.startsWith('dismissedNotice_') && !settings[k]) {
+          settings[k] = true;
+          dismissedAny = true;
+        }
+      });
+      // Also pre-set the known notice flag so first-run users skip it.
+      if (!settings.dismissedNotice_compUpdates2026) {
+        settings.dismissedNotice_compUpdates2026 = true;
+        dismissedAny = true;
+      }
+      if (dismissedAny) saveSettings(settings);
       showTutorial();
     } else if (!settings.dismissedNotice_compUpdates2026) {
       // One-time notification about compensation updates
