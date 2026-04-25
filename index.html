@@ -14707,9 +14707,14 @@ function renderProjectedAnnual() {
     const stip = getMonthlyStipendTotal(workKey);
     const deposit = data.paychecks && data.paychecks[payKey];
     let amt, source;
-    if (deposit != null) {
-      // User-entered actual deposit is the canonical YTD value (also the
-      // only source for January, whose simplified editor writes here).
+    if (pm !== 0 && ov && ov.compTotal != null) {
+      // Prefer the gross compensation summary value for past months when
+      // available so the YTD figure matches the basis used for the
+      // projection average.
+      amt = ov.compTotal + stip; source = 'actual';
+    } else if (deposit != null) {
+      // Fallback (and the canonical source for January, whose simplified
+      // editor only writes a deposit).
       amt = deposit; source = 'actual';
     } else if (ov && ov.compTotal != null) {
       amt = ov.compTotal + stip; source = 'actual';
