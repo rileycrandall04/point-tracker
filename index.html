@@ -5181,6 +5181,54 @@ function updateCalendarConnectedUI() {
 // Calendar Mapping Modal functions
 let calMappingResolve = null;
 
+// Single source of truth for per-shift-type compensation rules.
+// pagerWindow / unrestrictedCall: null means not eligible.
+// arRate.mode: 'general' (20 base), 'ob' (13 base), 'sf1' (13 daytime weekday non-holiday, else 20).
+const DEFAULT_SHIFT_RULES = {
+  OR:               { label: 'OR / General',      pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  OR_float:         { label: 'General OR - Float', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  OB_restricted:    { label: 'UVH OB',             pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'ob' } },
+  cardiac_liver:    { label: 'Cardiac / Liver',    pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  mole:             { label: 'Mole',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1140 },          weekend: 'all' },
+                      arRate: { mode: 'general' } },
+  '1st_call':       { label: '1st Call',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
+                      arRate: { mode: 'general' } },
+  '2nd_call':       { label: '2nd Call',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
+                      arRate: { mode: 'general' } },
+  '3rd_call':       { label: '3rd Call',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
+                      arRate: { mode: 'general' } },
+  '4th_call':       { label: '4th Call',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: null,                        weekend: 'all' },
+                      arRate: { mode: 'general' } },
+  endo:             { label: 'Endo',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: null },
+                      arRate: { mode: 'general' } },
+  SF1:              { label: 'SF 1',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
+                      arRate: { mode: 'sf1' } },
+  SF2:              { label: 'SF 2',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
+                      arRate: { mode: 'general' } },
+  ACS:              { label: 'ACS',              pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  NORA:             { label: 'NORA',             pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  pre_call:         { label: 'Pre-Call',         pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  CRNA_supervision: { label: 'CRNA Supervision', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  forced_off:       { label: 'UVH Forced Off',   pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  vacation:         { label: 'Vacation / Off',   pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } }
+};
+
 const ASSIGNMENT_TYPE_OPTIONS = [
   { value: 'OR', label: 'OR / General' },
   { value: 'OR_float', label: 'General OR - Float' },
@@ -5301,27 +5349,22 @@ function clearCalendarMappings() {
 // ================================================================
 // CONSTANTS & HELPERS
 // ================================================================
-const UNRESTRICTED_CALL_TYPES = new Set(['mole','1st_call','2nd_call','3rd_call','4th_call','endo','SF1','SF2']);
+const UNRESTRICTED_CALL_TYPES = new Set(
+  Object.entries(DEFAULT_SHIFT_RULES)
+    .filter(([, r]) => r.unrestrictedCall)
+    .map(([type]) => type)
+);
 
 // Returns true if the given minute is eligible for unrestricted call pay (3.5 pts/hr)
 // minuteOfDay: 0-1439, isWeekendOrHoliday: boolean
 function isUnrestrictedCallEligible(assignmentType, minuteOfDay, isWeekendOrHoliday) {
-  switch (assignmentType) {
-    case 'SF1':
-    case 'SF2':
-    case '1st_call':
-    case '2nd_call':
-    case '3rd_call':
-      return isWeekendOrHoliday ? true : (minuteOfDay >= 1020); // after 17:00
-    case '4th_call':
-      return isWeekendOrHoliday; // weekend only shift
-    case 'mole':
-      return isWeekendOrHoliday ? true : (minuteOfDay >= 1140); // after 19:00
-    case 'endo':
-      return !isWeekendOrHoliday && (minuteOfDay >= 1020); // weekday after 17:00 only
-    default:
-      return false; // OR, OB, Cardiac/Liver, NORA, ACS, CRNA Supervision
-  }
+  const rule = DEFAULT_SHIFT_RULES[assignmentType];
+  if (!rule || !rule.unrestrictedCall) return false;
+  const dayRule = isWeekendOrHoliday ? rule.unrestrictedCall.weekend : rule.unrestrictedCall.weekday;
+  if (!dayRule) return false;
+  if (dayRule === 'all') return true;
+  if (typeof dayRule.afterMin === 'number') return minuteOfDay >= dayRule.afterMin;
+  return false;
 }
 
 // Returns the pager pay eligible window {start, end} in minutes for a shift type.
@@ -5332,34 +5375,14 @@ function getPagerPayWindow(assignmentType, isWkndOrHol, dateStr) {
     const cal = data.calendarAssignments[dateStr];
     if (cal.label && /^Post\s/i.test(cal.label)) return null;
   }
-  switch (assignmentType) {
-    case 'SF1': case 'SF2':
-    case '1st_call': case '2nd_call': case '3rd_call':
-    case '4th_call':
-      // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: 07:00–07:00 next day (24 hrs)
-      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
-    case 'mole':
-      // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: 07:00–07:00 next day (24 hrs)
-      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
-    case 'endo':
-      // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: same as mole (07:00–07:00)
-      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
-    default:
-      return null;
-  }
+  const rule = DEFAULT_SHIFT_RULES[assignmentType];
+  if (!rule || !rule.pagerWindow) return null;
+  return isWkndOrHol ? rule.pagerWindow.weekend : rule.pagerWindow.weekday;
 }
 
 function getAssignmentTypeName(type) {
-  const names = {
-    OR: 'OR / General', OR_float: 'General OR - Float', OB_restricted: 'UVH OB', cardiac_liver: 'Cardiac / Liver',
-    mole: 'Mole', '1st_call': '1st Call', '2nd_call': '2nd Call', '3rd_call': '3rd Call', '4th_call': '4th Call',
-    endo: 'Endo', SF1: 'SF 1', SF2: 'SF 2', ACS: 'ACS', NORA: 'NORA',
-    pre_call: 'Pre-Call',
-    CRNA_supervision: 'CRNA Supervision',
-    forced_off: 'UVH Forced Off',
-    vacation: 'Vacation / Off'
-  };
-  return names[type] || type;
+  const rule = DEFAULT_SHIFT_RULES[type];
+  return rule ? rule.label : type;
 }
 
 // ================================================================
@@ -5719,13 +5742,16 @@ document.getElementById('addTimeEntryBtn').addEventListener('click', addTimeEntr
 // ================================================================
 function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
   const isDaytime = timeMinutes >= 420 && timeMinutes < 1020;
+  const rule = DEFAULT_SHIFT_RULES[assignmentType];
+  const mode = rule && rule.arRate ? rule.arRate.mode : 'general';
   let baseRate;
-  if (assignmentType === 'SF1') {
+  if (mode === 'sf1') {
     // SF1: 13/hr during 0700-1700 on non-holiday weekdays only; General rate otherwise
     baseRate = (!isHol && !isWknd && isDaytime) ? 13 : 20;
+  } else if (mode === 'ob') {
+    baseRate = 13;
   } else {
-    const isOB = assignmentType === 'OB_restricted';
-    baseRate = isOB ? 13 : 20;
+    baseRate = 20;
   }
   if (isHol || isWknd) {
     if (isDaytime) return baseRate * 1.10;
