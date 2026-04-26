@@ -161,17 +161,15 @@ module.exports = {
     //   IMC_OR_4 / 5 / 6 / 7 / 8   -> IMC_OR
     //   IMC_off / IMC_no_call      -> IMC_vacation
     //   IMC_aod_plus1              -> IMC_aod
-    //
-    // Removed per user feedback (rev 1 — "ignore tier designations"):
-    //   IMC_tier_2 / 3 / 4 / 5 / 6 (general OR — covered by IMC_OR)
-    //   IMC_tier_5_post_1st / cv1 / liver_1 (general OR if clocked in)
-    //   IMC_tier_4_cv2 (duplicate of IMC_cv_2nd_call)
-    //   IMC_tier_4_liver_2 (duplicate of IMC_liver_2nd_call)
-    //   IMC_tier_3_aps (duplicate of IMC_acute_pain_call)
-    //
-    // Removed per Q10 / Q11 (ignore for now):
-    //   IMC_icu_day, IMC_icu_night
-    //   IMC_cpru
+  },
 
+  otherMigrationMap: {
+    'OR':                      'IMC_OR',
+    'OR_float':                'IMC_OR_float',
+    'OB_restricted':           'IMC_OB_24hr',
+    'cardiac_liver':           'IMC_cv_1st_call',
+    'unrestricted_call_entry': 'IMC_1st_call',
+    'forced_off':              'IMC_forced_off',
+    'vacation':                'IMC_vacation'
   }
 };

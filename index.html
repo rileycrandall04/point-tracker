@@ -4546,12 +4546,15 @@ async function migrateUserDataToSite(uid, oldSiteId, newSiteId) {
   if (!uid || !oldSiteId || !newSiteId) throw new Error('uid/oldSiteId/newSiteId required');
   if (oldSiteId === newSiteId) return;
 
-  // When migrating away from the Other parking-lot site, remap any
-  // unrestricted_call_entry shifts to the destination site's 1st-call
-  // equivalent. The shift's clocked-in time entries and the entered
-  // unrestrictedCallHours are preserved (the latter as a per-shift
-  // pager override; see effectivePagerPts in the calc engine).
+  // When migrating away from the Other parking-lot site, remap legacy /
+  // Other shift assignmentType keys to the destination site's equivalents.
+  // The destination site's per-rule otherMigrationMap (populated from
+  // scripts/site-rules-*.js via load-site-rules.js) drives the mapping.
+  // Falls back to findSiteFirstCallType for unrestricted_call_entry only
+  // when no map is present, so existing IMC users still see the prior
+  // behavior even if the new map hasn't been loaded yet.
   const destFirstCall = findSiteFirstCallType(newSiteId);
+  const destOtherMap = (sitesCache[newSiteId] && sitesCache[newSiteId].otherMigrationMap) || null;
 
   // 1. Re-stamp the user's own data doc (shifts[*].siteId, cases[*].siteId)
   const dataRef = db.collection('users').doc(uid).collection('data').doc('data');
@@ -4569,10 +4572,19 @@ async function migrateUserDataToSite(uid, oldSiteId, newSiteId) {
           d.shifts[k].siteId = newSiteId;
           mutated = true;
         }
-        // Other-site unrestricted_call_entry → dest site's 1st_call
-        if (d.shifts[k] && d.shifts[k].assignmentType === 'unrestricted_call_entry' && destFirstCall) {
-          d.shifts[k].assignmentType = destFirstCall;
-          mutated = true;
+        // Remap shift type via destination site's otherMigrationMap if present.
+        if (d.shifts[k] && d.shifts[k].assignmentType) {
+          const curType = d.shifts[k].assignmentType;
+          let nextType = null;
+          if (destOtherMap && Object.prototype.hasOwnProperty.call(destOtherMap, curType)) {
+            nextType = destOtherMap[curType];
+          } else if (curType === 'unrestricted_call_entry' && destFirstCall) {
+            nextType = destFirstCall;
+          }
+          if (nextType && nextType !== curType) {
+            d.shifts[k].assignmentType = nextType;
+            mutated = true;
+          }
         }
       }
     }
@@ -6520,6 +6532,25 @@ function getPagerPayWindow(assignmentType, isWkndOrHol, dateStr, siteId) {
 // shifts migrated from Other into a real site (which want their
 // originally-entered hours preserved instead of the destination's
 // auto window).
+// Returns true when the shift uses OB-style AR rate (13/hr base) — UVH OB
+// or any per-site type that inherits from it. Drives the OB doubling on
+// non-OR cases and the OB 4-hr minimum (13 × 4 = 52).
+function shiftIsOBStyle(shift) {
+  if (!shift || !shift.assignmentType) return false;
+  if (shift.assignmentType === 'OB_restricted') return true;
+  const rule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+  return !!(rule && rule.arRate && rule.arRate.mode === 'ob');
+}
+
+// Returns true when the shift type doubles non-OR case production. UVH
+// OB plus SF1/SF2 (existing legacy behavior), and any per-site shift
+// that inherits OB-style AR rate.
+function shiftDoublesProduction(shift) {
+  if (!shift || !shift.assignmentType) return false;
+  if (['OB_restricted', 'SF1', 'SF2'].includes(shift.assignmentType)) return true;
+  return shiftIsOBStyle(shift);
+}
+
 function effectivePagerPts(shift, pagerWindow) {
   const overrideH = parseFloat(shift && shift.unrestrictedCallHours);
   if (overrideH > 0) return overrideH * 3.5;
@@ -7056,7 +7087,7 @@ function calcARPoints(shift) {
     }
     // Evening minimum: based on evening assignment type (mole/SF1/SF2: no minimum)
     if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
-      const isOBRate = shift.assignmentType === 'OB_restricted';
+      const isOBRate = shiftIsOBStyle(shift);
       const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
       eveningAR = Math.max(eveningAR, eveningMin);
     }
@@ -7107,7 +7138,7 @@ function calcARPoints(shift) {
 
   // Guaranteed minimums for clocked-in time (weekday, non-mole, non-SF1, non-SF2)
   if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
-    const isOBRate = shift.assignmentType === 'OB_restricted';
+    const isOBRate = shiftIsOBStyle(shift);
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     arPoints = Math.max(arPoints, minPoints);
   }
@@ -7274,7 +7305,7 @@ function calcARBreakdown(shift) {
     }
     // Evening minimum: based on evening assignment type (mole/SF1/SF2: no minimum)
     if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
-      const isOBRate = shift.assignmentType === 'OB_restricted';
+      const isOBRate = shiftIsOBStyle(shift);
       const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
       eveningAR = Math.max(eveningAR, eveningMin);
     }
@@ -7320,7 +7351,7 @@ function calcARBreakdown(shift) {
 
   // SF1/SF2: no AR minimum — accrues at actual rate from start. All others get 4-hr minimum.
   if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
-    const isOBRate = shift.assignmentType === 'OB_restricted';
+    const isOBRate = shiftIsOBStyle(shift);
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     arPoints = Math.max(arPoints, minPoints);
   }
@@ -7380,7 +7411,7 @@ function calcOtherPartyPoints(caseData, shift) {
     if (cs < initStart) initStart -= 1440;
     const handoffOffsetHrs = Math.min((cs - initStart) / 60, 24);
     let pts = 2.5 + laborEpiduralTierPoints(0, handoffOffsetHrs);
-    if (shift && shift.assignmentType === 'OB_restricted') pts *= 2;
+    if (shiftIsOBStyle(shift)) pts *= 2;
     return round2(pts);
   }
 
@@ -7390,8 +7421,7 @@ function calcOtherPartyPoints(caseData, shift) {
     const pct = parseFloat(caseData.sharedStartupPct) || 50;
     const otherPct = 100 - pct;
     let pts = 0.5 * baseUnits * (otherPct / 100);
-    const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
-    if (isOBShift && !caseData.isORCase) pts *= 2;
+    if (shiftDoublesProduction(shift) && !caseData.isORCase) pts *= 2;
     return round2(pts);
   }
 
@@ -7460,7 +7490,7 @@ function calcCasePoints(caseData, shift, ignoreManual) {
       const handoffOffsetHrs = Math.min((cs - initStart) / 60, 24);
       const totalElapsedHrs = Math.min((ce - initStart) / 60, 24);
       let pts = laborEpiduralTierPoints(handoffOffsetHrs, totalElapsedHrs);
-      if (shift && shift.assignmentType === 'OB_restricted') pts *= 2;
+      if (shiftIsOBStyle(shift)) pts *= 2;
       return round2(pts);
     }
 
@@ -7470,7 +7500,7 @@ function calcCasePoints(caseData, shift, ignoreManual) {
     if (durationHrs > 0) pts += Math.min(durationHrs, 1) * 6;
     if (durationHrs > 1) pts += Math.min(durationHrs - 1, 1) * 3;
     if (durationHrs > 2) pts += (durationHrs - 2) * 1.5;
-    if (shift && shift.assignmentType === 'OB_restricted') pts *= 2;
+    if (shiftIsOBStyle(shift)) pts *= 2;
     return round2(pts);
   }
 
@@ -7505,8 +7535,7 @@ function calcCasePoints(caseData, shift, ignoreManual) {
   const acutePainPoints = caseData.isAcutePain ? 0.375 * (parseFloat(caseData.acutePainUnits) || 0) : 0;
   const emergencyPoints = caseData.isEmergency ? 1 : 0;
   let total = basePoints + timePoints + medicalPoints + acutePainPoints + emergencyPoints + addOnPts;
-  const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
-  if (isOBShift && !caseData.isORCase) total *= 2;
+  if (shiftDoublesProduction(shift) && !caseData.isORCase) total *= 2;
   return round2(total);
 }
 
@@ -7582,8 +7611,8 @@ function getCaseBreakdown(caseData, shift) {
         const hrs = round2(totalElapsedHrs - Math.max(handoffOffsetHrs, 2));
         if (hrs > 0) { const p = round2(hrs * 1.5); bd.push({label: `3rd+ Hour tier (${hrs}h x 1.5)${estLabel}`, pts: p}); subtotal += p; }
       }
-      if (shift && shift.assignmentType === 'OB_restricted') {
-        bd.push({label: 'UVH OB Doubled (x2)', pts: round2(subtotal)});
+      if (shiftIsOBStyle(shift)) {
+        bd.push({label: 'OB Doubled (x2)', pts: round2(subtotal)});
       }
       return bd;
     }
@@ -7608,8 +7637,8 @@ function getCaseBreakdown(caseData, shift) {
       bd.push({label: `Additional (${hrs}h x 1.5)${estLabel}`, pts: p});
       subtotal += p;
     }
-    if (shift && shift.assignmentType === 'OB_restricted') {
-      bd.push({label: 'UVH OB Doubled (x2)', pts: round2(subtotal)});
+    if (shiftIsOBStyle(shift)) {
+      bd.push({label: 'OB Doubled (x2)', pts: round2(subtotal)});
     }
     return bd;
   }
@@ -7657,8 +7686,7 @@ function getCaseBreakdown(caseData, shift) {
   if (caseData.hasTEEExam) bd.push({label: 'TEE Exam', pts: 22});
   if (caseData.hasITMorphine) bd.push({label: 'IT Morphine', pts: 3});
   if (caseData.hasThoracicEpidural) bd.push({label: 'Thoracic Epidural', pts: 3.75});
-  const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
-  if (isOBShift && !caseData.isORCase) {
+  if (shiftDoublesProduction(shift) && !caseData.isORCase) {
     const subtotal = bd.reduce((s,r) => s + r.pts, 0);
     bd.push({label: 'OB Doubled (x2)', pts: round2(subtotal)});
   }
@@ -8075,8 +8103,7 @@ function updateEndTimeWarning() {
 
 function updateORCaseVisibility() {
   const shift = data.shifts[workingDate];
-  const isOBShift = shift && ['SF1','SF2','OB_restricted'].includes(shift.assignmentType);
-  const show = isOBShift && selectedCaseType === 'standard';
+  const show = shiftDoublesProduction(shift) && selectedCaseType === 'standard';
   document.getElementById('orCaseRow').classList.toggle('hidden', !show);
   if (!show) document.getElementById('caseORCase').checked = false;
 }
@@ -10162,7 +10189,7 @@ function updateTodayRateChips() {
     // In-progress production rate (open cases without end time)
     let prodRate = 0;
     const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
-    const isOB = shift.assignmentType === 'OB_restricted';
+    const isOB = shiftIsOBStyle(shift);
     openCases.forEach(c => {
       const cs = timeToMinutes(c.startTime);
       let elapsed = currentMin - cs;
@@ -10318,7 +10345,7 @@ function tickLiveUpdate() {
   }
   const pagerRate = inPagerWindow ? 3.5 : 0;
 
-  const isOB2 = shift.assignmentType === 'OB_restricted';
+  const isOB2 = shiftIsOBStyle(shift);
   let prodRate = 0;
   const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
   openCases.forEach(c => {
@@ -11613,7 +11640,7 @@ function getShiftPayBreakdown(shift) {
       let eveningResult = eveningRows;
       if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
         const eveningTotal = eveningRows.reduce((sum, r) => sum + r.amount, 0);
-        const isOBRate = shift.assignmentType === 'OB_restricted';
+        const isOBRate = shiftIsOBStyle(shift);
         const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
         if (eveningTotal > 0 && eveningTotal < eveningMin) {
           eveningResult = [{
@@ -11631,7 +11658,7 @@ function getShiftPayBreakdown(shift) {
       pagerRows.forEach(r => consolidated.push(r));
     } else if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
       // Non-pre-call: single 4hr minimum (SF1/SF2 excluded — no minimum)
-      const isOBRate = shift.assignmentType === 'OB_restricted';
+      const isOBRate = shiftIsOBStyle(shift);
       const minPoints = isOBRate ? 13 * 4 : 20 * 4;
       const arRows = consolidated.filter(r => !r.isPager);
       const arTotal = arRows.reduce((sum, r) => sum + r.amount, 0);
@@ -18963,10 +18990,10 @@ function openCaseEdit(caseId) {
   // Unbilled checkbox
   document.getElementById('editCaseUnbilled').checked = c.unbilled || false;
 
-  // OR Case checkbox visibility
+  // OR Case checkbox visibility — show whenever the shift doubles
+  // production (UVH OB / SF1 / SF2 / per-site OB)
   const shift = data.shifts[c.shiftDate];
-  const isOBShift = shift && ['SF1','SF2','OB_restricted'].includes(shift.assignmentType);
-  document.getElementById('editORCaseRow').classList.toggle('hidden', !isOBShift);
+  document.getElementById('editORCaseRow').classList.toggle('hidden', !shiftDoublesProduction(shift));
   document.getElementById('editCaseORCase').checked = c.isORCase || false;
 
   document.getElementById('caseEditModal').classList.remove('hidden');
@@ -21761,8 +21788,7 @@ function renderProdRecon() {
         const tc = m.tracker;
         const bc = m.billing;
         const oldPts = m.trackerPts;
-        const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
-        const obMult = (isOBShift && !tc.isORCase) ? 2 : 1;
+        const obMult = (shiftDoublesProduction(shift) && !tc.isORCase) ? 2 : 1;
         const addOns = calcAddOnPoints(tc);
         let caseStartMin = timeToMinutes(tc.startTime);
         let caseEndMin = timeToMinutes(tc.endTime);
@@ -21978,8 +22004,7 @@ function reconAcceptBillingInline(date, idx) {
   if (m.tracker && m.billing) {
     const tc = m.tracker;
     const shift = data.shifts[date];
-    const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
-    const obMult = (isOBShift && !tc.isORCase) ? 2 : 1;
+    const obMult = (shiftDoublesProduction(shift) && !tc.isORCase) ? 2 : 1;
     const addOns = calcAddOnPoints(tc);
     let caseStartMin = timeToMinutes(tc.startTime);
     let caseEndMin = timeToMinutes(tc.endTime);
