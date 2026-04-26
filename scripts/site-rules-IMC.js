@@ -39,11 +39,6 @@ module.exports = {
       unrestrictedCall: null,
       arRate: { mode: 'general' }
     },
-    'IMC_night_call_forced_off': {
-      label: 'Forced Off Night Call',
-      pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' },
-      flatPoints: 56
-    },
 
     // ============================================================
     // SUBSPECIALTY CALLS — pager + unrestricted (UVH 1st-call hours)
@@ -107,8 +102,8 @@ module.exports = {
     // AOD — weekday 07:00-17:00, no productivity, flat 235 pts
     // ============================================================
 
-    'IMC_aod_plus1': {
-      label: 'IMC AOD (Plus 1)',
+    'IMC_aod': {
+      label: 'IMC AOD',
       pagerWindow: null,
       unrestrictedCall: null,
       arRate: { mode: 'general' },
@@ -127,34 +122,45 @@ module.exports = {
       arRate: { mode: 'ob' },
       productionMultiplier: 2
     },
-    'IMC_OB_forced_off': {
-      label: 'Forced Off IMC OB',
-      pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' },
-      flatPoints: 56
+
+    // ============================================================
+    // PLACEMENT — single General OR entry (no pager pay, AR rate only,
+    // 4hr/80pt min). Replaces the per-room IMC_OR_4..8 entries; the
+    // Night Call AM side is also just General OR.
+    // ============================================================
+
+    'IMC_OR': {
+      label: 'IMC General OR',
+      pagerWindow: null,
+      unrestrictedCall: null,
+      arRate: { mode: 'general' }
     },
 
     // ============================================================
-    // PLACEMENT — OR rooms (no pager pay, AR rate only, 4hr/80pt min)
-    // OR_8 is the daytime side of a Night Call shift (in-house overnight after).
+    // OFF / VACATION — single forced off (56 pts) and single vacation (0 pts).
+    // The vacation entry covers IMC Off / IMC No Call as well; forced off
+    // covers Night Call and OB forced-off variants.
     // ============================================================
 
-    'IMC_OR_4':  { label: 'IMC OR 4',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'IMC_OR_5':  { label: 'IMC OR 5',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'IMC_OR_6':  { label: 'IMC OR 6',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'IMC_OR_7':  { label: 'IMC OR 7',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'IMC_OR_8':  { label: 'IMC OR 8 (Night Call AM)', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'IMC_forced_off': {
+      label: 'IMC Forced Off',
+      pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' },
+      flatPoints: 56
+    },
+    'IMC_vacation': {
+      label: 'IMC Vacation',
+      pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' }
+    }
 
-    // ============================================================
-    // OFF / VACATION — forced off = 56 pts; rest = 0
-    // ============================================================
-
-    'IMC_forced_off': { label: 'IMC Forced Off', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' }, flatPoints: 56 },
-    'IMC_off':        { label: 'IMC Off',        pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'IMC_vacation':   { label: 'IMC Vacation',   pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'IMC_no_call':    { label: 'IMC No Call',    pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } }
-
-    // Removed per user feedback (Q1 — "ignore tier designations"):
-    //   IMC_tier_2 / 3 / 4 / 5 / 6 (general OR — covered by IMC_OR_*)
+    // Removed per user cleanup (rev 2):
+    //   IMC_night_call_forced_off  -> IMC_forced_off
+    //   IMC_OB_forced_off          -> IMC_forced_off
+    //   IMC_OR_4 / 5 / 6 / 7 / 8   -> IMC_OR
+    //   IMC_off / IMC_no_call      -> IMC_vacation
+    //   IMC_aod_plus1              -> IMC_aod
+    //
+    // Removed per user feedback (rev 1 — "ignore tier designations"):
+    //   IMC_tier_2 / 3 / 4 / 5 / 6 (general OR — covered by IMC_OR)
     //   IMC_tier_5_post_1st / cv1 / liver_1 (general OR if clocked in)
     //   IMC_tier_4_cv2 (duplicate of IMC_cv_2nd_call)
     //   IMC_tier_4_liver_2 (duplicate of IMC_liver_2nd_call)
