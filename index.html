@@ -608,6 +608,21 @@ textarea { resize: vertical; min-height: 60px; }
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
+.invite-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--primary);
+  color: #fff;
+  text-align: center;
+  padding: 10px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  z-index: 400;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
 
 /* ===== MODAL ===== */
 .modal-overlay {
@@ -4207,6 +4222,31 @@ body.hide-monetary .monetary-hide { display: none !important; }
 <!-- Session Expired Banner -->
 <div class="session-banner hidden" id="sessionBanner" onclick="location.reload()">&#9888; Session expired &mdash; tap here to sign in again</div>
 
+<!-- Site Invite Banner -->
+<div class="invite-banner hidden" id="inviteBanner" onclick="openInviteModal()">&#9993; You've been invited to <span id="inviteBannerSite">a new site</span> &mdash; tap to review</div>
+
+<!-- Site Invite Modal -->
+<div class="modal-overlay hidden" id="inviteModal" onclick="if(event.target===this)closeInviteModal()">
+  <div class="modal" style="max-width:440px;">
+    <h2 style="margin-top:0;">Site invitation</h2>
+    <p style="margin:8px 0;font-size:0.92rem;">
+      You've been invited to <strong id="inviteModalSite">—</strong>.
+    </p>
+    <div style="background:rgba(59,130,246,0.08);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:0.82rem;">
+      <strong>If you accept:</strong> all of your shifts and cases will be moved from
+      <strong id="inviteModalOldSite">your current site</strong> to
+      <strong id="inviteModalNewSite">the new site</strong>.
+      Your data won't be lost &mdash; just re-tagged.
+    </div>
+    <p id="inviteModalStatus" style="margin:8px 0;font-size:0.82rem;color:var(--text-dim);"></p>
+    <div class="modal-actions" style="flex-direction:column;gap:8px;margin-top:14px;">
+      <button class="btn btn-primary" id="inviteAcceptBtn" onclick="handleAcceptInvite()">Accept &amp; move my data</button>
+      <button class="btn" id="inviteDeclineBtn" onclick="handleDeclineInvite()" style="background:var(--surface2);">Decline</button>
+      <button class="btn" onclick="closeInviteModal()" style="background:transparent;color:var(--text-dim);">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- BOTTOM NAV -->
 <div class="bottom-nav">
   <button data-page="time">
@@ -4506,6 +4546,92 @@ async function batchUpdateSiteId(query, newSiteId) {
 // Copy surgeon mappings for surgeons referenced in `userCases` from
 // oldSiteId to newSiteId. Only writes mappings the destination site
 // doesn't already have — never overwrites.
+// ----- Invite banner / modal UI -----
+
+function getPendingInviteSiteName(siteId) {
+  if (!siteId) return '';
+  return (sitesCache[siteId] && sitesCache[siteId].name) || siteId;
+}
+
+function renderInviteBanner() {
+  const banner = document.getElementById('inviteBanner');
+  if (!banner) return;
+  const invite = currentUserProfile && currentUserProfile.pendingInvite;
+  if (!invite || !invite.siteId) {
+    banner.classList.add('hidden');
+    return;
+  }
+  // Don't show if invite is for current site (degenerate)
+  const cur = (settings && settings.siteId) || DEFAULT_SITE_ID;
+  if (invite.siteId === cur) {
+    banner.classList.add('hidden');
+    return;
+  }
+  document.getElementById('inviteBannerSite').textContent = getPendingInviteSiteName(invite.siteId);
+  banner.classList.remove('hidden');
+}
+
+function openInviteModal() {
+  const invite = currentUserProfile && currentUserProfile.pendingInvite;
+  if (!invite || !invite.siteId) return;
+  const cur = (settings && settings.siteId) || DEFAULT_SITE_ID;
+  document.getElementById('inviteModalSite').textContent = getPendingInviteSiteName(invite.siteId);
+  document.getElementById('inviteModalOldSite').textContent = getPendingInviteSiteName(cur);
+  document.getElementById('inviteModalNewSite').textContent = getPendingInviteSiteName(invite.siteId);
+  document.getElementById('inviteModalStatus').textContent = '';
+  document.getElementById('inviteAcceptBtn').disabled = false;
+  document.getElementById('inviteDeclineBtn').disabled = false;
+  document.getElementById('inviteModal').classList.remove('hidden');
+}
+
+function closeInviteModal() {
+  document.getElementById('inviteModal').classList.add('hidden');
+}
+
+async function handleAcceptInvite() {
+  const status = document.getElementById('inviteModalStatus');
+  const acceptBtn = document.getElementById('inviteAcceptBtn');
+  const declineBtn = document.getElementById('inviteDeclineBtn');
+  acceptBtn.disabled = true;
+  declineBtn.disabled = true;
+  status.textContent = 'Moving your data...';
+  status.style.color = 'var(--text-dim)';
+  try {
+    await acceptPendingInvite();
+    status.textContent = 'Done! Reloading...';
+    status.style.color = 'var(--accent)';
+    // Reload so all shared caches re-fetch under the new siteId
+    setTimeout(() => location.reload(), 800);
+  } catch (err) {
+    console.error('Accept invite failed:', err);
+    status.textContent = 'Error: ' + (err.message || err);
+    status.style.color = 'var(--accent2)';
+    acceptBtn.disabled = false;
+    declineBtn.disabled = false;
+  }
+}
+
+async function handleDeclineInvite() {
+  const status = document.getElementById('inviteModalStatus');
+  const acceptBtn = document.getElementById('inviteAcceptBtn');
+  const declineBtn = document.getElementById('inviteDeclineBtn');
+  acceptBtn.disabled = true;
+  declineBtn.disabled = true;
+  status.textContent = 'Declining...';
+  try {
+    await declinePendingInvite();
+    closeInviteModal();
+    renderInviteBanner();
+    showToast('Invite declined');
+  } catch (err) {
+    console.error('Decline invite failed:', err);
+    status.textContent = 'Error: ' + (err.message || err);
+    status.style.color = 'var(--accent2)';
+    acceptBtn.disabled = false;
+    declineBtn.disabled = false;
+  }
+}
+
 async function copyUserSurgeonMappings(userCases, oldSiteId, newSiteId) {
   try {
     // Local cases store the surgeon name in `notes` (sharedCases mirror to `surgeon`).
@@ -22297,7 +22423,7 @@ auth.onAuthStateChanged(async (user) => {
     loadSharedCases().then(() => refreshSharedViews()).catch(() => {});
     loadSurgeonMappings().catch(() => {});
     loadUserProfiles().catch(() => {});
-    loadSites().then(() => renderSiteRow()).catch(() => {});
+    loadSites().then(() => { renderSiteRow(); renderInviteBanner(); }).catch(() => {});
     loadAsaMasterCodes().catch(() => {});
     loadAsaCodeProcedures().catch(() => {});
 
