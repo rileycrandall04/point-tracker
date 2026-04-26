@@ -2514,13 +2514,15 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
 <!-- TODAY PAGE -->
 <div class="page active" id="page-today">
-  <div class="card hidden" id="todayPVReminder" style="background:var(--accent2); color:#000; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-    <span style="font-size:0.85rem; font-weight:600;"><span id="todayPVReminderText"></span> <a href="#" onclick="goToPVHistory(); return false;" style="color:#000; text-decoration:underline; font-weight:400;">Update now</a> <a href="#" onclick="skipPVReminder(); return false;" style="color:#000; text-decoration:underline; font-weight:400; opacity:0.7; margin-left:6px;">Skip</a></span>
-    <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
-  </div>
-  <div class="card hidden monetary-hide" id="paycheckEntryReminder" style="background:var(--primary); color:#fff; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-    <span style="font-size:0.85rem; font-weight:600;"><span id="paycheckEntryReminderText"></span> <a href="#" onclick="goToPaycheckEntry(); return false;" style="color:#fff; text-decoration:underline; font-weight:400;">Enter now</a> <a href="#" onclick="skipPaycheckReminder(); return false;" style="color:#fff; text-decoration:underline; font-weight:400; opacity:0.7; margin-left:6px;">Skip</a></span>
-    <button onclick="dismissPaycheckReminder()" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
+  <div class="card hidden" id="todayPVReminder" style="background:var(--accent2); color:#000; padding:10px 16px; margin-bottom:8px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:0.85rem; font-weight:600; flex:1; min-width:0;" id="todayPVReminderText"></span>
+      <input type="number" step="0.01" min="0" id="todayPVReminderInput" placeholder="$/pt"
+        style="width:90px;padding:4px 8px;border-radius:4px;border:1px solid rgba(0,0,0,0.3);background:#fff;color:#000;font-size:0.85rem;">
+      <button onclick="saveTodayPVReminder()" style="background:rgba(0,0,0,0.85);color:#fff;border:none;border-radius:4px;padding:5px 12px;font-size:0.78rem;font-weight:600;cursor:pointer;">Save</button>
+      <a href="#" onclick="skipPVReminder(); return false;" style="color:#000; text-decoration:underline; font-weight:400; opacity:0.7;">Skip</a>
+      <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
+    </div>
   </div>
   <div class="card hidden" id="openLaborReminder" style="background:var(--danger); color:#fff; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; cursor:pointer;" onclick="goToOpenLaborCases()">
     <span style="font-size:0.85rem; font-weight:600;" id="openLaborReminderText"></span>
@@ -2839,9 +2841,15 @@ body.hide-monetary .monetary-hide { display: none !important; }
 <!-- COMPENSATION PAGE -->
 <div class="page" id="page-compensation">
   <!-- PV Reminder Banner -->
-  <div class="card hidden" id="pvReminderBanner" style="background:var(--accent2); color:#000; padding:10px 16px; display:flex; align-items:center; justify-content:space-between;">
-    <span style="font-size:0.85rem; font-weight:600;"><span id="pvReminderText">Last month's $/point hasn't been confirmed yet.</span> <a href="#" onclick="scrollToHistComp(); return false;" style="color:#000; text-decoration:underline; font-weight:400;">Update now</a></span>
-    <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
+  <div class="card hidden" id="pvReminderBanner" style="background:var(--accent2); color:#000; padding:10px 16px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:0.85rem; font-weight:600; flex:1; min-width:0;" id="pvReminderText">Last month's $/point hasn't been confirmed yet.</span>
+      <input type="number" step="0.01" min="0" id="pvReminderInput" placeholder="$/pt"
+        style="width:90px;padding:4px 8px;border-radius:4px;border:1px solid rgba(0,0,0,0.3);background:#fff;color:#000;font-size:0.85rem;">
+      <button onclick="saveTodayPVReminder()" style="background:rgba(0,0,0,0.85);color:#fff;border:none;border-radius:4px;padding:5px 12px;font-size:0.78rem;font-weight:600;cursor:pointer;">Save</button>
+      <a href="#" onclick="skipPVReminder(); return false;" style="color:#000; text-decoration:underline; font-weight:400; opacity:0.7;">Skip</a>
+      <button onclick="dismissPVReminder()" style="background:none; border:none; color:#000; font-size:1.2rem; cursor:pointer; padding:0 4px;">&times;</button>
+    </div>
   </div>
 
   <!-- 1. Monthly Pace (hero, compact) -->
@@ -13084,11 +13092,9 @@ function dismissPVReminder() {
   if (comp) comp.classList.add('hidden');
 }
 
-function dismissPaycheckReminder() {
-  window._paycheckReminderDismissed = true;
-  const el = document.getElementById('paycheckEntryReminder');
-  if (el) el.classList.add('hidden');
-}
+// dismissPaycheckReminder kept as a no-op — the banner element no longer
+// exists, but older HTML / cached pages may still try to call it.
+function dismissPaycheckReminder() { /* no-op: prompt removed */ }
 
 function skipPVReminder() {
   const now = new Date();
@@ -13099,6 +13105,39 @@ function skipPVReminder() {
   saveSettings(settings);
   dismissPVReminder();
   showToast('Skipped — using calculated values');
+}
+
+// Save the value typed inline on the PV reminder banner (Today + Comp).
+// Writes to settings.pointValues[<prev month key>] and refreshes views.
+function saveTodayPVReminder() {
+  const todayInp = document.getElementById('todayPVReminderInput');
+  const compInp  = document.getElementById('pvReminderInput');
+  const raw = (todayInp && todayInp.value && todayInp.value.trim())
+           || (compInp && compInp.value && compInp.value.trim())
+           || '';
+  const val = parseFloat(raw);
+  if (!raw || isNaN(val) || val <= 0) {
+    showToast('Enter a $/point value');
+    return;
+  }
+  const now = new Date();
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevKey = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth() + 1).padStart(2, '0');
+  if (!settings.pointValues) settings.pointValues = {};
+  settings.pointValues[prevKey] = val;
+  saveSettings(settings);
+  if (todayInp) todayInp.value = '';
+  if (compInp) compInp.value = '';
+  dismissPVReminder();
+  showToast('$/point saved for ' + prevKey);
+  // Refresh anything that reads point values
+  if (typeof renderToday === 'function') { try { renderToday(); } catch (e) {} }
+  if (typeof renderProjections === 'function') {
+    if (document.getElementById('page-compensation') &&
+        document.getElementById('page-compensation').classList.contains('active')) {
+      try { renderProjections(); } catch (e) {}
+    }
+  }
 }
 
 function skipPaycheckReminder() {
@@ -13136,26 +13175,10 @@ function goToPaycheckEntry() {
   }, 100);
 }
 
-function checkPaycheckReminder() {
-  const banner = document.getElementById('paycheckEntryReminder');
-  if (!banner || window._paycheckReminderDismissed) { if (banner) banner.classList.add('hidden'); return; }
-  const now = new Date();
-  if (now.getDate() < 20) { banner.classList.add('hidden'); return; }
-  // Check if last month's actual paycheck deposit has been entered
-  // Last month's work feeds into this month's paycheck (received on 20th)
-  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevKey = prevMonth.getFullYear() + '-' + String(prevMonth.getMonth() + 1).padStart(2, '0');
-  const hasDeposit = data.paychecks && data.paychecks[prevKey] != null;
-  const paycheckSkipped = settings.skippedReminders && settings.skippedReminders['paycheck_' + prevKey];
-  if (!hasDeposit && !paycheckSkipped) {
-    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    document.getElementById('paycheckEntryReminderText').textContent = 'Enter your ' + monthNames[now.getMonth()] + ' pay stub values (' + monthNames[prevMonth.getMonth()] + ' production).';
-    banner.classList.remove('hidden');
-    banner.style.display = 'flex';
-  } else {
-    banner.classList.add('hidden');
-  }
-}
+// Paycheck-entry banner removed — users open the Paycheck Projection
+// card on their own when they're ready. checkPaycheckReminder() kept
+// as a no-op so any older references don't error.
+function checkPaycheckReminder() { /* no-op: prompt removed */ }
 
 let openLaborCaseIds = [];
 
