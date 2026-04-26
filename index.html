@@ -4225,6 +4225,29 @@ body.hide-monetary .monetary-hide { display: none !important; }
 <!-- Site Invite Banner -->
 <div class="invite-banner hidden" id="inviteBanner" onclick="openInviteModal()">&#9993; You've been invited to <span id="inviteBannerSite">a new site</span> &mdash; tap to review</div>
 
+<!-- New-user site selector modal (first login, no data yet) -->
+<div class="modal-overlay hidden" id="newUserSiteModal">
+  <div class="modal" style="max-width:440px;">
+    <h2 style="margin-top:0;">Welcome &mdash; choose your site</h2>
+    <p style="margin:8px 0;font-size:0.92rem;">
+      Select the location where you primarily work. Your shifts and cases will be tracked under this site's compensation rules.
+    </p>
+    <div style="margin:12px 0;">
+      <label style="display:block;font-size:0.85rem;margin-bottom:6px;">Site</label>
+      <select id="newUserSiteSelect" style="width:100%;padding:10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.95rem;">
+        <option value="">Select a site...</option>
+      </select>
+    </div>
+    <p style="margin:8px 0;font-size:0.78rem;color:var(--text-dim);">
+      Don't see your site? Contact your admin to get it unlocked or to receive an invite.
+    </p>
+    <p id="newUserSiteStatus" style="margin:8px 0;font-size:0.82rem;color:var(--text-dim);"></p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="newUserSiteSubmitBtn" onclick="handleNewUserSiteSelect()" disabled>Confirm</button>
+    </div>
+  </div>
+</div>
+
 <!-- Site Invite Modal -->
 <div class="modal-overlay hidden" id="inviteModal" onclick="if(event.target===this)closeInviteModal()">
   <div class="modal" style="max-width:440px;">
@@ -4630,6 +4653,99 @@ async function handleDeclineInvite() {
     acceptBtn.disabled = false;
     declineBtn.disabled = false;
   }
+}
+
+// ----- New-user site selector (first login, no data) -----
+
+function showNewUserSiteSelector() {
+  const select = document.getElementById('newUserSiteSelect');
+  if (!select) return;
+  select.innerHTML = '<option value="">Select a site...</option>';
+  // Sort unlocked sites by display name; UVH always available as a fallback.
+  const unlocked = Object.entries(sitesCache || {})
+    .filter(([id, s]) => s && s.unlocked === true);
+  unlocked.sort((a, b) => (a[1].name || a[0]).localeCompare(b[1].name || b[0]));
+  const seen = new Set();
+  for (const [id, s] of unlocked) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = (s && s.name) || id;
+    select.appendChild(opt);
+    seen.add(id);
+  }
+  if (!seen.has(DEFAULT_SITE_ID)) {
+    const opt = document.createElement('option');
+    opt.value = DEFAULT_SITE_ID;
+    opt.textContent = (sitesCache[DEFAULT_SITE_ID] && sitesCache[DEFAULT_SITE_ID].name) || DEFAULT_SITE_ID;
+    // Insert as the first real option (after the placeholder)
+    select.insertBefore(opt, select.children[1] || null);
+  }
+  const submitBtn = document.getElementById('newUserSiteSubmitBtn');
+  submitBtn.disabled = true;
+  select.onchange = () => { submitBtn.disabled = !select.value; };
+  document.getElementById('newUserSiteStatus').textContent = '';
+  document.getElementById('newUserSiteModal').classList.remove('hidden');
+}
+
+async function handleNewUserSiteSelect() {
+  const select = document.getElementById('newUserSiteSelect');
+  const siteId = select && select.value;
+  if (!siteId || !currentUser) return;
+  const status = document.getElementById('newUserSiteStatus');
+  const submitBtn = document.getElementById('newUserSiteSubmitBtn');
+  submitBtn.disabled = true;
+  status.style.color = 'var(--text-dim)';
+  status.textContent = 'Saving...';
+  try {
+    settings.siteId = siteId;
+    saveSettings(settings);
+    await db.collection('users').doc(currentUser.uid).collection('data').doc('settings')
+      .set({ siteId: siteId }, { merge: true });
+    const stamp = new Date().toISOString();
+    await db.collection('userProfiles').doc(currentUser.uid)
+      .set({ siteSelectedAt: stamp }, { merge: true });
+    if (!currentUserProfile) currentUserProfile = {};
+    currentUserProfile.siteSelectedAt = stamp;
+    document.getElementById('newUserSiteModal').classList.add('hidden');
+    if (typeof renderSiteRow === 'function') renderSiteRow();
+    showToast('Site set to ' + getPendingInviteSiteName(siteId));
+  } catch (err) {
+    console.error('Site select save failed:', err);
+    status.style.color = 'var(--accent2)';
+    status.textContent = 'Error: ' + (err.message || err);
+    submitBtn.disabled = false;
+  }
+}
+
+// Decide whether to prompt the user to pick a site. Called once after auth +
+// data + sites are loaded.
+//   - Already chose? skip.
+//   - Has any shifts/cases? this is a legacy user — silently mark them as
+//     "selected" so we never prompt.
+//   - Otherwise: brand-new user, show picker.
+function maybeShowNewUserSiteSelector() {
+  if (!currentUser) return;
+  if (currentUserProfile && currentUserProfile.siteSelectedAt) return;
+  // Legacy user with existing data → silently mark as settled
+  const hasData = !!(data && (
+    (data.shifts && Object.keys(data.shifts).length > 0) ||
+    (Array.isArray(data.cases) && data.cases.length > 0)
+  ));
+  if (hasData) {
+    const stamp = new Date().toISOString();
+    db.collection('userProfiles').doc(currentUser.uid)
+      .set({ siteSelectedAt: stamp }, { merge: true })
+      .catch(() => {});
+    if (!currentUserProfile) currentUserProfile = {};
+    currentUserProfile.siteSelectedAt = stamp;
+    return;
+  }
+  // Don't show the picker if the user has a pending invite — let them
+  // accept/decline that first.
+  if (currentUserProfile && currentUserProfile.pendingInvite && currentUserProfile.pendingInvite.siteId) {
+    return;
+  }
+  showNewUserSiteSelector();
 }
 
 async function copyUserSurgeonMappings(userCases, oldSiteId, newSiteId) {
@@ -22423,7 +22539,11 @@ auth.onAuthStateChanged(async (user) => {
     loadSharedCases().then(() => refreshSharedViews()).catch(() => {});
     loadSurgeonMappings().catch(() => {});
     loadUserProfiles().catch(() => {});
-    loadSites().then(() => { renderSiteRow(); renderInviteBanner(); }).catch(() => {});
+    loadSites().then(() => {
+      renderSiteRow();
+      renderInviteBanner();
+      maybeShowNewUserSiteSelector();
+    }).catch(() => {});
     loadAsaMasterCodes().catch(() => {});
     loadAsaCodeProcedures().catch(() => {});
 
