@@ -47,7 +47,8 @@ module.exports = {
     // PLACEMENT SHIFTS — single General OR per facility (rev 2)
     // ============================================================
 
-    'SGH_OR':   { label: 'SGH General OR', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'SGH_OR':       { label: 'SGH General OR',         pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'SGH_OR_float': { label: 'SGH General OR - Float', inherit_uvh: 'OR_float' },
     'SGH_ASC':  { label: 'SGH ASC',        pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
     'SGH_NORA': { label: 'SGH NORA',       pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
 
@@ -66,7 +67,7 @@ module.exports = {
 
   otherMigrationMap: {
     'OR':                      'SGH_OR',
-    'OR_float':                'SGH_OR',
+    'OR_float':                'SGH_OR_float',
     'OB_restricted':           'SGH_OB',
     'cardiac_liver':           'SGH_heart_call',
     'unrestricted_call_entry': 'SGH_1st_call',

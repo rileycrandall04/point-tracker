@@ -1,4 +1,4 @@
-// Mckay Dee + Layton (site ID: MD) compensation rules — FILLED IN, rev 2.
+// Mckay Dee + Layton (site ID: MD) compensation rules — FILLED IN, rev 3.
 //
 // MDH = Mckay Dee Hospital, LH = Layton Hospital (same site).
 // See scripts/site-rules-IMC.js for full format docs.
@@ -82,58 +82,76 @@ module.exports = {
       cardiacBonus: true
     },
 
-    // OB call (McKay Dee) — exactly like UVH OB (per user spec rev 2).
-    // Inherits OB rate + production doubling.
+    // OB call (McKay Dee) — exactly like UVH OB.
     'MDH_OB_call': { label: 'MD OB', inherit_uvh: 'OB_restricted' },
 
-    // Layton OB — "Unrestricted OB". Treated like SF1 (per user spec rev 2):
-    // 13/hr weekday-daytime base, 20/hr at all other times, with SF1's
-    // pager window + unrestricted call windows.
+    // Layton OB — "Unrestricted OB". Treated like UVH SF1.
     'LH_OB': { label: 'Unrestricted OB', inherit_uvh: 'SF1' },
 
+    // ============================================================
+    // PLACEMENT — single General OR + General OR Float (rev 3 collapses
+    // MDH_<n>, MDH_ASC_<n>, LH_<n>, LH_ASC_<n> all into MDH_OR).
+    // TOCR / NORA / UCR / LH_endo_1 retained as their own entries.
+    // ============================================================
+
+    'MDH_OR':         { label: 'General OR',         pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'MDH_OR_float':   { label: 'General OR - Float', inherit_uvh: 'OR_float' },
+    'MDH_TOCR':       { label: 'MDH TOCR',           pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'MDH_NORA':       { label: 'MDH NORA',           pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'MDH_UCR':        { label: 'MDH UCR',            pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'LH_endo_1':      { label: 'LH Endo 1',          pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+
+    // Cardiac/Liver option (UVH default; CV/Heart calls above are MD-specific).
+    'cardiac_liver':  { label: 'Cardiac / Liver' },
+
     // ----- Off / vacation / status markers -----
-    'MDH_post_call':       { label: 'MDH Post Call',                  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'MDH_forced_off':      { label: 'MDH Forced Off - 1st Available', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' }, flatPoints: 56 },
-    'MDH_vacation':        { label: 'MDH Vacation',                   pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'MDH_locums_coverage': { label: 'Locums Coverage',                pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'MDH_half_timer':      { label: 'Part Timer in town (1/2 timer)', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'MDH_no_call':         { label: 'MDH No Call',                    pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-
-    // ============================================================
-    // PLACEMENT SHIFTS — single General OR per facility (rev 2)
-    // ============================================================
-
-    'MDH_OR':   { label: 'MDH General OR',   pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'LH_OR':    { label: 'Layton General OR', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'MDH_TOCR': { label: 'MDH TOCR',         pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'MDH_NORA': { label: 'MDH NORA',         pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'MDH_UCR':  { label: 'MDH UCR',          pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-
-    // MDH ASCs (collapsed: rev 2)
-    'MDH_ASC':  { label: 'MDH ASC',          pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    // Layton ASCs (collapsed: rev 2)
-    'LH_ASC':   { label: 'Layton ASC',       pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'LH_endo_1': { label: 'LH Endo 1',       pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-
-    // Cardiac/Liver option (UVH default; CV/Heart calls above are MD-specific)
-    'cardiac_liver': { label: 'Cardiac / Liver' }
+    'MDH_post_call':  { label: 'MDH Post Call',                  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'MDH_forced_off': { label: 'MDH Forced Off - 1st Available', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' }, flatPoints: 56 },
+    'MDH_vacation':   { label: 'MDH Vacation',                   pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'MDH_no_call':    { label: 'MDH No Call',                    pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } }
   },
 
   otherMigrationMap: {
     'OR':                      'MDH_OR',
-    'OR_float':                'MDH_OR',
+    'OR_float':                'MDH_OR_float',
     'OB_restricted':           'MDH_OB_call',
     'cardiac_liver':           'MDH_CV_am_call',
     'unrestricted_call_entry': 'MDH_1st_call',
     'forced_off':              'MDH_forced_off',
-    'vacation':                'MDH_vacation'
+    'vacation':                'MDH_vacation',
+    // Legacy MD keys retired in rev 2/3 — point them at General OR / Vacation.
+    'MDH_3':  'MDH_OR', 'MDH_4':  'MDH_OR', 'MDH_5':  'MDH_OR', 'MDH_6':  'MDH_OR',
+    'MDH_7':  'MDH_OR', 'MDH_8':  'MDH_OR', 'MDH_9':  'MDH_OR', 'MDH_10': 'MDH_OR',
+    'MDH_11': 'MDH_OR', 'MDH_12': 'MDH_OR', 'MDH_13': 'MDH_OR', 'MDH_14': 'MDH_OR',
+    'MDH_15': 'MDH_OR', 'MDH_16': 'MDH_OR', 'MDH_17': 'MDH_OR', 'MDH_18': 'MDH_OR',
+    'MDH_19': 'MDH_OR', 'MDH_20': 'MDH_OR', 'MDH_21': 'MDH_OR', 'MDH_22': 'MDH_OR',
+    'MDH_23': 'MDH_OR', 'MDH_24': 'MDH_OR', 'MDH_25': 'MDH_OR', 'MDH_31': 'MDH_OR',
+    'MDH_34': 'MDH_OR', 'MDH_35': 'MDH_OR',
+    'LH_1':   'MDH_OR', 'LH_2':   'MDH_OR', 'LH_3':   'MDH_OR',
+    'LH_OR':  'MDH_OR',
+    'MDH_ASC':       'MDH_OR',
+    'MDH_ASC_1': 'MDH_OR', 'MDH_ASC_2': 'MDH_OR', 'MDH_ASC_3': 'MDH_OR',
+    'MDH_ASC_4': 'MDH_OR', 'MDH_ASC_5': 'MDH_OR', 'MDH_ASC_6': 'MDH_OR',
+    'MDH_ASC_7': 'MDH_OR', 'MDH_ASC_8': 'MDH_OR',
+    'MDH_endo_ASC_1': 'MDH_OR',
+    'MDH_endo_ASC_2': 'MDH_OR',
+    'LH_ASC':        'MDH_OR',
+    'LH_ASC_1': 'MDH_OR', 'LH_ASC_2': 'MDH_OR',
+    'LH_ASC_3': 'MDH_OR', 'LH_ASC_4': 'MDH_OR',
+    'MDH_locums_coverage': 'MDH_vacation',
+    'MDH_half_timer':      'MDH_vacation',
+    'MDH_aod_plus1':       'MDH_post_call'
   }
 
-  // Removed in cleanup (rev 2):
-  //   MDH_3..25, 31, 34, 35 → MDH_OR (single General OR)
-  //   LH_1, LH_2, LH_3 → LH_OR (single Layton General OR)
-  //   MDH_endo_ASC_1, _2, MDH_ASC_1..8 → MDH_ASC
-  //   LH_ASC_1..4 → LH_ASC
-  //   MDH_OB_call rules: now inherit_uvh: 'OB_restricted' (per user spec)
-  //   LH_OB: now labeled "Unrestricted OB" and inherits SF1 (per user spec)
+  // Removed in cleanup:
+  //   rev 2: MDH_3..25/31/34/35 → MDH_OR; LH_1..3 → LH_OR;
+  //          MDH_ASC_1..8 → MDH_ASC; LH_ASC_1..4 → LH_ASC;
+  //          MDH_endo_ASC_1/_2 dropped.
+  //          MDH_OB_call now inherits UVH OB; LH_OB renamed
+  //          "Unrestricted OB" inheriting SF1.
+  //   rev 3: LH_OR / MDH_ASC / LH_ASC → MDH_OR (single General OR
+  //          per user spec). MDH_OR label "MDH General OR" → "General OR".
+  //          MDH_locums_coverage and MDH_half_timer removed (no longer
+  //          needed; legacy entries remap to MDH_vacation).
+  //          New MDH_OR_float (inherits UVH OR_float — same +30 bonus).
 };
