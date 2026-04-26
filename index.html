@@ -2051,6 +2051,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
       <div class="form-group" id="timeEntriesGroup">
         <label id="timeEntriesLabel">Time Entries</label>
+        <p id="timeEntriesHelp" class="hidden" style="font-size:0.72rem;color:var(--text-dim);margin:0 0 6px;line-height:1.4;"></p>
         <div id="timeEntriesContainer">
           <div class="time-entry-row">
             <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="07:10">
@@ -2088,9 +2089,11 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <div id="unrestrictedCallEntryOptions" class="hidden">
         <div class="divider"></div>
         <div class="form-group">
-          <label>Hours of unrestricted call</label>
-          <input type="number" id="unrestrictedCallHours" value="0" min="0" step="0.25" placeholder="e.g. 12">
-          <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">Pays 3.5 pts per hour. No AR rate or case points apply to this shift.</p>
+          <label>Pager-pay hours</label>
+          <input type="number" id="unrestrictedCallHours" value="0" min="0" step="0.25" placeholder="e.g. 14 or 24">
+          <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;line-height:1.4;">
+            Total pager pay hours for this shift (typically <strong>14</strong> on weekdays, <strong>24</strong> on weekends/holidays). Pays 3.5 pts per hour. Add clocked-in time entries above for any AR earned during this shift.
+          </p>
         </div>
       </div>
 
@@ -3193,14 +3196,15 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <!-- Users tab -->
     <div id="adminMSUsersPane">
       <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">
-        Look up a user by email to invite them to a different site, change their site directly, or grant/revoke admin role.
+        Click List Users for the full roster, or filter by email substring to narrow it. Click a card to invite the user, change their site, or grant/revoke admin role.
       </p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-        <input type="email" id="adminMSUserEmail" placeholder="user@email.com"
+        <input type="text" id="adminMSUserEmail" placeholder="filter by email (optional)"
           style="flex:1;min-width:200px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
-        <button class="btn btn-primary btn-sm" onclick="adminMSFindUser()">Find</button>
+        <button class="btn btn-primary btn-sm" onclick="adminMSListUsers()">List Users</button>
       </div>
-      <div id="adminMSUserCard" style="font-size:0.85rem;"></div>
+      <div id="adminMSUsersList" style="font-size:0.85rem;"></div>
+      <div id="adminMSUserCard" style="font-size:0.85rem;margin-top:12px;"></div>
     </div>
 
     <!-- Sites tab -->
@@ -4525,9 +4529,29 @@ async function acceptPendingInvite() {
 //   - Re-stamps sharedCaseOverrides owned by this user
 //   - Contained surgeon-mapping copy: only mappings the user references
 //     in their own cases get copied to the new site (skips conflicts).
+// Returns the assignmentType key that represents "1st call" at the
+// given site. Looks for an override with inherit_uvh: '1st_call'; falls
+// back to the UVH default key '1st_call' when no override exists or the
+// site has no per-site rules.
+function findSiteFirstCallType(siteId) {
+  const override = (sitesCache[siteId] && sitesCache[siteId].shiftRulesOverride) || {};
+  for (const [k, v] of Object.entries(override)) {
+    if (v && v.inherit_uvh === '1st_call') return k;
+  }
+  if (Object.prototype.hasOwnProperty.call(override, '1st_call')) return '1st_call';
+  return '1st_call';
+}
+
 async function migrateUserDataToSite(uid, oldSiteId, newSiteId) {
   if (!uid || !oldSiteId || !newSiteId) throw new Error('uid/oldSiteId/newSiteId required');
   if (oldSiteId === newSiteId) return;
+
+  // When migrating away from the Other parking-lot site, remap any
+  // unrestricted_call_entry shifts to the destination site's 1st-call
+  // equivalent. The shift's clocked-in time entries and the entered
+  // unrestrictedCallHours are preserved (the latter as a per-shift
+  // pager override; see effectivePagerPts in the calc engine).
+  const destFirstCall = findSiteFirstCallType(newSiteId);
 
   // 1. Re-stamp the user's own data doc (shifts[*].siteId, cases[*].siteId)
   const dataRef = db.collection('users').doc(uid).collection('data').doc('data');
@@ -4543,6 +4567,11 @@ async function migrateUserDataToSite(uid, oldSiteId, newSiteId) {
           mutated = true;
         } else if (d.shifts[k] && !d.shifts[k].siteId) {
           d.shifts[k].siteId = newSiteId;
+          mutated = true;
+        }
+        // Other-site unrestricted_call_entry → dest site's 1st_call
+        if (d.shifts[k] && d.shifts[k].assignmentType === 'unrestricted_call_entry' && destFirstCall) {
+          d.shifts[k].assignmentType = destFirstCall;
           mutated = true;
         }
       }
@@ -4737,25 +4766,73 @@ function _adminMSSiteOptionsHTML(currentSiteId) {
   return html;
 }
 
-async function adminMSFindUser() {
+async function adminMSListUsers() {
   if (!isAdmin()) return;
-  const email = (document.getElementById('adminMSUserEmail').value || '').trim();
-  const out = document.getElementById('adminMSUserCard');
-  if (!email) { out.innerHTML = '<p style="color:var(--accent2);">Enter an email address</p>'; return; }
-  out.innerHTML = '<p>Looking up...</p>';
+  const filterRaw = (document.getElementById('adminMSUserEmail').value || '').trim().toLowerCase();
+  const listOut = document.getElementById('adminMSUsersList');
+  const cardOut = document.getElementById('adminMSUserCard');
+  cardOut.innerHTML = '';
+  listOut.innerHTML = '<p>Loading users...</p>';
   try {
-    const snap = await db.collection('userProfiles').where('email', '==', email).get();
-    if (snap.empty) { out.innerHTML = '<p style="color:var(--accent2);">No user found with email: ' + email + '</p>'; return; }
-    const uid = snap.docs[0].id;
-    const profile = snap.docs[0].data() || {};
-    // Read their settings to get current siteId
+    const snap = await db.collection('userProfiles').get();
+    if (snap.empty) { listOut.innerHTML = '<p style="color:var(--text-dim);">No user profiles yet.</p>'; return; }
+    const rows = [];
+    snap.forEach(doc => {
+      const data = doc.data() || {};
+      const email = (data.email || '').toLowerCase();
+      const name = (data.displayName || '').toLowerCase();
+      if (filterRaw && !email.includes(filterRaw) && !name.includes(filterRaw)) return;
+      rows.push({ uid: doc.id, profile: data });
+    });
+    rows.sort((a, b) => (a.profile.email || '').localeCompare(b.profile.email || ''));
+    if (rows.length === 0) {
+      listOut.innerHTML = '<p style="color:var(--accent2);">No users match "' + escapeHtml(filterRaw) + '".</p>';
+      return;
+    }
+    let html = '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:6px;">' + rows.length + ' user' + (rows.length !== 1 ? 's' : '') + '</div>';
+    for (const r of rows) {
+      const name = r.profile.displayName || '(no name)';
+      const email = r.profile.email || '(no email)';
+      const isMaster = r.uid === ADMIN_UID;
+      const userIsAdmin = isMaster || r.profile.isAdmin === true;
+      const inv = r.profile.pendingInvite;
+      const inviteSite = inv && inv.siteId ? ((sitesCache[inv.siteId] && sitesCache[inv.siteId].name) || inv.siteId) : null;
+      html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;" onclick="adminMSOpenUser(\'' + r.uid + '\')">';
+      html += '<div><strong>' + escapeHtml(name) + '</strong>';
+      if (userIsAdmin) html += ' <span style="font-size:0.65rem;color:var(--accent);">[admin' + (isMaster ? '/master' : '') + ']</span>';
+      html += '<br><span style="font-size:0.72rem;color:var(--text-dim);">' + escapeHtml(email) + '</span>';
+      if (inviteSite) html += '<br><span style="font-size:0.68rem;color:var(--accent2);">pending invite → ' + escapeHtml(inviteSite) + '</span>';
+      html += '</div>';
+      html += '<span style="font-size:0.7rem;color:var(--primary);">Open &rsaquo;</span>';
+      html += '</div>';
+    }
+    listOut.innerHTML = html;
+  } catch (err) {
+    console.error('Admin user list error:', err);
+    listOut.innerHTML = '<p style="color:var(--accent2);">Error: ' + (err.message || err) + '</p>';
+  }
+}
+
+async function adminMSOpenUser(uid) {
+  if (!isAdmin()) return;
+  const out = document.getElementById('adminMSUserCard');
+  out.innerHTML = '<p>Loading...</p>';
+  try {
+    const profileSnap = await db.collection('userProfiles').doc(uid).get();
+    const profile = profileSnap.exists ? (profileSnap.data() || {}) : {};
     const settingsDoc = await db.collection('users').doc(uid).collection('data').doc('settings').get();
     const userSiteId = (settingsDoc.exists && settingsDoc.data().siteId) || DEFAULT_SITE_ID;
     renderAdminMSUserCard(uid, profile, userSiteId);
+    out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (err) {
-    console.error('Admin user lookup error:', err);
+    console.error('Admin open user error:', err);
     out.innerHTML = '<p style="color:var(--accent2);">Error: ' + (err.message || err) + '</p>';
   }
+}
+
+// Backward-compat alias for any internal callers (post-action refreshes).
+async function adminMSFindUser() {
+  return adminMSListUsers();
 }
 
 function renderAdminMSUserCard(uid, profile, userSiteId) {
@@ -6437,6 +6514,19 @@ function getPagerPayWindow(assignmentType, isWkndOrHol, dateStr, siteId) {
   return isWkndOrHol ? rule.pagerWindow.weekend : rule.pagerWindow.weekday;
 }
 
+// Pager points for a shift. shift.unrestrictedCallHours, when set,
+// acts as a per-shift override of the rule's pager window — used by
+// Other-site shifts (where pager hours are entered manually) and by
+// shifts migrated from Other into a real site (which want their
+// originally-entered hours preserved instead of the destination's
+// auto window).
+function effectivePagerPts(shift, pagerWindow) {
+  const overrideH = parseFloat(shift && shift.unrestrictedCallHours);
+  if (overrideH > 0) return overrideH * 3.5;
+  if (!pagerWindow) return 0;
+  return ((pagerWindow.end - pagerWindow.start) / 60) * 3.5;
+}
+
 function getAssignmentTypeName(type, siteId) {
   const rule = getResolvedShiftRules(siteId)[type];
   return rule ? rule.label : type;
@@ -6841,14 +6931,6 @@ function getARRate(assignmentType, isHol, isWknd, timeMinutes, siteId) {
 function calcARPoints(shift) {
   if (shift.assignmentType === 'vacation') return 0;
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return 56;
-  // Unrestricted call entry shifts: pay = hours × 3.5, no AR / no productivity.
-  {
-    const _r = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
-    if (_r && _r.unrestrictedCallEntry) {
-      const h = parseFloat(shift.unrestrictedCallHours) || 0;
-      return round2(h * 3.5);
-    }
-  }
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
@@ -6881,13 +6963,9 @@ function calcARPoints(shift) {
   const lastEntry = hasEntries ? entries[entries.length - 1] : null;
   const hasEnd = hasEntries && (entries.length > 1 || (lastEntry && lastEntry.end));
 
-  // No time entries: return pager pay only if eligible
+  // No time entries: return pager pay only (rule window or per-shift override)
   if (!hasEntries || !hasEnd) {
-    if (pagerWindow) {
-      const pagerMinutes = pagerWindow.end - pagerWindow.start;
-      return round2((pagerMinutes / 60) * 3.5);
-    }
-    return 0;
+    return round2(effectivePagerPts(shift, pagerWindow));
   }
 
   const isSF = ['SF1','SF2'].includes(shift.assignmentType);
@@ -6924,11 +7002,7 @@ function calcARPoints(shift) {
   }
 
   if (clockedRanges.length === 0) {
-    if (pagerWindow) {
-      const pagerMinutes = pagerWindow.end - pagerWindow.start;
-      return round2((pagerMinutes / 60) * 3.5);
-    }
-    return 0;
+    return round2(effectivePagerPts(shift, pagerWindow));
   }
 
   // Full span: first entry start → last entry end
@@ -6938,11 +7012,7 @@ function calcARPoints(shift) {
   const nextShiftMin = getNextShiftStartMin(shift.date);
   if (nextShiftMin != null && spanEnd > nextShiftMin) spanEnd = nextShiftMin;
   if (spanEnd <= spanStart) {
-    if (pagerWindow) {
-      const pagerMinutes = pagerWindow.end - pagerWindow.start;
-      return round2((pagerMinutes / 60) * 3.5);
-    }
-    return 0;
+    return round2(effectivePagerPts(shift, pagerWindow));
   }
 
   // Build pre-call range (OR rates during pre-call period)
@@ -6994,10 +7064,7 @@ function calcARPoints(shift) {
 
     // Pager pay: guaranteed full window duration
     let callPoints = 0;
-    if (pagerWindow) {
-      const pagerMinutes = pagerWindow.end - pagerWindow.start;
-      callPoints = (pagerMinutes / 60) * 3.5;
-    }
+    callPoints = effectivePagerPts(shift, pagerWindow);
     const tcPts = calcTempCoveragePoints(shift);
     callPoints += tcPts.pagerAdj;
     arPoints += tcPts.ar;
@@ -7031,10 +7098,7 @@ function calcARPoints(shift) {
 
   // Pager pay: guaranteed full window duration (does not stop when clocked in)
   let callPoints = 0;
-  if (pagerWindow) {
-    const pagerMinutes = pagerWindow.end - pagerWindow.start;
-    callPoints = (pagerMinutes / 60) * 3.5;
-  }
+  callPoints = effectivePagerPts(shift, pagerWindow);
 
   // Temp coverage adjustment
   const tcPts = calcTempCoveragePoints(shift);
@@ -7072,14 +7136,6 @@ function getNextShiftStartMin(shiftDate) {
 function calcARBreakdown(shift) {
   if (shift.assignmentType === 'vacation') return { ar: 0, call: 0 };
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return { ar: 56, call: 0 };
-  // Unrestricted call entry shifts: pay = hours × 3.5, all as call/pager pay.
-  {
-    const _r = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
-    if (_r && _r.unrestrictedCallEntry) {
-      const h = parseFloat(shift.unrestrictedCallHours) || 0;
-      return { ar: 0, call: round2(h * 3.5) };
-    }
-  }
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
@@ -7114,14 +7170,10 @@ function calcARBreakdown(shift) {
 
   // No time entries: return pager pay only if eligible
   if (!hasEntries || !hasEnd) {
-    if (pagerWindow) {
-      const pagerMinutes = pagerWindow.end - pagerWindow.start;
-      let callPts = (pagerMinutes / 60) * 3.5;
-      const tcAdj = calcTempCoveragePoints(shift);
-      callPts += tcAdj.pagerAdj;
-      return { ar: round2(tcAdj.ar), call: round2(callPts) };
-    }
-    return { ar: 0, call: 0 };
+    let callPts = effectivePagerPts(shift, pagerWindow);
+    const tcAdj = calcTempCoveragePoints(shift);
+    callPts += tcAdj.pagerAdj;
+    return { ar: round2(tcAdj.ar), call: round2(callPts) };
   }
 
   const isSF = ['SF1','SF2'].includes(shift.assignmentType);
@@ -7164,14 +7216,10 @@ function calcARBreakdown(shift) {
   }
 
   if (clockedRanges.length === 0) {
-    if (pagerWindow) {
-      const pagerMinutes = pagerWindow.end - pagerWindow.start;
-      let callPts = (pagerMinutes / 60) * 3.5;
-      const tcAdj = calcTempCoveragePoints(shift);
-      callPts += tcAdj.pagerAdj;
-      return { ar: round2(tcAdj.ar), call: round2(callPts) };
-    }
-    return { ar: 0, call: 0 };
+    let callPts = effectivePagerPts(shift, pagerWindow);
+    const tcAdj = calcTempCoveragePoints(shift);
+    callPts += tcAdj.pagerAdj;
+    return { ar: round2(tcAdj.ar), call: round2(callPts) };
   }
 
   const spanStart = clockedRanges[0].start;
@@ -7180,14 +7228,10 @@ function calcARBreakdown(shift) {
   const nextShiftMin2 = getNextShiftStartMin(shift.date);
   if (nextShiftMin2 != null && spanEnd > nextShiftMin2) spanEnd = nextShiftMin2;
   if (spanEnd <= spanStart) {
-    if (pagerWindow) {
-      const pagerMinutes = pagerWindow.end - pagerWindow.start;
-      let callPts = (pagerMinutes / 60) * 3.5;
-      const tcAdj = calcTempCoveragePoints(shift);
-      callPts += tcAdj.pagerAdj;
-      return { ar: round2(tcAdj.ar), call: round2(callPts) };
-    }
-    return { ar: 0, call: 0 };
+    let callPts = effectivePagerPts(shift, pagerWindow);
+    const tcAdj = calcTempCoveragePoints(shift);
+    callPts += tcAdj.pagerAdj;
+    return { ar: round2(tcAdj.ar), call: round2(callPts) };
   }
 
   // Build pre-call range (OR rates during pre-call period)
@@ -7237,10 +7281,7 @@ function calcARBreakdown(shift) {
     let arPoints = preCallAR + eveningAR;
 
     let callPoints = 0;
-    if (pagerWindow) {
-      const pagerMinutes = pagerWindow.end - pagerWindow.start;
-      callPoints = (pagerMinutes / 60) * 3.5;
-    }
+    callPoints = effectivePagerPts(shift, pagerWindow);
     const tcPtsBd = calcTempCoveragePoints(shift);
     callPoints += tcPtsBd.pagerAdj;
     arPoints += tcPtsBd.ar;
@@ -7270,10 +7311,7 @@ function calcARBreakdown(shift) {
 
   // Pager pay: guaranteed full window duration (does not stop when clocked in)
   let callPoints = 0;
-  if (pagerWindow) {
-    const pagerMinutes = pagerWindow.end - pagerWindow.start;
-    callPoints = (pagerMinutes / 60) * 3.5;
-  }
+  callPoints = effectivePagerPts(shift, pagerWindow);
 
   // Temp coverage adjustment
   const tcPtsBd = calcTempCoveragePoints(shift);
@@ -8145,12 +8183,26 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
     document.getElementById('eveningTimeSection').classList.add('hidden');
     document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
   }
-  // Unrestricted call entry shifts: show hours field, hide time entries
-  // (since we don't track clock-in/out for these — just hours of pager).
+  // Unrestricted call entry shifts: show pager-hours field AND time entries
+  // (clocked-in time contributes AR; the hours field captures total pager
+  // pay hours for that night/shift).
   const isUnrestrictedEntry = !!(getResolvedShiftRules(getCurrentSiteId())[type]
     && getResolvedShiftRules(getCurrentSiteId())[type].unrestrictedCallEntry);
   document.getElementById('unrestrictedCallEntryOptions').classList.toggle('hidden', !isUnrestrictedEntry);
-  if (type === 'forced_off' || isUnrestrictedEntry) {
+  // Help text on the time-entries section: only the unrestricted call
+  // case needs an inline explanation right now.
+  const helpEl = document.getElementById('timeEntriesHelp');
+  if (helpEl) {
+    if (isUnrestrictedEntry) {
+      helpEl.textContent = 'Clocked-IN time on QGenda. Leave blank if you were never called in.';
+      helpEl.classList.remove('hidden');
+    } else {
+      helpEl.textContent = '';
+      helpEl.classList.add('hidden');
+    }
+  }
+  // Vacation and forced-off shifts have no clocked-in time at all.
+  if (type === 'forced_off' || type === 'vacation') {
     populateTimeEntries([{ start: '', end: '' }]);
     document.getElementById('timeEntriesGroup').classList.add('hidden');
   } else {
@@ -8665,7 +8717,8 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
   const timeEntries = isVacation || isForcedOff ? [{ start: '', end: '' }] : collectTimeEntries();
   const effectiveType = eveningAssignment || assignmentType;
   const hasPagerWindow = getPagerPayWindow(effectiveType, isWeekend(date) || document.getElementById('holidayCheck')?.checked, date) !== null;
-  if (!isVacation && !isForcedOff && (timeEntries.length === 0 || !timeEntries[0].start) && !hasPagerWindow) {
+  const ucHoursVal = parseFloat(document.getElementById('unrestrictedCallHours')?.value) || 0;
+  if (!isVacation && !isForcedOff && (timeEntries.length === 0 || !timeEntries[0].start) && !hasPagerWindow && !(ucHoursVal > 0)) {
     showToast('Please enter at least one start time');
     return;
   }
@@ -11270,8 +11323,13 @@ function getShiftPayBreakdown(shift) {
   const lastEntry = hasEntries ? entries[entries.length - 1] : null;
   const hasEnd = hasEntries && (entries.length > 1 || (lastEntry && lastEntry.end));
 
-  // No time entries: return pager pay row only if eligible
+  // No time entries: return pager pay row only if eligible (or if a
+  // per-shift unrestrictedCallHours override is set).
   if (!hasEntries || !hasEnd) {
+    const ucH = parseFloat(shift.unrestrictedCallHours) || 0;
+    if (ucH > 0) {
+      return [{ clockIn: '', clockOut: '', payCode: 'Pager Pay (manual)', durationMin: ucH * 60, payRate: 3.5, amount: round2(ucH * 3.5), isPager: true, isSubRow: false }];
+    }
     if (pagerWindowEarly) {
       const durMin = pagerWindowEarly.end - pagerWindowEarly.start;
       return [{ clockIn: minutesToTimeStr(pagerWindowEarly.start), clockOut: minutesToTimeStr(pagerWindowEarly.end), payCode: 'Pager Pay', durationMin: durMin, payRate: 3.5, amount: round2((durMin / 60) * 3.5), isPager: true, isSubRow: false }];
@@ -11309,6 +11367,10 @@ function getShiftPayBreakdown(shift) {
   }
 
   function pagerOnlyRows() {
+    const ucH = parseFloat(shift.unrestrictedCallHours) || 0;
+    if (ucH > 0) {
+      return [{ clockIn: '', clockOut: '', payCode: 'Pager Pay (manual)', durationMin: ucH * 60, payRate: 3.5, amount: round2(ucH * 3.5), isPager: true, isSubRow: false }];
+    }
     if (pagerWindowEarly) {
       const durMin = pagerWindowEarly.end - pagerWindowEarly.start;
       return [{ clockIn: minutesToTimeStr(pagerWindowEarly.start), clockOut: minutesToTimeStr(pagerWindowEarly.end), payCode: 'Pager Pay', durationMin: durMin, payRate: 3.5, amount: round2((durMin / 60) * 3.5), isPager: true, isSubRow: false }];
@@ -11416,9 +11478,23 @@ function getShiftPayBreakdown(shift) {
     }
   });
 
-  // Pager pay: guaranteed full window duration (does not stop when clocked in)
+  // Pager pay: guaranteed full window duration (does not stop when clocked in).
+  // shift.unrestrictedCallHours, when set, is a per-shift override of the
+  // rule's window (used by Other-site shifts and shifts migrated from Other).
   const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
-  if (pagerWindow) {
+  const ucOverrideH = parseFloat(shift.unrestrictedCallHours) || 0;
+  if (ucOverrideH > 0) {
+    rows.push({
+      clockIn: '',
+      clockOut: '',
+      payCode: 'Pager Pay (manual)',
+      durationMin: ucOverrideH * 60,
+      payRate: 3.5,
+      amount: round2(ucOverrideH * 3.5),
+      isPager: true,
+      isSubRow: false
+    });
+  } else if (pagerWindow) {
     const durMin = pagerWindow.end - pagerWindow.start;
     if (durMin > 0) {
       rows.push({
