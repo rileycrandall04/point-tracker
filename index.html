@@ -2236,7 +2236,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
           <option value="emergency_intubation">Emergency Intubation</option>
           <option value="01996">Epidural Rounding (01996)</option>
           <option value="99231">Pain Rounding (99231)</option>
-          <option value="tee">TEE Exam</option>
           <option value="supervision_block">Supervision Block (2.63 pts)</option>
           <option value="aps_rounding">APS Rounding</option>
         </select>
@@ -2348,6 +2347,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
             <div class="checkbox-group">
               <input type="checkbox" id="caseThoracicEpidural">
               <label for="caseThoracicEpidural">Thoracic Epidural (3.75 pts)</label>
+            </div>
+            <div class="checkbox-group">
+              <input type="checkbox" id="caseTEEExam">
+              <label for="caseTEEExam">TEE Exam (22 pts)</label>
             </div>
           </div>
         </details>
@@ -3660,6 +3663,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
             <tr><td>Central Line</td><td>0.8 pts</td></tr>
             <tr><td>Arterial Line</td><td>0.6 pts</td></tr>
             <tr><td>TEE Add-On</td><td>0.4 pts</td></tr>
+            <tr><td>TEE Exam</td><td>22 pts</td></tr>
           </tbody>
         </table>
       </div>
@@ -3674,7 +3678,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <table class="cr-table">
           <thead><tr><th>Case Type</th><th>Points</th></tr></thead>
           <tbody>
-            <tr><td>TEE Exam</td><td>22 pts</td></tr>
             <tr><td>Epidural Blood Patch</td><td>5 pts</td></tr>
             <tr><td>Emergency Intubation</td><td>4 pts</td></tr>
             <tr><td>Epidural Rounding (01996)</td><td>3 pts per round</td></tr>
@@ -3799,7 +3802,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <option value="emergency_intubation">Emergency Intubation</option>
         <option value="01996">Epidural Rounding (01996)</option>
         <option value="99231">Pain Rounding (99231)</option>
-        <option value="tee">TEE Exam</option>
         <option value="aps_rounding">APS Rounding</option>
       </select>
     </div>
@@ -3912,6 +3914,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <div class="checkbox-group">
         <input type="checkbox" id="editThoracicEpidural">
         <label for="editThoracicEpidural">Thoracic Epidural (3.75 pts)</label>
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="editTEEExam">
+        <label for="editTEEExam">TEE Exam (22 pts)</label>
       </div>
     </div>
     <div id="editLaborEpiduralFields" class="hidden">
@@ -6188,6 +6194,7 @@ function calcAddOnPoints(caseData) {
   if (caseData.hasArterialLine) pts += 0.6;
   if (caseData.hasPAC) pts += 2;
   if (caseData.hasTEEAddOn) pts += 0.4;
+  if (caseData.hasTEEExam) pts += 22;
   if (caseData.hasITMorphine) pts += 3;
   if (caseData.hasThoracicEpidural) pts += 3.75;
   return pts;
@@ -6489,6 +6496,7 @@ function getCaseBreakdown(caseData, shift) {
   if (caseData.hasArterialLine) bd.push({label: 'Arterial Line', pts: 0.6});
   if (caseData.hasPAC) bd.push({label: 'PAC', pts: 2});
   if (caseData.hasTEEAddOn) bd.push({label: 'TEE', pts: 0.4});
+  if (caseData.hasTEEExam) bd.push({label: 'TEE Exam', pts: 22});
   if (caseData.hasITMorphine) bd.push({label: 'IT Morphine', pts: 3});
   if (caseData.hasThoracicEpidural) bd.push({label: 'Thoracic Epidural', pts: 3.75});
   const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
@@ -8475,7 +8483,7 @@ function autoLearnProcedureMapping(procedure, asaCode) {
   if (el) { el.addEventListener('input', updatePointPreview); el.addEventListener('change', updatePointPreview); }
 });
 
-['caseEmergency','caseHighRiskPeds','caseORCase','caseCentralLine','caseArterialLine','casePAC','caseTEEAddOn','caseITMorphine','caseThoracicEpidural','caseShared'].forEach(id => {
+['caseEmergency','caseHighRiskPeds','caseORCase','caseCentralLine','caseArterialLine','casePAC','caseTEEAddOn','caseTEEExam','caseITMorphine','caseThoracicEpidural','caseShared'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', updatePointPreview);
 });
@@ -8549,6 +8557,7 @@ function buildCaseFromForm() {
     hasArterialLine: document.getElementById('caseArterialLine')?.checked || false,
     hasPAC: document.getElementById('casePAC')?.checked || false,
     hasTEEAddOn: document.getElementById('caseTEEAddOn')?.checked || false,
+    hasTEEExam: document.getElementById('caseTEEExam')?.checked || false,
     hasITMorphine: document.getElementById('caseITMorphine')?.checked || false,
     hasThoracicEpidural: document.getElementById('caseThoracicEpidural')?.checked || false,
     epiduralRounds: document.getElementById('apsEpiduralCount')?.value || 0,
@@ -8630,6 +8639,7 @@ function resetCaseForm() {
   document.getElementById('caseArterialLine').checked = false;
   document.getElementById('casePAC').checked = false;
   document.getElementById('caseTEEAddOn').checked = false;
+  if (document.getElementById('caseTEEExam')) document.getElementById('caseTEEExam').checked = false;
   document.getElementById('caseITMorphine').checked = false;
   document.getElementById('caseThoracicEpidural').checked = false;
   document.getElementById('laborStart').value = '';
@@ -9880,6 +9890,7 @@ function getCaseAddOnSummary(c) {
   if (c.hasArterialLine) parts.push('AL');
   if (c.hasPAC) parts.push('PAC');
   if (c.hasTEEAddOn) parts.push('TEE');
+  if (c.hasTEEExam) parts.push('TEE Exam');
   if (c.hasITMorphine) parts.push('ITM');
   if (c.hasThoracicEpidural) parts.push('TE');
   return parts.join(', ');
@@ -17696,6 +17707,7 @@ function openCaseEdit(caseId) {
   document.getElementById('editArterialLine').checked = c.hasArterialLine || false;
   document.getElementById('editPAC').checked = c.hasPAC || false;
   document.getElementById('editTEEAddOn').checked = c.hasTEEAddOn || false;
+  document.getElementById('editTEEExam').checked = c.hasTEEExam || false;
   document.getElementById('editITMorphine').checked = c.hasITMorphine || false;
   document.getElementById('editThoracicEpidural').checked = c.hasThoracicEpidural || false;
 
@@ -17756,6 +17768,7 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
     c.hasArterialLine = document.getElementById('editArterialLine').checked;
     c.hasPAC = document.getElementById('editPAC').checked;
     c.hasTEEAddOn = document.getElementById('editTEEAddOn').checked;
+    c.hasTEEExam = document.getElementById('editTEEExam').checked;
     c.hasITMorphine = document.getElementById('editITMorphine').checked;
     c.hasThoracicEpidural = document.getElementById('editThoracicEpidural').checked;
     c.notes = document.getElementById('editCaseNotes').value;
