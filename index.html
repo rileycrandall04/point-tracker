@@ -2075,10 +2075,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <div id="cardiacLiverOptions" class="hidden">
         <div class="divider"></div>
         <h3>Subspecialty Options</h3>
-        <div class="checkbox-group">
-          <input type="checkbox" id="subspecCoverage">
-          <label for="subspecCoverage">Subspecialty coverage (45 pts/day)</label>
+        <div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;line-height:1.4;">
+          Cardiac/Liver call automatically earns its 45-pt subspecialty bonus plus pager pay (14 hrs weekday, 24 hrs weekend/holiday) — <strong>94 pts</strong> weekday base, <strong>129 pts</strong> weekend/holiday base.
         </div>
+        <input type="checkbox" id="subspecCoverage" style="display:none;">
         <div class="form-group">
           <label>TEE Exams Performed</label>
           <input type="number" id="teeCount" value="0" min="0">
@@ -2240,7 +2240,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
           <option value="emergency_intubation">Emergency Intubation</option>
           <option value="01996">Epidural Rounding (01996)</option>
           <option value="99231">Pain Rounding (99231)</option>
-          <option value="tee">TEE Exam</option>
           <option value="supervision_block">Supervision Block (2.63 pts)</option>
           <option value="aps_rounding">APS Rounding</option>
         </select>
@@ -2352,6 +2351,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
             <div class="checkbox-group">
               <input type="checkbox" id="caseThoracicEpidural">
               <label for="caseThoracicEpidural">Thoracic Epidural (3.75 pts)</label>
+            </div>
+            <div class="checkbox-group">
+              <input type="checkbox" id="caseTEEExam">
+              <label for="caseTEEExam">TEE Exam (22 pts)</label>
             </div>
           </div>
         </details>
@@ -3640,7 +3643,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
             <tr><td>1st&ndash;4th Call</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
             <tr><td>Mole</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
             <tr><td>Endo</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
-            <tr><td>Cardiac / Liver</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
+            <tr><td>Cardiac / Liver**</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
             <tr><td>NORA</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
             <tr><td>ACS</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
             <tr><td>Pre-Call</td><td>20 pts/hr</td><td>Eve assignment</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
@@ -3650,6 +3653,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
           </tbody>
         </table>
         <p class="cr-note">*SF1 uses 13 pts/hr on weekday daytime only; 20 pts/hr at all other times.</p>
+        <p class="cr-note">**Cardiac/Liver base = pager pay + automatic 45-pt subspecialty bonus: <strong>94 pts</strong> weekday (14 hrs × 3.5 + 45), <strong>129 pts</strong> weekend/holiday (24 hrs × 3.5 + 45).</p>
         <p class="cr-note">Evening = 17:00&ndash;23:00 (&times;1.10). Night = 23:00&ndash;07:00 (&times;1.25). Holiday/Weekend daytime = &times;1.10.</p>
       </div>
     </div>
@@ -3728,6 +3732,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
             <tr><td>Central Line</td><td>0.8 pts</td></tr>
             <tr><td>Arterial Line</td><td>0.6 pts</td></tr>
             <tr><td>TEE Add-On</td><td>0.4 pts</td></tr>
+            <tr><td>TEE Exam</td><td>22 pts</td></tr>
           </tbody>
         </table>
       </div>
@@ -3742,7 +3747,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <table class="cr-table">
           <thead><tr><th>Case Type</th><th>Points</th></tr></thead>
           <tbody>
-            <tr><td>TEE Exam</td><td>22 pts</td></tr>
             <tr><td>Epidural Blood Patch</td><td>5 pts</td></tr>
             <tr><td>Emergency Intubation</td><td>4 pts</td></tr>
             <tr><td>Epidural Rounding (01996)</td><td>3 pts per round</td></tr>
@@ -3867,7 +3871,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <option value="emergency_intubation">Emergency Intubation</option>
         <option value="01996">Epidural Rounding (01996)</option>
         <option value="99231">Pain Rounding (99231)</option>
-        <option value="tee">TEE Exam</option>
         <option value="aps_rounding">APS Rounding</option>
       </select>
     </div>
@@ -3980,6 +3983,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <div class="checkbox-group">
         <input type="checkbox" id="editThoracicEpidural">
         <label for="editThoracicEpidural">Thoracic Epidural (3.75 pts)</label>
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="editTEEExam">
+        <label for="editTEEExam">TEE Exam (22 pts)</label>
       </div>
     </div>
     <div id="editLaborEpiduralFields" class="hidden">
@@ -6116,7 +6123,10 @@ const DEFAULT_SHIFT_RULES = {
   OR:               { label: 'OR / General',      pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
   OR_float:         { label: 'General OR - Float', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
   OB_restricted:    { label: 'UVH OB',             pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'ob' } },
-  cardiac_liver:    { label: 'Cardiac / Liver',    pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  cardiac_liver:    { label: 'Cardiac / Liver',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: null,
+                      arRate: { mode: 'general' } },
   mole:             { label: 'Mole',
                       pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
                       unrestrictedCall: { weekday: { afterMin: 1140 },          weekend: 'all' },
@@ -6774,6 +6784,24 @@ document.getElementById('addTimeEntryBtn').addEventListener('click', addTimeEntr
 // ================================================================
 // POINT CALCULATION ENGINE (preserved from v1)
 // ================================================================
+// Determine isHoliday / isWeekend for a given minute offset m from the
+// start of a shift's date. When a shift crosses midnight we want the AR
+// rate to reflect the day the work is actually being done on — e.g. an
+// OB shift starting Sunday 17:00 should switch back to weekday rates at
+// 07:00 Monday rather than continuing to apply weekend rates for the
+// whole 24h span.
+function getMomentContext(shift, m) {
+  const dayOffset = m >= 0 ? Math.floor(m / 1440) : -1;
+  if (dayOffset === 0 || !shift || !shift.date) {
+    return { isHol: !!(shift && shift.isHoliday), isWknd: shift && shift.date ? isWeekend(shift.date) : false };
+  }
+  const [y, mo, d] = shift.date.split('-').map(Number);
+  const dt = new Date(y, mo - 1, d + dayOffset);
+  const key = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+  const dayShift = data.shifts && data.shifts[key];
+  return { isHol: !!(dayShift && dayShift.isHoliday), isWknd: isWeekend(key) };
+}
+
 function getARRate(assignmentType, isHol, isWknd, timeMinutes, siteId) {
   const isDaytime = timeMinutes >= 420 && timeMinutes < 1020;
   const rule = getResolvedShiftRules(siteId)[assignmentType];
@@ -6828,7 +6856,8 @@ function calcARPoints(shift) {
       let ee = timeToMinutes(e.end);
       if (ee <= es) ee += 1440;
       for (let m = es; m < ee; m++) {
-        arPts += getARRate(shift.assignmentType, isHol, isWknd, m % 1440, shift.siteId) / 60;
+        const ctx = getMomentContext(shift, m);
+        arPts += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440, shift.siteId) / 60;
       }
     });
     return round2(pagerPts + arPts);
@@ -6871,9 +6900,11 @@ function calcARPoints(shift) {
     if (en <= s && e.end) en += 1440;
     clockedRanges.push({ start: s, end: en });
   });
-  // Fix cross-midnight ordering: if an entry starts before the previous entry, it's the next day
+  // Fix cross-midnight ordering: each entry must start at or after the
+  // previous entry's end. Add full days as needed so multi-midnight
+  // shifts (>24 h spans like an extended OB call) compose correctly.
   for (let i = 1; i < clockedRanges.length; i++) {
-    if (clockedRanges[i].start < clockedRanges[i-1].start) {
+    while (clockedRanges[i].start < clockedRanges[i-1].end) {
       clockedRanges[i].start += 1440;
       clockedRanges[i].end += 1440;
     }
@@ -6922,8 +6953,9 @@ function calcARPoints(shift) {
         if (m >= r.start && m < r.end) { clockedIn = true; break; }
       }
       if (clockedIn) {
+        const ctx = getMomentContext(shift, m);
         if (m >= preCallRange.start && m < preCallRange.end) {
-          preCallAR += getARRate('OR', isHol, isWknd, normalizedMin, shift.siteId) / 60;
+          preCallAR += getARRate('OR', ctx.isHol, ctx.isWknd, normalizedMin, shift.siteId) / 60;
         } else {
           let rateType = shift.assignmentType;
           if (isSF) {
@@ -6931,7 +6963,7 @@ function calcARPoints(shift) {
               if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
             }
           }
-          eveningAR += getARRate(rateType, isHol, isWknd, normalizedMin, shift.siteId) / 60;
+          eveningAR += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin, shift.siteId) / 60;
         }
       }
     }
@@ -6979,7 +7011,8 @@ function calcARPoints(shift) {
           if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
         }
       }
-      arPoints += getARRate(rateType, isHol, isWknd, normalizedMin, shift.siteId) / 60;
+      const ctx = getMomentContext(shift, m);
+      arPoints += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin, shift.siteId) / 60;
     }
   }
 
@@ -7054,7 +7087,8 @@ function calcARBreakdown(shift) {
       let ee = timeToMinutes(e.end);
       if (ee <= es) ee += 1440;
       for (let m = es; m < ee; m++) {
-        arPts += getARRate(shift.assignmentType, isHol, isWknd, m % 1440, shift.siteId) / 60;
+        const ctx = getMomentContext(shift, m);
+        arPts += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440, shift.siteId) / 60;
       }
     });
     return { ar: round2(arPts), call: round2(pagerPts) };
@@ -7107,9 +7141,10 @@ function calcARBreakdown(shift) {
     if (en <= s && e.end) en += 1440;
     clockedRanges.push({ start: s, end: en });
   });
-  // Fix cross-midnight ordering: if an entry starts before the previous entry, it's the next day
+  // Each entry must start at or after the previous entry's end. Add
+  // full days as needed so multi-midnight shifts (>24 h spans) compose.
   for (let i = 1; i < clockedRanges.length; i++) {
-    if (clockedRanges[i].start < clockedRanges[i-1].start) {
+    while (clockedRanges[i].start < clockedRanges[i-1].end) {
       clockedRanges[i].start += 1440;
       clockedRanges[i].end += 1440;
     }
@@ -7162,8 +7197,9 @@ function calcARBreakdown(shift) {
         if (m >= r.start && m < r.end) { clockedIn = true; break; }
       }
       if (clockedIn) {
+        const ctx = getMomentContext(shift, m);
         if (m >= preCallRange.start && m < preCallRange.end) {
-          preCallAR += getARRate('OR', isHol, isWknd, normalizedMin, shift.siteId) / 60;
+          preCallAR += getARRate('OR', ctx.isHol, ctx.isWknd, normalizedMin, shift.siteId) / 60;
         } else {
           let rateType = shift.assignmentType;
           if (isSF) {
@@ -7171,7 +7207,7 @@ function calcARBreakdown(shift) {
               if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
             }
           }
-          eveningAR += getARRate(rateType, isHol, isWknd, normalizedMin, shift.siteId) / 60;
+          eveningAR += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin, shift.siteId) / 60;
         }
       }
     }
@@ -7214,7 +7250,8 @@ function calcARBreakdown(shift) {
           if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
         }
       }
-      arPoints += getARRate(rateType, isHol, isWknd, normalizedMin, shift.siteId) / 60;
+      const ctx = getMomentContext(shift, m);
+      arPoints += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin, shift.siteId) / 60;
     }
   }
 
@@ -7264,6 +7301,7 @@ function calcAddOnPoints(caseData) {
   if (caseData.hasArterialLine) pts += 0.6;
   if (caseData.hasPAC) pts += 2;
   if (caseData.hasTEEAddOn) pts += 0.4;
+  if (caseData.hasTEEExam) pts += 22;
   if (caseData.hasITMorphine) pts += 3;
   if (caseData.hasThoracicEpidural) pts += 3.75;
   return pts;
@@ -7565,6 +7603,7 @@ function getCaseBreakdown(caseData, shift) {
   if (caseData.hasArterialLine) bd.push({label: 'Arterial Line', pts: 0.6});
   if (caseData.hasPAC) bd.push({label: 'PAC', pts: 2});
   if (caseData.hasTEEAddOn) bd.push({label: 'TEE', pts: 0.4});
+  if (caseData.hasTEEExam) bd.push({label: 'TEE Exam', pts: 22});
   if (caseData.hasITMorphine) bd.push({label: 'IT Morphine', pts: 3});
   if (caseData.hasThoracicEpidural) bd.push({label: 'Thoracic Epidural', pts: 3.75});
   const isOBShift = shift && ['OB_restricted','SF1','SF2'].includes(shift.assignmentType);
@@ -7598,7 +7637,8 @@ function calcSupervisionPoints(shift) {
     let pts = 0;
     clockedRanges.forEach(r => {
       for (let m = r.start; m < r.end; m++) {
-        pts += (getARRate('OR', isHol, isWknd, m % 1440, shift.siteId) + 7) / 60;
+        const ctx = getMomentContext(shift, m);
+        pts += (getARRate('OR', ctx.isHol, ctx.isWknd, m % 1440, shift.siteId) + 7) / 60;
       }
     });
     return round2(pts);
@@ -7628,16 +7668,16 @@ function calcCallPoints(shift) {
 }
 
 function calcSubspecPoints(shift) {
-  let pts = 0;
-  if (shift.subspecCoverage) pts += 45;
+  // Cardiac/Liver shifts always include the 45-pt subspecialty bonus
+  // as part of their base. The legacy subspecCoverage checkbox is kept
+  // as a no-op for backward compatibility but no longer required.
+  let pts = 45;
   pts += (parseInt(shift.teeCount) || 0) * 22;
   return pts;
 }
 
 function calcTempCoveragePoints(shift) {
   if (!shift.tempCoverage || shift.tempCoverage.length === 0) return { pagerAdj: 0, ar: 0 };
-  const isHol = shift.isHoliday;
-  const isWknd = isWeekend(shift.date);
   let pagerAdj = 0;
   let ar = 0;
   shift.tempCoverage.forEach(tc => {
@@ -7658,7 +7698,8 @@ function calcTempCoveragePoints(shift) {
         let ee = timeToMinutes(e.end);
         if (ee <= es) ee += 1440;
         for (let m = es; m < ee; m++) {
-          ar += getARRate(shift.assignmentType, isHol, isWknd, m % 1440, shift.siteId) / 60;
+          const ctx = getMomentContext(shift, m);
+          ar += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440, shift.siteId) / 60;
         }
       });
     }
@@ -8612,19 +8653,22 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     showToast('Please enter at least one start time');
     return;
   }
-  // Validate: entries should be in chronological order, no overlaps (cross-midnight aware)
+  // Validate: entries should be in chronological order, no overlaps.
+  // Cross-midnight aware over multiple days so >24 h shifts (extended OB
+  // call etc.) compose correctly: each entry must start at or after the
+  // previous entry's end, with full days added as needed.
   if (!isVacation && !isForcedOff) {
-    for (let i = 1; i < timeEntries.length; i++) {
-      const prevEnd = timeToMinutes(timeEntries[i-1].end);
-      let currStart = timeToMinutes(timeEntries[i].start);
-      // If current start is before previous end, assume cross-midnight
-      if (currStart < timeToMinutes(timeEntries[0].start)) currStart += 1440;
-      let adjPrevEnd = prevEnd;
-      if (adjPrevEnd < timeToMinutes(timeEntries[0].start)) adjPrevEnd += 1440;
-      if (timeEntries[i-1].end && currStart <= adjPrevEnd) {
-        showToast('Time entries must be in chronological order with no overlaps');
-        return;
+    let prevEndAbs = null;
+    let absOffset = 0;
+    for (let i = 0; i < timeEntries.length; i++) {
+      const e = timeEntries[i];
+      let s = timeToMinutes(e.start) + absOffset;
+      if (prevEndAbs != null) {
+        while (s < prevEndAbs) { s += 1440; absOffset += 1440; }
       }
+      let en = e.end ? timeToMinutes(e.end) + absOffset : s;
+      if (e.end && en <= s) en += 1440;
+      prevEndAbs = e.end ? en : s;
     }
   }
   // Build list of dates to save (range for vacation, single otherwise)
@@ -9567,7 +9611,7 @@ function autoLearnProcedureMapping(procedure, asaCode) {
   if (el) { el.addEventListener('input', updatePointPreview); el.addEventListener('change', updatePointPreview); }
 });
 
-['caseEmergency','caseHighRiskPeds','caseORCase','caseCentralLine','caseArterialLine','casePAC','caseTEEAddOn','caseITMorphine','caseThoracicEpidural','caseShared'].forEach(id => {
+['caseEmergency','caseHighRiskPeds','caseORCase','caseCentralLine','caseArterialLine','casePAC','caseTEEAddOn','caseTEEExam','caseITMorphine','caseThoracicEpidural','caseShared'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', updatePointPreview);
 });
@@ -9641,6 +9685,7 @@ function buildCaseFromForm() {
     hasArterialLine: document.getElementById('caseArterialLine')?.checked || false,
     hasPAC: document.getElementById('casePAC')?.checked || false,
     hasTEEAddOn: document.getElementById('caseTEEAddOn')?.checked || false,
+    hasTEEExam: document.getElementById('caseTEEExam')?.checked || false,
     hasITMorphine: document.getElementById('caseITMorphine')?.checked || false,
     hasThoracicEpidural: document.getElementById('caseThoracicEpidural')?.checked || false,
     epiduralRounds: document.getElementById('apsEpiduralCount')?.value || 0,
@@ -9723,6 +9768,7 @@ function resetCaseForm() {
   document.getElementById('caseArterialLine').checked = false;
   document.getElementById('casePAC').checked = false;
   document.getElementById('caseTEEAddOn').checked = false;
+  if (document.getElementById('caseTEEExam')) document.getElementById('caseTEEExam').checked = false;
   document.getElementById('caseITMorphine').checked = false;
   document.getElementById('caseThoracicEpidural').checked = false;
   document.getElementById('laborStart').value = '';
@@ -10973,6 +11019,7 @@ function getCaseAddOnSummary(c) {
   if (c.hasArterialLine) parts.push('AL');
   if (c.hasPAC) parts.push('PAC');
   if (c.hasTEEAddOn) parts.push('TEE');
+  if (c.hasTEEExam) parts.push('TEE Exam');
   if (c.hasITMorphine) parts.push('ITM');
   if (c.hasThoracicEpidural) parts.push('TE');
   return parts.join(', ');
@@ -11189,7 +11236,8 @@ function getShiftPayBreakdown(shift) {
       if (ee <= es) ee += 1440;
       const eDurMin = ee - es;
       const normMin = es % 1440;
-      const rate = getARRate(shift.assignmentType, isHol, isWknd, normMin, shift.siteId);
+      const eCtx = getMomentContext(shift, es);
+      const rate = getARRate(shift.assignmentType, eCtx.isHol, eCtx.isWknd, normMin, shift.siteId);
       coverageRows.push({
         clockIn: e.start, clockOut: e.end,
         payCode: 'Temp Coverage AR',
@@ -11235,9 +11283,10 @@ function getShiftPayBreakdown(shift) {
     if (en <= s && e.end) en += 1440;
     clockedRanges.push({ start: s, end: en, startStr: e.start, endStr: e.end || '' });
   });
-  // Fix cross-midnight ordering: if an entry starts before the previous entry, it's the next day
+  // Each entry must start at or after the previous entry's end. Add
+  // full days as needed so multi-midnight shifts (>24 h spans) compose.
   for (let i = 1; i < clockedRanges.length; i++) {
-    if (clockedRanges[i].start < clockedRanges[i-1].start) {
+    while (clockedRanges[i].start < clockedRanges[i-1].end) {
       clockedRanges[i].start += 1440;
       clockedRanges[i].end += 1440;
     }
@@ -11271,7 +11320,9 @@ function getShiftPayBreakdown(shift) {
 
   // Rate-change boundaries (minute of day)
   function getBoundaries() {
-    const b = (isWknd || isHol) ? [420, 1020] : [420, 1020, 1380];
+    // Always include the weekday 23:00 boundary so cross-midnight shifts
+    // split at the right rate transitions when the calendar day changes.
+    const b = [420, 1020, 1380];
     // Add supervision overlay boundaries so segments split at supervision start/end
     if (shift.supervisionStart && shift.supervisionEnd && shift.assignmentType !== 'CRNA_supervision') {
       const ss = timeToMinutes(shift.supervisionStart);
@@ -11316,8 +11367,9 @@ function getShiftPayBreakdown(shift) {
           if (segStart >= r.start && segStart < r.end) { rateType = 'OR'; break; }
         }
       }
-      const payCode = isPreCallSeg ? 'Pre-Call ' + getPayCodeName(normSeg, 'OR', isWknd, isHol) : getPayCodeName(normSeg, rateType, isWknd, isHol);
-      let payRate = getARRate(rateType, isHol, isWknd, normSeg, shift.siteId);
+      const segCtx = getMomentContext(shift, segStart);
+      const payCode = isPreCallSeg ? 'Pre-Call ' + getPayCodeName(normSeg, 'OR', segCtx.isWknd, segCtx.isHol) : getPayCodeName(normSeg, rateType, segCtx.isWknd, segCtx.isHol);
+      let payRate = getARRate(rateType, segCtx.isHol, segCtx.isWknd, normSeg, shift.siteId);
 
       // CRNA supervision bonus: +7/hr
       let supBonus = 0;
@@ -11399,7 +11451,8 @@ function getShiftPayBreakdown(shift) {
           if (ee <= es) ee += 1440;
           const eDurMin = ee - es;
           const normMin = es % 1440;
-          const rate = getARRate(shift.assignmentType, isHol, isWknd, normMin, shift.siteId);
+          const eCtx = getMomentContext(shift, es);
+          const rate = getARRate(shift.assignmentType, eCtx.isHol, eCtx.isWknd, normMin, shift.siteId);
           rows.push({
             clockIn: e.start, clockOut: e.end,
             payCode: 'Temp Coverage AR',
@@ -18356,14 +18409,13 @@ function closeSurgeonCaseEditor() {
 function calcCaseARContribution(c, shift) {
   if (!c.startTime || !c.endTime || !shift || !shift.assignmentType) return 0;
   if (shift.assignmentType === 'vacation' || shift.forcedOff || shift.assignmentType === 'forced_off') return 0;
-  const isHol = shift.isHoliday;
-  const isWknd = isWeekend(shift.date || c.shiftDate);
   let s = timeToMinutes(c.startTime);
   let e = timeToMinutes(c.endTime);
   if (e <= s) e += 1440;
   let ar = 0;
   for (let m = s; m < e; m++) {
-    ar += getARRate(shift.assignmentType, isHol, isWknd, m % 1440, shift.siteId) / 60;
+    const ctx = getMomentContext(shift, m);
+    ar += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440, shift.siteId) / 60;
   }
   return round2(ar);
 }
@@ -18791,6 +18843,7 @@ function openCaseEdit(caseId) {
   document.getElementById('editArterialLine').checked = c.hasArterialLine || false;
   document.getElementById('editPAC').checked = c.hasPAC || false;
   document.getElementById('editTEEAddOn').checked = c.hasTEEAddOn || false;
+  document.getElementById('editTEEExam').checked = c.hasTEEExam || false;
   document.getElementById('editITMorphine').checked = c.hasITMorphine || false;
   document.getElementById('editThoracicEpidural').checked = c.hasThoracicEpidural || false;
 
@@ -18851,6 +18904,7 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
     c.hasArterialLine = document.getElementById('editArterialLine').checked;
     c.hasPAC = document.getElementById('editPAC').checked;
     c.hasTEEAddOn = document.getElementById('editTEEAddOn').checked;
+    c.hasTEEExam = document.getElementById('editTEEExam').checked;
     c.hasITMorphine = document.getElementById('editITMorphine').checked;
     c.hasThoracicEpidural = document.getElementById('editThoracicEpidural').checked;
     c.notes = document.getElementById('editCaseNotes').value;
@@ -22976,8 +23030,24 @@ auth.onAuthStateChanged(async (user) => {
       showToast('Data loaded from cloud');
     }
 
-    // Show tutorial for brand-new users (no data at all)
+    // Show tutorial for brand-new users (no data at all). Brand-new users
+    // are auto-opted-out of any historical update notifications so they
+    // see only the tutorial, not changelogs about features that predate
+    // their account.
     if (Object.keys(data.shifts).length === 0 && data.cases.length === 0) {
+      let dismissedAny = false;
+      Object.keys(settings).forEach(k => {
+        if (k.startsWith('dismissedNotice_') && !settings[k]) {
+          settings[k] = true;
+          dismissedAny = true;
+        }
+      });
+      // Also pre-set the known notice flag so first-run users skip it.
+      if (!settings.dismissedNotice_compUpdates2026) {
+        settings.dismissedNotice_compUpdates2026 = true;
+        dismissedAny = true;
+      }
+      if (dismissedAny) saveSettings(settings);
       showTutorial();
     } else if (!settings.dismissedNotice_compUpdates2026) {
       // One-time notification about compensation updates
