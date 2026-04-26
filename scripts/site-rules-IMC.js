@@ -136,6 +136,9 @@ module.exports = {
       arRate: { mode: 'general' }
     },
 
+    // OR Float: same comp rules as UVH OR Float (general AR + 30 pt float bonus).
+    'IMC_OR_float': { label: 'IMC General OR - Float', inherit_uvh: 'OR_float' },
+
     // ============================================================
     // OFF / VACATION — single forced off (56 pts) and single vacation (0 pts).
     // The vacation entry covers IMC Off / IMC No Call as well; forced off

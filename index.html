@@ -6121,7 +6121,7 @@ let calMappingResolve = null;
 // arRate.mode: 'general' (20 base), 'ob' (13 base), 'sf1' (13 daytime weekday non-holiday, else 20).
 const DEFAULT_SHIFT_RULES = {
   OR:               { label: 'OR / General',      pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-  OR_float:         { label: 'General OR - Float', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  OR_float:         { label: 'General OR - Float', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' }, floatBonus: 30 },
   OB_restricted:    { label: 'UVH OB',             pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'ob' } },
   cardiac_liver:    { label: 'Cardiac / Liver',
                       pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
@@ -7729,7 +7729,10 @@ function calcShiftTotal(shift) {
   shiftCases.forEach(c => { if (!c.unbilled) prodPts += calcCasePoints(c, shift); });
   const subspecPts = (shift.assignmentType === 'cardiac_liver') ? calcSubspecPoints(shift) : 0;
   const supervisionPts = calcSupervisionPoints(shift);
-  const floatBonus = shift.assignmentType === 'OR_float' ? 30 : 0;
+  // Float bonus: rule-driven so per-site float types (e.g. IMC_OR_float
+  // inheriting OR_float) automatically pick it up.
+  const _ftRule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+  const floatBonus = (_ftRule && typeof _ftRule.floatBonus === 'number') ? _ftRule.floatBonus : 0;
   const calcTotal = round2(arPts + prodPts + callPts + subspecPts + supervisionPts + floatBonus);
   // Per-row overrides: adjust total by difference between overridden and calculated row amounts
   const hasRowOverrides = shift.manualAmounts && Object.keys(shift.manualAmounts).length > 0;
