@@ -2038,25 +2038,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
       <div class="form-group">
         <label>Assignment Type</label>
-        <select id="shiftAssignmentType">
-          <option value="OR">OR / General</option>
-          <option value="OR_float">General OR - Float</option>
-          <option value="OB_restricted">UVH OB</option>
-          <option value="cardiac_liver">Cardiac / Liver</option>
-          <option value="mole">Mole</option>
-          <option value="1st_call">1st Call</option>
-          <option value="2nd_call">2nd Call</option>
-          <option value="3rd_call">3rd Call</option>
-          <option value="4th_call">4th Call</option>
-          <option value="endo">Endo</option>
-          <option value="SF1">SF 1</option>
-          <option value="SF2">SF 2</option>
-          <option value="ACS">ACS</option>
-          <option value="NORA">NORA</option>
-          <option value="pre_call">Pre-Call</option>
-          <option value="CRNA_supervision">CRNA Supervision</option>
-          <option value="forced_off">Forced Off</option>
-          <option value="vacation">Vacation / Off</option>
+        <select id="shiftAssignmentType"><!-- options populated by refreshAllShiftTypeDropdowns() -->
         </select>
       </div>
 
@@ -2100,6 +2082,15 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div class="form-group">
           <label>TEE Exams Performed</label>
           <input type="number" id="teeCount" value="0" min="0">
+        </div>
+      </div>
+
+      <div id="unrestrictedCallEntryOptions" class="hidden">
+        <div class="divider"></div>
+        <div class="form-group">
+          <label>Hours of unrestricted call</label>
+          <input type="number" id="unrestrictedCallHours" value="0" min="0" step="0.25" placeholder="e.g. 12">
+          <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">Pays 3.5 pts per hour. No AR rate or case points apply to this shift.</p>
         </div>
       </div>
 
@@ -2184,10 +2175,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div class="divider"></div>
         <div class="form-group">
           <label>Evening Assignment</label>
-          <select id="eveningAssignmentType">
+          <select id="eveningAssignmentType"><!-- options populated by refreshAllShiftTypeDropdowns() -->
             <option value="">None</option>
-            <option value="mole">Mole</option>
-            <option value="OB_restricted">UVH OB</option>
           </select>
         </div>
         <div id="eveningTimeSection" class="hidden">
@@ -4107,26 +4096,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <h2 id="shiftEditTitle">Edit Shift</h2>
     <div class="form-group">
       <label>Assignment Type</label>
-      <select id="editShiftType">
-        <option value="OR">OR / General</option>
-        <option value="OR_float">General OR - Float</option>
-        <option value="OB_restricted">UVH OB</option>
-        <option value="cardiac_liver">Cardiac / Liver</option>
-        <option value="mole">Mole</option>
-        <option value="1st_call">1st Call</option>
-        <option value="2nd_call">2nd Call</option>
-        <option value="3rd_call">3rd Call</option>
-        <option value="4th_call">4th Call</option>
-        <option value="endo">Endo</option>
-        <option value="SF1">SF 1</option>
-        <option value="SF2">SF 2</option>
-        <option value="ACS">ACS</option>
-        <option value="NORA">NORA</option>
-        <option value="pre_call">Pre-Call</option>
-        <option value="CRNA_supervision">CRNA Supervision</option>
-        <option value="forced_off">Forced Off</option>
-        <option value="vacation">Vacation / Off</option>
-      </select>
+      <select id="editShiftType"><!-- options populated by refreshAllShiftTypeDropdowns() --></select>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="editShiftHoliday"> Holiday</label>
@@ -6183,6 +6153,10 @@ const DEFAULT_SHIFT_RULES = {
   NORA:             { label: 'NORA',             pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
   pre_call:         { label: 'Pre-Call',         pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
   CRNA_supervision: { label: 'CRNA Supervision', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  // Generic "I was on unrestricted call for N hours" shift. UI exposes an
+  // hours input; pay = hours * 3.5 (no AR rate, no case points). Used at
+  // sites that don't have a per-shift pager window structure (e.g. Other).
+  unrestricted_call_entry: { label: 'Unrestricted Call', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' }, unrestrictedCallEntry: true, noProductivity: true },
   forced_off:       { label: 'UVH Forced Off',   pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
   vacation:         { label: 'Vacation / Off',   pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } }
 };
@@ -6204,6 +6178,7 @@ const ASSIGNMENT_TYPE_OPTIONS = [
   { value: 'NORA', label: 'NORA' },
   { value: 'pre_call', label: 'Pre-Call' },
   { value: 'CRNA_supervision', label: 'CRNA Supervision' },
+  { value: 'unrestricted_call_entry', label: 'Unrestricted Call' },
   { value: 'forced_off', label: 'Forced Off' },
   { value: 'vacation', label: 'Vacation / Off' }
 ];
@@ -6213,8 +6188,10 @@ function showMappingModal(titles) {
     calMappingResolve = resolve;
     const listEl = document.getElementById('calMappingList');
     listEl.innerHTML = titles.map((title, i) => {
+      const _siteId = getCurrentSiteId();
+      const _types = getVisibleShiftTypesForSite(_siteId);
       const optionsHtml = '<option value="">— Skip —</option>' +
-        ASSIGNMENT_TYPE_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+        _types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(getShiftTypeLabel(t, _siteId))}</option>`).join('');
       // Suggest a label from the title (extract numbers for WB hint)
       const numMatch = title.match(/\d+/);
       const wbHint = numMatch ? 'WB: ' + numMatch[0] : '';
@@ -6337,6 +6314,75 @@ function getResolvedShiftRules(siteId) {
   return merged;
 }
 function invalidateResolvedRulesCache() { _resolvedRulesCache.clear(); }
+
+// Returns the ordered list of shift type IDs that should appear in the
+// assignment-type dropdowns for users on this site.
+//   - If sites/{siteId}.visibleShiftTypes is set, returns that array.
+//   - Otherwise, falls back to all keys of DEFAULT_SHIFT_RULES (current
+//     UVH behavior). This keeps backward compat: UVH (no override) sees
+//     every shift type. Other / IMC / etc. set their own whitelist.
+function getVisibleShiftTypesForSite(siteId) {
+  if (!siteId) siteId = getCurrentSiteId();
+  const list = sitesCache[siteId] && sitesCache[siteId].visibleShiftTypes;
+  if (Array.isArray(list) && list.length > 0) return list.slice();
+  return ASSIGNMENT_TYPE_OPTIONS.map(o => o.value);
+}
+
+function getShiftTypeLabel(typeId, siteId) {
+  const rules = getResolvedShiftRules(siteId)[typeId];
+  if (rules && rules.label) return rules.label;
+  // Fall back to ASSIGNMENT_TYPE_OPTIONS label
+  const opt = ASSIGNMENT_TYPE_OPTIONS.find(o => o.value === typeId);
+  return (opt && opt.label) || typeId;
+}
+
+// Replaces the options in `selectEl` with the visible shift types for siteId.
+// If `opts.includeBlank` is set, prepends `<option value="">{label}</option>`.
+// Preserves the current selection if it's still in the new list; otherwise
+// clears it (caller is responsible for downstream UI updates if needed).
+function populateShiftTypeSelect(selectEl, siteId, opts) {
+  if (!selectEl) return;
+  const blank = opts && opts.includeBlank;
+  const blankLabel = (opts && opts.blankLabel) || '';
+  const prevValue = selectEl.value;
+  const types = getVisibleShiftTypesForSite(siteId);
+  let html = '';
+  if (blank) html += '<option value="">' + escapeHtml(blankLabel) + '</option>';
+  for (const t of types) {
+    html += '<option value="' + escapeHtml(t) + '">' + escapeHtml(getShiftTypeLabel(t, siteId)) + '</option>';
+  }
+  selectEl.innerHTML = html;
+  // Restore previous selection if still valid (or blank)
+  if (prevValue && (types.indexOf(prevValue) !== -1 || (blank && prevValue === ''))) {
+    selectEl.value = prevValue;
+  } else if (blank) {
+    selectEl.value = '';
+  } else if (types.length > 0) {
+    selectEl.value = types[0];
+  }
+}
+
+// Repopulates every shift-type dropdown in the page based on the current
+// user's site. Safe to call multiple times — re-renders all selects.
+function refreshAllShiftTypeDropdowns() {
+  const siteId = getCurrentSiteId();
+  // Main shift entry (day modal)
+  populateShiftTypeSelect(document.getElementById('shiftAssignmentType'), siteId);
+  // Edit shift modal
+  populateShiftTypeSelect(document.getElementById('editShiftType'), siteId);
+  // Evening overlay (UVH-specific concept; only mole/OB_restricted if both
+  // exist in the site's visible types — otherwise hide the row entirely)
+  const eve = document.getElementById('eveningAssignmentType');
+  if (eve) {
+    const types = getVisibleShiftTypesForSite(siteId);
+    const eveTypes = ['mole', 'OB_restricted'].filter(t => types.indexOf(t) !== -1);
+    let html = '<option value="">None</option>';
+    for (const t of eveTypes) {
+      html += '<option value="' + escapeHtml(t) + '">' + escapeHtml(getShiftTypeLabel(t, siteId)) + '</option>';
+    }
+    eve.innerHTML = html;
+  }
+}
 
 function isUnrestrictedCallType(type, siteId) {
   const rule = getResolvedShiftRules(siteId)[type];
@@ -6754,6 +6800,14 @@ function getARRate(assignmentType, isHol, isWknd, timeMinutes, siteId) {
 function calcARPoints(shift) {
   if (shift.assignmentType === 'vacation') return 0;
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return 56;
+  // Unrestricted call entry shifts: pay = hours × 3.5, no AR / no productivity.
+  {
+    const _r = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+    if (_r && _r.unrestrictedCallEntry) {
+      const h = parseFloat(shift.unrestrictedCallHours) || 0;
+      return round2(h * 3.5);
+    }
+  }
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
@@ -6972,6 +7026,14 @@ function getNextShiftStartMin(shiftDate) {
 function calcARBreakdown(shift) {
   if (shift.assignmentType === 'vacation') return { ar: 0, call: 0 };
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return { ar: 56, call: 0 };
+  // Unrestricted call entry shifts: pay = hours × 3.5, all as call/pager pay.
+  {
+    const _r = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+    if (_r && _r.unrestrictedCallEntry) {
+      const h = parseFloat(shift.unrestrictedCallHours) || 0;
+      return { ar: 0, call: round2(h * 3.5) };
+    }
+  }
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
@@ -8026,7 +8088,12 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
     document.getElementById('eveningTimeSection').classList.add('hidden');
     document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
   }
-  if (type === 'forced_off') {
+  // Unrestricted call entry shifts: show hours field, hide time entries
+  // (since we don't track clock-in/out for these — just hours of pager).
+  const isUnrestrictedEntry = !!(getResolvedShiftRules(getCurrentSiteId())[type]
+    && getResolvedShiftRules(getCurrentSiteId())[type].unrestrictedCallEntry);
+  document.getElementById('unrestrictedCallEntryOptions').classList.toggle('hidden', !isUnrestrictedEntry);
+  if (type === 'forced_off' || isUnrestrictedEntry) {
     populateTimeEntries([{ start: '', end: '' }]);
     document.getElementById('timeEntriesGroup').classList.add('hidden');
   } else {
@@ -8197,6 +8264,13 @@ function loadShiftForDate() {
     document.getElementById('vacationEndDate').value = '';
     document.getElementById('subspecCoverage').checked = shift.subspecCoverage || false;
     document.getElementById('teeCount').value = shift.teeCount || 0;
+    {
+      const ucRule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+      const isUC = !!(ucRule && ucRule.unrestrictedCallEntry);
+      document.getElementById('unrestrictedCallEntryOptions').classList.toggle('hidden', !isUC);
+      document.getElementById('unrestrictedCallHours').value = shift.unrestrictedCallHours || 0;
+      if (isUC) document.getElementById('timeEntriesGroup').classList.add('hidden');
+    }
     if (shift.supervisionStart || shift.supervisionEnd) {
       document.getElementById('supervisionOverlayCheck').checked = true;
       document.getElementById('supervisionStart').value = shift.supervisionStart || '';
@@ -8285,6 +8359,8 @@ function loadShiftForDate() {
     document.getElementById('vacationEndDate').value = '';
     document.getElementById('subspecCoverage').checked = false;
     document.getElementById('teeCount').value = 0;
+    document.getElementById('unrestrictedCallEntryOptions').classList.add('hidden');
+    document.getElementById('unrestrictedCallHours').value = 0;
     document.getElementById('supervisionOverlayCheck').checked = false;
     document.getElementById('supervisionStart').value = '';
     document.getElementById('supervisionEnd').value = '';
@@ -8594,6 +8670,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       forcedOff: false,
       subspecCoverage: document.getElementById('subspecCoverage').checked,
       teeCount: parseInt(document.getElementById('teeCount').value) || 0,
+      unrestrictedCallHours: parseFloat(document.getElementById('unrestrictedCallHours').value) || 0,
       supervisionStart: supervisionEnabled ? document.getElementById('supervisionStart').value : '',
       supervisionEnd: supervisionEnabled ? document.getElementById('supervisionEnd').value : '',
       preCallStart: savePreCallStart,
@@ -22935,6 +23012,7 @@ auth.onAuthStateChanged(async (user) => {
     loadSites().then(() => {
       renderSiteRow();
       renderInviteBanner();
+      refreshAllShiftTypeDropdowns();
       maybeShowNewUserSiteSelector();
     }).catch(() => {});
     loadAsaMasterCodes().catch(() => {});
