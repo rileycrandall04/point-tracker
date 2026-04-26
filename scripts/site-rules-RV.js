@@ -22,7 +22,8 @@ module.exports = {
     },
 
     // ----- Placement (single General OR replaces RVTN_OR_3..10) -----
-    'RVTN_OR':   { label: 'RVTN General OR', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'RVTN_OR':       { label: 'RVTN General OR',         pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'RVTN_OR_float': { label: 'RVTN General OR - Float', inherit_uvh: 'OR_float' },
 
     // ----- CRNAs (collapsed to single supervision shift, rev 2) -----
     'RVTN_CRNA': { label: 'RVTN CRNA', inherit_uvh: 'CRNA_supervision' },
@@ -37,7 +38,7 @@ module.exports = {
 
   otherMigrationMap: {
     'OR':                      'RVTN_OR',
-    'OR_float':                'RVTN_OR',
+    'OR_float':                'RVTN_OR_float',
     'OB_restricted':           'RVTN_OB_call_24h',
     'cardiac_liver':           'cardiac_liver',
     'unrestricted_call_entry': 'RVTN_1st_call',

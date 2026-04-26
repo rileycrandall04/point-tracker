@@ -19,8 +19,9 @@ module.exports = {
     },
 
     // ----- Placement (single General OR replaces PC_OR_3..12) -----
-    'PC_OR':   { label: 'Park City General OR', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'PC_ASC':  { label: 'Park City ASC',        pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'PC_OR':       { label: 'Park City General OR',         pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'PC_OR_float': { label: 'Park City General OR - Float', inherit_uvh: 'OR_float' },
+    'PC_ASC':      { label: 'Park City ASC',                pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
 
     // ----- OB option (per user spec rev 2: keep selectable even if rarely used) -----
     'PC_OB':   { label: 'Park City OB', inherit_uvh: 'OB_restricted' },
@@ -36,7 +37,7 @@ module.exports = {
 
   otherMigrationMap: {
     'OR':                      'PC_OR',
-    'OR_float':                'PC_OR',
+    'OR_float':                'PC_OR_float',
     'OB_restricted':           'PC_OB',
     'cardiac_liver':           'cardiac_liver',
     'unrestricted_call_entry': 'PC_1st_call',

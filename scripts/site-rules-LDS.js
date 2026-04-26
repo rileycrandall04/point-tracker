@@ -31,6 +31,7 @@ module.exports = {
 
     // ----- Placement (single General OR — covers LDSH_OR_3..16, NORA, ASC 1/2) -----
     'LDSH_OR':       { label: 'General OR', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'LDSH_OR_float': { label: 'General OR - Float', inherit_uvh: 'OR_float' },
 
     // ----- Cardiac/Liver option (UVH default; not commonly used here) -----
     'cardiac_liver': { label: 'Cardiac / Liver' },
@@ -42,7 +43,7 @@ module.exports = {
 
   otherMigrationMap: {
     'OR':                      'LDSH_OR',
-    'OR_float':                'LDSH_OR',
+    'OR_float':                'LDSH_OR_float',
     'OB_restricted':           'LDSH_OB',
     'cardiac_liver':           'cardiac_liver',
     'unrestricted_call_entry': 'LDSH_1st_call',

@@ -17,6 +17,7 @@ module.exports = {
 
     // ----- Placement (single General OR — covers AVH_OR_4..11 AND ASC) -----
     'AVH_OR':              { label: 'General OR', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'AVH_OR_float':        { label: 'General OR - Float', inherit_uvh: 'OR_float' },
 
     // ----- Cardiac/Liver option (UVH default; rarely used here, but selectable) -----
     'cardiac_liver':       { label: 'Cardiac / Liver' },
@@ -28,7 +29,7 @@ module.exports = {
 
   otherMigrationMap: {
     'OR':                      'AVH_OR',
-    'OR_float':                'AVH_OR',
+    'OR_float':                'AVH_OR_float',
     'OB_restricted':           'AVH_OB_call',
     'cardiac_liver':           'cardiac_liver',
     'unrestricted_call_entry': 'AVH_1st_backup_call',
