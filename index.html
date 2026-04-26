@@ -3189,11 +3189,13 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <!-- Admin Multi-Site Management (admin only) -->
   <div class="card hidden" id="adminMultiSiteCard" style="margin-top:12px;">
     <h2>Multi-Site Admin</h2>
-    <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0;">
+    <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0;flex-wrap:wrap;">
       <button class="btn btn-sm" id="adminMSTabUsers" onclick="adminMSSetTab('users')"
         style="border-radius:6px 6px 0 0;background:var(--primary);color:#fff;">Users</button>
       <button class="btn btn-sm" id="adminMSTabSites" onclick="adminMSSetTab('sites')"
         style="border-radius:6px 6px 0 0;background:var(--surface2);">Sites</button>
+      <button class="btn btn-sm" id="adminMSTabTest" onclick="adminMSSetTab('test')"
+        style="border-radius:6px 6px 0 0;background:var(--surface2);">Test cleanup</button>
     </div>
 
     <!-- Users tab -->
@@ -3215,6 +3217,31 @@ body.hide-monetary .monetary-hide { display: none !important; }
         Toggle "Unlocked for signups" once you've confirmed compensation rules with the site supervisors. Locked sites can still be invited to manually.
       </p>
       <div id="adminMSSitesList"></div>
+    </div>
+
+    <!-- Test cleanup tab -->
+    <div id="adminMSTestPane" class="hidden">
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
+        Wipes a test user's data: their user profile, settings, all shifts/cases, all shared cases and overrides they own. Their Firebase Auth account is NOT deleted (must be removed manually in the Firebase console).
+      </p>
+      <div style="background:rgba(239,68,68,0.08);border:1px solid var(--accent2);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.78rem;">
+        <strong style="color:var(--accent2);">Destructive.</strong> This cannot be undone. Use only for test accounts.
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;font-size:0.8rem;margin-bottom:4px;">Test user email</label>
+        <input type="email" id="adminMSWipeEmail" placeholder="testuser@example.com"
+          oninput="adminMSWipeOnInput()"
+          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;font-size:0.8rem;margin-bottom:4px;">Type the email again to confirm</label>
+        <input type="email" id="adminMSWipeConfirm" placeholder="testuser@example.com"
+          oninput="adminMSWipeOnInput()"
+          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+      </div>
+      <button class="btn btn-sm" id="adminMSWipeBtn" onclick="adminMSWipeUser()" disabled
+        style="background:var(--accent2);color:#1e293b;width:100%;">Wipe user data</button>
+      <div id="adminMSWipeStatus" style="margin-top:10px;font-size:0.82rem;"></div>
     </div>
   </div>
 
@@ -4700,27 +4727,26 @@ function escapeHtml(s) {
 // ----- Admin Multi-Site Management UI -----
 
 function adminMSSetTab(tab) {
-  const usersBtn = document.getElementById('adminMSTabUsers');
-  const sitesBtn = document.getElementById('adminMSTabSites');
-  const usersPane = document.getElementById('adminMSUsersPane');
-  const sitesPane = document.getElementById('adminMSSitesPane');
-  if (!usersBtn || !sitesBtn || !usersPane || !sitesPane) return;
-  if (tab === 'sites') {
-    usersBtn.style.background = 'var(--surface2)';
-    usersBtn.style.color = '';
-    sitesBtn.style.background = 'var(--primary)';
-    sitesBtn.style.color = '#fff';
-    usersPane.classList.add('hidden');
-    sitesPane.classList.remove('hidden');
-    renderAdminMSSitesList();
-  } else {
-    usersBtn.style.background = 'var(--primary)';
-    usersBtn.style.color = '#fff';
-    sitesBtn.style.background = 'var(--surface2)';
-    sitesBtn.style.color = '';
-    usersPane.classList.remove('hidden');
-    sitesPane.classList.add('hidden');
+  const tabs = [
+    { id: 'users', btn: 'adminMSTabUsers', pane: 'adminMSUsersPane' },
+    { id: 'sites', btn: 'adminMSTabSites', pane: 'adminMSSitesPane' },
+    { id: 'test',  btn: 'adminMSTabTest',  pane: 'adminMSTestPane'  }
+  ];
+  for (const t of tabs) {
+    const btn = document.getElementById(t.btn);
+    const pane = document.getElementById(t.pane);
+    if (!btn || !pane) continue;
+    if (t.id === tab) {
+      btn.style.background = 'var(--primary)';
+      btn.style.color = '#fff';
+      pane.classList.remove('hidden');
+    } else {
+      btn.style.background = 'var(--surface2)';
+      btn.style.color = '';
+      pane.classList.add('hidden');
+    }
   }
+  if (tab === 'sites') renderAdminMSSitesList();
 }
 
 function _adminMSSiteOptionsHTML(currentSiteId) {
@@ -4924,6 +4950,99 @@ async function adminMSToggleSiteUnlock(siteId, unlock) {
     renderAdminMSSitesList();
   } catch (err) {
     alert('Failed: ' + (err.message || err));
+  }
+}
+
+// ----- Test cleanup tab -----
+
+function adminMSWipeOnInput() {
+  const emailEl = document.getElementById('adminMSWipeEmail');
+  const confirmEl = document.getElementById('adminMSWipeConfirm');
+  const btn = document.getElementById('adminMSWipeBtn');
+  if (!emailEl || !confirmEl || !btn) return;
+  const e1 = emailEl.value.trim().toLowerCase();
+  const e2 = confirmEl.value.trim().toLowerCase();
+  btn.disabled = !(e1 && e2 && e1 === e2);
+}
+
+async function adminMSWipeUser() {
+  if (!isAdmin()) return;
+  const emailEl = document.getElementById('adminMSWipeEmail');
+  const confirmEl = document.getElementById('adminMSWipeConfirm');
+  const status = document.getElementById('adminMSWipeStatus');
+  const btn = document.getElementById('adminMSWipeBtn');
+  if (!emailEl || !confirmEl || !status || !btn) return;
+  const email = emailEl.value.trim().toLowerCase();
+  const confirmEmail = confirmEl.value.trim().toLowerCase();
+  if (!email || email !== confirmEmail) {
+    status.style.color = 'var(--accent2)';
+    status.textContent = 'Emails do not match.';
+    return;
+  }
+  status.style.color = 'var(--text-dim)';
+  status.textContent = 'Looking up user...';
+  btn.disabled = true;
+  try {
+    const snap = await db.collection('userProfiles').where('email', '==', email).get();
+    if (snap.empty) throw new Error('No user found with email: ' + email);
+    const uid = snap.docs[0].id;
+    const profile = snap.docs[0].data() || {};
+
+    // Safety checks
+    if (currentUser && uid === currentUser.uid) throw new Error('Cannot wipe your own account.');
+    if (uid === ADMIN_UID) throw new Error('Cannot wipe the master admin.');
+    if (profile.isAdmin === true) throw new Error('Cannot wipe an admin user. Revoke admin first.');
+
+    if (!confirm('Wipe ALL data for ' + email + '?\n\nThis cannot be undone.')) {
+      status.style.color = 'var(--text-dim)';
+      status.textContent = 'Cancelled.';
+      btn.disabled = false;
+      return;
+    }
+
+    // 1. Delete sharedCases owned by this user (paginated)
+    status.textContent = 'Deleting shared cases...';
+    await deleteByQuery(db.collection('sharedCases').where('uid', '==', uid));
+
+    // 2. Delete sharedCaseOverrides owned by this user
+    status.textContent = 'Deleting shared overrides...';
+    await deleteByQuery(db.collection('sharedCaseOverrides').where('uid', '==', uid));
+
+    // 3. Delete user data + settings docs
+    status.textContent = 'Deleting user data...';
+    await db.collection('users').doc(uid).collection('data').doc('data').delete().catch(() => {});
+    await db.collection('users').doc(uid).collection('data').doc('settings').delete().catch(() => {});
+
+    // 4. Delete the userProfile last
+    status.textContent = 'Deleting user profile...';
+    await db.collection('userProfiles').doc(uid).delete();
+
+    status.style.color = 'var(--accent)';
+    status.textContent = 'Done. Wiped Firestore data for ' + email + '. (Auth account remains; remove via Firebase console if needed.)';
+    emailEl.value = '';
+    confirmEl.value = '';
+  } catch (err) {
+    console.error('Wipe failed:', err);
+    status.style.color = 'var(--accent2)';
+    status.textContent = 'Failed: ' + (err.message || err);
+    btn.disabled = false;
+  }
+}
+
+async function deleteByQuery(query) {
+  let pageSize = 400;
+  let lastDoc = null;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let q = query.limit(pageSize);
+    if (lastDoc) q = q.startAfter(lastDoc);
+    const snap = await q.get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    snap.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    if (snap.docs.length < pageSize) break;
+    lastDoc = snap.docs[snap.docs.length - 1];
   }
 }
 
