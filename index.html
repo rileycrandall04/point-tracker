@@ -2078,10 +2078,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <div id="cardiacLiverOptions" class="hidden">
         <div class="divider"></div>
         <h3>Subspecialty Options</h3>
-        <div class="checkbox-group">
-          <input type="checkbox" id="subspecCoverage">
-          <label for="subspecCoverage">Subspecialty coverage (45 pts/day)</label>
+        <div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;line-height:1.4;">
+          Cardiac/Liver call automatically earns its 45-pt subspecialty bonus plus pager pay (14 hrs weekday, 24 hrs weekend/holiday) — <strong>94 pts</strong> weekday base, <strong>129 pts</strong> weekend/holiday base.
         </div>
+        <input type="checkbox" id="subspecCoverage" style="display:none;">
         <div class="form-group">
           <label>TEE Exams Performed</label>
           <input type="number" id="teeCount" value="0" min="0">
@@ -3575,7 +3575,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
             <tr><td>1st&ndash;4th Call</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
             <tr><td>Mole</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
             <tr><td>Endo</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
-            <tr><td>Cardiac / Liver</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
+            <tr><td>Cardiac / Liver**</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
             <tr><td>NORA</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
             <tr><td>ACS</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
             <tr><td>Pre-Call</td><td>20 pts/hr</td><td>Eve assignment</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
@@ -3585,6 +3585,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
           </tbody>
         </table>
         <p class="cr-note">*SF1 uses 13 pts/hr on weekday daytime only; 20 pts/hr at all other times.</p>
+        <p class="cr-note">**Cardiac/Liver base = pager pay + automatic 45-pt subspecialty bonus: <strong>94 pts</strong> weekday (14 hrs × 3.5 + 45), <strong>129 pts</strong> weekend/holiday (24 hrs × 3.5 + 45).</p>
         <p class="cr-note">Evening = 17:00&ndash;23:00 (&times;1.10). Night = 23:00&ndash;07:00 (&times;1.25). Holiday/Weekend daytime = &times;1.10.</p>
       </div>
     </div>
@@ -5350,6 +5351,10 @@ function getPagerPayWindow(assignmentType, isWkndOrHol, dateStr) {
     case 'endo':
       // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: same as mole (07:00–07:00)
       return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
+    case 'cardiac_liver':
+      // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: 07:00–07:00 next day (24 hrs)
+      // Combined with the automatic 45-pt subspecialty bonus → 94 pts/day weekday, 129 pts/day wknd/hol base.
+      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
     default:
       return null;
   }
@@ -6560,8 +6565,10 @@ function calcCallPoints(shift) {
 }
 
 function calcSubspecPoints(shift) {
-  let pts = 0;
-  if (shift.subspecCoverage) pts += 45;
+  // Cardiac/Liver shifts always include the 45-pt subspecialty bonus
+  // as part of their base. The legacy subspecCoverage checkbox is kept
+  // as a no-op for backward compatibility but no longer required.
+  let pts = 45;
   pts += (parseInt(shift.teeCount) || 0) * 22;
   return pts;
 }
