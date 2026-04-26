@@ -23176,6 +23176,16 @@ auth.onAuthStateChanged(async (user) => {
       renderInviteBanner();
       refreshAllShiftTypeDropdowns();
       maybeShowNewUserSiteSelector();
+      // Initial renders ran before sitesCache was populated, so any
+      // site-specific labels (e.g. IMC_1st_call) fell back to the raw
+      // key. Re-render the views that surface assignment-type labels
+      // now that the cache is ready.
+      if (typeof renderToday === 'function') {
+        try { renderToday(); } catch (e) { console.warn('renderToday post-loadSites failed:', e); }
+      }
+      if (typeof renderShiftLogTable === 'function') {
+        try { renderShiftLogTable(); } catch (e) { console.warn('renderShiftLogTable post-loadSites failed:', e); }
+      }
     }).catch(() => {});
     loadAsaMasterCodes().catch(() => {});
     loadAsaCodeProcedures().catch(() => {});
