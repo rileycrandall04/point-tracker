@@ -5728,6 +5728,24 @@ document.getElementById('addTimeEntryBtn').addEventListener('click', addTimeEntr
 // ================================================================
 // POINT CALCULATION ENGINE (preserved from v1)
 // ================================================================
+// Determine isHoliday / isWeekend for a given minute offset m from the
+// start of a shift's date. When a shift crosses midnight we want the AR
+// rate to reflect the day the work is actually being done on — e.g. an
+// OB shift starting Sunday 17:00 should switch back to weekday rates at
+// 07:00 Monday rather than continuing to apply weekend rates for the
+// whole 24h span.
+function getMomentContext(shift, m) {
+  const dayOffset = m >= 0 ? Math.floor(m / 1440) : -1;
+  if (dayOffset === 0 || !shift || !shift.date) {
+    return { isHol: !!(shift && shift.isHoliday), isWknd: shift && shift.date ? isWeekend(shift.date) : false };
+  }
+  const [y, mo, d] = shift.date.split('-').map(Number);
+  const dt = new Date(y, mo - 1, d + dayOffset);
+  const key = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+  const dayShift = data.shifts && data.shifts[key];
+  return { isHol: !!(dayShift && dayShift.isHoliday), isWknd: isWeekend(key) };
+}
+
 function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
   const isDaytime = timeMinutes >= 420 && timeMinutes < 1020;
   let baseRate;
@@ -5771,7 +5789,8 @@ function calcARPoints(shift) {
       let ee = timeToMinutes(e.end);
       if (ee <= es) ee += 1440;
       for (let m = es; m < ee; m++) {
-        arPts += getARRate(shift.assignmentType, isHol, isWknd, m % 1440) / 60;
+        const ctx = getMomentContext(shift, m);
+        arPts += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440) / 60;
       }
     });
     return round2(pagerPts + arPts);
@@ -5865,8 +5884,9 @@ function calcARPoints(shift) {
         if (m >= r.start && m < r.end) { clockedIn = true; break; }
       }
       if (clockedIn) {
+        const ctx = getMomentContext(shift, m);
         if (m >= preCallRange.start && m < preCallRange.end) {
-          preCallAR += getARRate('OR', isHol, isWknd, normalizedMin) / 60;
+          preCallAR += getARRate('OR', ctx.isHol, ctx.isWknd, normalizedMin) / 60;
         } else {
           let rateType = shift.assignmentType;
           if (isSF) {
@@ -5874,7 +5894,7 @@ function calcARPoints(shift) {
               if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
             }
           }
-          eveningAR += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
+          eveningAR += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin) / 60;
         }
       }
     }
@@ -5922,7 +5942,8 @@ function calcARPoints(shift) {
           if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
         }
       }
-      arPoints += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
+      const ctx = getMomentContext(shift, m);
+      arPoints += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin) / 60;
     }
   }
 
@@ -5989,7 +6010,8 @@ function calcARBreakdown(shift) {
       let ee = timeToMinutes(e.end);
       if (ee <= es) ee += 1440;
       for (let m = es; m < ee; m++) {
-        arPts += getARRate(shift.assignmentType, isHol, isWknd, m % 1440) / 60;
+        const ctx = getMomentContext(shift, m);
+        arPts += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440) / 60;
       }
     });
     return { ar: round2(arPts), call: round2(pagerPts) };
@@ -6097,8 +6119,9 @@ function calcARBreakdown(shift) {
         if (m >= r.start && m < r.end) { clockedIn = true; break; }
       }
       if (clockedIn) {
+        const ctx = getMomentContext(shift, m);
         if (m >= preCallRange.start && m < preCallRange.end) {
-          preCallAR += getARRate('OR', isHol, isWknd, normalizedMin) / 60;
+          preCallAR += getARRate('OR', ctx.isHol, ctx.isWknd, normalizedMin) / 60;
         } else {
           let rateType = shift.assignmentType;
           if (isSF) {
@@ -6106,7 +6129,7 @@ function calcARBreakdown(shift) {
               if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
             }
           }
-          eveningAR += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
+          eveningAR += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin) / 60;
         }
       }
     }
@@ -6149,7 +6172,8 @@ function calcARBreakdown(shift) {
           if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
         }
       }
-      arPoints += getARRate(rateType, isHol, isWknd, normalizedMin) / 60;
+      const ctx = getMomentContext(shift, m);
+      arPoints += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin) / 60;
     }
   }
 
@@ -6535,7 +6559,8 @@ function calcSupervisionPoints(shift) {
     let pts = 0;
     clockedRanges.forEach(r => {
       for (let m = r.start; m < r.end; m++) {
-        pts += (getARRate('OR', isHol, isWknd, m % 1440) + 7) / 60;
+        const ctx = getMomentContext(shift, m);
+        pts += (getARRate('OR', ctx.isHol, ctx.isWknd, m % 1440) + 7) / 60;
       }
     });
     return round2(pts);
@@ -6575,8 +6600,6 @@ function calcSubspecPoints(shift) {
 
 function calcTempCoveragePoints(shift) {
   if (!shift.tempCoverage || shift.tempCoverage.length === 0) return { pagerAdj: 0, ar: 0 };
-  const isHol = shift.isHoliday;
-  const isWknd = isWeekend(shift.date);
   let pagerAdj = 0;
   let ar = 0;
   shift.tempCoverage.forEach(tc => {
@@ -6597,7 +6620,8 @@ function calcTempCoveragePoints(shift) {
         let ee = timeToMinutes(e.end);
         if (ee <= es) ee += 1440;
         for (let m = es; m < ee; m++) {
-          ar += getARRate(shift.assignmentType, isHol, isWknd, m % 1440) / 60;
+          const ctx = getMomentContext(shift, m);
+          ar += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440) / 60;
         }
       });
     }
@@ -10114,7 +10138,8 @@ function getShiftPayBreakdown(shift) {
       if (ee <= es) ee += 1440;
       const eDurMin = ee - es;
       const normMin = es % 1440;
-      const rate = getARRate(shift.assignmentType, isHol, isWknd, normMin);
+      const eCtx = getMomentContext(shift, es);
+      const rate = getARRate(shift.assignmentType, eCtx.isHol, eCtx.isWknd, normMin);
       coverageRows.push({
         clockIn: e.start, clockOut: e.end,
         payCode: 'Temp Coverage AR',
@@ -10196,7 +10221,9 @@ function getShiftPayBreakdown(shift) {
 
   // Rate-change boundaries (minute of day)
   function getBoundaries() {
-    const b = (isWknd || isHol) ? [420, 1020] : [420, 1020, 1380];
+    // Always include the weekday 23:00 boundary so cross-midnight shifts
+    // split at the right rate transitions when the calendar day changes.
+    const b = [420, 1020, 1380];
     // Add supervision overlay boundaries so segments split at supervision start/end
     if (shift.supervisionStart && shift.supervisionEnd && shift.assignmentType !== 'CRNA_supervision') {
       const ss = timeToMinutes(shift.supervisionStart);
@@ -10241,8 +10268,9 @@ function getShiftPayBreakdown(shift) {
           if (segStart >= r.start && segStart < r.end) { rateType = 'OR'; break; }
         }
       }
-      const payCode = isPreCallSeg ? 'Pre-Call ' + getPayCodeName(normSeg, 'OR', isWknd, isHol) : getPayCodeName(normSeg, rateType, isWknd, isHol);
-      let payRate = getARRate(rateType, isHol, isWknd, normSeg);
+      const segCtx = getMomentContext(shift, segStart);
+      const payCode = isPreCallSeg ? 'Pre-Call ' + getPayCodeName(normSeg, 'OR', segCtx.isWknd, segCtx.isHol) : getPayCodeName(normSeg, rateType, segCtx.isWknd, segCtx.isHol);
+      let payRate = getARRate(rateType, segCtx.isHol, segCtx.isWknd, normSeg);
 
       // CRNA supervision bonus: +7/hr
       let supBonus = 0;
@@ -10324,7 +10352,8 @@ function getShiftPayBreakdown(shift) {
           if (ee <= es) ee += 1440;
           const eDurMin = ee - es;
           const normMin = es % 1440;
-          const rate = getARRate(shift.assignmentType, isHol, isWknd, normMin);
+          const eCtx = getMomentContext(shift, es);
+          const rate = getARRate(shift.assignmentType, eCtx.isHol, eCtx.isWknd, normMin);
           rows.push({
             clockIn: e.start, clockOut: e.end,
             payCode: 'Temp Coverage AR',
@@ -17279,14 +17308,13 @@ function closeSurgeonCaseEditor() {
 function calcCaseARContribution(c, shift) {
   if (!c.startTime || !c.endTime || !shift || !shift.assignmentType) return 0;
   if (shift.assignmentType === 'vacation' || shift.forcedOff || shift.assignmentType === 'forced_off') return 0;
-  const isHol = shift.isHoliday;
-  const isWknd = isWeekend(shift.date || c.shiftDate);
   let s = timeToMinutes(c.startTime);
   let e = timeToMinutes(c.endTime);
   if (e <= s) e += 1440;
   let ar = 0;
   for (let m = s; m < e; m++) {
-    ar += getARRate(shift.assignmentType, isHol, isWknd, m % 1440) / 60;
+    const ctx = getMomentContext(shift, m);
+    ar += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440) / 60;
   }
   return round2(ar);
 }
