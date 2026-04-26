@@ -14,8 +14,6 @@
 // Note: ORs/ASCs/NORA (placement shifts) get the same 4hr / 80pt minimum
 // that UVH OR uses. Wired generically in the engine.
 //
-// TODO: SGH_night_call inherits UVH "mole" — confirm exact UVH shift key.
-
 module.exports = {
   siteId: 'SG',
   shiftRulesOverride: {
@@ -36,11 +34,8 @@ module.exports = {
       arRate: { mode: 'general' }
     },
 
-    // Night Call = UVH "mole". TODO confirm UVH key.
-    'SGH_night_call': {
-      label: 'SGH Night Call',
-      inherit_uvh: 'mole' // TODO: confirm exact UVH shift key
-    },
+    // Night Call = UVH Mole (weekday 19:00-07:00, unrestricted)
+    'SGH_night_call': { label: 'SGH Night Call', inherit_uvh: 'mole' },
 
     // Heart Call = 1st-call-style shift + cardiac bonus
     // (one of the call people doubles as cardiac call; gets unrestricted call
