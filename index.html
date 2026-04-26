@@ -6311,6 +6311,12 @@ function _deepMerge(base, override) {
 
 // Per-site resolved rules: DEFAULT_SHIFT_RULES + sites/{siteId}.shiftRulesOverride.
 // Cached per siteId; cleared whenever sitesCache is repopulated.
+//
+// Override keys may be either an existing UVH key (in which case the override
+// is layered on top of DEFAULT_SHIFT_RULES[key]) or a new site-specific key
+// (e.g. "IMC_1st_call"). A site-specific key may carry an `inherit_uvh` field
+// pointing at a UVH default to use as the base; the inherit_uvh field itself
+// is dropped from the resolved rule.
 const _resolvedRulesCache = new Map();
 function getResolvedShiftRules(siteId) {
   if (!siteId) siteId = getCurrentSiteId();
@@ -6318,7 +6324,14 @@ function getResolvedShiftRules(siteId) {
   const override = (sitesCache[siteId] && sitesCache[siteId].shiftRulesOverride) || {};
   const merged = { ...DEFAULT_SHIFT_RULES };
   for (const [type, ruleOverride] of Object.entries(override)) {
-    merged[type] = _deepMerge(DEFAULT_SHIFT_RULES[type] || {}, ruleOverride);
+    let base = DEFAULT_SHIFT_RULES[type] || {};
+    let layer = ruleOverride;
+    if (ruleOverride && ruleOverride.inherit_uvh && DEFAULT_SHIFT_RULES[ruleOverride.inherit_uvh]) {
+      base = DEFAULT_SHIFT_RULES[ruleOverride.inherit_uvh];
+      const { inherit_uvh, ...rest } = ruleOverride;
+      layer = rest;
+    }
+    merged[type] = _deepMerge(base, layer);
   }
   _resolvedRulesCache.set(siteId, merged);
   return merged;
