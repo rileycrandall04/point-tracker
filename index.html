@@ -3186,6 +3186,38 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </details>
   </div>
 
+  <!-- Admin Multi-Site Management (admin only) -->
+  <div class="card hidden" id="adminMultiSiteCard" style="margin-top:12px;">
+    <h2>Multi-Site Admin</h2>
+    <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0;">
+      <button class="btn btn-sm" id="adminMSTabUsers" onclick="adminMSSetTab('users')"
+        style="border-radius:6px 6px 0 0;background:var(--primary);color:#fff;">Users</button>
+      <button class="btn btn-sm" id="adminMSTabSites" onclick="adminMSSetTab('sites')"
+        style="border-radius:6px 6px 0 0;background:var(--surface2);">Sites</button>
+    </div>
+
+    <!-- Users tab -->
+    <div id="adminMSUsersPane">
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">
+        Look up a user by email to invite them to a different site, change their site directly, or grant/revoke admin role.
+      </p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+        <input type="email" id="adminMSUserEmail" placeholder="user@email.com"
+          style="flex:1;min-width:200px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+        <button class="btn btn-primary btn-sm" onclick="adminMSFindUser()">Find</button>
+      </div>
+      <div id="adminMSUserCard" style="font-size:0.85rem;"></div>
+    </div>
+
+    <!-- Sites tab -->
+    <div id="adminMSSitesPane" class="hidden">
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
+        Toggle "Unlocked for signups" once you've confirmed compensation rules with the site supervisors. Locked sites can still be invited to manually.
+      </p>
+      <div id="adminMSSitesList"></div>
+    </div>
+  </div>
+
   <!-- Admin User Lookup (admin only) -->
   <div class="card hidden" id="adminUserLookupCard" style="margin-top:12px;">
     <h2>User Data Lookup</h2>
@@ -4652,6 +4684,246 @@ async function handleDeclineInvite() {
     status.style.color = 'var(--accent2)';
     acceptBtn.disabled = false;
     declineBtn.disabled = false;
+  }
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ----- Admin Multi-Site Management UI -----
+
+function adminMSSetTab(tab) {
+  const usersBtn = document.getElementById('adminMSTabUsers');
+  const sitesBtn = document.getElementById('adminMSTabSites');
+  const usersPane = document.getElementById('adminMSUsersPane');
+  const sitesPane = document.getElementById('adminMSSitesPane');
+  if (!usersBtn || !sitesBtn || !usersPane || !sitesPane) return;
+  if (tab === 'sites') {
+    usersBtn.style.background = 'var(--surface2)';
+    usersBtn.style.color = '';
+    sitesBtn.style.background = 'var(--primary)';
+    sitesBtn.style.color = '#fff';
+    usersPane.classList.add('hidden');
+    sitesPane.classList.remove('hidden');
+    renderAdminMSSitesList();
+  } else {
+    usersBtn.style.background = 'var(--primary)';
+    usersBtn.style.color = '#fff';
+    sitesBtn.style.background = 'var(--surface2)';
+    sitesBtn.style.color = '';
+    usersPane.classList.remove('hidden');
+    sitesPane.classList.add('hidden');
+  }
+}
+
+function _adminMSSiteOptionsHTML(currentSiteId) {
+  const ids = Object.keys(sitesCache || {}).slice().sort();
+  let html = '';
+  for (const id of ids) {
+    const name = (sitesCache[id] && sitesCache[id].name) || id;
+    const sel = id === currentSiteId ? ' selected' : '';
+    html += '<option value="' + id + '"' + sel + '>' + name + ' (' + id + ')</option>';
+  }
+  return html;
+}
+
+async function adminMSFindUser() {
+  if (!isAdmin()) return;
+  const email = (document.getElementById('adminMSUserEmail').value || '').trim();
+  const out = document.getElementById('adminMSUserCard');
+  if (!email) { out.innerHTML = '<p style="color:var(--accent2);">Enter an email address</p>'; return; }
+  out.innerHTML = '<p>Looking up...</p>';
+  try {
+    const snap = await db.collection('userProfiles').where('email', '==', email).get();
+    if (snap.empty) { out.innerHTML = '<p style="color:var(--accent2);">No user found with email: ' + email + '</p>'; return; }
+    const uid = snap.docs[0].id;
+    const profile = snap.docs[0].data() || {};
+    // Read their settings to get current siteId
+    const settingsDoc = await db.collection('users').doc(uid).collection('data').doc('settings').get();
+    const userSiteId = (settingsDoc.exists && settingsDoc.data().siteId) || DEFAULT_SITE_ID;
+    renderAdminMSUserCard(uid, profile, userSiteId);
+  } catch (err) {
+    console.error('Admin user lookup error:', err);
+    out.innerHTML = '<p style="color:var(--accent2);">Error: ' + (err.message || err) + '</p>';
+  }
+}
+
+function renderAdminMSUserCard(uid, profile, userSiteId) {
+  const out = document.getElementById('adminMSUserCard');
+  if (!out) return;
+  const name = profile.displayName || '(no name)';
+  const email = profile.email || '(no email)';
+  const isMaster = uid === ADMIN_UID;
+  const userIsAdmin = isMaster || profile.isAdmin === true;
+  const inv = profile.pendingInvite;
+  const inviteSiteName = inv && inv.siteId
+    ? ((sitesCache[inv.siteId] && sitesCache[inv.siteId].name) || inv.siteId)
+    : null;
+  const curSiteName = (sitesCache[userSiteId] && sitesCache[userSiteId].name) || userSiteId;
+
+  let html = '';
+  html += '<div style="background:var(--surface);padding:12px;border-radius:8px;margin-bottom:12px;">';
+  html += '<strong>' + escapeHtml(name) + '</strong> &mdash; ' + escapeHtml(email);
+  html += '<br><span style="color:var(--text-dim);font-size:0.75rem;">UID: ' + uid + '</span>';
+  html += '<br><span style="font-size:0.78rem;">Current site: <strong>' + escapeHtml(curSiteName) + '</strong> (' + userSiteId + ')</span>';
+  html += '<br><span style="font-size:0.78rem;">Admin: ' + (userIsAdmin ? '<strong style="color:var(--accent);">Yes' + (isMaster ? ' (master)' : '') + '</strong>' : 'No') + '</span>';
+  if (inviteSiteName) {
+    html += '<br><span style="font-size:0.78rem;color:var(--accent2);">Pending invite: ' + escapeHtml(inviteSiteName) + ' (sent ' + (inv.invitedAt ? inv.invitedAt.split('T')[0] : '') + ')</span>';
+  }
+  html += '</div>';
+
+  // Invite to site
+  html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:8px;">';
+  html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Invite to a site</div>';
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+  html += '<select id="adminMSInviteSite_' + uid + '" style="flex:1;min-width:140px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.82rem;">' + _adminMSSiteOptionsHTML(userSiteId) + '</select>';
+  html += '<button class="btn btn-primary btn-sm" onclick="adminMSSendInvite(\'' + uid + '\')">Send invite</button>';
+  if (inviteSiteName) {
+    html += '<button class="btn btn-sm" onclick="adminMSCancelInvite(\'' + uid + '\')" style="background:var(--surface);color:var(--accent2);">Cancel pending</button>';
+  }
+  html += '</div>';
+  html += '<p style="font-size:0.72rem;color:var(--text-dim);margin:6px 0 0 0;">User sees a banner and can accept (auto-migrates their data) or decline.</p>';
+  html += '</div>';
+
+  // Change site directly
+  html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:8px;">';
+  html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Change site directly (no user prompt)</div>';
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">';
+  html += '<select id="adminMSSetSite_' + uid + '" style="flex:1;min-width:140px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.82rem;">' + _adminMSSiteOptionsHTML(userSiteId) + '</select>';
+  html += '<label style="font-size:0.78rem;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="adminMSSetSiteMigrate_' + uid + '" checked> Migrate data</label>';
+  html += '<button class="btn btn-sm" onclick="adminMSSetUserSite(\'' + uid + '\')" style="background:var(--accent2);color:#1e293b;">Apply</button>';
+  html += '</div>';
+  html += '</div>';
+
+  // Admin role toggle
+  html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;">';
+  html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Admin role</div>';
+  if (isMaster) {
+    html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0;">Master admin &mdash; cannot be demoted.</p>';
+  } else if (userIsAdmin) {
+    html += '<button class="btn btn-sm" onclick="adminMSTogglePromote(\'' + uid + '\', false)" style="background:var(--surface);color:var(--accent2);">Revoke admin</button>';
+  } else {
+    html += '<button class="btn btn-primary btn-sm" onclick="adminMSTogglePromote(\'' + uid + '\', true)">Promote to admin</button>';
+  }
+  html += '</div>';
+
+  html += '<div id="adminMSUserStatus_' + uid + '" style="margin-top:10px;font-size:0.8rem;"></div>';
+  out.innerHTML = html;
+}
+
+function _adminMSSetStatus(uid, msg, isError) {
+  const el = document.getElementById('adminMSUserStatus_' + uid);
+  if (!el) return;
+  el.style.color = isError ? 'var(--accent2)' : 'var(--accent)';
+  el.textContent = msg;
+}
+
+async function adminMSSendInvite(uid) {
+  const sel = document.getElementById('adminMSInviteSite_' + uid);
+  const siteId = sel && sel.value;
+  if (!siteId) return;
+  _adminMSSetStatus(uid, 'Sending invite...', false);
+  try {
+    await inviteUserToSite(uid, siteId);
+    _adminMSSetStatus(uid, 'Invite sent. User will see a banner on next load.', false);
+    // Re-render the user card to reflect the new pending invite
+    setTimeout(() => adminMSFindUser(), 500);
+  } catch (err) {
+    _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
+  }
+}
+
+async function adminMSCancelInvite(uid) {
+  if (!confirm('Cancel the pending invite for this user?')) return;
+  _adminMSSetStatus(uid, 'Cancelling...', false);
+  try {
+    await db.collection('userProfiles').doc(uid).set({
+      pendingInvite: firebase.firestore.FieldValue.delete()
+    }, { merge: true });
+    _adminMSSetStatus(uid, 'Invite cancelled.', false);
+    setTimeout(() => adminMSFindUser(), 400);
+  } catch (err) {
+    _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
+  }
+}
+
+async function adminMSSetUserSite(uid) {
+  const sel = document.getElementById('adminMSSetSite_' + uid);
+  const migrateCb = document.getElementById('adminMSSetSiteMigrate_' + uid);
+  const siteId = sel && sel.value;
+  if (!siteId) return;
+  const withMigration = !!(migrateCb && migrateCb.checked);
+  const msg = withMigration
+    ? 'Move this user to ' + siteId + ' AND migrate all their data?'
+    : 'Move this user to ' + siteId + ' WITHOUT migrating data (their existing shifts stay tagged with the old site)?';
+  if (!confirm(msg)) return;
+  _adminMSSetStatus(uid, 'Applying...', false);
+  try {
+    await adminSetUserSite(uid, siteId, withMigration);
+    _adminMSSetStatus(uid, 'Done. User now on ' + siteId + (withMigration ? ' (data migrated)' : ' (no migration)') + '.', false);
+    setTimeout(() => adminMSFindUser(), 500);
+  } catch (err) {
+    _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
+  }
+}
+
+async function adminMSTogglePromote(uid, makeAdmin) {
+  const verb = makeAdmin ? 'Promote' : 'Revoke admin from';
+  if (!confirm(verb + ' this user?')) return;
+  _adminMSSetStatus(uid, 'Saving...', false);
+  try {
+    await setUserAdmin(uid, makeAdmin);
+    _adminMSSetStatus(uid, 'Done.', false);
+    setTimeout(() => adminMSFindUser(), 400);
+  } catch (err) {
+    _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
+  }
+}
+
+async function renderAdminMSSitesList() {
+  const out = document.getElementById('adminMSSitesList');
+  if (!out) return;
+  out.innerHTML = '<p>Loading sites...</p>';
+  try {
+    const snap = await db.collection('sites').get();
+    const rows = [];
+    snap.forEach(doc => rows.push({ id: doc.id, data: doc.data() || {} }));
+    rows.sort((a, b) => a.id.localeCompare(b.id));
+    let html = '';
+    for (const row of rows) {
+      const name = row.data.name || row.id;
+      const unlocked = row.data.unlocked === true;
+      html += '<div style="background:var(--surface);padding:10px 12px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">';
+      html += '<div><strong>' + escapeHtml(name) + '</strong>';
+      html += ' <span style="font-size:0.72rem;color:var(--text-dim);">(' + row.id + ')</span>';
+      html += '<br><span style="font-size:0.75rem;color:' + (unlocked ? 'var(--accent)' : 'var(--text-dim)') + ';">' + (unlocked ? 'Unlocked for new-user signups' : 'Locked (admin invite only)') + '</span>';
+      html += '</div>';
+      html += '<button class="btn btn-sm" onclick="adminMSToggleSiteUnlock(\'' + row.id + '\', ' + (!unlocked) + ')" style="background:' + (unlocked ? 'var(--surface2)' : 'var(--primary)') + ';color:' + (unlocked ? 'var(--text)' : '#fff') + ';">';
+      html += (unlocked ? 'Lock' : 'Unlock') + '</button>';
+      html += '</div>';
+    }
+    if (rows.length === 0) html = '<p style="color:var(--text-dim);">No sites configured.</p>';
+    out.innerHTML = html;
+  } catch (err) {
+    out.innerHTML = '<p style="color:var(--accent2);">Failed to load sites: ' + (err.message || err) + '</p>';
+  }
+}
+
+async function adminMSToggleSiteUnlock(siteId, unlock) {
+  try {
+    await setSiteUnlocked(siteId, unlock);
+    // Refresh local cache + UI
+    if (sitesCache[siteId]) sitesCache[siteId].unlocked = unlock;
+    renderAdminMSSitesList();
+  } catch (err) {
+    alert('Failed: ' + (err.message || err));
   }
 }
 
@@ -22496,6 +22768,8 @@ auth.onAuthStateChanged(async (user) => {
       if (aiCard) aiCard.classList.remove('hidden');
       const lookupCard = document.getElementById('adminUserLookupCard');
       if (lookupCard) lookupCard.classList.remove('hidden');
+      const msCard = document.getElementById('adminMultiSiteCard');
+      if (msCard) msCard.classList.remove('hidden');
       document.getElementById('settingsClaudeKey').value = settings.claudeApiKey || '';
       document.getElementById('settingsPersonalTimeValue').value = settings.personalTimeValue || '';
     }
