@@ -608,6 +608,21 @@ textarea { resize: vertical; min-height: 60px; }
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
+.invite-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--primary);
+  color: #fff;
+  text-align: center;
+  padding: 10px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  z-index: 400;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
 
 /* ===== MODAL ===== */
 .modal-overlay {
@@ -2023,25 +2038,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
       <div class="form-group">
         <label>Assignment Type</label>
-        <select id="shiftAssignmentType">
-          <option value="OR">OR / General</option>
-          <option value="OR_float">General OR - Float</option>
-          <option value="OB_restricted">UVH OB</option>
-          <option value="cardiac_liver">Cardiac / Liver</option>
-          <option value="mole">Mole</option>
-          <option value="1st_call">1st Call</option>
-          <option value="2nd_call">2nd Call</option>
-          <option value="3rd_call">3rd Call</option>
-          <option value="4th_call">4th Call</option>
-          <option value="endo">Endo</option>
-          <option value="SF1">SF 1</option>
-          <option value="SF2">SF 2</option>
-          <option value="ACS">ACS</option>
-          <option value="NORA">NORA</option>
-          <option value="pre_call">Pre-Call</option>
-          <option value="CRNA_supervision">CRNA Supervision</option>
-          <option value="forced_off">Forced Off</option>
-          <option value="vacation">Vacation / Off</option>
+        <select id="shiftAssignmentType"><!-- options populated by refreshAllShiftTypeDropdowns() -->
         </select>
       </div>
 
@@ -2085,6 +2082,15 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div class="form-group">
           <label>TEE Exams Performed</label>
           <input type="number" id="teeCount" value="0" min="0">
+        </div>
+      </div>
+
+      <div id="unrestrictedCallEntryOptions" class="hidden">
+        <div class="divider"></div>
+        <div class="form-group">
+          <label>Hours of unrestricted call</label>
+          <input type="number" id="unrestrictedCallHours" value="0" min="0" step="0.25" placeholder="e.g. 12">
+          <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">Pays 3.5 pts per hour. No AR rate or case points apply to this shift.</p>
         </div>
       </div>
 
@@ -2169,10 +2175,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div class="divider"></div>
         <div class="form-group">
           <label>Evening Assignment</label>
-          <select id="eveningAssignmentType">
+          <select id="eveningAssignmentType"><!-- options populated by refreshAllShiftTypeDropdowns() -->
             <option value="">None</option>
-            <option value="mole">Mole</option>
-            <option value="OB_restricted">UVH OB</option>
           </select>
         </div>
         <div id="eveningTimeSection" class="hidden">
@@ -3093,6 +3097,11 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="card">
     <h2>Settings</h2>
     <div class="settings-field">
+      <label>Site</label>
+      <input type="text" id="settingsSite" disabled placeholder="—" style="opacity:0.85;">
+      <p style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">Your group's location. Contact the admin to change.</p>
+    </div>
+    <div class="settings-field">
       <label>Name</label>
       <input type="text" id="settingsName" placeholder="Your name (labels exports)">
     </div>
@@ -3167,6 +3176,65 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <li>Add credits to your account under <strong>Billing</strong></li>
       </ol>
     </details>
+  </div>
+
+  <!-- Admin Multi-Site Management (admin only) -->
+  <div class="card hidden" id="adminMultiSiteCard" style="margin-top:12px;">
+    <h2>Multi-Site Admin</h2>
+    <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0;flex-wrap:wrap;">
+      <button class="btn btn-sm" id="adminMSTabUsers" onclick="adminMSSetTab('users')"
+        style="border-radius:6px 6px 0 0;background:var(--primary);color:#fff;">Users</button>
+      <button class="btn btn-sm" id="adminMSTabSites" onclick="adminMSSetTab('sites')"
+        style="border-radius:6px 6px 0 0;background:var(--surface2);">Sites</button>
+      <button class="btn btn-sm" id="adminMSTabTest" onclick="adminMSSetTab('test')"
+        style="border-radius:6px 6px 0 0;background:var(--surface2);">Test cleanup</button>
+    </div>
+
+    <!-- Users tab -->
+    <div id="adminMSUsersPane">
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">
+        Look up a user by email to invite them to a different site, change their site directly, or grant/revoke admin role.
+      </p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+        <input type="email" id="adminMSUserEmail" placeholder="user@email.com"
+          style="flex:1;min-width:200px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+        <button class="btn btn-primary btn-sm" onclick="adminMSFindUser()">Find</button>
+      </div>
+      <div id="adminMSUserCard" style="font-size:0.85rem;"></div>
+    </div>
+
+    <!-- Sites tab -->
+    <div id="adminMSSitesPane" class="hidden">
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
+        Toggle "Unlocked for signups" once you've confirmed compensation rules with the site supervisors. Locked sites can still be invited to manually.
+      </p>
+      <div id="adminMSSitesList"></div>
+    </div>
+
+    <!-- Test cleanup tab -->
+    <div id="adminMSTestPane" class="hidden">
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
+        Wipes a test user's data: their user profile, settings, all shifts/cases, all shared cases and overrides they own. Their Firebase Auth account is NOT deleted (must be removed manually in the Firebase console).
+      </p>
+      <div style="background:rgba(239,68,68,0.08);border:1px solid var(--accent2);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.78rem;">
+        <strong style="color:var(--accent2);">Destructive.</strong> This cannot be undone. Use only for test accounts.
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;font-size:0.8rem;margin-bottom:4px;">Test user email</label>
+        <input type="email" id="adminMSWipeEmail" placeholder="testuser@example.com"
+          oninput="adminMSWipeOnInput()"
+          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;font-size:0.8rem;margin-bottom:4px;">Type the email again to confirm</label>
+        <input type="email" id="adminMSWipeConfirm" placeholder="testuser@example.com"
+          oninput="adminMSWipeOnInput()"
+          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+      </div>
+      <button class="btn btn-sm" id="adminMSWipeBtn" onclick="adminMSWipeUser()" disabled
+        style="background:var(--accent2);color:#1e293b;width:100%;">Wipe user data</button>
+      <div id="adminMSWipeStatus" style="margin-top:10px;font-size:0.82rem;"></div>
+    </div>
   </div>
 
   <!-- Admin User Lookup (admin only) -->
@@ -4035,26 +4103,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <h2 id="shiftEditTitle">Edit Shift</h2>
     <div class="form-group">
       <label>Assignment Type</label>
-      <select id="editShiftType">
-        <option value="OR">OR / General</option>
-        <option value="OR_float">General OR - Float</option>
-        <option value="OB_restricted">UVH OB</option>
-        <option value="cardiac_liver">Cardiac / Liver</option>
-        <option value="mole">Mole</option>
-        <option value="1st_call">1st Call</option>
-        <option value="2nd_call">2nd Call</option>
-        <option value="3rd_call">3rd Call</option>
-        <option value="4th_call">4th Call</option>
-        <option value="endo">Endo</option>
-        <option value="SF1">SF 1</option>
-        <option value="SF2">SF 2</option>
-        <option value="ACS">ACS</option>
-        <option value="NORA">NORA</option>
-        <option value="pre_call">Pre-Call</option>
-        <option value="CRNA_supervision">CRNA Supervision</option>
-        <option value="forced_off">Forced Off</option>
-        <option value="vacation">Vacation / Off</option>
-      </select>
+      <select id="editShiftType"><!-- options populated by refreshAllShiftTypeDropdowns() --></select>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="editShiftHoliday"> Holiday</label>
@@ -4209,6 +4258,54 @@ body.hide-monetary .monetary-hide { display: none !important; }
 <!-- Session Expired Banner -->
 <div class="session-banner hidden" id="sessionBanner" onclick="location.reload()">&#9888; Session expired &mdash; tap here to sign in again</div>
 
+<!-- Site Invite Banner -->
+<div class="invite-banner hidden" id="inviteBanner" onclick="openInviteModal()">&#9993; You've been invited to <span id="inviteBannerSite">a new site</span> &mdash; tap to review</div>
+
+<!-- New-user site selector modal (first login, no data yet) -->
+<div class="modal-overlay hidden" id="newUserSiteModal">
+  <div class="modal" style="max-width:440px;">
+    <h2 style="margin-top:0;">Welcome &mdash; choose your site</h2>
+    <p style="margin:8px 0;font-size:0.92rem;">
+      Select the location where you primarily work. Your shifts and cases will be tracked under this site's compensation rules.
+    </p>
+    <div style="margin:12px 0;">
+      <label style="display:block;font-size:0.85rem;margin-bottom:6px;">Site</label>
+      <select id="newUserSiteSelect" style="width:100%;padding:10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.95rem;">
+        <option value="">Select a site...</option>
+      </select>
+    </div>
+    <p style="margin:8px 0;font-size:0.78rem;color:var(--text-dim);">
+      Don't see your site? Contact your admin to get it unlocked or to receive an invite.
+    </p>
+    <p id="newUserSiteStatus" style="margin:8px 0;font-size:0.82rem;color:var(--text-dim);"></p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="newUserSiteSubmitBtn" onclick="handleNewUserSiteSelect()" disabled>Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Site Invite Modal -->
+<div class="modal-overlay hidden" id="inviteModal" onclick="if(event.target===this)closeInviteModal()">
+  <div class="modal" style="max-width:440px;">
+    <h2 style="margin-top:0;">Site invitation</h2>
+    <p style="margin:8px 0;font-size:0.92rem;">
+      You've been invited to <strong id="inviteModalSite">—</strong>.
+    </p>
+    <div style="background:rgba(59,130,246,0.08);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:0.82rem;">
+      <strong>If you accept:</strong> all of your shifts and cases will be moved from
+      <strong id="inviteModalOldSite">your current site</strong> to
+      <strong id="inviteModalNewSite">the new site</strong>.
+      Your data won't be lost &mdash; just re-tagged.
+    </div>
+    <p id="inviteModalStatus" style="margin:8px 0;font-size:0.82rem;color:var(--text-dim);"></p>
+    <div class="modal-actions" style="flex-direction:column;gap:8px;margin-top:14px;">
+      <button class="btn btn-primary" id="inviteAcceptBtn" onclick="handleAcceptInvite()">Accept &amp; move my data</button>
+      <button class="btn" id="inviteDeclineBtn" onclick="handleDeclineInvite()" style="background:var(--surface2);">Decline</button>
+      <button class="btn" onclick="closeInviteModal()" style="background:transparent;color:var(--text-dim);">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- BOTTOM NAV -->
 <div class="bottom-nav">
   <button data-page="time">
@@ -4290,11 +4387,781 @@ const db = firebase.firestore();
 db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 
 let currentUser = null;
+let currentUserProfile = null;
 let firestoreSyncEnabled = false;
 let syncDebounceTimer = null;
 let googleAccessToken = null;
 const ADMIN_UID = 'ZCXVQgTIknSVa7MvOnXSw550MCo2';
-function isAdmin() { return currentUser && currentUser.uid === ADMIN_UID; }
+function isAdmin() {
+  if (!currentUser) return false;
+  if (currentUser.uid === ADMIN_UID) return true;
+  return !!(currentUserProfile && currentUserProfile.isAdmin === true);
+}
+
+// Fetch the current user's profile doc into memory. Called on auth state
+// change before isAdmin() needs to be accurate for promoted admins.
+async function loadCurrentUserProfile() {
+  if (!currentUser) { currentUserProfile = null; return; }
+  try {
+    const snap = await db.collection('userProfiles').doc(currentUser.uid).get();
+    currentUserProfile = snap.exists ? snap.data() : {};
+  } catch (e) {
+    console.error('loadCurrentUserProfile failed:', e);
+    currentUserProfile = {};
+  }
+}
+
+// ================================================================
+// MULTI-SITE: invites + site switching + admin operations
+// ================================================================
+//
+// Site lock model:
+//   - Every user has settings.siteId pointing at their current site.
+//   - Users cannot self-switch sites. Switching happens only via an
+//     admin-issued invite that the user accepts (or via direct admin
+//     site assignment).
+//   - sites/{siteId}.unlocked: true means the site appears in the
+//     new-user signup dropdown. Admin invites bypass this flag.
+//
+// Invite flow:
+//   - Admin calls inviteUserToSite(targetUid, siteId). Writes
+//     userProfiles/{targetUid}.pendingInvite = { siteId, invitedBy, invitedAt }.
+//     Replaces any existing pending invite.
+//   - Target user sees a banner on next load (or live if subscribed).
+//   - Accept: runs migration (move all their data from old site to new),
+//     updates settings.siteId, clears pendingInvite.
+//   - Decline: clears pendingInvite, no other change.
+
+async function inviteUserToSite(targetUid, siteId) {
+  if (!isAdmin()) throw new Error('Admin only');
+  if (!targetUid || !siteId) throw new Error('targetUid and siteId required');
+  await db.collection('userProfiles').doc(targetUid).set({
+    pendingInvite: {
+      siteId: siteId,
+      invitedBy: currentUser.uid,
+      invitedAt: new Date().toISOString()
+    }
+  }, { merge: true });
+}
+
+async function setUserAdmin(targetUid, makeAdmin) {
+  if (!isAdmin()) throw new Error('Admin only');
+  if (!targetUid) throw new Error('targetUid required');
+  // Master admin (ADMIN_UID) cannot be demoted via this path.
+  if (targetUid === ADMIN_UID && !makeAdmin) throw new Error('Cannot demote master admin');
+  await db.collection('userProfiles').doc(targetUid).set({
+    isAdmin: !!makeAdmin
+  }, { merge: true });
+}
+
+async function setSiteUnlocked(siteId, unlocked) {
+  if (!isAdmin()) throw new Error('Admin only');
+  if (!siteId) throw new Error('siteId required');
+  await db.collection('sites').doc(siteId).set({
+    unlocked: !!unlocked
+  }, { merge: true });
+}
+
+async function adminSetUserSite(targetUid, newSiteId, withMigration) {
+  if (!isAdmin()) throw new Error('Admin only');
+  if (!targetUid || !newSiteId) throw new Error('targetUid and newSiteId required');
+  // Read target's current siteId
+  const settingsRef = db.collection('users').doc(targetUid).collection('data').doc('settings');
+  const snap = await settingsRef.get();
+  const oldSiteId = (snap.exists && snap.data().siteId) || DEFAULT_SITE_ID;
+  if (oldSiteId === newSiteId) return; // no-op
+  if (withMigration) {
+    await migrateUserDataToSite(targetUid, oldSiteId, newSiteId);
+  }
+  await settingsRef.set({ siteId: newSiteId }, { merge: true });
+  // Clear any pending invite — direct assignment supersedes it
+  await db.collection('userProfiles').doc(targetUid).set({
+    pendingInvite: firebase.firestore.FieldValue.delete()
+  }, { merge: true });
+}
+
+// Decline a pending invite for the current user (no data changes).
+async function declinePendingInvite() {
+  if (!currentUser) return;
+  await db.collection('userProfiles').doc(currentUser.uid).set({
+    pendingInvite: firebase.firestore.FieldValue.delete()
+  }, { merge: true });
+  if (currentUserProfile) delete currentUserProfile.pendingInvite;
+}
+
+// Accept a pending invite for the current user. Auto-migrates all the
+// user's data from their current site to the invited site.
+async function acceptPendingInvite() {
+  if (!currentUser) throw new Error('Not signed in');
+  const profile = currentUserProfile || {};
+  const invite = profile.pendingInvite;
+  if (!invite || !invite.siteId) throw new Error('No pending invite');
+  const newSiteId = invite.siteId;
+  const oldSiteId = (settings && settings.siteId) || DEFAULT_SITE_ID;
+  if (newSiteId === oldSiteId) {
+    // Already there — just clear the invite
+    await declinePendingInvite();
+    return;
+  }
+  // Run migration
+  await migrateUserDataToSite(currentUser.uid, oldSiteId, newSiteId);
+  // Update local + remote settings
+  settings.siteId = newSiteId;
+  saveSettings(settings);
+  await db.collection('users').doc(currentUser.uid).collection('data').doc('settings').set({
+    siteId: newSiteId
+  }, { merge: true });
+  // Clear pending invite
+  await declinePendingInvite();
+  // Refresh local data view (local data is already migrated for self;
+  // shared caches need a re-read scoped to new siteId)
+  invalidateResolvedRulesCache && invalidateResolvedRulesCache();
+}
+
+// Migrate all of a user's data from oldSiteId → newSiteId.
+//   - Re-stamps data.shifts[*].siteId in the user's data doc
+//   - Re-stamps cases array entries
+//   - Re-stamps sharedCases owned by this user (where siteId == oldSiteId)
+//   - Re-stamps sharedCaseOverrides owned by this user
+//   - Contained surgeon-mapping copy: only mappings the user references
+//     in their own cases get copied to the new site (skips conflicts).
+async function migrateUserDataToSite(uid, oldSiteId, newSiteId) {
+  if (!uid || !oldSiteId || !newSiteId) throw new Error('uid/oldSiteId/newSiteId required');
+  if (oldSiteId === newSiteId) return;
+
+  // 1. Re-stamp the user's own data doc (shifts[*].siteId, cases[*].siteId)
+  const dataRef = db.collection('users').doc(uid).collection('data').doc('data');
+  const dataSnap = await dataRef.get();
+  let userCases = [];
+  if (dataSnap.exists) {
+    const d = dataSnap.data() || {};
+    let mutated = false;
+    if (d.shifts) {
+      for (const k in d.shifts) {
+        if (d.shifts[k] && d.shifts[k].siteId === oldSiteId) {
+          d.shifts[k].siteId = newSiteId;
+          mutated = true;
+        } else if (d.shifts[k] && !d.shifts[k].siteId) {
+          d.shifts[k].siteId = newSiteId;
+          mutated = true;
+        }
+      }
+    }
+    if (Array.isArray(d.cases)) {
+      for (const c of d.cases) {
+        if (c && (c.siteId === oldSiteId || !c.siteId)) {
+          c.siteId = newSiteId;
+          mutated = true;
+        }
+      }
+      userCases = d.cases;
+    }
+    if (mutated) {
+      await dataRef.set(d);
+      // If migrating self, refresh local data + storage
+      if (currentUser && currentUser.uid === uid) {
+        data = d;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
+      }
+    }
+  }
+
+  // 2. Re-stamp user's sharedCases (batched; Firestore caps batches at 500 writes)
+  await batchUpdateSiteId(
+    db.collection('sharedCases').where('uid', '==', uid).where('siteId', '==', oldSiteId),
+    newSiteId
+  );
+
+  // 3. Re-stamp user's sharedCaseOverrides
+  await batchUpdateSiteId(
+    db.collection('sharedCaseOverrides').where('uid', '==', uid).where('siteId', '==', oldSiteId),
+    newSiteId
+  );
+
+  // 4. Contained surgeon-mapping copy
+  await copyUserSurgeonMappings(userCases, oldSiteId, newSiteId);
+}
+
+async function batchUpdateSiteId(query, newSiteId) {
+  let pageSize = 400;
+  let lastDoc = null;
+  // Loop in case there are >500 docs
+  // (Most users will have far fewer; this is just defensive.)
+  // Note: Firestore batched writes are capped at 500 ops. We page at 400.
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let q = query.limit(pageSize);
+    if (lastDoc) q = q.startAfter(lastDoc);
+    const snap = await q.get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    snap.docs.forEach(doc => batch.update(doc.ref, { siteId: newSiteId }));
+    await batch.commit();
+    if (snap.docs.length < pageSize) break;
+    lastDoc = snap.docs[snap.docs.length - 1];
+  }
+}
+
+// Copy surgeon mappings for surgeons referenced in `userCases` from
+// oldSiteId to newSiteId. Only writes mappings the destination site
+// doesn't already have — never overwrites.
+// ----- Invite banner / modal UI -----
+
+function getPendingInviteSiteName(siteId) {
+  if (!siteId) return '';
+  return (sitesCache[siteId] && sitesCache[siteId].name) || siteId;
+}
+
+function renderInviteBanner() {
+  const banner = document.getElementById('inviteBanner');
+  if (!banner) return;
+  const invite = currentUserProfile && currentUserProfile.pendingInvite;
+  if (!invite || !invite.siteId) {
+    banner.classList.add('hidden');
+    return;
+  }
+  // Don't show if invite is for current site (degenerate)
+  const cur = (settings && settings.siteId) || DEFAULT_SITE_ID;
+  if (invite.siteId === cur) {
+    banner.classList.add('hidden');
+    return;
+  }
+  document.getElementById('inviteBannerSite').textContent = getPendingInviteSiteName(invite.siteId);
+  banner.classList.remove('hidden');
+}
+
+function openInviteModal() {
+  const invite = currentUserProfile && currentUserProfile.pendingInvite;
+  if (!invite || !invite.siteId) return;
+  const cur = (settings && settings.siteId) || DEFAULT_SITE_ID;
+  document.getElementById('inviteModalSite').textContent = getPendingInviteSiteName(invite.siteId);
+  document.getElementById('inviteModalOldSite').textContent = getPendingInviteSiteName(cur);
+  document.getElementById('inviteModalNewSite').textContent = getPendingInviteSiteName(invite.siteId);
+  document.getElementById('inviteModalStatus').textContent = '';
+  document.getElementById('inviteAcceptBtn').disabled = false;
+  document.getElementById('inviteDeclineBtn').disabled = false;
+  document.getElementById('inviteModal').classList.remove('hidden');
+}
+
+function closeInviteModal() {
+  document.getElementById('inviteModal').classList.add('hidden');
+}
+
+async function handleAcceptInvite() {
+  const status = document.getElementById('inviteModalStatus');
+  const acceptBtn = document.getElementById('inviteAcceptBtn');
+  const declineBtn = document.getElementById('inviteDeclineBtn');
+  acceptBtn.disabled = true;
+  declineBtn.disabled = true;
+  status.textContent = 'Moving your data...';
+  status.style.color = 'var(--text-dim)';
+  try {
+    await acceptPendingInvite();
+    status.textContent = 'Done! Reloading...';
+    status.style.color = 'var(--accent)';
+    // Reload so all shared caches re-fetch under the new siteId
+    setTimeout(() => location.reload(), 800);
+  } catch (err) {
+    console.error('Accept invite failed:', err);
+    status.textContent = 'Error: ' + (err.message || err);
+    status.style.color = 'var(--accent2)';
+    acceptBtn.disabled = false;
+    declineBtn.disabled = false;
+  }
+}
+
+async function handleDeclineInvite() {
+  const status = document.getElementById('inviteModalStatus');
+  const acceptBtn = document.getElementById('inviteAcceptBtn');
+  const declineBtn = document.getElementById('inviteDeclineBtn');
+  acceptBtn.disabled = true;
+  declineBtn.disabled = true;
+  status.textContent = 'Declining...';
+  try {
+    await declinePendingInvite();
+    closeInviteModal();
+    renderInviteBanner();
+    showToast('Invite declined');
+  } catch (err) {
+    console.error('Decline invite failed:', err);
+    status.textContent = 'Error: ' + (err.message || err);
+    status.style.color = 'var(--accent2)';
+    acceptBtn.disabled = false;
+    declineBtn.disabled = false;
+  }
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ----- Admin Multi-Site Management UI -----
+
+function adminMSSetTab(tab) {
+  const tabs = [
+    { id: 'users', btn: 'adminMSTabUsers', pane: 'adminMSUsersPane' },
+    { id: 'sites', btn: 'adminMSTabSites', pane: 'adminMSSitesPane' },
+    { id: 'test',  btn: 'adminMSTabTest',  pane: 'adminMSTestPane'  }
+  ];
+  for (const t of tabs) {
+    const btn = document.getElementById(t.btn);
+    const pane = document.getElementById(t.pane);
+    if (!btn || !pane) continue;
+    if (t.id === tab) {
+      btn.style.background = 'var(--primary)';
+      btn.style.color = '#fff';
+      pane.classList.remove('hidden');
+    } else {
+      btn.style.background = 'var(--surface2)';
+      btn.style.color = '';
+      pane.classList.add('hidden');
+    }
+  }
+  if (tab === 'sites') renderAdminMSSitesList();
+}
+
+function _adminMSSiteOptionsHTML(currentSiteId) {
+  const ids = Object.keys(sitesCache || {}).slice().sort();
+  let html = '';
+  for (const id of ids) {
+    const name = (sitesCache[id] && sitesCache[id].name) || id;
+    const sel = id === currentSiteId ? ' selected' : '';
+    html += '<option value="' + id + '"' + sel + '>' + name + ' (' + id + ')</option>';
+  }
+  return html;
+}
+
+async function adminMSFindUser() {
+  if (!isAdmin()) return;
+  const email = (document.getElementById('adminMSUserEmail').value || '').trim();
+  const out = document.getElementById('adminMSUserCard');
+  if (!email) { out.innerHTML = '<p style="color:var(--accent2);">Enter an email address</p>'; return; }
+  out.innerHTML = '<p>Looking up...</p>';
+  try {
+    const snap = await db.collection('userProfiles').where('email', '==', email).get();
+    if (snap.empty) { out.innerHTML = '<p style="color:var(--accent2);">No user found with email: ' + email + '</p>'; return; }
+    const uid = snap.docs[0].id;
+    const profile = snap.docs[0].data() || {};
+    // Read their settings to get current siteId
+    const settingsDoc = await db.collection('users').doc(uid).collection('data').doc('settings').get();
+    const userSiteId = (settingsDoc.exists && settingsDoc.data().siteId) || DEFAULT_SITE_ID;
+    renderAdminMSUserCard(uid, profile, userSiteId);
+  } catch (err) {
+    console.error('Admin user lookup error:', err);
+    out.innerHTML = '<p style="color:var(--accent2);">Error: ' + (err.message || err) + '</p>';
+  }
+}
+
+function renderAdminMSUserCard(uid, profile, userSiteId) {
+  const out = document.getElementById('adminMSUserCard');
+  if (!out) return;
+  const name = profile.displayName || '(no name)';
+  const email = profile.email || '(no email)';
+  const isMaster = uid === ADMIN_UID;
+  const userIsAdmin = isMaster || profile.isAdmin === true;
+  const inv = profile.pendingInvite;
+  const inviteSiteName = inv && inv.siteId
+    ? ((sitesCache[inv.siteId] && sitesCache[inv.siteId].name) || inv.siteId)
+    : null;
+  const curSiteName = (sitesCache[userSiteId] && sitesCache[userSiteId].name) || userSiteId;
+
+  let html = '';
+  html += '<div style="background:var(--surface);padding:12px;border-radius:8px;margin-bottom:12px;">';
+  html += '<strong>' + escapeHtml(name) + '</strong> &mdash; ' + escapeHtml(email);
+  html += '<br><span style="color:var(--text-dim);font-size:0.75rem;">UID: ' + uid + '</span>';
+  html += '<br><span style="font-size:0.78rem;">Current site: <strong>' + escapeHtml(curSiteName) + '</strong> (' + userSiteId + ')</span>';
+  html += '<br><span style="font-size:0.78rem;">Admin: ' + (userIsAdmin ? '<strong style="color:var(--accent);">Yes' + (isMaster ? ' (master)' : '') + '</strong>' : 'No') + '</span>';
+  if (inviteSiteName) {
+    html += '<br><span style="font-size:0.78rem;color:var(--accent2);">Pending invite: ' + escapeHtml(inviteSiteName) + ' (sent ' + (inv.invitedAt ? inv.invitedAt.split('T')[0] : '') + ')</span>';
+  }
+  html += '</div>';
+
+  // Invite to site
+  html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:8px;">';
+  html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Invite to a site</div>';
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+  html += '<select id="adminMSInviteSite_' + uid + '" style="flex:1;min-width:140px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.82rem;">' + _adminMSSiteOptionsHTML(userSiteId) + '</select>';
+  html += '<button class="btn btn-primary btn-sm" onclick="adminMSSendInvite(\'' + uid + '\')">Send invite</button>';
+  if (inviteSiteName) {
+    html += '<button class="btn btn-sm" onclick="adminMSCancelInvite(\'' + uid + '\')" style="background:var(--surface);color:var(--accent2);">Cancel pending</button>';
+  }
+  html += '</div>';
+  html += '<p style="font-size:0.72rem;color:var(--text-dim);margin:6px 0 0 0;">User sees a banner and can accept (auto-migrates their data) or decline.</p>';
+  html += '</div>';
+
+  // Change site directly
+  html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:8px;">';
+  html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Change site directly (no user prompt)</div>';
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">';
+  html += '<select id="adminMSSetSite_' + uid + '" style="flex:1;min-width:140px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.82rem;">' + _adminMSSiteOptionsHTML(userSiteId) + '</select>';
+  html += '<label style="font-size:0.78rem;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="adminMSSetSiteMigrate_' + uid + '" checked> Migrate data</label>';
+  html += '<button class="btn btn-sm" onclick="adminMSSetUserSite(\'' + uid + '\')" style="background:var(--accent2);color:#1e293b;">Apply</button>';
+  html += '</div>';
+  html += '</div>';
+
+  // Admin role toggle
+  html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;">';
+  html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Admin role</div>';
+  if (isMaster) {
+    html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0;">Master admin &mdash; cannot be demoted.</p>';
+  } else if (userIsAdmin) {
+    html += '<button class="btn btn-sm" onclick="adminMSTogglePromote(\'' + uid + '\', false)" style="background:var(--surface);color:var(--accent2);">Revoke admin</button>';
+  } else {
+    html += '<button class="btn btn-primary btn-sm" onclick="adminMSTogglePromote(\'' + uid + '\', true)">Promote to admin</button>';
+  }
+  html += '</div>';
+
+  html += '<div id="adminMSUserStatus_' + uid + '" style="margin-top:10px;font-size:0.8rem;"></div>';
+  out.innerHTML = html;
+}
+
+function _adminMSSetStatus(uid, msg, isError) {
+  const el = document.getElementById('adminMSUserStatus_' + uid);
+  if (!el) return;
+  el.style.color = isError ? 'var(--accent2)' : 'var(--accent)';
+  el.textContent = msg;
+}
+
+async function adminMSSendInvite(uid) {
+  const sel = document.getElementById('adminMSInviteSite_' + uid);
+  const siteId = sel && sel.value;
+  if (!siteId) return;
+  _adminMSSetStatus(uid, 'Sending invite...', false);
+  try {
+    await inviteUserToSite(uid, siteId);
+    _adminMSSetStatus(uid, 'Invite sent. User will see a banner on next load.', false);
+    // Re-render the user card to reflect the new pending invite
+    setTimeout(() => adminMSFindUser(), 500);
+  } catch (err) {
+    _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
+  }
+}
+
+async function adminMSCancelInvite(uid) {
+  if (!confirm('Cancel the pending invite for this user?')) return;
+  _adminMSSetStatus(uid, 'Cancelling...', false);
+  try {
+    await db.collection('userProfiles').doc(uid).set({
+      pendingInvite: firebase.firestore.FieldValue.delete()
+    }, { merge: true });
+    _adminMSSetStatus(uid, 'Invite cancelled.', false);
+    setTimeout(() => adminMSFindUser(), 400);
+  } catch (err) {
+    _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
+  }
+}
+
+async function adminMSSetUserSite(uid) {
+  const sel = document.getElementById('adminMSSetSite_' + uid);
+  const migrateCb = document.getElementById('adminMSSetSiteMigrate_' + uid);
+  const siteId = sel && sel.value;
+  if (!siteId) return;
+  const withMigration = !!(migrateCb && migrateCb.checked);
+  const msg = withMigration
+    ? 'Move this user to ' + siteId + ' AND migrate all their data?'
+    : 'Move this user to ' + siteId + ' WITHOUT migrating data (their existing shifts stay tagged with the old site)?';
+  if (!confirm(msg)) return;
+  _adminMSSetStatus(uid, 'Applying...', false);
+  try {
+    await adminSetUserSite(uid, siteId, withMigration);
+    _adminMSSetStatus(uid, 'Done. User now on ' + siteId + (withMigration ? ' (data migrated)' : ' (no migration)') + '.', false);
+    setTimeout(() => adminMSFindUser(), 500);
+  } catch (err) {
+    _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
+  }
+}
+
+async function adminMSTogglePromote(uid, makeAdmin) {
+  const verb = makeAdmin ? 'Promote' : 'Revoke admin from';
+  if (!confirm(verb + ' this user?')) return;
+  _adminMSSetStatus(uid, 'Saving...', false);
+  try {
+    await setUserAdmin(uid, makeAdmin);
+    _adminMSSetStatus(uid, 'Done.', false);
+    setTimeout(() => adminMSFindUser(), 400);
+  } catch (err) {
+    _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
+  }
+}
+
+async function renderAdminMSSitesList() {
+  const out = document.getElementById('adminMSSitesList');
+  if (!out) return;
+  out.innerHTML = '<p>Loading sites...</p>';
+  try {
+    const snap = await db.collection('sites').get();
+    const rows = [];
+    snap.forEach(doc => rows.push({ id: doc.id, data: doc.data() || {} }));
+    rows.sort((a, b) => a.id.localeCompare(b.id));
+    let html = '';
+    for (const row of rows) {
+      const name = row.data.name || row.id;
+      const unlocked = row.data.unlocked === true;
+      html += '<div style="background:var(--surface);padding:10px 12px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">';
+      html += '<div><strong>' + escapeHtml(name) + '</strong>';
+      html += ' <span style="font-size:0.72rem;color:var(--text-dim);">(' + row.id + ')</span>';
+      html += '<br><span style="font-size:0.75rem;color:' + (unlocked ? 'var(--accent)' : 'var(--text-dim)') + ';">' + (unlocked ? 'Unlocked for new-user signups' : 'Locked (admin invite only)') + '</span>';
+      html += '</div>';
+      html += '<button class="btn btn-sm" onclick="adminMSToggleSiteUnlock(\'' + row.id + '\', ' + (!unlocked) + ')" style="background:' + (unlocked ? 'var(--surface2)' : 'var(--primary)') + ';color:' + (unlocked ? 'var(--text)' : '#fff') + ';">';
+      html += (unlocked ? 'Lock' : 'Unlock') + '</button>';
+      html += '</div>';
+    }
+    if (rows.length === 0) html = '<p style="color:var(--text-dim);">No sites configured.</p>';
+    out.innerHTML = html;
+  } catch (err) {
+    out.innerHTML = '<p style="color:var(--accent2);">Failed to load sites: ' + (err.message || err) + '</p>';
+  }
+}
+
+async function adminMSToggleSiteUnlock(siteId, unlock) {
+  try {
+    await setSiteUnlocked(siteId, unlock);
+    // Refresh local cache + UI
+    if (sitesCache[siteId]) sitesCache[siteId].unlocked = unlock;
+    renderAdminMSSitesList();
+  } catch (err) {
+    alert('Failed: ' + (err.message || err));
+  }
+}
+
+// ----- Test cleanup tab -----
+
+function adminMSWipeOnInput() {
+  const emailEl = document.getElementById('adminMSWipeEmail');
+  const confirmEl = document.getElementById('adminMSWipeConfirm');
+  const btn = document.getElementById('adminMSWipeBtn');
+  if (!emailEl || !confirmEl || !btn) return;
+  const e1 = emailEl.value.trim().toLowerCase();
+  const e2 = confirmEl.value.trim().toLowerCase();
+  btn.disabled = !(e1 && e2 && e1 === e2);
+}
+
+async function adminMSWipeUser() {
+  if (!isAdmin()) return;
+  const emailEl = document.getElementById('adminMSWipeEmail');
+  const confirmEl = document.getElementById('adminMSWipeConfirm');
+  const status = document.getElementById('adminMSWipeStatus');
+  const btn = document.getElementById('adminMSWipeBtn');
+  if (!emailEl || !confirmEl || !status || !btn) return;
+  const email = emailEl.value.trim().toLowerCase();
+  const confirmEmail = confirmEl.value.trim().toLowerCase();
+  if (!email || email !== confirmEmail) {
+    status.style.color = 'var(--accent2)';
+    status.textContent = 'Emails do not match.';
+    return;
+  }
+  status.style.color = 'var(--text-dim)';
+  status.textContent = 'Looking up user...';
+  btn.disabled = true;
+  try {
+    const snap = await db.collection('userProfiles').where('email', '==', email).get();
+    if (snap.empty) throw new Error('No user found with email: ' + email);
+    const uid = snap.docs[0].id;
+    const profile = snap.docs[0].data() || {};
+
+    // Safety checks
+    if (currentUser && uid === currentUser.uid) throw new Error('Cannot wipe your own account.');
+    if (uid === ADMIN_UID) throw new Error('Cannot wipe the master admin.');
+    if (profile.isAdmin === true) throw new Error('Cannot wipe an admin user. Revoke admin first.');
+
+    if (!confirm('Wipe ALL data for ' + email + '?\n\nThis cannot be undone.')) {
+      status.style.color = 'var(--text-dim)';
+      status.textContent = 'Cancelled.';
+      btn.disabled = false;
+      return;
+    }
+
+    // 1. Delete sharedCases owned by this user (paginated)
+    status.textContent = 'Deleting shared cases...';
+    await deleteByQuery(db.collection('sharedCases').where('uid', '==', uid));
+
+    // 2. Delete sharedCaseOverrides owned by this user
+    status.textContent = 'Deleting shared overrides...';
+    await deleteByQuery(db.collection('sharedCaseOverrides').where('uid', '==', uid));
+
+    // 3. Delete user data + settings docs
+    status.textContent = 'Deleting user data...';
+    await db.collection('users').doc(uid).collection('data').doc('data').delete().catch(() => {});
+    await db.collection('users').doc(uid).collection('data').doc('settings').delete().catch(() => {});
+
+    // 4. Delete the userProfile last
+    status.textContent = 'Deleting user profile...';
+    await db.collection('userProfiles').doc(uid).delete();
+
+    status.style.color = 'var(--accent)';
+    status.textContent = 'Done. Wiped Firestore data for ' + email + '. (Auth account remains; remove via Firebase console if needed.)';
+    emailEl.value = '';
+    confirmEl.value = '';
+  } catch (err) {
+    console.error('Wipe failed:', err);
+    status.style.color = 'var(--accent2)';
+    status.textContent = 'Failed: ' + (err.message || err);
+    btn.disabled = false;
+  }
+}
+
+async function deleteByQuery(query) {
+  let pageSize = 400;
+  let lastDoc = null;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let q = query.limit(pageSize);
+    if (lastDoc) q = q.startAfter(lastDoc);
+    const snap = await q.get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    snap.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    if (snap.docs.length < pageSize) break;
+    lastDoc = snap.docs[snap.docs.length - 1];
+  }
+}
+
+// ----- New-user site selector (first login, no data) -----
+
+function showNewUserSiteSelector() {
+  const select = document.getElementById('newUserSiteSelect');
+  if (!select) return;
+  select.innerHTML = '<option value="">Select a site...</option>';
+  // Sort unlocked sites by display name; UVH always available as a fallback.
+  const unlocked = Object.entries(sitesCache || {})
+    .filter(([id, s]) => s && s.unlocked === true);
+  unlocked.sort((a, b) => (a[1].name || a[0]).localeCompare(b[1].name || b[0]));
+  const seen = new Set();
+  for (const [id, s] of unlocked) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = (s && s.name) || id;
+    select.appendChild(opt);
+    seen.add(id);
+  }
+  if (!seen.has(DEFAULT_SITE_ID)) {
+    const opt = document.createElement('option');
+    opt.value = DEFAULT_SITE_ID;
+    opt.textContent = (sitesCache[DEFAULT_SITE_ID] && sitesCache[DEFAULT_SITE_ID].name) || DEFAULT_SITE_ID;
+    // Insert as the first real option (after the placeholder)
+    select.insertBefore(opt, select.children[1] || null);
+  }
+  const submitBtn = document.getElementById('newUserSiteSubmitBtn');
+  submitBtn.disabled = true;
+  select.onchange = () => { submitBtn.disabled = !select.value; };
+  document.getElementById('newUserSiteStatus').textContent = '';
+  document.getElementById('newUserSiteModal').classList.remove('hidden');
+}
+
+async function handleNewUserSiteSelect() {
+  const select = document.getElementById('newUserSiteSelect');
+  const siteId = select && select.value;
+  if (!siteId || !currentUser) return;
+  const status = document.getElementById('newUserSiteStatus');
+  const submitBtn = document.getElementById('newUserSiteSubmitBtn');
+  submitBtn.disabled = true;
+  status.style.color = 'var(--text-dim)';
+  status.textContent = 'Saving...';
+  try {
+    settings.siteId = siteId;
+    saveSettings(settings);
+    await db.collection('users').doc(currentUser.uid).collection('data').doc('settings')
+      .set({ siteId: siteId }, { merge: true });
+    const stamp = new Date().toISOString();
+    await db.collection('userProfiles').doc(currentUser.uid)
+      .set({ siteSelectedAt: stamp }, { merge: true });
+    if (!currentUserProfile) currentUserProfile = {};
+    currentUserProfile.siteSelectedAt = stamp;
+    document.getElementById('newUserSiteModal').classList.add('hidden');
+    if (typeof renderSiteRow === 'function') renderSiteRow();
+    showToast('Site set to ' + getPendingInviteSiteName(siteId));
+  } catch (err) {
+    console.error('Site select save failed:', err);
+    status.style.color = 'var(--accent2)';
+    status.textContent = 'Error: ' + (err.message || err);
+    submitBtn.disabled = false;
+  }
+}
+
+// Decide whether to prompt the user to pick a site. Called once after auth +
+// data + sites are loaded.
+//   - Already chose? skip.
+//   - Has any shifts/cases? this is a legacy user — silently mark them as
+//     "selected" so we never prompt.
+//   - Otherwise: brand-new user, show picker.
+function maybeShowNewUserSiteSelector() {
+  if (!currentUser) return;
+  if (currentUserProfile && currentUserProfile.siteSelectedAt) return;
+  // Legacy user with existing data → silently mark as settled
+  const hasData = !!(data && (
+    (data.shifts && Object.keys(data.shifts).length > 0) ||
+    (Array.isArray(data.cases) && data.cases.length > 0)
+  ));
+  if (hasData) {
+    const stamp = new Date().toISOString();
+    db.collection('userProfiles').doc(currentUser.uid)
+      .set({ siteSelectedAt: stamp }, { merge: true })
+      .catch(() => {});
+    if (!currentUserProfile) currentUserProfile = {};
+    currentUserProfile.siteSelectedAt = stamp;
+    return;
+  }
+  // Don't show the picker if the user has a pending invite — let them
+  // accept/decline that first.
+  if (currentUserProfile && currentUserProfile.pendingInvite && currentUserProfile.pendingInvite.siteId) {
+    return;
+  }
+  showNewUserSiteSelector();
+}
+
+async function copyUserSurgeonMappings(userCases, oldSiteId, newSiteId) {
+  try {
+    // Local cases store the surgeon name in `notes` (sharedCases mirror to `surgeon`).
+    const surgeonNames = new Set();
+    for (const c of (userCases || [])) {
+      const name = c && (c.notes || c.surgeon);
+      if (name && String(name).trim()) surgeonNames.add(String(name).trim());
+    }
+    if (surgeonNames.size === 0) return;
+
+    const oldRef = db.collection('surgeonMappings').doc(oldSiteId);
+    const newRef = db.collection('surgeonMappings').doc(newSiteId);
+    const [oldSnap, newSnap] = await Promise.all([oldRef.get(), newRef.get()]);
+    const oldMap = (oldSnap.exists && oldSnap.data().mappings) || {};
+    const newMap = (newSnap.exists && newSnap.data().mappings) || {};
+
+    const merged = Object.assign({}, newMap);
+    let added = 0;
+    for (const name of surgeonNames) {
+      // Look up oldMap by exact + case-insensitive
+      let canonical = oldMap[name];
+      if (!canonical) {
+        const lower = name.toLowerCase();
+        for (const [variant, c] of Object.entries(oldMap)) {
+          if (variant.toLowerCase() === lower) { canonical = c; break; }
+        }
+      }
+      if (!canonical) continue;
+      // Don't overwrite existing newSite entry
+      if (merged[name] !== undefined) continue;
+      merged[name] = canonical;
+      added += 1;
+    }
+    if (added > 0) {
+      await newRef.set({
+        mappings: merged,
+        siteId: newSiteId,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+  } catch (e) {
+    console.error('copyUserSurgeonMappings failed:', e);
+    // Don't throw — surgeon mapping copy is best-effort. The migration
+    // of shifts/cases is the critical path.
+  }
+}
 
 async function adminLookupUser() {
   if (!isAdmin()) return;
@@ -4373,6 +5240,36 @@ const PROD_KEY = 'mwa_production';
 const RECON_DECISIONS_KEY = 'mwa_recon_decisions';
 const SHIFT_RECON_DECISIONS_KEY = 'mwa_shift_recon_decisions';
 
+// Multi-site: every user belongs to exactly one site. Existing users default
+// to UVH; new sites are created admin-side. Each shift/case is stamped with
+// the user's siteId at save time and never silently re-stamped, so historical
+// data keeps the rules of the site it was entered under.
+const DEFAULT_SITE_ID = 'UVH';
+function getCurrentSiteId() {
+  // try/catch guards against `settings` being in the temporal dead zone
+  // when this is called during initial loadData() (before `let settings = ...`).
+  try { return (settings && settings.siteId) || DEFAULT_SITE_ID; }
+  catch (e) { return DEFAULT_SITE_ID; }
+}
+
+// Stamp siteId on every shift/case in `data` that lacks one. Idempotent:
+// records already stamped are left alone, so this is safe to run on every load.
+function backfillSiteIds(d) {
+  if (!d) return d;
+  const sid = getCurrentSiteId();
+  if (d.shifts) {
+    for (const k in d.shifts) {
+      if (d.shifts[k] && !d.shifts[k].siteId) d.shifts[k].siteId = sid;
+    }
+  }
+  if (Array.isArray(d.cases)) {
+    for (const c of d.cases) {
+      if (c && !c.siteId) c.siteId = sid;
+    }
+  }
+  return d;
+}
+
 function loadData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -4383,6 +5280,7 @@ function loadData() {
       if (!d.calendarAssignments) d.calendarAssignments = {};
       if (!d.paychecks) d.paychecks = {};
       if (!d.retirement) d.retirement = {};
+      backfillSiteIds(d);
       return d;
     }
   } catch(e) {}
@@ -4432,6 +5330,7 @@ function syncToFirestore(docName, payload) {
 function buildSharedCase(caseData, shift) {
   return {
     uid: currentUser ? currentUser.uid : '',
+    siteId: caseData.siteId || (shift && shift.siteId) || getCurrentSiteId(),
     caseType: caseData.caseType || '',
     shiftDate: caseData.shiftDate || '',
     timestamp: caseData.timestamp || new Date().toISOString(),
@@ -4508,6 +5407,8 @@ let sharedCaseOverridesCache = {}; // { docId: { surgeon, procedure, updatedAt }
 let surgeonMappingsCache = {};
 let surgeonMappingsLoaded = false;
 let userProfilesCache = {}; // { uid: { email, displayName } }
+let sitesCache = {};       // { siteId: { id, name, members[], owner, ... } }
+let sitesLoaded = false;
 
 function parseSharedCasesSnapshot(snapshot) {
   const cases = [];
@@ -4528,7 +5429,9 @@ async function loadSharedCases(retryCount) {
   try {
     // Use default get() — Firestore handles cache vs server automatically.
     // Forced source:'server' can hang if the WebSocket isn't connected yet.
-    const snap = await db.collection('sharedCases').get();
+    const snap = await db.collection('sharedCases')
+      .where('siteId', '==', getCurrentSiteId())
+      .get();
     sharedCasesCache = parseSharedCasesSnapshot(snap);
     applySharedCaseOverrides();
     sharedCasesLoaded = true;
@@ -4552,7 +5455,9 @@ async function loadSharedCases(retryCount) {
 
 async function loadSharedCaseOverrides() {
   try {
-    const snap = await db.collection('sharedCaseOverrides').get();
+    const snap = await db.collection('sharedCaseOverrides')
+      .where('siteId', '==', getCurrentSiteId())
+      .get();
     sharedCaseOverridesCache = {};
     snap.forEach(doc => { sharedCaseOverridesCache[doc.id] = doc.data(); });
     console.log('Loaded ' + Object.keys(sharedCaseOverridesCache).length + ' shared case overrides');
@@ -4598,7 +5503,8 @@ function approxSharedCasePoints(sc) {
 
 async function loadSurgeonMappings() {
   try {
-    const doc = await db.collection('surgeonMappings').doc('canonical').get();
+    const sid = getCurrentSiteId();
+    const doc = await db.collection('surgeonMappings').doc(sid).get();
     if (doc.exists) {
       surgeonMappingsCache = doc.data().mappings || {};
     } else {
@@ -4624,6 +5530,27 @@ async function loadUserProfiles() {
     console.error('Failed to load user profiles:', err);
     userProfilesCache = {};
   }
+}
+
+async function loadSites() {
+  try {
+    const snapshot = await db.collection('sites').get();
+    sitesCache = {};
+    snapshot.forEach(doc => { sitesCache[doc.id] = doc.data(); });
+    sitesLoaded = true;
+    invalidateResolvedRulesCache();
+    console.log('Loaded ' + Object.keys(sitesCache).length + ' sites');
+  } catch (err) {
+    console.error('Failed to load sites:', err);
+    sitesCache = {};
+    sitesLoaded = true;
+    invalidateResolvedRulesCache();
+  }
+}
+
+function getCurrentSiteName() {
+  const sid = getCurrentSiteId();
+  return (sitesCache[sid] && sitesCache[sid].name) || sid;
 }
 
 function normalizeSurgeonName(rawName) {
@@ -4670,6 +5597,7 @@ async function loadFromFirestore(uid) {
       if (!d.retirement) d.retirement = {};
       // Ensure cases is an array
       if (!Array.isArray(d.cases)) d.cases = [];
+      backfillSiteIds(d);
       data = d;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       return 'loaded';
@@ -5188,6 +6116,61 @@ function updateCalendarConnectedUI() {
 // Calendar Mapping Modal functions
 let calMappingResolve = null;
 
+// Single source of truth for per-shift-type compensation rules.
+// pagerWindow / unrestrictedCall: null means not eligible.
+// arRate.mode: 'general' (20 base), 'ob' (13 base), 'sf1' (13 daytime weekday non-holiday, else 20).
+const DEFAULT_SHIFT_RULES = {
+  OR:               { label: 'OR / General',      pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  OR_float:         { label: 'General OR - Float', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  OB_restricted:    { label: 'UVH OB',             pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'ob' } },
+  cardiac_liver:    { label: 'Cardiac / Liver',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: null,
+                      arRate: { mode: 'general' } },
+  mole:             { label: 'Mole',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1140 },          weekend: 'all' },
+                      arRate: { mode: 'general' } },
+  '1st_call':       { label: '1st Call',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
+                      arRate: { mode: 'general' } },
+  '2nd_call':       { label: '2nd Call',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
+                      arRate: { mode: 'general' } },
+  '3rd_call':       { label: '3rd Call',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
+                      arRate: { mode: 'general' } },
+  '4th_call':       { label: '4th Call',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: null,                        weekend: 'all' },
+                      arRate: { mode: 'general' } },
+  endo:             { label: 'Endo',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: null },
+                      arRate: { mode: 'general' } },
+  SF1:              { label: 'SF 1',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
+                      arRate: { mode: 'sf1' } },
+  SF2:              { label: 'SF 2',
+                      pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
+                      arRate: { mode: 'general' } },
+  ACS:              { label: 'ACS',              pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  NORA:             { label: 'NORA',             pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  pre_call:         { label: 'Pre-Call',         pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  CRNA_supervision: { label: 'CRNA Supervision', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  // Generic "I was on unrestricted call for N hours" shift. UI exposes an
+  // hours input; pay = hours * 3.5 (no AR rate, no case points). Used at
+  // sites that don't have a per-shift pager window structure (e.g. Other).
+  unrestricted_call_entry: { label: 'Unrestricted Call', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' }, unrestrictedCallEntry: true, noProductivity: true },
+  forced_off:       { label: 'UVH Forced Off',   pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  vacation:         { label: 'Vacation / Off',   pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } }
+};
+
 const ASSIGNMENT_TYPE_OPTIONS = [
   { value: 'OR', label: 'OR / General' },
   { value: 'OR_float', label: 'General OR - Float' },
@@ -5205,6 +6188,7 @@ const ASSIGNMENT_TYPE_OPTIONS = [
   { value: 'NORA', label: 'NORA' },
   { value: 'pre_call', label: 'Pre-Call' },
   { value: 'CRNA_supervision', label: 'CRNA Supervision' },
+  { value: 'unrestricted_call_entry', label: 'Unrestricted Call' },
   { value: 'forced_off', label: 'Forced Off' },
   { value: 'vacation', label: 'Vacation / Off' }
 ];
@@ -5214,8 +6198,10 @@ function showMappingModal(titles) {
     calMappingResolve = resolve;
     const listEl = document.getElementById('calMappingList');
     listEl.innerHTML = titles.map((title, i) => {
+      const _siteId = getCurrentSiteId();
+      const _types = getVisibleShiftTypesForSite(_siteId);
       const optionsHtml = '<option value="">— Skip —</option>' +
-        ASSIGNMENT_TYPE_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+        _types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(getShiftTypeLabel(t, _siteId))}</option>`).join('');
       // Suggest a label from the title (extract numbers for WB hint)
       const numMatch = title.match(/\d+/);
       const wbHint = numMatch ? 'WB: ' + numMatch[0] : '';
@@ -5308,69 +6294,139 @@ function clearCalendarMappings() {
 // ================================================================
 // CONSTANTS & HELPERS
 // ================================================================
-const UNRESTRICTED_CALL_TYPES = new Set(['mole','1st_call','2nd_call','3rd_call','4th_call','endo','SF1','SF2']);
+
+// Deep-merge two plain objects. Override values fully replace base if
+// they're not plain objects (so e.g. `pagerWindow: null` removes pager pay).
+function _deepMerge(base, override) {
+  if (override === undefined) return base;
+  if (override === null) return null;
+  if (typeof override !== 'object' || Array.isArray(override)) return override;
+  if (base === null || typeof base !== 'object' || Array.isArray(base)) return override;
+  const out = { ...base };
+  for (const k of Object.keys(override)) {
+    out[k] = _deepMerge(base[k], override[k]);
+  }
+  return out;
+}
+
+// Per-site resolved rules: DEFAULT_SHIFT_RULES + sites/{siteId}.shiftRulesOverride.
+// Cached per siteId; cleared whenever sitesCache is repopulated.
+const _resolvedRulesCache = new Map();
+function getResolvedShiftRules(siteId) {
+  if (!siteId) siteId = getCurrentSiteId();
+  if (_resolvedRulesCache.has(siteId)) return _resolvedRulesCache.get(siteId);
+  const override = (sitesCache[siteId] && sitesCache[siteId].shiftRulesOverride) || {};
+  const merged = { ...DEFAULT_SHIFT_RULES };
+  for (const [type, ruleOverride] of Object.entries(override)) {
+    merged[type] = _deepMerge(DEFAULT_SHIFT_RULES[type] || {}, ruleOverride);
+  }
+  _resolvedRulesCache.set(siteId, merged);
+  return merged;
+}
+function invalidateResolvedRulesCache() { _resolvedRulesCache.clear(); }
+
+// Returns the ordered list of shift type IDs that should appear in the
+// assignment-type dropdowns for users on this site.
+//   - If sites/{siteId}.visibleShiftTypes is set, returns that array.
+//   - Otherwise, falls back to all keys of DEFAULT_SHIFT_RULES (current
+//     UVH behavior). This keeps backward compat: UVH (no override) sees
+//     every shift type. Other / IMC / etc. set their own whitelist.
+function getVisibleShiftTypesForSite(siteId) {
+  if (!siteId) siteId = getCurrentSiteId();
+  const list = sitesCache[siteId] && sitesCache[siteId].visibleShiftTypes;
+  if (Array.isArray(list) && list.length > 0) return list.slice();
+  return ASSIGNMENT_TYPE_OPTIONS.map(o => o.value);
+}
+
+function getShiftTypeLabel(typeId, siteId) {
+  const rules = getResolvedShiftRules(siteId)[typeId];
+  if (rules && rules.label) return rules.label;
+  // Fall back to ASSIGNMENT_TYPE_OPTIONS label
+  const opt = ASSIGNMENT_TYPE_OPTIONS.find(o => o.value === typeId);
+  return (opt && opt.label) || typeId;
+}
+
+// Replaces the options in `selectEl` with the visible shift types for siteId.
+// If `opts.includeBlank` is set, prepends `<option value="">{label}</option>`.
+// Preserves the current selection if it's still in the new list; otherwise
+// clears it (caller is responsible for downstream UI updates if needed).
+function populateShiftTypeSelect(selectEl, siteId, opts) {
+  if (!selectEl) return;
+  const blank = opts && opts.includeBlank;
+  const blankLabel = (opts && opts.blankLabel) || '';
+  const prevValue = selectEl.value;
+  const types = getVisibleShiftTypesForSite(siteId);
+  let html = '';
+  if (blank) html += '<option value="">' + escapeHtml(blankLabel) + '</option>';
+  for (const t of types) {
+    html += '<option value="' + escapeHtml(t) + '">' + escapeHtml(getShiftTypeLabel(t, siteId)) + '</option>';
+  }
+  selectEl.innerHTML = html;
+  // Restore previous selection if still valid (or blank)
+  if (prevValue && (types.indexOf(prevValue) !== -1 || (blank && prevValue === ''))) {
+    selectEl.value = prevValue;
+  } else if (blank) {
+    selectEl.value = '';
+  } else if (types.length > 0) {
+    selectEl.value = types[0];
+  }
+}
+
+// Repopulates every shift-type dropdown in the page based on the current
+// user's site. Safe to call multiple times — re-renders all selects.
+function refreshAllShiftTypeDropdowns() {
+  const siteId = getCurrentSiteId();
+  // Main shift entry (day modal)
+  populateShiftTypeSelect(document.getElementById('shiftAssignmentType'), siteId);
+  // Edit shift modal
+  populateShiftTypeSelect(document.getElementById('editShiftType'), siteId);
+  // Evening overlay (UVH-specific concept; only mole/OB_restricted if both
+  // exist in the site's visible types — otherwise hide the row entirely)
+  const eve = document.getElementById('eveningAssignmentType');
+  if (eve) {
+    const types = getVisibleShiftTypesForSite(siteId);
+    const eveTypes = ['mole', 'OB_restricted'].filter(t => types.indexOf(t) !== -1);
+    let html = '<option value="">None</option>';
+    for (const t of eveTypes) {
+      html += '<option value="' + escapeHtml(t) + '">' + escapeHtml(getShiftTypeLabel(t, siteId)) + '</option>';
+    }
+    eve.innerHTML = html;
+  }
+}
+
+function isUnrestrictedCallType(type, siteId) {
+  const rule = getResolvedShiftRules(siteId)[type];
+  return !!(rule && rule.unrestrictedCall);
+}
 
 // Returns true if the given minute is eligible for unrestricted call pay (3.5 pts/hr)
 // minuteOfDay: 0-1439, isWeekendOrHoliday: boolean
-function isUnrestrictedCallEligible(assignmentType, minuteOfDay, isWeekendOrHoliday) {
-  switch (assignmentType) {
-    case 'SF1':
-    case 'SF2':
-    case '1st_call':
-    case '2nd_call':
-    case '3rd_call':
-      return isWeekendOrHoliday ? true : (minuteOfDay >= 1020); // after 17:00
-    case '4th_call':
-      return isWeekendOrHoliday; // weekend only shift
-    case 'mole':
-      return isWeekendOrHoliday ? true : (minuteOfDay >= 1140); // after 19:00
-    case 'endo':
-      return !isWeekendOrHoliday && (minuteOfDay >= 1020); // weekday after 17:00 only
-    default:
-      return false; // OR, OB, Cardiac/Liver, NORA, ACS, CRNA Supervision
-  }
+function isUnrestrictedCallEligible(assignmentType, minuteOfDay, isWeekendOrHoliday, siteId) {
+  const rule = getResolvedShiftRules(siteId)[assignmentType];
+  if (!rule || !rule.unrestrictedCall) return false;
+  const dayRule = isWeekendOrHoliday ? rule.unrestrictedCall.weekend : rule.unrestrictedCall.weekday;
+  if (!dayRule) return false;
+  if (dayRule === 'all') return true;
+  if (typeof dayRule.afterMin === 'number') return minuteOfDay >= dayRule.afterMin;
+  return false;
 }
 
 // Returns the pager pay eligible window {start, end} in minutes for a shift type.
 // end can be >1440 for cross-midnight windows. Returns null if not eligible.
-function getPagerPayWindow(assignmentType, isWkndOrHol, dateStr) {
+function getPagerPayWindow(assignmentType, isWkndOrHol, dateStr, siteId) {
   // "Post" assignments (Post SF1, Post Call, Post Mole, etc.) never get pager pay
   if (dateStr && data.calendarAssignments && data.calendarAssignments[dateStr]) {
     const cal = data.calendarAssignments[dateStr];
     if (cal.label && /^Post\s/i.test(cal.label)) return null;
   }
-  switch (assignmentType) {
-    case 'SF1': case 'SF2':
-    case '1st_call': case '2nd_call': case '3rd_call':
-    case '4th_call':
-      // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: 07:00–07:00 next day (24 hrs)
-      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
-    case 'mole':
-      // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: 07:00–07:00 next day (24 hrs)
-      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
-    case 'endo':
-      // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: same as mole (07:00–07:00)
-      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
-    case 'cardiac_liver':
-      // Weekday: 17:00–07:00 next day (14 hrs); Weekend/Holiday: 07:00–07:00 next day (24 hrs)
-      // Combined with the automatic 45-pt subspecialty bonus → 94 pts/day weekday, 129 pts/day wknd/hol base.
-      return isWkndOrHol ? { start: 420, end: 1860 } : { start: 1020, end: 1860 };
-    default:
-      return null;
-  }
+  const rule = getResolvedShiftRules(siteId)[assignmentType];
+  if (!rule || !rule.pagerWindow) return null;
+  return isWkndOrHol ? rule.pagerWindow.weekend : rule.pagerWindow.weekday;
 }
 
-function getAssignmentTypeName(type) {
-  const names = {
-    OR: 'OR / General', OR_float: 'General OR - Float', OB_restricted: 'UVH OB', cardiac_liver: 'Cardiac / Liver',
-    mole: 'Mole', '1st_call': '1st Call', '2nd_call': '2nd Call', '3rd_call': '3rd Call', '4th_call': '4th Call',
-    endo: 'Endo', SF1: 'SF 1', SF2: 'SF 2', ACS: 'ACS', NORA: 'NORA',
-    pre_call: 'Pre-Call',
-    CRNA_supervision: 'CRNA Supervision',
-    forced_off: 'UVH Forced Off',
-    vacation: 'Vacation / Off'
-  };
-  return names[type] || type;
+function getAssignmentTypeName(type, siteId) {
+  const rule = getResolvedShiftRules(siteId)[type];
+  return rule ? rule.label : type;
 }
 
 // ================================================================
@@ -5746,15 +6802,18 @@ function getMomentContext(shift, m) {
   return { isHol: !!(dayShift && dayShift.isHoliday), isWknd: isWeekend(key) };
 }
 
-function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
+function getARRate(assignmentType, isHol, isWknd, timeMinutes, siteId) {
   const isDaytime = timeMinutes >= 420 && timeMinutes < 1020;
+  const rule = getResolvedShiftRules(siteId)[assignmentType];
+  const mode = rule && rule.arRate ? rule.arRate.mode : 'general';
   let baseRate;
-  if (assignmentType === 'SF1') {
+  if (mode === 'sf1') {
     // SF1: 13/hr during 0700-1700 on non-holiday weekdays only; General rate otherwise
     baseRate = (!isHol && !isWknd && isDaytime) ? 13 : 20;
+  } else if (mode === 'ob') {
+    baseRate = 13;
   } else {
-    const isOB = assignmentType === 'OB_restricted';
-    baseRate = isOB ? 13 : 20;
+    baseRate = 20;
   }
   if (isHol || isWknd) {
     if (isDaytime) return baseRate * 1.10;
@@ -5769,10 +6828,18 @@ function getARRate(assignmentType, isHol, isWknd, timeMinutes) {
 function calcARPoints(shift) {
   if (shift.assignmentType === 'vacation') return 0;
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return 56;
+  // Unrestricted call entry shifts: pay = hours × 3.5, no AR / no productivity.
+  {
+    const _r = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+    if (_r && _r.unrestrictedCallEntry) {
+      const h = parseFloat(shift.unrestrictedCallHours) || 0;
+      return round2(h * 3.5);
+    }
+  }
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
 
   // Temp coverage (covering): pager + AR scoped entirely to coverage interval
   if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
@@ -5790,7 +6857,7 @@ function calcARPoints(shift) {
       if (ee <= es) ee += 1440;
       for (let m = es; m < ee; m++) {
         const ctx = getMomentContext(shift, m);
-        arPts += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440) / 60;
+        arPts += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440, shift.siteId) / 60;
       }
     });
     return round2(pagerPts + arPts);
@@ -5888,7 +6955,7 @@ function calcARPoints(shift) {
       if (clockedIn) {
         const ctx = getMomentContext(shift, m);
         if (m >= preCallRange.start && m < preCallRange.end) {
-          preCallAR += getARRate('OR', ctx.isHol, ctx.isWknd, normalizedMin) / 60;
+          preCallAR += getARRate('OR', ctx.isHol, ctx.isWknd, normalizedMin, shift.siteId) / 60;
         } else {
           let rateType = shift.assignmentType;
           if (isSF) {
@@ -5896,7 +6963,7 @@ function calcARPoints(shift) {
               if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
             }
           }
-          eveningAR += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin) / 60;
+          eveningAR += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin, shift.siteId) / 60;
         }
       }
     }
@@ -5945,7 +7012,7 @@ function calcARPoints(shift) {
         }
       }
       const ctx = getMomentContext(shift, m);
-      arPoints += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin) / 60;
+      arPoints += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin, shift.siteId) / 60;
     }
   }
 
@@ -5992,10 +7059,18 @@ function getNextShiftStartMin(shiftDate) {
 function calcARBreakdown(shift) {
   if (shift.assignmentType === 'vacation') return { ar: 0, call: 0 };
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return { ar: 56, call: 0 };
+  // Unrestricted call entry shifts: pay = hours × 3.5, all as call/pager pay.
+  {
+    const _r = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+    if (_r && _r.unrestrictedCallEntry) {
+      const h = parseFloat(shift.unrestrictedCallHours) || 0;
+      return { ar: 0, call: round2(h * 3.5) };
+    }
+  }
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
 
   // Temp coverage (covering): pager + AR scoped entirely to coverage interval
   if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
@@ -6013,7 +7088,7 @@ function calcARBreakdown(shift) {
       if (ee <= es) ee += 1440;
       for (let m = es; m < ee; m++) {
         const ctx = getMomentContext(shift, m);
-        arPts += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440) / 60;
+        arPts += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440, shift.siteId) / 60;
       }
     });
     return { ar: round2(arPts), call: round2(pagerPts) };
@@ -6124,7 +7199,7 @@ function calcARBreakdown(shift) {
       if (clockedIn) {
         const ctx = getMomentContext(shift, m);
         if (m >= preCallRange.start && m < preCallRange.end) {
-          preCallAR += getARRate('OR', ctx.isHol, ctx.isWknd, normalizedMin) / 60;
+          preCallAR += getARRate('OR', ctx.isHol, ctx.isWknd, normalizedMin, shift.siteId) / 60;
         } else {
           let rateType = shift.assignmentType;
           if (isSF) {
@@ -6132,7 +7207,7 @@ function calcARBreakdown(shift) {
               if (m >= r.start && m < r.end) { rateType = 'OR'; break; }
             }
           }
-          eveningAR += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin) / 60;
+          eveningAR += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin, shift.siteId) / 60;
         }
       }
     }
@@ -6176,7 +7251,7 @@ function calcARBreakdown(shift) {
         }
       }
       const ctx = getMomentContext(shift, m);
-      arPoints += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin) / 60;
+      arPoints += getARRate(rateType, ctx.isHol, ctx.isWknd, normalizedMin, shift.siteId) / 60;
     }
   }
 
@@ -6289,7 +7364,7 @@ function calcCasePoints(caseData, shift, ignoreManual) {
       if (!isClockedIn) {
         const isHol = shift ? shift.isHoliday : false;
         const isWknd = shift ? isWeekend(shift.date) : false;
-        const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720) : 20;
+        const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720, shift.siteId) : 20;
         pts += round2(arRate * (10 / 60));
       }
     }
@@ -6400,7 +7475,7 @@ function getCaseBreakdown(caseData, shift) {
       if (!isClockedIn) {
         const isHol = shift ? shift.isHoliday : false;
         const isWknd = shift ? isWeekend(shift.date) : false;
-        const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720) : 20;
+        const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720, shift.siteId) : 20;
         const bonus = round2(arRate * (10 / 60));
         bd.push({label:'10-min AR bonus (not clocked in)', pts: bonus});
       }
@@ -6563,7 +7638,7 @@ function calcSupervisionPoints(shift) {
     clockedRanges.forEach(r => {
       for (let m = r.start; m < r.end; m++) {
         const ctx = getMomentContext(shift, m);
-        pts += (getARRate('OR', ctx.isHol, ctx.isWknd, m % 1440) + 7) / 60;
+        pts += (getARRate('OR', ctx.isHol, ctx.isWknd, m % 1440, shift.siteId) + 7) / 60;
       }
     });
     return round2(pts);
@@ -6624,7 +7699,7 @@ function calcTempCoveragePoints(shift) {
         if (ee <= es) ee += 1440;
         for (let m = es; m < ee; m++) {
           const ctx = getMomentContext(shift, m);
-          ar += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440) / 60;
+          ar += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440, shift.siteId) / 60;
         }
       });
     }
@@ -7054,7 +8129,12 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
     document.getElementById('eveningTimeSection').classList.add('hidden');
     document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
   }
-  if (type === 'forced_off') {
+  // Unrestricted call entry shifts: show hours field, hide time entries
+  // (since we don't track clock-in/out for these — just hours of pager).
+  const isUnrestrictedEntry = !!(getResolvedShiftRules(getCurrentSiteId())[type]
+    && getResolvedShiftRules(getCurrentSiteId())[type].unrestrictedCallEntry);
+  document.getElementById('unrestrictedCallEntryOptions').classList.toggle('hidden', !isUnrestrictedEntry);
+  if (type === 'forced_off' || isUnrestrictedEntry) {
     populateTimeEntries([{ start: '', end: '' }]);
     document.getElementById('timeEntriesGroup').classList.add('hidden');
   } else {
@@ -7225,6 +8305,13 @@ function loadShiftForDate() {
     document.getElementById('vacationEndDate').value = '';
     document.getElementById('subspecCoverage').checked = shift.subspecCoverage || false;
     document.getElementById('teeCount').value = shift.teeCount || 0;
+    {
+      const ucRule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+      const isUC = !!(ucRule && ucRule.unrestrictedCallEntry);
+      document.getElementById('unrestrictedCallEntryOptions').classList.toggle('hidden', !isUC);
+      document.getElementById('unrestrictedCallHours').value = shift.unrestrictedCallHours || 0;
+      if (isUC) document.getElementById('timeEntriesGroup').classList.add('hidden');
+    }
     if (shift.supervisionStart || shift.supervisionEnd) {
       document.getElementById('supervisionOverlayCheck').checked = true;
       document.getElementById('supervisionStart').value = shift.supervisionStart || '';
@@ -7295,7 +8382,7 @@ function loadShiftForDate() {
       populateTimeEntries([{ start: '', end: '' }]);
     } else {
       let defaultStart = '07:10';
-      if (UNRESTRICTED_CALL_TYPES.has(calType)) {
+      if (isUnrestrictedCallType(calType)) {
         if (calType === 'mole') {
           const wkndOrHol = isWeekend(date);
           defaultStart = wkndOrHol ? '21:00' : '19:00';
@@ -7313,6 +8400,8 @@ function loadShiftForDate() {
     document.getElementById('vacationEndDate').value = '';
     document.getElementById('subspecCoverage').checked = false;
     document.getElementById('teeCount').value = 0;
+    document.getElementById('unrestrictedCallEntryOptions').classList.add('hidden');
+    document.getElementById('unrestrictedCallHours').value = 0;
     document.getElementById('supervisionOverlayCheck').checked = false;
     document.getElementById('supervisionStart').value = '';
     document.getElementById('supervisionEnd').value = '';
@@ -7395,8 +8484,8 @@ function updateDataEntryState() {
     const badge = document.getElementById('deSSBBadge');
     const hasPreCallOverlay = (shift.preCallStart || shift.preCallEnd) && ['mole','OB_restricted'].includes(shift.assignmentType);
     badge.textContent = hasPreCallOverlay
-      ? 'Pre-Call + ' + getAssignmentTypeName(shift.assignmentType)
-      : getAssignmentTypeName(isForcedOff ? 'forced_off' : shift.assignmentType);
+      ? 'Pre-Call + ' + getAssignmentTypeName(shift.assignmentType, shift.siteId)
+      : getAssignmentTypeName(isForcedOff ? 'forced_off' : shift.assignmentType, shift.siteId);
     badge.classList.toggle('vacation', isVacation);
     const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
     if (isVacation) {
@@ -7617,6 +8706,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     }
     data.shifts[dt] = {
       date: dt, assignmentType: effectiveType,
+      siteId: data.shifts[dt]?.siteId || getCurrentSiteId(),
       startTime: allTimeEntries[0]?.start || '',
       endTime: allTimeEntries[allTimeEntries.length - 1]?.end || '',
       timeEntries: allTimeEntries,
@@ -7624,6 +8714,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       forcedOff: false,
       subspecCoverage: document.getElementById('subspecCoverage').checked,
       teeCount: parseInt(document.getElementById('teeCount').value) || 0,
+      unrestrictedCallHours: parseFloat(document.getElementById('unrestrictedCallHours').value) || 0,
       supervisionStart: supervisionEnabled ? document.getElementById('supervisionStart').value : '',
       supervisionEnd: supervisionEnabled ? document.getElementById('supervisionEnd').value : '',
       preCallStart: savePreCallStart,
@@ -8635,6 +9726,7 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   if (caseData.caseType === 'acute_pain_procedure') {
     if (!caseData.acutePainProcType) { showToast('Please select a procedure type'); return; }
   }
+  caseData.siteId = data.shifts[date]?.siteId || getCurrentSiteId();
   data.cases.push(caseData);
   saveData(data);
   writeSharedCase(caseData, data.shifts[date]);
@@ -8747,7 +9839,7 @@ function renderToday() {
   const pv = getPointValueForMonth(monthKey);
   const dollarTotal = round2(result.total * pv);
   const dCalLabel = data.calendarAssignments[date];
-  const typeName = dCalLabel ? dCalLabel.label : getAssignmentTypeName(shift.assignmentType);
+  const typeName = dCalLabel ? dCalLabel.label : getAssignmentTypeName(shift.assignmentType, shift.siteId);
 
   let bdHtml = '<div style="margin-top:6px;">';
 
@@ -8972,7 +10064,7 @@ function updateTodayRateChips() {
 
   // Current rate chip (only when clocked in — shift in progress)
   if (date === effectiveWorkDate() && result.isInProgress) {
-    const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
+    const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin, shift.siteId);
     // CRNA supervision bonus: +7/hr for standalone CRNA_supervision or overlay during supervision window
     let supRate = 0;
     if (shift.assignmentType === 'CRNA_supervision') {
@@ -8990,7 +10082,7 @@ function updateTodayRateChips() {
       }
     }
     const isWkndOrHol = isWknd || isHol;
-    const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
+    const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
     let inPagerWindow = false;
     if (pagerWin) {
       const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
@@ -9131,7 +10223,7 @@ function tickLiveUpdate() {
   const isHol = shift.isHoliday || false;
   const isWkndOrHol = isWknd || isHol;
 
-  const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin);
+  const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin, shift.siteId);
   // CRNA supervision bonus: +7/hr for standalone CRNA_supervision or overlay during supervision window
   let supRate = 0;
   if (shift.assignmentType === 'CRNA_supervision') {
@@ -9149,7 +10241,7 @@ function tickLiveUpdate() {
       if (nowAdj >= supStart) supRate = 7;
     }
   }
-  const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
+  const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
   let inPagerWindow = false;
   if (pagerWin) {
     const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
@@ -9704,7 +10796,7 @@ function renderHistory() {
       <div class="day-list-item${schedClass}" onclick="showDayDetail('${shift.date}')">
         <div>
           <div class="date">${formatDate(shift.date)}${schedBadge}</div>
-          <div class="meta">${data.calendarAssignments[shift.date] ? escHtml(data.calendarAssignments[shift.date].label) : getAssignmentTypeName(shift.assignmentType)} | ${timeStr} | ${caseCount} cases</div>
+          <div class="meta">${data.calendarAssignments[shift.date] ? escHtml(data.calendarAssignments[shift.date].label) : getAssignmentTypeName(shift.assignmentType, shift.siteId)} | ${timeStr} | ${caseCount} cases</div>
         </div>
         <span class="point-badge large">${totals.total.toFixed(1)}</span>
       </div>`;
@@ -9743,7 +10835,7 @@ function showDayDetail(dateStr) {
   const detailEntries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
   const detailTimeStr = detailEntries.map(e => `${e.start}-${e.end || '?'}`).join(', ');
   let html = `
-    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">${data.calendarAssignments[dateStr] ? escHtml(data.calendarAssignments[dateStr].label) : getAssignmentTypeName(shift.assignmentType)} | ${detailTimeStr}${detailEntries.length > 1 ? ' (' + detailEntries.length + ' entries)' : ''}</p>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">${data.calendarAssignments[dateStr] ? escHtml(data.calendarAssignments[dateStr].label) : getAssignmentTypeName(shift.assignmentType, shift.siteId)} | ${detailTimeStr}${detailEntries.length > 1 ? ' (' + detailEntries.length + ' entries)' : ''}</p>
     <div class="summary-grid" style="margin-bottom:12px;">
       <div class="summary-item"><div class="label">AR</div><div class="value blue">${totals.ar.toFixed(1)}</div></div>
       <div class="summary-item"><div class="label">Prod</div><div class="value green">${totals.prod.toFixed(1)}</div></div>
@@ -10119,7 +11211,7 @@ function getShiftPayBreakdown(shift) {
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
-  const pagerWindowEarly = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
+  const pagerWindowEarly = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
 
   // Temp coverage (covering): only coverage-scoped rows
   if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
@@ -10145,7 +11237,7 @@ function getShiftPayBreakdown(shift) {
       const eDurMin = ee - es;
       const normMin = es % 1440;
       const eCtx = getMomentContext(shift, es);
-      const rate = getARRate(shift.assignmentType, eCtx.isHol, eCtx.isWknd, normMin);
+      const rate = getARRate(shift.assignmentType, eCtx.isHol, eCtx.isWknd, normMin, shift.siteId);
       coverageRows.push({
         clockIn: e.start, clockOut: e.end,
         payCode: 'Temp Coverage AR',
@@ -10277,7 +11369,7 @@ function getShiftPayBreakdown(shift) {
       }
       const segCtx = getMomentContext(shift, segStart);
       const payCode = isPreCallSeg ? 'Pre-Call ' + getPayCodeName(normSeg, 'OR', segCtx.isWknd, segCtx.isHol) : getPayCodeName(normSeg, rateType, segCtx.isWknd, segCtx.isHol);
-      let payRate = getARRate(rateType, segCtx.isHol, segCtx.isWknd, normSeg);
+      let payRate = getARRate(rateType, segCtx.isHol, segCtx.isWknd, normSeg, shift.siteId);
 
       // CRNA supervision bonus: +7/hr
       let supBonus = 0;
@@ -10309,7 +11401,7 @@ function getShiftPayBreakdown(shift) {
   });
 
   // Pager pay: guaranteed full window duration (does not stop when clocked in)
-  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date);
+  const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
   if (pagerWindow) {
     const durMin = pagerWindow.end - pagerWindow.start;
     if (durMin > 0) {
@@ -10360,7 +11452,7 @@ function getShiftPayBreakdown(shift) {
           const eDurMin = ee - es;
           const normMin = es % 1440;
           const eCtx = getMomentContext(shift, es);
-          const rate = getARRate(shift.assignmentType, eCtx.isHol, eCtx.isWknd, normMin);
+          const rate = getARRate(shift.assignmentType, eCtx.isHol, eCtx.isWknd, normMin, shift.siteId);
           rows.push({
             clockIn: e.start, clockOut: e.end,
             payCode: 'Temp Coverage AR',
@@ -10434,7 +11526,7 @@ function getShiftPayBreakdown(shift) {
         if (eveningTotal > 0 && eveningTotal < eveningMin) {
           eveningResult = [{
             clockIn: eveningRows[0]?.clockIn || '', clockOut: eveningRows[eveningRows.length - 1]?.clockOut || '',
-            payCode: getAssignmentTypeName(shift.assignmentType) + ' 4-Hour Minimum',
+            payCode: getAssignmentTypeName(shift.assignmentType, shift.siteId) + ' 4-Hour Minimum',
             durationMin: 240, payRate: isOBRate ? 13 : 20, amount: eveningMin,
             isSubRow: false
           }];
@@ -10515,7 +11607,7 @@ function renderShiftLogTable() {
     slWatchHtml += '<div class="watching-box"><h4>&#x1f4b2; Watching for Billing (' + watchShifts.length + ')</h4>';
     watchShifts.sort((a,b) => a.date.localeCompare(b.date)).forEach(s => {
       const wCalLabel = data.calendarAssignments[s.date];
-      const typeName = wCalLabel ? wCalLabel.label : getAssignmentTypeName(s.assignmentType);
+      const typeName = wCalLabel ? wCalLabel.label : getAssignmentTypeName(s.assignmentType, s.siteId);
       const entries = s.timeEntries || [];
       const timeStr = entries.length > 0 && entries[0].start
         ? entries.map(e => e.start + (e.end ? '-' + e.end : '')).join(', ')
@@ -10591,7 +11683,7 @@ function renderShiftLogTable() {
     const day = d.getDate();
     const dateLabel = `${dayName} ${month}/${day}`;
     const calLabel = data.calendarAssignments[shift.date];
-    const typeName = calLabel ? calLabel.label : getAssignmentTypeName(shift.assignmentType);
+    const typeName = calLabel ? calLabel.label : getAssignmentTypeName(shift.assignmentType, shift.siteId);
     const badgeClass = getShiftBadgeClass(shift.assignmentType);
     const hasPreCall = shift.preCallStart && shift.preCallEnd;
     const totalHrs = calcShiftHours(shift);
@@ -11115,7 +12207,7 @@ function renderFlaggedPage() {
     const d = new Date(s.date + 'T12:00:00');
     const dateStr = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
     const fCalLabel = data.calendarAssignments[s.date];
-    const typeName = fCalLabel ? fCalLabel.label : getAssignmentTypeName(s.assignmentType);
+    const typeName = fCalLabel ? fCalLabel.label : getAssignmentTypeName(s.assignmentType, s.siteId);
     const entries = s.timeEntries || [];
     const times = entries.length > 0 && entries[0].start
       ? entries.map(e => e.start + (e.end ? '\u2013' + e.end : '')).join(', ')
@@ -15557,7 +16649,7 @@ function renderTimeSummary() {
     totalPoints += st.total;
     totalClockedHrs += hrs;
     // Availability: 24 hrs for pager-pay-eligible call shifts
-    if (UNRESTRICTED_CALL_TYPES.has(s.assignmentType)) {
+    if (isUnrestrictedCallType(s.assignmentType, s.siteId)) {
       totalAvailHrs += 24;
     } else {
       totalAvailHrs += hrs;
@@ -16192,7 +17284,7 @@ function renderMonthlyPtsCard() {
     monthMetrics[mk].allPts += pts;
     monthMetrics[mk].allHrs += hrs;
     const isWkndOrHol = isWeekend(shift.date) || !!shift.isHoliday;
-    const isCall = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date) !== null;
+    const isCall = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId) !== null;
     if (!isCall) {
       monthMetrics[mk].nonCallPts += pts;
       monthMetrics[mk].nonCallHrs += hrs;
@@ -16449,6 +17541,7 @@ function syncPagerShift(dateStr, type) {
   // Create or update placeholder shift for any assignment type
   data.shifts[dateStr] = {
     date: dateStr, assignmentType: type,
+    siteId: data.shifts[dateStr]?.siteId || getCurrentSiteId(),
     startTime: '', endTime: '',
     timeEntries: isVacOrOff ? [{ start: '', end: '' }] : [],
     isHoliday: shift ? shift.isHoliday : false,
@@ -16539,7 +17632,7 @@ function renderDayDetailContent() {
   let html = '';
   // Shift bar
   html += `<div class="dd-shift-bar">
-    <span class="dd-badge${isVacation ? ' vacation' : ''}">${escHtml(getAssignmentTypeName(shift.assignmentType))}</span>
+    <span class="dd-badge${isVacation ? ' vacation' : ''}">${escHtml(getAssignmentTypeName(shift.assignmentType, shift.siteId))}</span>
     <span class="dd-times">${escHtml(timesText)}</span>
     <button class="btn btn-outline btn-sm" onclick="openShiftEdit('${dateStr}')" style="padding:4px 10px;font-size:0.72rem;">Edit</button>
   </div>`;
@@ -16833,7 +17926,7 @@ async function saveAdminCaseGroup(groupIdx) {
       writeSharedCase(caseObj, shift);
       personalCount++;
     } else if (c.source === 'shared' && c._docId) {
-      const overrideObj = { updatedAt: new Date().toISOString() };
+      const overrideObj = { siteId: getCurrentSiteId(), updatedAt: new Date().toISOString() };
       if (surgeonChanged) overrideObj.surgeon = newSurgeon;
       if (procChanged) overrideObj.procedure = newProc;
       // Update local caches
@@ -17000,8 +18093,9 @@ async function saveSurgeonMappings() {
     });
   });
   try {
-    await db.collection('surgeonMappings').doc('canonical').set({
+    await db.collection('surgeonMappings').doc(getCurrentSiteId()).set({
       mappings: newMappings,
+      siteId: getCurrentSiteId(),
       updatedAt: new Date().toISOString(),
       updatedBy: currentUser.uid
     });
@@ -17021,7 +18115,7 @@ async function resetSurgeonMappings() {
   if (!isAdmin()) return;
   if (!confirm('Reset all surgeon name mappings? Original names will be restored. This cannot be undone.')) return;
   try {
-    await db.collection('surgeonMappings').doc('canonical').delete();
+    await db.collection('surgeonMappings').doc(getCurrentSiteId()).delete();
     surgeonMappingsCache = {};
     showToast('Surgeon mappings reset');
     closeSurgeonMappingModal();
@@ -17264,7 +18358,7 @@ async function saveSCEChanges() {
       writeSharedCase(caseObj, shift);
       personalUpdated++;
     } else if (c.source === 'shared' && c._docId) {
-      const overrideObj = {};
+      const overrideObj = { siteId: getCurrentSiteId() };
       if (fields.surgeon !== undefined) { overrideObj.surgeon = fields.surgeon; c.surgeon = fields.surgeon; }
       if (fields.procedure !== undefined) { overrideObj.procedure = fields.procedure; c.procedure = fields.procedure; }
       overrideObj.updatedAt = new Date().toISOString();
@@ -17321,7 +18415,7 @@ function calcCaseARContribution(c, shift) {
   let ar = 0;
   for (let m = s; m < e; m++) {
     const ctx = getMomentContext(shift, m);
-    ar += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440) / 60;
+    ar += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440, shift.siteId) / 60;
   }
   return round2(ar);
 }
@@ -18074,7 +19168,7 @@ document.getElementById('exportCSVBtn').addEventListener('click', () => {
   monthShifts.forEach(shift => {
     const totals = calcShiftTotal(shift);
     const shiftCases = data.cases.filter(c => c.shiftDate === shift.date).sort((a,b) => (a.startTime||'').localeCompare(b.startTime||''));
-    const assign = getAssignmentTypeName(shift.assignmentType);
+    const assign = getAssignmentTypeName(shift.assignmentType, shift.siteId);
     if (shiftCases.length === 0) {
       csv += `${shift.date},${csvEsc(assign)},,,,,,,,${totals.total.toFixed(2)}\n`;
     } else {
@@ -18181,6 +19275,12 @@ function downloadFile(content, filename, type) {
 // ================================================================
 // SETTINGS
 // ================================================================
+function renderSiteRow() {
+  const el = document.getElementById('settingsSite');
+  if (el) el.value = getCurrentSiteName();
+}
+renderSiteRow();
+
 const nameInput = document.getElementById('settingsName');
 nameInput.value = settings.name || '';
 nameInput.addEventListener('change', () => {
@@ -18854,6 +19954,7 @@ function applyQgendaToShift(d) {
     const reconTimeEntries = timeEntries.length > 0 ? timeEntries : reconHasPager ? [] : [{ start: earliest, end: latest }];
     data.shifts[d.date] = {
       date: d.date, assignmentType: reconAssignType,
+      siteId: data.shifts[d.date]?.siteId || getCurrentSiteId(),
       startTime: timeEntries.length > 0 ? earliest : '',
       endTime: timeEntries.length > 0 ? latest : '',
       timeEntries: reconTimeEntries, isHoliday: false, forcedOff: false,
@@ -19622,7 +20723,7 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
   body.innerHTML = `<p>Import <strong>${toImport}</strong> shift${toImport > 1 ? 's' : ''} from QGenda?</p>` +
     (toSkip > 0 ? `<p style="font-size:0.8rem;color:var(--text-dim);">${toSkip} date${toSkip > 1 ? 's' : ''} already have shifts and will be skipped.</p>` : '') +
     `<div style="max-height:200px;overflow-y:auto;margin-top:8px;font-size:0.8rem;">` +
-    shiftsToCreate.map(s => `<div style="padding:4px 0;border-bottom:1px solid var(--border);">${formatDateShort(s.date)} &mdash; ${getAssignmentTypeName(s.assignmentType)}${s.startTime ? ` (${s.startTime}-${s.endTime})` : ' (pager only)'}</div>`).join('') +
+    shiftsToCreate.map(s => `<div style="padding:4px 0;border-bottom:1px solid var(--border);">${formatDateShort(s.date)} &mdash; ${getAssignmentTypeName(s.assignmentType, s.siteId)}${s.startTime ? ` (${s.startTime}-${s.endTime})` : ' (pager only)'}</div>`).join('') +
     `</div>`;
   document.getElementById('importConfirmTitle').textContent = 'Import Shifts';
 
@@ -19631,6 +20732,7 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
       data.shifts[s.date] = {
         date: s.date,
         assignmentType: s.assignmentType,
+        siteId: data.shifts[s.date]?.siteId || getCurrentSiteId(),
         startTime: s.startTime,
         endTime: s.endTime,
         timeEntries: s.timeEntries || [{ start: s.startTime, end: s.endTime }],
@@ -19951,6 +21053,7 @@ function showCSVImportConfirmation(result) {
         const en = caseDates[date].latest || '17:00';
         data.shifts[date] = {
           date, assignmentType: 'OR',
+          siteId: data.shifts[date]?.siteId || getCurrentSiteId(),
           startTime: st, endTime: en,
           timeEntries: [{ start: st, end: en }],
           isHoliday: false,
@@ -19961,6 +21064,7 @@ function showCSVImportConfirmation(result) {
       }
     });
 
+    newCases.forEach(c => { c.siteId = data.shifts[c.shiftDate]?.siteId || getCurrentSiteId(); });
     data.cases.push(...newCases);
     saveData(data);
     newCases.forEach(c => writeSharedCase(c, data.shifts[c.shiftDate]));
@@ -21797,6 +22901,7 @@ document.getElementById('scanImportBtn').addEventListener('click', () => {
     const en = latest || '17:00';
     data.shifts[scanDate] = {
       date: scanDate, assignmentType: 'OR',
+      siteId: data.shifts[scanDate]?.siteId || getCurrentSiteId(),
       startTime: st, endTime: en,
       timeEntries: [{ start: st, end: en }],
       isHoliday: false, forcedOff: false, subspecCoverage: false,
@@ -21805,6 +22910,7 @@ document.getElementById('scanImportBtn').addEventListener('click', () => {
     showToast(`Created placeholder OR shift for ${formatDateShort(scanDate)}`);
   }
 
+  newCases.forEach(c => { c.siteId = data.shifts[c.shiftDate]?.siteId || getCurrentSiteId(); });
   data.cases.push(...newCases);
   saveData(data);
   newCases.forEach(c => writeSharedCase(c, data.shifts[c.shiftDate]));
@@ -21889,6 +22995,10 @@ auth.onAuthStateChanged(async (user) => {
       lastSignIn: new Date().toISOString()
     }, { merge: true }).catch(err => console.error('Profile write error:', err));
 
+    // Load this user's profile so isAdmin() / pendingInvite are accurate
+    // before the rest of init runs.
+    await loadCurrentUserProfile();
+
     // Load data from Firestore
     const result = await loadFromFirestore(user.uid);
     await loadSettingsFromFirestore(user.uid);
@@ -21908,6 +23018,8 @@ auth.onAuthStateChanged(async (user) => {
       if (aiCard) aiCard.classList.remove('hidden');
       const lookupCard = document.getElementById('adminUserLookupCard');
       if (lookupCard) lookupCard.classList.remove('hidden');
+      const msCard = document.getElementById('adminMultiSiteCard');
+      if (msCard) msCard.classList.remove('hidden');
       document.getElementById('settingsClaudeKey').value = settings.claudeApiKey || '';
       document.getElementById('settingsPersonalTimeValue').value = settings.personalTimeValue || '';
     }
@@ -21967,6 +23079,12 @@ auth.onAuthStateChanged(async (user) => {
     loadSharedCases().then(() => refreshSharedViews()).catch(() => {});
     loadSurgeonMappings().catch(() => {});
     loadUserProfiles().catch(() => {});
+    loadSites().then(() => {
+      renderSiteRow();
+      renderInviteBanner();
+      refreshAllShiftTypeDropdowns();
+      maybeShowNewUserSiteSelector();
+    }).catch(() => {});
     loadAsaMasterCodes().catch(() => {});
     loadAsaCodeProcedures().catch(() => {});
 
