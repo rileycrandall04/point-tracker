@@ -4288,11 +4288,270 @@ const db = firebase.firestore();
 db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 
 let currentUser = null;
+let currentUserProfile = null;
 let firestoreSyncEnabled = false;
 let syncDebounceTimer = null;
 let googleAccessToken = null;
 const ADMIN_UID = 'ZCXVQgTIknSVa7MvOnXSw550MCo2';
-function isAdmin() { return currentUser && currentUser.uid === ADMIN_UID; }
+function isAdmin() {
+  if (!currentUser) return false;
+  if (currentUser.uid === ADMIN_UID) return true;
+  return !!(currentUserProfile && currentUserProfile.isAdmin === true);
+}
+
+// Fetch the current user's profile doc into memory. Called on auth state
+// change before isAdmin() needs to be accurate for promoted admins.
+async function loadCurrentUserProfile() {
+  if (!currentUser) { currentUserProfile = null; return; }
+  try {
+    const snap = await db.collection('userProfiles').doc(currentUser.uid).get();
+    currentUserProfile = snap.exists ? snap.data() : {};
+  } catch (e) {
+    console.error('loadCurrentUserProfile failed:', e);
+    currentUserProfile = {};
+  }
+}
+
+// ================================================================
+// MULTI-SITE: invites + site switching + admin operations
+// ================================================================
+//
+// Site lock model:
+//   - Every user has settings.siteId pointing at their current site.
+//   - Users cannot self-switch sites. Switching happens only via an
+//     admin-issued invite that the user accepts (or via direct admin
+//     site assignment).
+//   - sites/{siteId}.unlocked: true means the site appears in the
+//     new-user signup dropdown. Admin invites bypass this flag.
+//
+// Invite flow:
+//   - Admin calls inviteUserToSite(targetUid, siteId). Writes
+//     userProfiles/{targetUid}.pendingInvite = { siteId, invitedBy, invitedAt }.
+//     Replaces any existing pending invite.
+//   - Target user sees a banner on next load (or live if subscribed).
+//   - Accept: runs migration (move all their data from old site to new),
+//     updates settings.siteId, clears pendingInvite.
+//   - Decline: clears pendingInvite, no other change.
+
+async function inviteUserToSite(targetUid, siteId) {
+  if (!isAdmin()) throw new Error('Admin only');
+  if (!targetUid || !siteId) throw new Error('targetUid and siteId required');
+  await db.collection('userProfiles').doc(targetUid).set({
+    pendingInvite: {
+      siteId: siteId,
+      invitedBy: currentUser.uid,
+      invitedAt: new Date().toISOString()
+    }
+  }, { merge: true });
+}
+
+async function setUserAdmin(targetUid, makeAdmin) {
+  if (!isAdmin()) throw new Error('Admin only');
+  if (!targetUid) throw new Error('targetUid required');
+  // Master admin (ADMIN_UID) cannot be demoted via this path.
+  if (targetUid === ADMIN_UID && !makeAdmin) throw new Error('Cannot demote master admin');
+  await db.collection('userProfiles').doc(targetUid).set({
+    isAdmin: !!makeAdmin
+  }, { merge: true });
+}
+
+async function setSiteUnlocked(siteId, unlocked) {
+  if (!isAdmin()) throw new Error('Admin only');
+  if (!siteId) throw new Error('siteId required');
+  await db.collection('sites').doc(siteId).set({
+    unlocked: !!unlocked
+  }, { merge: true });
+}
+
+async function adminSetUserSite(targetUid, newSiteId, withMigration) {
+  if (!isAdmin()) throw new Error('Admin only');
+  if (!targetUid || !newSiteId) throw new Error('targetUid and newSiteId required');
+  // Read target's current siteId
+  const settingsRef = db.collection('users').doc(targetUid).collection('data').doc('settings');
+  const snap = await settingsRef.get();
+  const oldSiteId = (snap.exists && snap.data().siteId) || DEFAULT_SITE_ID;
+  if (oldSiteId === newSiteId) return; // no-op
+  if (withMigration) {
+    await migrateUserDataToSite(targetUid, oldSiteId, newSiteId);
+  }
+  await settingsRef.set({ siteId: newSiteId }, { merge: true });
+  // Clear any pending invite — direct assignment supersedes it
+  await db.collection('userProfiles').doc(targetUid).set({
+    pendingInvite: firebase.firestore.FieldValue.delete()
+  }, { merge: true });
+}
+
+// Decline a pending invite for the current user (no data changes).
+async function declinePendingInvite() {
+  if (!currentUser) return;
+  await db.collection('userProfiles').doc(currentUser.uid).set({
+    pendingInvite: firebase.firestore.FieldValue.delete()
+  }, { merge: true });
+  if (currentUserProfile) delete currentUserProfile.pendingInvite;
+}
+
+// Accept a pending invite for the current user. Auto-migrates all the
+// user's data from their current site to the invited site.
+async function acceptPendingInvite() {
+  if (!currentUser) throw new Error('Not signed in');
+  const profile = currentUserProfile || {};
+  const invite = profile.pendingInvite;
+  if (!invite || !invite.siteId) throw new Error('No pending invite');
+  const newSiteId = invite.siteId;
+  const oldSiteId = (settings && settings.siteId) || DEFAULT_SITE_ID;
+  if (newSiteId === oldSiteId) {
+    // Already there — just clear the invite
+    await declinePendingInvite();
+    return;
+  }
+  // Run migration
+  await migrateUserDataToSite(currentUser.uid, oldSiteId, newSiteId);
+  // Update local + remote settings
+  settings.siteId = newSiteId;
+  saveSettings(settings);
+  await db.collection('users').doc(currentUser.uid).collection('data').doc('settings').set({
+    siteId: newSiteId
+  }, { merge: true });
+  // Clear pending invite
+  await declinePendingInvite();
+  // Refresh local data view (local data is already migrated for self;
+  // shared caches need a re-read scoped to new siteId)
+  invalidateResolvedRulesCache && invalidateResolvedRulesCache();
+}
+
+// Migrate all of a user's data from oldSiteId → newSiteId.
+//   - Re-stamps data.shifts[*].siteId in the user's data doc
+//   - Re-stamps cases array entries
+//   - Re-stamps sharedCases owned by this user (where siteId == oldSiteId)
+//   - Re-stamps sharedCaseOverrides owned by this user
+//   - Contained surgeon-mapping copy: only mappings the user references
+//     in their own cases get copied to the new site (skips conflicts).
+async function migrateUserDataToSite(uid, oldSiteId, newSiteId) {
+  if (!uid || !oldSiteId || !newSiteId) throw new Error('uid/oldSiteId/newSiteId required');
+  if (oldSiteId === newSiteId) return;
+
+  // 1. Re-stamp the user's own data doc (shifts[*].siteId, cases[*].siteId)
+  const dataRef = db.collection('users').doc(uid).collection('data').doc('data');
+  const dataSnap = await dataRef.get();
+  let userCases = [];
+  if (dataSnap.exists) {
+    const d = dataSnap.data() || {};
+    let mutated = false;
+    if (d.shifts) {
+      for (const k in d.shifts) {
+        if (d.shifts[k] && d.shifts[k].siteId === oldSiteId) {
+          d.shifts[k].siteId = newSiteId;
+          mutated = true;
+        } else if (d.shifts[k] && !d.shifts[k].siteId) {
+          d.shifts[k].siteId = newSiteId;
+          mutated = true;
+        }
+      }
+    }
+    if (Array.isArray(d.cases)) {
+      for (const c of d.cases) {
+        if (c && (c.siteId === oldSiteId || !c.siteId)) {
+          c.siteId = newSiteId;
+          mutated = true;
+        }
+      }
+      userCases = d.cases;
+    }
+    if (mutated) {
+      await dataRef.set(d);
+      // If migrating self, refresh local data + storage
+      if (currentUser && currentUser.uid === uid) {
+        data = d;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
+      }
+    }
+  }
+
+  // 2. Re-stamp user's sharedCases (batched; Firestore caps batches at 500 writes)
+  await batchUpdateSiteId(
+    db.collection('sharedCases').where('uid', '==', uid).where('siteId', '==', oldSiteId),
+    newSiteId
+  );
+
+  // 3. Re-stamp user's sharedCaseOverrides
+  await batchUpdateSiteId(
+    db.collection('sharedCaseOverrides').where('uid', '==', uid).where('siteId', '==', oldSiteId),
+    newSiteId
+  );
+
+  // 4. Contained surgeon-mapping copy
+  await copyUserSurgeonMappings(userCases, oldSiteId, newSiteId);
+}
+
+async function batchUpdateSiteId(query, newSiteId) {
+  let pageSize = 400;
+  let lastDoc = null;
+  // Loop in case there are >500 docs
+  // (Most users will have far fewer; this is just defensive.)
+  // Note: Firestore batched writes are capped at 500 ops. We page at 400.
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let q = query.limit(pageSize);
+    if (lastDoc) q = q.startAfter(lastDoc);
+    const snap = await q.get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    snap.docs.forEach(doc => batch.update(doc.ref, { siteId: newSiteId }));
+    await batch.commit();
+    if (snap.docs.length < pageSize) break;
+    lastDoc = snap.docs[snap.docs.length - 1];
+  }
+}
+
+// Copy surgeon mappings for surgeons referenced in `userCases` from
+// oldSiteId to newSiteId. Only writes mappings the destination site
+// doesn't already have — never overwrites.
+async function copyUserSurgeonMappings(userCases, oldSiteId, newSiteId) {
+  try {
+    // Local cases store the surgeon name in `notes` (sharedCases mirror to `surgeon`).
+    const surgeonNames = new Set();
+    for (const c of (userCases || [])) {
+      const name = c && (c.notes || c.surgeon);
+      if (name && String(name).trim()) surgeonNames.add(String(name).trim());
+    }
+    if (surgeonNames.size === 0) return;
+
+    const oldRef = db.collection('surgeonMappings').doc(oldSiteId);
+    const newRef = db.collection('surgeonMappings').doc(newSiteId);
+    const [oldSnap, newSnap] = await Promise.all([oldRef.get(), newRef.get()]);
+    const oldMap = (oldSnap.exists && oldSnap.data().mappings) || {};
+    const newMap = (newSnap.exists && newSnap.data().mappings) || {};
+
+    const merged = Object.assign({}, newMap);
+    let added = 0;
+    for (const name of surgeonNames) {
+      // Look up oldMap by exact + case-insensitive
+      let canonical = oldMap[name];
+      if (!canonical) {
+        const lower = name.toLowerCase();
+        for (const [variant, c] of Object.entries(oldMap)) {
+          if (variant.toLowerCase() === lower) { canonical = c; break; }
+        }
+      }
+      if (!canonical) continue;
+      // Don't overwrite existing newSite entry
+      if (merged[name] !== undefined) continue;
+      merged[name] = canonical;
+      added += 1;
+    }
+    if (added > 0) {
+      await newRef.set({
+        mappings: merged,
+        siteId: newSiteId,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+  } catch (e) {
+    console.error('copyUserSurgeonMappings failed:', e);
+    // Don't throw — surgeon mapping copy is best-effort. The migration
+    // of shifts/cases is the critical path.
+  }
+}
 
 async function adminLookupUser() {
   if (!isAdmin()) return;
@@ -21971,6 +22230,10 @@ auth.onAuthStateChanged(async (user) => {
       displayName: user.displayName || '',
       lastSignIn: new Date().toISOString()
     }, { merge: true }).catch(err => console.error('Profile write error:', err));
+
+    // Load this user's profile so isAdmin() / pendingInvite are accurate
+    // before the rest of init runs.
+    await loadCurrentUserProfile();
 
     // Load data from Firestore
     const result = await loadFromFirestore(user.uid);
