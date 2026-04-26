@@ -1,8 +1,20 @@
-// St. George (site ID: SG) compensation rules — fill in and send back.
+// St. George (site ID: SG) compensation rules — FILLED IN.
 //
 // SGH = St. George Hospital.
-// See scripts/site-rules-IMC.js for full format docs and examples.
-// Shorthand: write `inherit_uvh: 'OB_restricted'` to copy UVH's rules verbatim.
+// See scripts/site-rules-IMC.js for full format docs.
+// Shorthand: write `inherit_uvh: '1st_call'` (or any UVH code) to copy
+// UVH's rules verbatim.
+//
+// Extra fields used here (need wiring in comp engine):
+//   productionMultiplier: N — multiplies AR/production points on this shift
+//   flatPoints: N           — flat point award regardless of duration
+//   cardiacBonus: true      — apply UVH cardiac_liver-style 2x case point bonus
+//                             on cardiac cases (Heart Call doubles as cardiac call)
+//
+// Note: ORs/ASCs/NORA (placement shifts) get the same 4hr / 80pt minimum
+// that UVH OR uses. Wired generically in the engine.
+//
+// TODO: SGH_night_call inherits UVH "mole" — confirm exact UVH shift key.
 
 module.exports = {
   siteId: 'SG',
@@ -12,24 +24,69 @@ module.exports = {
     // CALL SHIFTS
     // ============================================================
 
-    'SGH_day_call':    { label: 'SGH Day Call',    pagerWindow: /* TODO */ null, unrestrictedCall: /* TODO */ null, arRate: { mode: 'general' } },
-    'SGH_night_call':  { label: 'SGH Night Call',  pagerWindow: /* TODO */ null, unrestrictedCall: /* TODO */ null, arRate: { mode: 'general' } },
-    'SGH_heart_call':  { label: 'SGH Heart Call',  pagerWindow: /* TODO */ null, unrestrictedCall: /* TODO */ null, arRate: { mode: 'general' } },
+    // Day Call = UVH 1st Call's weekend pattern (24h pager, all-day unrestricted).
+    // Typically worked on weekends; rules force weekend behavior even on weekdays.
+    'SGH_day_call': {
+      label: 'SGH Day Call',
+      pagerWindow: {
+        weekday: { start: 420, end: 1860 },
+        weekend: { start: 420, end: 1860 }
+      },
+      unrestrictedCall: { weekday: 'all', weekend: 'all' },
+      arRate: { mode: 'general' }
+    },
 
-    // Backup physician shifts
-    'SGH_backup_1_phys': { label: 'SGH Backup 1 Physician (SGH Backup 1 Phys)', pagerWindow: /* TODO */ null, unrestrictedCall: /* TODO */ null, arRate: { mode: 'general' } },
-    'SGH_backup_2_phys': { label: 'SGH Backup 2 Physician (SGH Backup 2 Phys)', pagerWindow: /* TODO */ null, unrestrictedCall: /* TODO */ null, arRate: { mode: 'general' } },
+    // Night Call = UVH "mole". TODO confirm UVH key.
+    'SGH_night_call': {
+      label: 'SGH Night Call',
+      inherit_uvh: 'mole' // TODO: confirm exact UVH shift key
+    },
 
-    // OB calls (split day/night)
-    'SGH_OB_day_call':   { label: 'SGH OB Day Call',   pagerWindow: /* TODO */ null, unrestrictedCall: /* TODO */ null, arRate: /* TODO ob? */ { mode: 'ob' } },
-    'SGH_OB_night_call': { label: 'SGH OB Night Call', pagerWindow: /* TODO */ null, unrestrictedCall: /* TODO */ null, arRate: /* TODO ob? */ { mode: 'ob' } },
+    // Heart Call = 1st-call-style shift + cardiac bonus
+    // (one of the call people doubles as cardiac call; gets unrestricted call
+    // + UVH cardiac_liver-style 2x case point multiplier).
+    'SGH_heart_call': {
+      label: 'SGH Heart Call',
+      pagerWindow: {
+        weekday: { start: 1020, end: 1860 },
+        weekend: { start: 420,  end: 1860 }
+      },
+      unrestrictedCall: {
+        weekday: { afterMin: 1020 },
+        weekend: 'all'
+      },
+      arRate: { mode: 'general' },
+      cardiacBonus: true
+    },
 
-    // 1st / 2nd call
-    'SGH_1st_call': { label: 'SGH 1st Call', pagerWindow: /* TODO */ null, unrestrictedCall: /* TODO */ null, arRate: { mode: 'general' } },
-    'SGH_2nd_call': { label: 'SGH 2nd Call', pagerWindow: /* TODO */ null, unrestrictedCall: /* TODO */ null, arRate: { mode: 'general' } },
+    // Backup physicians (typically weekend; inherit UVH 2nd/3rd call rules)
+    'SGH_backup_1_phys': { label: 'SGH Backup 1 Physician (SGH Backup 1 Phys)', inherit_uvh: '2nd_call' },
+    'SGH_backup_2_phys': { label: 'SGH Backup 2 Physician (SGH Backup 2 Phys)', inherit_uvh: '3rd_call' },
+
+    // OB Day/Night — same comp as UVH OB: 13/hr base + UVH AR multipliers.
+    // Production doubled. No pager pay (scheduled shifts).
+    // OB Day typically 07:00-19:00, OB Night typically 19:00-07:00 (not hard limits).
+    'SGH_OB_day_call': {
+      label: 'SGH OB Day Call',
+      pagerWindow: null,
+      unrestrictedCall: null,
+      arRate: { mode: 'ob' },
+      productionMultiplier: 2
+    },
+    'SGH_OB_night_call': {
+      label: 'SGH OB Night Call',
+      pagerWindow: null,
+      unrestrictedCall: null,
+      arRate: { mode: 'ob' },
+      productionMultiplier: 2
+    },
+
+    // 1st/2nd Call — typically weekday at SG; inherit UVH 1st/2nd verbatim
+    'SGH_1st_call': { label: 'SGH 1st Call', inherit_uvh: '1st_call' },
+    'SGH_2nd_call': { label: 'SGH 2nd Call', inherit_uvh: '2nd_call' },
 
     // ============================================================
-    // PLACEMENT SHIFTS (ORs / ASCs / NORA)
+    // PLACEMENT SHIFTS (ORs / ASCs / NORA — same as UVH General OR)
     // ============================================================
 
     'SGH_OR_3':  { label: 'SGH OR 3',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
@@ -68,41 +125,13 @@ module.exports = {
     'SGH_NORA':  { label: 'SGH NORA', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
 
     // ============================================================
-    // OFF / VACATION
+    // OFF / VACATION (Off Grid / Off Post Call / Vacation all = 0 pts)
     // ============================================================
 
-    'SGH_forced_day_off': { label: 'SGH Forced Day Off', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'SGH_forced_day_off': { label: 'SGH Forced Day Off', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' }, flatPoints: 56 },
     'SGH_off_grid':       { label: 'SGH Off Grid',       pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
     'SGH_off_post_call':  { label: 'SGH Off Post Call',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
     'SGH_vacation':       { label: 'SGH Vacation',       pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } }
 
   }
 };
-
-// ================================================================
-// QUESTIONS for SG:
-// ================================================================
-//
-// 1. SGH Day Call vs Night Call vs 1st/2nd Call vs Heart Call vs Backup —
-//    what's the relationship? Are Day Call and Night Call a single call
-//    rotation split by time, or distinct shifts? Where do 1st/2nd fit in?
-//    Pager hours for each? Unrestricted call eligibility?
-//
-// 2. SGH Backup 1 Physician / Backup 2 Physician — paid as call (pager pay)
-//    or paid hourly when activated, or just a calendar marker?
-//
-// 3. SGH OB Day Call vs OB Night Call — what hours each? Both AR rate base
-//    13/hr (OB)?
-//
-// 4. SGH Heart Call — pager hours? AR rate base — same as general (20/hr)
-//    or is there something cardiac-specific?
-//
-// 5. ORs 3-28, ASCs 1-5, NORA — confirm: placement only, no pager,
-//    AR base 20/hr.
-//
-// 6. SGH Forced Day Off — flat point amount (UVH = 56)?
-//
-// 7. SGH Off Post Call vs SGH Off Grid vs SGH Vacation — what distinguishes
-//    these? All 0 pts, just different calendar labels?
-//
-// 8. Any SG shifts that should inherit UVH rules verbatim?
