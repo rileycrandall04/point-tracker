@@ -59,12 +59,17 @@ const filterSet = argSiteIds.length > 0 ? new Set(argSiteIds) : null;
       }
 
       const visibleShiftTypes = Object.keys(override);
-      await db.collection('sites').doc(siteId).set({
+      const payload = {
         shiftRulesOverride: override,
         visibleShiftTypes
-      }, { merge: true });
+      };
+      if (mod.otherMigrationMap && typeof mod.otherMigrationMap === 'object') {
+        payload.otherMigrationMap = mod.otherMigrationMap;
+      }
+      await db.collection('sites').doc(siteId).set(payload, { merge: true });
 
-      console.log(`  loaded sites/${siteId}: ${visibleShiftTypes.length} shift type(s) from ${file}`);
+      const omLen = mod.otherMigrationMap ? Object.keys(mod.otherMigrationMap).length : 0;
+      console.log(`  loaded sites/${siteId}: ${visibleShiftTypes.length} shift type(s)` + (omLen ? `, ${omLen} otherMigrationMap entries` : '') + ` from ${file}`);
       loaded++;
     }
 

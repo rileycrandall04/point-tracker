@@ -1,62 +1,52 @@
-// Park City (site ID: PC) compensation rules — FILLED IN.
-//
-// See scripts/site-rules-IMC.js for full format docs and examples.
-// Per your note: PC_job_share_off uses identical rules to PC_vacation.
-//
-// Extra field used here (needs wiring in comp engine):
-//   flatPoints: N — flat point award regardless of duration
+// Park City (site ID: PC) compensation rules — FILLED IN, rev 2.
 
 module.exports = {
   siteId: 'PC',
-  shiftRulesOverride: {
 
+  shiftRulesOverride: {
     // ----- Call shifts (UVH-style: weekday 17:00-07:00, weekend 07:00-07:00) -----
     'PC_1st_call': {
       label: 'Park City 1st Call',
-      pagerWindow: {
-        weekday: { start: 1020, end: 1860 },
-        weekend: { start: 420,  end: 1860 }
-      },
-      unrestrictedCall: {
-        weekday: { afterMin: 1020 },
-        weekend: 'all'
-      },
+      pagerWindow: { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+      unrestrictedCall: { weekday: { afterMin: 1020 }, weekend: 'all' },
       arRate: { mode: 'general' }
     },
     'PC_2nd_call': {
       label: 'Park City 2nd Call',
-      pagerWindow: {
-        weekday: { start: 1020, end: 1860 },
-        weekend: { start: 420,  end: 1860 }
-      },
-      unrestrictedCall: {
-        weekday: { afterMin: 1020 },
-        weekend: 'all'
-      },
+      pagerWindow: { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+      unrestrictedCall: { weekday: { afterMin: 1020 }, weekend: 'all' },
       arRate: { mode: 'general' }
     },
 
-    // ----- OR rooms (placement only — no OR 11) -----
-    'PC_OR_3':  { label: 'Park City OR 3',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'PC_OR_4':  { label: 'Park City OR 4',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'PC_OR_5':  { label: 'Park City OR 5',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'PC_OR_6':  { label: 'Park City OR 6',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'PC_OR_7':  { label: 'Park City OR 7',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'PC_OR_8':  { label: 'Park City OR 8',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'PC_OR_9':  { label: 'Park City OR 9',  pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'PC_OR_10': { label: 'Park City OR 10', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'PC_OR_12': { label: 'Park City OR 12', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    // ----- Placement (single General OR replaces PC_OR_3..12) -----
+    'PC_OR':   { label: 'Park City General OR', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    'PC_ASC':  { label: 'Park City ASC',        pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
 
-    // ----- ASCs -----
-    'PC_ASC_1': { label: 'Park City ASC 1', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'PC_ASC_2': { label: 'Park City ASC 2', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'PC_ASC_3': { label: 'Park City ASC 3', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
-    'PC_ASC_4': { label: 'Park City ASC 4', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+    // ----- OB option (per user spec rev 2: keep selectable even if rarely used) -----
+    'PC_OB':   { label: 'Park City OB', inherit_uvh: 'OB_restricted' },
 
-    // ----- Off / vacation (forced off = 56 pts like UVH; job share off = vacation = 0) -----
+    // ----- Cardiac/Liver option (UVH default; not commonly used here) -----
+    'cardiac_liver': { label: 'Cardiac / Liver' },
+
+    // ----- Off / vacation -----
     'PC_forced_off':    { label: 'Park City Forced Off',    pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' }, flatPoints: 56 },
     'PC_job_share_off': { label: 'Park City Job Share Off', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
     'PC_vacation':      { label: 'Park City Vacation',      pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } }
+  },
 
+  otherMigrationMap: {
+    'OR':                      'PC_OR',
+    'OR_float':                'PC_OR',
+    'OB_restricted':           'PC_OB',
+    'cardiac_liver':           'cardiac_liver',
+    'unrestricted_call_entry': 'PC_1st_call',
+    'forced_off':              'PC_forced_off',
+    'vacation':                'PC_vacation'
   }
+
+  // Removed in cleanup (rev 2):
+  //   PC_OR_3..12 → PC_OR (single General OR)
+  //   PC_ASC_1..4 → PC_ASC
+  // Added in cleanup (rev 2):
+  //   PC_OB (inherits UVH OB) — selectable option
 };
