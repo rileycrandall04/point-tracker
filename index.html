@@ -5833,9 +5833,11 @@ function calcARPoints(shift) {
     if (en <= s && e.end) en += 1440;
     clockedRanges.push({ start: s, end: en });
   });
-  // Fix cross-midnight ordering: if an entry starts before the previous entry, it's the next day
+  // Fix cross-midnight ordering: each entry must start at or after the
+  // previous entry's end. Add full days as needed so multi-midnight
+  // shifts (>24 h spans like an extended OB call) compose correctly.
   for (let i = 1; i < clockedRanges.length; i++) {
-    if (clockedRanges[i].start < clockedRanges[i-1].start) {
+    while (clockedRanges[i].start < clockedRanges[i-1].end) {
       clockedRanges[i].start += 1440;
       clockedRanges[i].end += 1440;
     }
@@ -6064,9 +6066,10 @@ function calcARBreakdown(shift) {
     if (en <= s && e.end) en += 1440;
     clockedRanges.push({ start: s, end: en });
   });
-  // Fix cross-midnight ordering: if an entry starts before the previous entry, it's the next day
+  // Each entry must start at or after the previous entry's end. Add
+  // full days as needed so multi-midnight shifts (>24 h spans) compose.
   for (let i = 1; i < clockedRanges.length; i++) {
-    if (clockedRanges[i].start < clockedRanges[i-1].start) {
+    while (clockedRanges[i].start < clockedRanges[i-1].end) {
       clockedRanges[i].start += 1440;
       clockedRanges[i].end += 1440;
     }
@@ -7561,19 +7564,22 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     showToast('Please enter at least one start time');
     return;
   }
-  // Validate: entries should be in chronological order, no overlaps (cross-midnight aware)
+  // Validate: entries should be in chronological order, no overlaps.
+  // Cross-midnight aware over multiple days so >24 h shifts (extended OB
+  // call etc.) compose correctly: each entry must start at or after the
+  // previous entry's end, with full days added as needed.
   if (!isVacation && !isForcedOff) {
-    for (let i = 1; i < timeEntries.length; i++) {
-      const prevEnd = timeToMinutes(timeEntries[i-1].end);
-      let currStart = timeToMinutes(timeEntries[i].start);
-      // If current start is before previous end, assume cross-midnight
-      if (currStart < timeToMinutes(timeEntries[0].start)) currStart += 1440;
-      let adjPrevEnd = prevEnd;
-      if (adjPrevEnd < timeToMinutes(timeEntries[0].start)) adjPrevEnd += 1440;
-      if (timeEntries[i-1].end && currStart <= adjPrevEnd) {
-        showToast('Time entries must be in chronological order with no overlaps');
-        return;
+    let prevEndAbs = null;
+    let absOffset = 0;
+    for (let i = 0; i < timeEntries.length; i++) {
+      const e = timeEntries[i];
+      let s = timeToMinutes(e.start) + absOffset;
+      if (prevEndAbs != null) {
+        while (s < prevEndAbs) { s += 1440; absOffset += 1440; }
       }
+      let en = e.end ? timeToMinutes(e.end) + absOffset : s;
+      if (e.end && en <= s) en += 1440;
+      prevEndAbs = e.end ? en : s;
     }
   }
   // Build list of dates to save (range for vacation, single otherwise)
@@ -10185,9 +10191,10 @@ function getShiftPayBreakdown(shift) {
     if (en <= s && e.end) en += 1440;
     clockedRanges.push({ start: s, end: en, startStr: e.start, endStr: e.end || '' });
   });
-  // Fix cross-midnight ordering: if an entry starts before the previous entry, it's the next day
+  // Each entry must start at or after the previous entry's end. Add
+  // full days as needed so multi-midnight shifts (>24 h spans) compose.
   for (let i = 1; i < clockedRanges.length; i++) {
-    if (clockedRanges[i].start < clockedRanges[i-1].start) {
+    while (clockedRanges[i].start < clockedRanges[i-1].end) {
       clockedRanges[i].start += 1440;
       clockedRanges[i].end += 1440;
     }
