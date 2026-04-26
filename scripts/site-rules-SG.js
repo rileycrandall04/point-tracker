@@ -8,8 +8,9 @@
 // Extra fields used here (need wiring in comp engine):
 //   productionMultiplier: N — multiplies AR/production points on this shift
 //   flatPoints: N           — flat point award regardless of duration
-//   cardiacBonus: true      — apply UVH cardiac_liver-style 2x case point bonus
-//                             on cardiac cases (Heart Call doubles as cardiac call)
+//   cardiacBonus: true      — exposes UVH-style "Subspecialty coverage"
+//                             checkbox at shift entry (45 pts/day flat add).
+//                             Heart Call doubles as cardiac call.
 //
 // Note: ORs/ASCs/NORA (placement shifts) get the same 4hr / 80pt minimum
 // that UVH OR uses. Wired generically in the engine.
@@ -39,7 +40,7 @@ module.exports = {
 
     // Heart Call = 1st-call-style shift + cardiac bonus
     // (one of the call people doubles as cardiac call; gets unrestricted call
-    // + UVH cardiac_liver-style 2x case point multiplier).
+    // + UVH cardiac subspec coverage option, +45 pts/day flat when toggled on).
     'SGH_heart_call': {
       label: 'SGH Heart Call',
       pagerWindow: {
