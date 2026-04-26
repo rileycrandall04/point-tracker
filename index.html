@@ -1891,8 +1891,60 @@ body.hide-monetary .monetary-hide { display: none !important; }
       </div>
     </div>
 
-    <!-- Step 3: Log Your Cases -->
+    <!-- Step 3: Adding monthly shifts — choose Manual or Sync -->
     <div class="tutorial-step" data-step="2">
+      <span class="tut-icon">&#128467;</span>
+      <h3>Adding a Whole Month</h3>
+      <p>How do you want to fill in the rest of your shifts?</p>
+      <div class="tutorial-options">
+        <div class="tutorial-option" onclick="tutorialMonthlyChoice('manual')">
+          <span class="to-icon">&#9999;</span>
+          <div class="to-text">
+            <strong>Enter Manually</strong>
+            <span>Tap each day on the Daily tab and pick the assignment</span>
+          </div>
+        </div>
+        <div class="tutorial-option" onclick="tutorialMonthlyChoice('sync')">
+          <span class="to-icon">&#128197;</span>
+          <div class="to-text">
+            <strong>Sync from QGenda</strong>
+            <span>Have QGenda push to Google Calendar, then connect this app</span>
+          </div>
+          <span class="to-badge">Recommended</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: QGenda → Google Calendar -->
+    <div class="tutorial-step" data-step="3">
+      <span class="tut-icon">&#128228;</span>
+      <h3>Step 1 of 2 &mdash; QGenda &rarr; Google Calendar</h3>
+      <p style="font-size:0.85rem;">First, get QGenda to push your assignments into a Google Calendar.</p>
+      <div class="tut-instructions">
+        <strong>1.</strong> Open the QGenda app or website<br>
+        <strong>2.</strong> Open <strong>Settings &rarr; Calendar Sync</strong> (label varies)<br>
+        <strong>3.</strong> Sign in with your Google account and pick a calendar<br>
+        <strong>4.</strong> Wait a moment for QGenda to push the next month
+      </div>
+      <p style="font-size:0.72rem;color:var(--text-dim);margin-top:8px;">When the events show up in Google Calendar, hit Next.</p>
+    </div>
+
+    <!-- Step 5: This app → Google Calendar -->
+    <div class="tutorial-step" data-step="4">
+      <span class="tut-icon">&#128279;</span>
+      <h3>Step 2 of 2 &mdash; This App &rarr; Google Calendar</h3>
+      <p style="font-size:0.85rem;">Now connect this app to that same calendar.</p>
+      <div class="tut-instructions">
+        <strong>1.</strong> Tap <strong>More &rarr; Settings</strong><br>
+        <strong>2.</strong> In the <strong>Calendar Sync</strong> card, sign in with the same Google account<br>
+        <strong>3.</strong> Pick the calendar QGenda is pushing to<br>
+        <strong>4.</strong> Tap <strong>Sync Calendar</strong> &mdash; shifts auto-fill from the events
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="tutorialOpenCalendarSync()" style="margin-top:8px;">Open Calendar Sync now</button>
+    </div>
+
+    <!-- Step 6: Log Your Cases -->
+    <div class="tutorial-step" data-step="5">
       <span class="tut-icon">&#128203;</span>
       <h3>Log Your Cases</h3>
       <div class="tut-instructions">
@@ -1903,8 +1955,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
       </div>
     </div>
 
-    <!-- Step 4: Catch Up on Past Data -->
-    <div class="tutorial-step" data-step="3">
+    <!-- Step 7: Catch Up on Past Data -->
+    <div class="tutorial-step" data-step="6">
       <span class="tut-icon">&#128202;</span>
       <h3>Catch Up on Past Data</h3>
       <p>How would you like to add your history?</p>
@@ -1934,8 +1986,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
       </div>
     </div>
 
-    <!-- Step 5: Revenue Projections -->
-    <div class="tutorial-step" data-step="4">
+    <!-- Step 8: Revenue Projections -->
+    <div class="tutorial-step" data-step="7">
       <span class="tut-icon">&#129689;</span>
       <h3>Revenue Projections</h3>
       <div class="tut-instructions">
@@ -1947,6 +1999,9 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
     <div class="tutorial-dots" id="tutorialDots">
       <span class="dot active"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
       <span class="dot"></span>
       <span class="dot"></span>
       <span class="dot"></span>
@@ -3276,7 +3331,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 
   <!-- Calendar Sync -->
-  <div class="card" style="margin-top:12px;">
+  <div class="card" id="calendarSyncCard" style="margin-top:12px;">
     <h2>Calendar Sync</h2>
     <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:10px;">
       Sync your Google Calendar assignments to auto-fill shift types and label the weekly chart.
@@ -12928,7 +12983,10 @@ function navigateToWorkScan() {
 // TUTORIAL
 // ================================================================
 let tutorialStep = 0;
-const TUTORIAL_TOTAL = 5;
+const TUTORIAL_TOTAL = 8;
+// Step indices that present option cards instead of a Next button
+// (step 2 = Adding a Whole Month; step 6 = Catch Up on Past Data).
+const TUTORIAL_CHOICE_STEPS = new Set([2, 6]);
 
 function showTutorial() {
   tutorialStep = 0;
@@ -12948,8 +13006,7 @@ function updateTutorialStep() {
   const backBtn = document.getElementById('tutBackBtn');
   const nextBtn = document.getElementById('tutNextBtn');
   backBtn.style.display = tutorialStep === 0 ? 'none' : '';
-  // Step 4 (index 3) has its own option cards — hide Next
-  if (tutorialStep === 3) {
+  if (TUTORIAL_CHOICE_STEPS.has(tutorialStep)) {
     nextBtn.style.display = 'none';
   } else if (tutorialStep === TUTORIAL_TOTAL - 1) {
     nextBtn.style.display = '';
@@ -12982,9 +13039,36 @@ function tutorialPrev() {
   }
 }
 
+function tutorialMonthlyChoice(choice) {
+  // Manual: skip the QGenda + Calendar-sync steps and go straight to
+  // Log Your Cases (step 5). Sync: continue with the next step
+  // (QGenda → Google Calendar walk-through).
+  if (choice === 'manual') {
+    tutorialStep = 5;
+  } else {
+    tutorialStep = 3;
+  }
+  updateTutorialStep();
+}
+
+function tutorialOpenCalendarSync() {
+  closeTutorial();
+  closeDrawer();
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const settingsPage = document.getElementById('page-settings');
+  if (settingsPage) settingsPage.classList.add('active');
+  // Scroll the Calendar Sync card into view so the user lands on it.
+  setTimeout(() => {
+    const card = document.getElementById('calendarSyncCard');
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 100);
+}
+
 function tutorialHistoryChoice(choice) {
   if (choice === 'fresh') {
-    tutorialStep = 4;
+    // Jump to the final step (Revenue Projections).
+    tutorialStep = TUTORIAL_TOTAL - 1;
     updateTutorialStep();
   } else if (choice === 'import') {
     closeTutorial();
