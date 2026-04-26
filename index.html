@@ -3213,107 +3213,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </details>
   </div>
 
-  <!-- Claude AI Settings (admin only) -->
-  <div class="card hidden" id="claudeAISettingsCard" style="margin-top:12px;">
-    <h2>AI Analysis (Claude API)</h2>
-    <div style="margin-bottom:12px;">
-      <label for="settingsClaudeKey" style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:6px;">Anthropic API Key</label>
-      <input type="password" id="settingsClaudeKey" placeholder="sk-ant-..."
-        style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
-    </div>
-    <p style="font-size:0.72rem;color:var(--accent2);margin-bottom:8px;">
-      &#9888; Your API key is stored in your device settings and synced with your account data. Each AI analysis costs ~$0.01-0.05. You are responsible for your own usage.
-    </p>
-    <div class="monetary-hide" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-      <div class="settings-field">
-        <label style="font-size:0.8rem;color:var(--text-dim);">Personal Time Value ($/hr)</label>
-        <input type="number" id="settingsPersonalTimeValue" min="0" step="1" placeholder="100"
-          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
-      </div>
-    </div>
-    <details style="margin-top:8px;">
-      <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">How to get an API key</summary>
-      <ol style="font-size:0.75rem;color:var(--text-dim);margin:8px 0 0 0;padding-left:20px;line-height:1.6;">
-        <li>Go to <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="color:var(--primary);">console.anthropic.com</a></li>
-        <li>Create an account or sign in</li>
-        <li>Go to <strong>API Keys</strong></li>
-        <li>Click <strong>Create Key</strong></li>
-        <li>Copy the key and paste it above</li>
-        <li>Add credits to your account under <strong>Billing</strong></li>
-      </ol>
-    </details>
-  </div>
-
-  <!-- Admin Multi-Site Management (admin only) -->
-  <div class="card hidden" id="adminMultiSiteCard" style="margin-top:12px;">
-    <h2>Multi-Site Admin</h2>
-    <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0;flex-wrap:wrap;">
-      <button class="btn btn-sm" id="adminMSTabUsers" onclick="adminMSSetTab('users')"
-        style="border-radius:6px 6px 0 0;background:var(--primary);color:#fff;">Users</button>
-      <button class="btn btn-sm" id="adminMSTabSites" onclick="adminMSSetTab('sites')"
-        style="border-radius:6px 6px 0 0;background:var(--surface2);">Sites</button>
-      <button class="btn btn-sm" id="adminMSTabTest" onclick="adminMSSetTab('test')"
-        style="border-radius:6px 6px 0 0;background:var(--surface2);">Test cleanup</button>
-    </div>
-
-    <!-- Users tab -->
-    <div id="adminMSUsersPane">
-      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">
-        Click List Users for the full roster, or filter by email substring to narrow it. Click a card to invite the user, change their site, or grant/revoke admin role.
-      </p>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-        <input type="text" id="adminMSUserEmail" placeholder="filter by email (optional)"
-          style="flex:1;min-width:200px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
-        <button class="btn btn-primary btn-sm" onclick="adminMSListUsers()">List Users</button>
-      </div>
-      <div id="adminMSUsersList" style="font-size:0.85rem;"></div>
-      <div id="adminMSUserCard" style="font-size:0.85rem;margin-top:12px;"></div>
-    </div>
-
-    <!-- Sites tab -->
-    <div id="adminMSSitesPane" class="hidden">
-      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
-        Toggle "Unlocked for signups" once you've confirmed compensation rules with the site supervisors. Locked sites can still be invited to manually.
-      </p>
-      <div id="adminMSSitesList"></div>
-    </div>
-
-    <!-- Test cleanup tab -->
-    <div id="adminMSTestPane" class="hidden">
-      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
-        Wipes a test user's data: their user profile, settings, all shifts/cases, all shared cases and overrides they own. Their Firebase Auth account is NOT deleted (must be removed manually in the Firebase console).
-      </p>
-      <div style="background:rgba(239,68,68,0.08);border:1px solid var(--accent2);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.78rem;">
-        <strong style="color:var(--accent2);">Destructive.</strong> This cannot be undone. Use only for test accounts.
-      </div>
-      <div style="margin-bottom:8px;">
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;">Test user email</label>
-        <input type="email" id="adminMSWipeEmail" placeholder="testuser@example.com"
-          oninput="adminMSWipeOnInput()"
-          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
-      </div>
-      <div style="margin-bottom:8px;">
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;">Type the email again to confirm</label>
-        <input type="email" id="adminMSWipeConfirm" placeholder="testuser@example.com"
-          oninput="adminMSWipeOnInput()"
-          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
-      </div>
-      <button class="btn btn-sm" id="adminMSWipeBtn" onclick="adminMSWipeUser()" disabled
-        style="background:var(--accent2);color:#1e293b;width:100%;">Wipe user data</button>
-      <div id="adminMSWipeStatus" style="margin-top:10px;font-size:0.82rem;"></div>
-    </div>
-  </div>
-
-  <!-- Admin User Lookup (admin only) -->
-  <div class="card hidden" id="adminUserLookupCard" style="margin-top:12px;">
-    <h2>User Data Lookup</h2>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-      <input type="email" id="adminLookupEmail" placeholder="user@gmail.com"
-        style="flex:1;min-width:200px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
-      <button class="btn btn-primary btn-sm" onclick="adminLookupUser()">Lookup</button>
-    </div>
-    <div id="adminLookupResults" style="font-size:0.82rem;"></div>
-  </div>
 
   <!-- Account -->
   <div class="card" id="accountCard">
@@ -3897,6 +3796,116 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 </div>
 
+<!-- ADMIN PAGE -->
+<div class="page" id="page-admin">
+  <div class="card" id="adminPageHeaderCard" style="margin-bottom:12px;">
+    <h2 style="margin-bottom:6px;">Admin</h2>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin:0;" id="adminPageRoleBadge"></p>
+  </div>
+  <!-- Claude AI Settings (admin only) -->
+  <div class="card hidden" id="claudeAISettingsCard" style="margin-top:12px;">
+    <h2>AI Analysis (Claude API)</h2>
+    <div style="margin-bottom:12px;">
+      <label for="settingsClaudeKey" style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:6px;">Anthropic API Key</label>
+      <input type="password" id="settingsClaudeKey" placeholder="sk-ant-..."
+        style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-height:40px;">
+    </div>
+    <p style="font-size:0.72rem;color:var(--accent2);margin-bottom:8px;">
+      &#9888; Your API key is stored in your device settings and synced with your account data. Each AI analysis costs ~$0.01-0.05. You are responsible for your own usage.
+    </p>
+    <div class="monetary-hide" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div class="settings-field">
+        <label style="font-size:0.8rem;color:var(--text-dim);">Personal Time Value ($/hr)</label>
+        <input type="number" id="settingsPersonalTimeValue" min="0" step="1" placeholder="100"
+          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+      </div>
+    </div>
+    <details style="margin-top:8px;">
+      <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">How to get an API key</summary>
+      <ol style="font-size:0.75rem;color:var(--text-dim);margin:8px 0 0 0;padding-left:20px;line-height:1.6;">
+        <li>Go to <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="color:var(--primary);">console.anthropic.com</a></li>
+        <li>Create an account or sign in</li>
+        <li>Go to <strong>API Keys</strong></li>
+        <li>Click <strong>Create Key</strong></li>
+        <li>Copy the key and paste it above</li>
+        <li>Add credits to your account under <strong>Billing</strong></li>
+      </ol>
+    </details>
+  </div>
+
+  <!-- Admin Multi-Site Management (admin only) -->
+  <div class="card hidden" id="adminMultiSiteCard" style="margin-top:12px;">
+    <h2>Multi-Site Admin</h2>
+    <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0;flex-wrap:wrap;">
+      <button class="btn btn-sm" id="adminMSTabUsers" onclick="adminMSSetTab('users')"
+        style="border-radius:6px 6px 0 0;background:var(--primary);color:#fff;">Users</button>
+      <button class="btn btn-sm" id="adminMSTabSites" onclick="adminMSSetTab('sites')"
+        style="border-radius:6px 6px 0 0;background:var(--surface2);">Sites</button>
+      <button class="btn btn-sm" id="adminMSTabTest" onclick="adminMSSetTab('test')"
+        style="border-radius:6px 6px 0 0;background:var(--surface2);">Test cleanup</button>
+    </div>
+
+    <!-- Users tab -->
+    <div id="adminMSUsersPane">
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">
+        Click List Users for the full roster, or filter by email substring to narrow it. Click a card to invite the user, change their site, or grant/revoke admin role.
+      </p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+        <input type="text" id="adminMSUserEmail" placeholder="filter by email (optional)"
+          style="flex:1;min-width:200px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+        <button class="btn btn-primary btn-sm" onclick="adminMSListUsers()">List Users</button>
+      </div>
+      <div id="adminMSUsersList" style="font-size:0.85rem;"></div>
+      <div id="adminMSUserCard" style="font-size:0.85rem;margin-top:12px;"></div>
+    </div>
+
+    <!-- Sites tab -->
+    <div id="adminMSSitesPane" class="hidden">
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
+        Toggle "Unlocked for signups" once you've confirmed compensation rules with the site supervisors. Locked sites can still be invited to manually.
+      </p>
+      <div id="adminMSSitesList"></div>
+    </div>
+
+    <!-- Test cleanup tab -->
+    <div id="adminMSTestPane" class="hidden">
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
+        Wipes a test user's data: their user profile, settings, all shifts/cases, all shared cases and overrides they own. Their Firebase Auth account is NOT deleted (must be removed manually in the Firebase console).
+      </p>
+      <div style="background:rgba(239,68,68,0.08);border:1px solid var(--accent2);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.78rem;">
+        <strong style="color:var(--accent2);">Destructive.</strong> This cannot be undone. Use only for test accounts.
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;font-size:0.8rem;margin-bottom:4px;">Test user email</label>
+        <input type="email" id="adminMSWipeEmail" placeholder="testuser@example.com"
+          oninput="adminMSWipeOnInput()"
+          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;font-size:0.8rem;margin-bottom:4px;">Type the email again to confirm</label>
+        <input type="email" id="adminMSWipeConfirm" placeholder="testuser@example.com"
+          oninput="adminMSWipeOnInput()"
+          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+      </div>
+      <button class="btn btn-sm" id="adminMSWipeBtn" onclick="adminMSWipeUser()" disabled
+        style="background:var(--accent2);color:#1e293b;width:100%;">Wipe user data</button>
+      <div id="adminMSWipeStatus" style="margin-top:10px;font-size:0.82rem;"></div>
+    </div>
+  </div>
+
+  <!-- Admin User Lookup (admin only) -->
+  <div class="card hidden" id="adminUserLookupCard" style="margin-top:12px;">
+    <h2>User Data Lookup</h2>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <input type="email" id="adminLookupEmail" placeholder="user@gmail.com"
+        style="flex:1;min-width:200px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+      <button class="btn btn-primary btn-sm" onclick="adminLookupUser()">Lookup</button>
+    </div>
+    <div id="adminLookupResults" style="font-size:0.82rem;"></div>
+  </div>
+</div>
+
+
 <!-- Day detail modal -->
 <div class="modal-overlay hidden" id="dayModal">
   <div class="modal">
@@ -4429,6 +4438,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <span class="drawer-icon">&#128214;</span>
     <span>Compensation Rules</span>
   </div>
+  <div class="drawer-item hidden" id="drawerAdminItem" data-page="admin">
+    <span class="drawer-icon">&#128272;</span>
+    <span>Admin</span>
+  </div>
   <div class="drawer-item" data-page="asacodes">
     <span class="drawer-icon">&#128209;</span>
     <span>ASA Code Reference</span>
@@ -4459,10 +4472,55 @@ let firestoreSyncEnabled = false;
 let syncDebounceTimer = null;
 let googleAccessToken = null;
 const ADMIN_UID = 'ZCXVQgTIknSVa7MvOnXSw550MCo2';
+
+// ----- Admin role tiers -----
+// userProfiles/{uid} can carry:
+//   role: 'app_owner' | 'siteAdmin' | undefined
+//   adminSites: string[]   (siteAdmin only — list of siteIds they admin)
+//   isAdmin: boolean       (legacy fallback — treated as siteAdmin for ALL sites)
+//
+// Helpers:
+//   getEffectiveRole()      'app_owner' | 'siteAdmin' | null
+//   isAppOwner()            boolean — full powers
+//   isSiteAdmin(siteId?)    boolean — site-rules editor + invite for that site
+//                                     (or any site, if siteId omitted)
+//   getAdminSites()         array of siteIds the current user can admin
+//                           (empty array means "all" for app_owner / legacy isAdmin)
+//   isLegacyAdmin()         pre-role isAdmin: true users — full per-site fallback
+//   isAdmin()               legacy union — kept for backward-compat callsites we
+//                           haven't migrated yet. Logs once per page load.
+function getEffectiveRole() {
+  if (!currentUser) return null;
+  if (currentUser.uid === ADMIN_UID) return 'app_owner';
+  const p = currentUserProfile || {};
+  if (p.role === 'app_owner') return 'app_owner';
+  if (p.role === 'siteAdmin') return 'siteAdmin';
+  if (p.isAdmin === true) return 'siteAdmin'; // legacy fallback
+  return null;
+}
+function isAppOwner() { return getEffectiveRole() === 'app_owner'; }
+function isLegacyAdmin() {
+  return !!(currentUserProfile && currentUserProfile.isAdmin === true && !currentUserProfile.role);
+}
+function getAdminSites() {
+  if (isAppOwner() || isLegacyAdmin()) return []; // empty = all
+  const list = currentUserProfile && currentUserProfile.adminSites;
+  return Array.isArray(list) ? list.slice() : [];
+}
+function isSiteAdmin(siteId) {
+  const role = getEffectiveRole();
+  if (role !== 'app_owner' && role !== 'siteAdmin') return false;
+  if (isAppOwner() || isLegacyAdmin()) return true;
+  if (!siteId) return getAdminSites().length > 0;
+  return getAdminSites().indexOf(siteId) !== -1;
+}
+let _isAdminWarned = false;
 function isAdmin() {
-  if (!currentUser) return false;
-  if (currentUser.uid === ADMIN_UID) return true;
-  return !!(currentUserProfile && currentUserProfile.isAdmin === true);
+  if (!_isAdminWarned) {
+    _isAdminWarned = true;
+    console.warn('isAdmin() is legacy — migrate callsite to isAppOwner() / isSiteAdmin()');
+  }
+  return isAppOwner() || isSiteAdmin();
 }
 
 // Fetch the current user's profile doc into memory. Called on auth state
@@ -4500,7 +4558,7 @@ async function loadCurrentUserProfile() {
 //   - Decline: clears pendingInvite, no other change.
 
 async function inviteUserToSite(targetUid, siteId) {
-  if (!isAdmin()) throw new Error('Admin only');
+  if (!isSiteAdmin(siteId)) throw new Error('Not authorized for this site');
   if (!targetUid || !siteId) throw new Error('targetUid and siteId required');
   await db.collection('userProfiles').doc(targetUid).set({
     pendingInvite: {
@@ -4511,10 +4569,42 @@ async function inviteUserToSite(targetUid, siteId) {
   }, { merge: true });
 }
 
-async function setUserAdmin(targetUid, makeAdmin) {
-  if (!isAdmin()) throw new Error('Admin only');
+// Set the role + adminSites on another user. App-owner-only.
+//   role: 'app_owner' | 'siteAdmin' | null   (null = remove admin)
+//   adminSites: string[]   (only meaningful when role === 'siteAdmin')
+// Clears the legacy isAdmin field on every write so the role field is the
+// single source of truth going forward.
+async function setUserRole(targetUid, role, adminSites) {
+  if (!isAppOwner()) throw new Error('App owner only');
   if (!targetUid) throw new Error('targetUid required');
-  // Master admin (ADMIN_UID) cannot be demoted via this path.
+  if (targetUid === ADMIN_UID && role !== 'app_owner') {
+    throw new Error('Cannot demote master app owner');
+  }
+  if (role && role !== 'app_owner' && role !== 'siteAdmin') {
+    throw new Error('Unknown role: ' + role);
+  }
+  // Only the master ADMIN_UID can be set to app_owner from this path —
+  // for now app_owner is a singleton; relax later if needed.
+  if (role === 'app_owner' && targetUid !== ADMIN_UID) {
+    throw new Error('app_owner is reserved for the master account');
+  }
+  const FieldValue = firebase.firestore.FieldValue;
+  const payload = { isAdmin: FieldValue.delete() };
+  if (role) {
+    payload.role = role;
+    payload.adminSites = (role === 'siteAdmin' && Array.isArray(adminSites)) ? adminSites : FieldValue.delete();
+  } else {
+    payload.role = FieldValue.delete();
+    payload.adminSites = FieldValue.delete();
+  }
+  await db.collection('userProfiles').doc(targetUid).set(payload, { merge: true });
+}
+
+// Legacy wrapper — toggles isAdmin only. Kept so any existing UI still
+// works during the migration. New code should call setUserRole().
+async function setUserAdmin(targetUid, makeAdmin) {
+  if (!isAppOwner()) throw new Error('App owner only');
+  if (!targetUid) throw new Error('targetUid required');
   if (targetUid === ADMIN_UID && !makeAdmin) throw new Error('Cannot demote master admin');
   await db.collection('userProfiles').doc(targetUid).set({
     isAdmin: !!makeAdmin
@@ -4522,7 +4612,7 @@ async function setUserAdmin(targetUid, makeAdmin) {
 }
 
 async function setSiteUnlocked(siteId, unlocked) {
-  if (!isAdmin()) throw new Error('Admin only');
+  if (!isAppOwner()) throw new Error('App owner only');
   if (!siteId) throw new Error('siteId required');
   await db.collection('sites').doc(siteId).set({
     unlocked: !!unlocked
@@ -4530,7 +4620,7 @@ async function setSiteUnlocked(siteId, unlocked) {
 }
 
 async function adminSetUserSite(targetUid, newSiteId, withMigration) {
-  if (!isAdmin()) throw new Error('Admin only');
+  if (!isAppOwner()) throw new Error('App owner only');
   if (!targetUid || !newSiteId) throw new Error('targetUid and newSiteId required');
   // Read target's current siteId
   const settingsRef = db.collection('users').doc(targetUid).collection('data').doc('settings');
@@ -4831,7 +4921,16 @@ function adminMSSetTab(tab) {
 }
 
 function _adminMSSiteOptionsHTML(currentSiteId) {
-  const ids = Object.keys(sitesCache || {}).slice().sort();
+  let ids = Object.keys(sitesCache || {}).slice().sort();
+  // siteAdmin (non-owner) can only invite/manage within their assigned sites.
+  if (!isAppOwner() && !isLegacyAdmin()) {
+    const allowed = getAdminSites();
+    if (allowed.length > 0) {
+      const allowSet = {};
+      for (const s of allowed) allowSet[s] = true;
+      ids = ids.filter(id => allowSet[id]);
+    }
+  }
   let html = '';
   for (const id of ids) {
     const name = (sitesCache[id] && sitesCache[id].name) || id;
@@ -4842,7 +4941,7 @@ function _adminMSSiteOptionsHTML(currentSiteId) {
 }
 
 async function adminMSListUsers() {
-  if (!isAdmin()) return;
+  if (!isSiteAdmin()) return;
   const filterRaw = (document.getElementById('adminMSUserEmail').value || '').trim().toLowerCase();
   const listOut = document.getElementById('adminMSUsersList');
   const cardOut = document.getElementById('adminMSUserCard');
@@ -4869,12 +4968,19 @@ async function adminMSListUsers() {
       const name = r.profile.displayName || '(no name)';
       const email = r.profile.email || '(no email)';
       const isMaster = r.uid === ADMIN_UID;
-      const userIsAdmin = isMaster || r.profile.isAdmin === true;
+      const userRole = isMaster ? 'app_owner'
+        : (r.profile.role === 'app_owner' || r.profile.role === 'siteAdmin') ? r.profile.role
+        : (r.profile.isAdmin === true ? 'siteAdmin' : null);
+      const userIsAdmin = !!userRole;
+      const userIsOwner = userRole === 'app_owner';
       const inv = r.profile.pendingInvite;
       const inviteSite = inv && inv.siteId ? ((sitesCache[inv.siteId] && sitesCache[inv.siteId].name) || inv.siteId) : null;
       html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;" onclick="adminMSOpenUser(\'' + r.uid + '\')">';
       html += '<div><strong>' + escapeHtml(name) + '</strong>';
-      if (userIsAdmin) html += ' <span style="font-size:0.65rem;color:var(--accent);">[admin' + (isMaster ? '/master' : '') + ']</span>';
+      if (userIsAdmin) {
+        const tag = userIsOwner ? (isMaster ? 'owner/master' : 'owner') : 'site admin';
+        html += ' <span style="font-size:0.65rem;color:var(--accent);">[' + tag + ']</span>';
+      }
       html += '<br><span style="font-size:0.72rem;color:var(--text-dim);">' + escapeHtml(email) + '</span>';
       if (inviteSite) html += '<br><span style="font-size:0.68rem;color:var(--accent2);">pending invite → ' + escapeHtml(inviteSite) + '</span>';
       html += '</div>';
@@ -4889,7 +4995,7 @@ async function adminMSListUsers() {
 }
 
 async function adminMSOpenUser(uid) {
-  if (!isAdmin()) return;
+  if (!isSiteAdmin()) return;
   const out = document.getElementById('adminMSUserCard');
   out.innerHTML = '<p>Loading...</p>';
   try {
@@ -4916,7 +5022,13 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
   const name = profile.displayName || '(no name)';
   const email = profile.email || '(no email)';
   const isMaster = uid === ADMIN_UID;
-  const userIsAdmin = isMaster || profile.isAdmin === true;
+  // Read the target user's role using the same precedence as getEffectiveRole.
+  const targetRole = isMaster ? 'app_owner'
+    : (profile.role === 'app_owner' || profile.role === 'siteAdmin') ? profile.role
+    : (profile.isAdmin === true ? 'siteAdmin' : null);
+  const userIsAdmin = !!targetRole;
+  const targetIsOwner = targetRole === 'app_owner';
+  const viewerIsOwner = isAppOwner() || isLegacyAdmin();
   const inv = profile.pendingInvite;
   const inviteSiteName = inv && inv.siteId
     ? ((sitesCache[inv.siteId] && sitesCache[inv.siteId].name) || inv.siteId)
@@ -4926,15 +5038,24 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
   let html = '';
   html += '<div style="background:var(--surface);padding:12px;border-radius:8px;margin-bottom:12px;">';
   html += '<strong>' + escapeHtml(name) + '</strong> &mdash; ' + escapeHtml(email);
-  html += '<br><span style="color:var(--text-dim);font-size:0.75rem;">UID: ' + uid + '</span>';
+  if (viewerIsOwner) {
+    html += '<br><span style="color:var(--text-dim);font-size:0.75rem;">UID: ' + uid + '</span>';
+  }
   html += '<br><span style="font-size:0.78rem;">Current site: <strong>' + escapeHtml(curSiteName) + '</strong> (' + userSiteId + ')</span>';
-  html += '<br><span style="font-size:0.78rem;">Admin: ' + (userIsAdmin ? '<strong style="color:var(--accent);">Yes' + (isMaster ? ' (master)' : '') + '</strong>' : 'No') + '</span>';
+  if (userIsAdmin) {
+    const roleLabel = targetIsOwner ? ('App owner' + (isMaster ? ' (master)' : '')) : 'Site admin';
+    html += '<br><span style="font-size:0.78rem;">Role: <strong style="color:var(--accent);">' + roleLabel + '</strong></span>';
+    if (targetRole === 'siteAdmin' && Array.isArray(profile.adminSites) && profile.adminSites.length > 0) {
+      html += '<br><span style="font-size:0.75rem;color:var(--text-dim);">Admin sites: ' + escapeHtml(profile.adminSites.join(', ')) + '</span>';
+    }
+  }
   if (inviteSiteName) {
     html += '<br><span style="font-size:0.78rem;color:var(--accent2);">Pending invite: ' + escapeHtml(inviteSiteName) + ' (sent ' + (inv.invitedAt ? inv.invitedAt.split('T')[0] : '') + ')</span>';
   }
   html += '</div>';
 
-  // Invite to site
+  // Invite to site — visible to both owner and siteAdmin (siteAdmin's dropdown
+  // is filtered to their adminSites by _adminMSSiteOptionsHTML).
   html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:8px;">';
   html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Invite to a site</div>';
   html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
@@ -4947,27 +5068,49 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
   html += '<p style="font-size:0.72rem;color:var(--text-dim);margin:6px 0 0 0;">User sees a banner and can accept (auto-migrates their data) or decline.</p>';
   html += '</div>';
 
-  // Change site directly
-  html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:8px;">';
-  html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Change site directly (no user prompt)</div>';
-  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">';
-  html += '<select id="adminMSSetSite_' + uid + '" style="flex:1;min-width:140px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.82rem;">' + _adminMSSiteOptionsHTML(userSiteId) + '</select>';
-  html += '<label style="font-size:0.78rem;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="adminMSSetSiteMigrate_' + uid + '" checked> Migrate data</label>';
-  html += '<button class="btn btn-sm" onclick="adminMSSetUserSite(\'' + uid + '\')" style="background:var(--accent2);color:#1e293b;">Apply</button>';
-  html += '</div>';
-  html += '</div>';
+  // Change site directly — app_owner only.
+  if (viewerIsOwner) {
+    html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:8px;">';
+    html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Change site directly (no user prompt)</div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">';
+    html += '<select id="adminMSSetSite_' + uid + '" style="flex:1;min-width:140px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.82rem;">' + _adminMSSiteOptionsHTML(userSiteId) + '</select>';
+    html += '<label style="font-size:0.78rem;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="adminMSSetSiteMigrate_' + uid + '" checked> Migrate data</label>';
+    html += '<button class="btn btn-sm" onclick="adminMSSetUserSite(\'' + uid + '\')" style="background:var(--accent2);color:#1e293b;">Apply</button>';
+    html += '</div>';
+    html += '</div>';
 
-  // Admin role toggle
-  html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;">';
-  html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Admin role</div>';
-  if (isMaster) {
-    html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0;">Master admin &mdash; cannot be demoted.</p>';
-  } else if (userIsAdmin) {
-    html += '<button class="btn btn-sm" onclick="adminMSTogglePromote(\'' + uid + '\', false)" style="background:var(--surface);color:var(--accent2);">Revoke admin</button>';
-  } else {
-    html += '<button class="btn btn-primary btn-sm" onclick="adminMSTogglePromote(\'' + uid + '\', true)">Promote to admin</button>';
+    // Admin role toggle — app_owner only.
+    html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;">';
+    html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Admin role</div>';
+    if (isMaster) {
+      html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0;">Master app owner &mdash; cannot be demoted.</p>';
+    } else if (targetIsOwner) {
+      html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 6px 0;">App owner role is reserved for the master account; revoke would demote to no role.</p>';
+      html += '<button class="btn btn-sm" onclick="adminMSTogglePromote(\'' + uid + '\', false)" style="background:var(--surface);color:var(--accent2);">Revoke admin</button>';
+    } else if (userIsAdmin) {
+      // Show site-scope editor for siteAdmins.
+      const allowedIds = Object.keys(sitesCache || {}).slice().sort();
+      const adminSites = Array.isArray(profile.adminSites) ? profile.adminSites : [];
+      html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:6px;">Sites this admin can manage:</div>';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">';
+      for (const sid of allowedIds) {
+        const checked = adminSites.indexOf(sid) !== -1 ? ' checked' : '';
+        const sname = (sitesCache[sid] && sitesCache[sid].name) || sid;
+        html += '<label style="font-size:0.78rem;display:flex;align-items:center;gap:4px;background:var(--surface);padding:4px 8px;border-radius:6px;">';
+        html += '<input type="checkbox" class="adminMSSiteCheckbox_' + uid + '" value="' + sid + '"' + checked + '> ' + escapeHtml(sname);
+        html += '</label>';
+      }
+      html += '</div>';
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+      html += '<button class="btn btn-primary btn-sm" onclick="adminMSSaveSiteAdminScope(\'' + uid + '\')">Save site scope</button>';
+      html += '<button class="btn btn-sm" onclick="adminMSTogglePromote(\'' + uid + '\', false)" style="background:var(--surface);color:var(--accent2);">Revoke admin</button>';
+      html += '</div>';
+    } else {
+      html += '<button class="btn btn-primary btn-sm" onclick="adminMSTogglePromote(\'' + uid + '\', true)">Promote to site admin</button>';
+      html += '<p style="font-size:0.72rem;color:var(--text-dim);margin:6px 0 0 0;">After promoting you can pick which site(s) they can administer.</p>';
+    }
+    html += '</div>';
   }
-  html += '</div>';
 
   html += '<div id="adminMSUserStatus_' + uid + '" style="margin-top:10px;font-size:0.8rem;"></div>';
   out.innerHTML = html;
@@ -5030,13 +5173,34 @@ async function adminMSSetUserSite(uid) {
 }
 
 async function adminMSTogglePromote(uid, makeAdmin) {
-  const verb = makeAdmin ? 'Promote' : 'Revoke admin from';
+  const verb = makeAdmin ? 'Promote to site admin' : 'Revoke admin from';
   if (!confirm(verb + ' this user?')) return;
   _adminMSSetStatus(uid, 'Saving...', false);
   try {
-    await setUserAdmin(uid, makeAdmin);
-    _adminMSSetStatus(uid, 'Done.', false);
-    setTimeout(() => adminMSFindUser(), 400);
+    if (makeAdmin) {
+      // Default to no sites — owner picks the scope after promotion.
+      await setUserRole(uid, 'siteAdmin', []);
+    } else {
+      await setUserRole(uid, null, null);
+    }
+    _adminMSSetStatus(uid, 'Done. ' + (makeAdmin ? 'Pick site scope below.' : ''), false);
+    // Re-open the same user card so the new state shows immediately.
+    setTimeout(() => adminMSOpenUser(uid), 400);
+  } catch (err) {
+    _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
+  }
+}
+
+// Save the checked site list for an existing siteAdmin. App-owner only.
+async function adminMSSaveSiteAdminScope(uid) {
+  const boxes = document.querySelectorAll('.adminMSSiteCheckbox_' + uid);
+  const sites = [];
+  boxes.forEach(b => { if (b.checked) sites.push(b.value); });
+  _adminMSSetStatus(uid, 'Saving...', false);
+  try {
+    await setUserRole(uid, 'siteAdmin', sites);
+    _adminMSSetStatus(uid, 'Saved. Sites: ' + (sites.join(', ') || '(none)'), false);
+    setTimeout(() => adminMSOpenUser(uid), 400);
   } catch (err) {
     _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
   }
@@ -5060,8 +5224,11 @@ async function renderAdminMSSitesList() {
       html += ' <span style="font-size:0.72rem;color:var(--text-dim);">(' + row.id + ')</span>';
       html += '<br><span style="font-size:0.75rem;color:' + (unlocked ? 'var(--accent)' : 'var(--text-dim)') + ';">' + (unlocked ? 'Unlocked for new-user signups' : 'Locked (admin invite only)') + '</span>';
       html += '</div>';
-      html += '<button class="btn btn-sm" onclick="adminMSToggleSiteUnlock(\'' + row.id + '\', ' + (!unlocked) + ')" style="background:' + (unlocked ? 'var(--surface2)' : 'var(--primary)') + ';color:' + (unlocked ? 'var(--text)' : '#fff') + ';">';
-      html += (unlocked ? 'Lock' : 'Unlock') + '</button>';
+      // Lock/unlock is app-owner only.
+      if (isAppOwner() || isLegacyAdmin()) {
+        html += '<button class="btn btn-sm" onclick="adminMSToggleSiteUnlock(\'' + row.id + '\', ' + (!unlocked) + ')" style="background:' + (unlocked ? 'var(--surface2)' : 'var(--primary)') + ';color:' + (unlocked ? 'var(--text)' : '#fff') + ';">';
+        html += (unlocked ? 'Lock' : 'Unlock') + '</button>';
+      }
       html += '</div>';
     }
     if (rows.length === 0) html = '<p style="color:var(--text-dim);">No sites configured.</p>';
@@ -5095,7 +5262,7 @@ function adminMSWipeOnInput() {
 }
 
 async function adminMSWipeUser() {
-  if (!isAdmin()) return;
+  if (!isAppOwner()) return;
   const emailEl = document.getElementById('adminMSWipeEmail');
   const confirmEl = document.getElementById('adminMSWipeConfirm');
   const status = document.getElementById('adminMSWipeStatus');
@@ -5324,7 +5491,7 @@ async function copyUserSurgeonMappings(userCases, oldSiteId, newSiteId) {
 }
 
 async function adminLookupUser() {
-  if (!isAdmin()) return;
+  if (!isAppOwner()) return;
   const email = (document.getElementById('adminLookupEmail').value || '').trim();
   const out = document.getElementById('adminLookupResults');
   if (!email) { out.innerHTML = '<p style="color:var(--accent2);">Enter an email address</p>'; return; }
@@ -8068,8 +8235,63 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     if (page === 'updates') { /* no special init needed */ }
     if (page === 'comprules') { /* static content, no init needed */ }
     if (page === 'asacodes') { renderAsaCodesPage(); }
+    if (page === 'admin') { renderAdminPage(); }
   });
 });
+
+// Render the dedicated Admin page. Toggles each card's visibility based
+// on the current user's role and triggers any per-card render hooks.
+function renderAdminPage() {
+  const role = getEffectiveRole();
+  const isOwner = isAppOwner();
+  const isSAdmin = isSiteAdmin();
+
+  const badge = document.getElementById('adminPageRoleBadge');
+  if (badge) {
+    if (isOwner) {
+      badge.textContent = 'Signed in as app owner — full access.';
+    } else if (role === 'siteAdmin') {
+      const sites = getAdminSites();
+      badge.textContent = sites.length
+        ? 'Signed in as site admin for: ' + sites.join(', ')
+        : 'Signed in as site admin.';
+    } else if (isLegacyAdmin()) {
+      badge.textContent = 'Signed in as admin (legacy — please contact the app owner to migrate to the new role system).';
+    } else {
+      badge.textContent = 'You do not have admin access.';
+    }
+  }
+
+  // Card visibility:
+  //   App owner: every card visible.
+  //   Site admin: Multi-Site Admin only (and within that, the trimmed
+  //     Users tab + Sites tab in read-only mode). Editor card (Stage 2)
+  //     will be visible to siteAdmin too.
+  const showOwnerOnly = (id) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('hidden', !isOwner);
+  };
+  const showAnyAdmin = (id) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('hidden', !(isOwner || isSAdmin));
+  };
+  showOwnerOnly('claudeAISettingsCard');
+  showAnyAdmin('adminMultiSiteCard');
+  showOwnerOnly('adminUserLookupCard');
+
+  // Within the Multi-Site Admin card, default tab + which tabs are visible:
+  if (isSAdmin && !isOwner) {
+    // Site admin: hide Test cleanup tab; default to Users; Sites tab is
+    // visible but the Lock/Unlock controls are gated client-side.
+    const testTab = document.getElementById('adminMSTabTest');
+    if (testTab) testTab.style.display = 'none';
+    const testPane = document.getElementById('adminMSTestPane');
+    if (testPane) testPane.classList.add('hidden');
+  } else if (isOwner) {
+    const testTab = document.getElementById('adminMSTabTest');
+    if (testTab) testTab.style.display = '';
+  }
+}
 
 // ================================================================
 // SHIFT TEMPLATES
@@ -9352,7 +9574,7 @@ function loadAsaMasterCodes() {
 
 // One-time admin upload of master data to Firestore
 function uploadAsaMasterToFirestore() {
-  if (!db || !currentUser || typeof isAdmin !== 'function' || !isAdmin()) {
+  if (!db || !currentUser || !isAppOwner()) {
     showToast('Admin access required'); return;
   }
   db.collection('asaCodes').doc('master').set({
@@ -9505,7 +9727,7 @@ function saveAsaCodeProcedure(code, procedureName) {
 }
 
 function removeAsaCodeProcedure(code, procedureName) {
-  if (!db || !currentUser || !(typeof isAdmin === 'function' && isAdmin())) return;
+  if (!db || !currentUser || !isAppOwner()) return;
   if (!asaCodeProcedures[code]) return;
   asaCodeProcedures[code] = asaCodeProcedures[code].filter(function(p) { return p !== procedureName; });
   if (asaCodeProcedures[code].length === 0) delete asaCodeProcedures[code];
@@ -17981,7 +18203,7 @@ function renderCollectiveCases() {
     html += `<div class="proc-case-item"><span>${escHtml(label)}</span><span>${count} case${count !== 1 ? 's' : ''}</span></div>`;
   });
   html += `</div>`;
-  if (isAdmin()) {
+  if (isAppOwner()) {
     html += `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">`;
     html += `<div style="font-weight:600;font-size:0.85rem;margin-bottom:8px;">Admin: Search & Edit Cases</div>`;
     html += `<input type="text" id="adminCaseSearch" placeholder="Search surgeon or procedure..." autocomplete="off" style="width:100%;padding:8px 10px;font-size:0.85rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="renderAdminCaseSearch()">`;
@@ -18003,7 +18225,7 @@ function renderCollectiveCases() {
 let adminSearchDirty = {};  // { docId_or_caseId: { surgeon?, procedure? } }
 
 function renderAdminCaseSearch(mode) {
-  if (!isAdmin()) return;
+  if (!isAppOwner()) return;
   const el = document.getElementById('adminCaseSearchResults');
   if (!el) return;
   const query = (document.getElementById('adminCaseSearch') || {}).value;
@@ -18134,7 +18356,7 @@ function markAdminGroupDirty(input) {
 }
 
 async function saveAdminCaseGroup(groupIdx) {
-  if (!isAdmin() || !window._adminSearchGroups) return;
+  if (!isAppOwner() || !window._adminSearchGroups) return;
   const group = window._adminSearchGroups[groupIdx];
   if (!group) return;
 
@@ -18203,7 +18425,7 @@ async function saveAdminCaseGroup(groupIdx) {
 
 // ---- Surgeon Name Mapping Admin UI ----
 function openSurgeonMappingModal() {
-  if (!isAdmin()) return;
+  if (!isAppOwner()) return;
   const nameMap = {};
   data.cases.forEach(c => {
     const name = (c.notes || '').trim();
@@ -18318,7 +18540,7 @@ function toggleSingleSurgeonGroups() {
 }
 
 async function saveSurgeonMappings() {
-  if (!isAdmin()) return;
+  if (!isAppOwner()) return;
   const el = document.getElementById('surgeonMappingList');
   const groups = el._groups || [];
   const newMappings = {};
@@ -18350,7 +18572,7 @@ async function saveSurgeonMappings() {
 }
 
 async function resetSurgeonMappings() {
-  if (!isAdmin()) return;
+  if (!isAppOwner()) return;
   if (!confirm('Reset all surgeon name mappings? Original names will be restored. This cannot be undone.')) return;
   try {
     await db.collection('surgeonMappings').doc(getCurrentSiteId()).delete();
@@ -18376,7 +18598,7 @@ let sceSelected = new Set();
 let sceDirty = new Set();
 
 function openSurgeonCaseEditor() {
-  if (!isAdmin()) return;
+  if (!isAppOwner()) return;
   const myUid = currentUser ? currentUser.uid : '';
   const admin = true;
   const uidLabels = {};
@@ -19630,11 +19852,8 @@ visionKeyInput.addEventListener('change', () => {
   showToast('Vision API key saved');
 });
 
-// Claude AI settings (admin only)
-if (isAdmin()) {
-  const aiCard = document.getElementById('claudeAISettingsCard');
-  if (aiCard) aiCard.classList.remove('hidden');
-}
+// Claude AI settings card lives on the dedicated Admin page now.
+// Visibility is set by renderAdminPage() based on app_owner role.
 const claudeKeyInput = document.getElementById('settingsClaudeKey');
 claudeKeyInput.value = settings.claudeApiKey || '';
 claudeKeyInput.addEventListener('change', () => {
@@ -23248,17 +23467,18 @@ auth.onAuthStateChanged(async (user) => {
     migrateData(data);
     initApp();
 
-    // Show admin-only settings after auth and sync values from cloud
-    if (isAdmin()) {
-      const aiCard = document.getElementById('claudeAISettingsCard');
-      if (aiCard) aiCard.classList.remove('hidden');
-      const lookupCard = document.getElementById('adminUserLookupCard');
-      if (lookupCard) lookupCard.classList.remove('hidden');
-      const msCard = document.getElementById('adminMultiSiteCard');
-      if (msCard) msCard.classList.remove('hidden');
-      document.getElementById('settingsClaudeKey').value = settings.claudeApiKey || '';
-      document.getElementById('settingsPersonalTimeValue').value = settings.personalTimeValue || '';
+    // Admin cards live on the dedicated Admin page (renderAdminPage()).
+    // Pre-fill the Claude API key + personal time value inputs so when
+    // the app_owner opens the Admin page, the saved values are there.
+    if (isAppOwner()) {
+      const claudeKey = document.getElementById('settingsClaudeKey');
+      const personalTime = document.getElementById('settingsPersonalTimeValue');
+      if (claudeKey) claudeKey.value = settings.claudeApiKey || '';
+      if (personalTime) personalTime.value = settings.personalTimeValue || '';
     }
+    // Show the Admin drawer entry once we know the user has any admin role.
+    const drawerAdmin = document.getElementById('drawerAdminItem');
+    if (drawerAdmin) drawerAdmin.classList.toggle('hidden', !isSiteAdmin());
 
     if (result === 'migrated') {
       showToast('Local data synced to cloud');
