@@ -6559,12 +6559,16 @@ function shiftIsOBStyle(shift) {
 }
 
 // Returns true when the shift type doubles non-OR case production. UVH
-// OB plus SF1/SF2 (existing legacy behavior), and any per-site shift
-// that inherits OB-style AR rate.
+// OB plus SF1/SF2 (existing legacy behavior), any per-site shift that
+// inherits OB-style AR rate, and any rule that explicitly sets
+// productionMultiplier > 1 (e.g. RVTN_Supervision — SF2-style with no
+// pager). Per-case opt-out via the OR Case checkbox still applies.
 function shiftDoublesProduction(shift) {
   if (!shift || !shift.assignmentType) return false;
   if (['OB_restricted', 'SF1', 'SF2'].includes(shift.assignmentType)) return true;
-  return shiftIsOBStyle(shift);
+  if (shiftIsOBStyle(shift)) return true;
+  const rule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+  return !!(rule && typeof rule.productionMultiplier === 'number' && rule.productionMultiplier > 1);
 }
 
 function effectivePagerPts(shift, pagerWindow) {
