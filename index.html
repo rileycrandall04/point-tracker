@@ -8110,6 +8110,111 @@ function shiftDoublesProduction(shift) {
   return !!(rule && typeof rule.productionMultiplier === 'number' && rule.productionMultiplier > 1);
 }
 
+// Add N days to a YYYY-MM-DD string. Anchors at noon to dodge DST seams.
+function _addDaysIso(dateStr, n) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const nd = new Date(y, m - 1, d + n);
+  return nd.getFullYear() + '-' + String(nd.getMonth() + 1).padStart(2, '0') + '-' + String(nd.getDate()).padStart(2, '0');
+}
+
+// SF1 (Spanish Fork OB) production-doubling window: 07:00-17:00 on
+// weekday non-holidays. Cases that span the boundary (or midnight) are
+// pro-rated minute-by-minute via _sf1DoubledMinutes.
+function _isSf1DoublingMin(shift, absoluteMin) {
+  if (!shift || shift.assignmentType !== 'SF1') return false;
+  const dayOffset = Math.floor(absoluteMin / 1440);
+  const minOfDay = absoluteMin - dayOffset * 1440;
+  // Holiday flag is only applied to the shift's own date (day 0); cases
+  // that cross midnight onto an unflagged neighboring date are treated
+  // as non-holiday on that side.
+  if (dayOffset === 0 && shift.isHoliday) return false;
+  const date = _addDaysIso(shift.date, dayOffset);
+  if (isWeekend(date)) return false;
+  return minOfDay >= 420 && minOfDay < 1020;
+}
+
+// Returns the count of minutes in [startMin, endMin) that fall inside
+// the SF1 doubling window. Walks day-by-day to handle multi-midnight
+// spans cleanly.
+function _sf1DoubledMinutes(shift, startMin, endMin) {
+  if (endMin <= startMin) return 0;
+  let doubled = 0;
+  let pos = startMin;
+  while (pos < endMin) {
+    const dayOffset = Math.floor(pos / 1440);
+    const dayStart = dayOffset * 1440;
+    const date = _addDaysIso(shift.date, dayOffset);
+    const isHol = (dayOffset === 0 && !!shift.isHoliday);
+    if (!isWeekend(date) && !isHol) {
+      const winStart = dayStart + 420;  // 07:00
+      const winEnd   = dayStart + 1020; // 17:00
+      const overlapStart = Math.max(pos, winStart);
+      const overlapEnd   = Math.min(endMin, winEnd);
+      if (overlapEnd > overlapStart) doubled += overlapEnd - overlapStart;
+    }
+    pos = dayStart + 1440; // jump to next day
+  }
+  return doubled;
+}
+
+// SF1 fractional production doubling kicks in for shifts on or after
+// this date — earlier shifts keep the old "double every minute"
+// behavior so historical totals don't change.
+const SF1_FRACTIONAL_DOUBLING_FROM = '2026-04-27';
+
+// Live (right-now) version of the SF1 production-doubling check, used
+// by the ticker to gate the in-progress prod rate. Reads the wall-clock
+// instead of an absolute-minutes argument so the ticker doesn't have to
+// track day offsets.
+function _isSf1DoublingNowLive(shift) {
+  if (!shift || shift.assignmentType !== 'SF1') return false;
+  // Pre-cutover shifts keep the old "always doubled" behavior.
+  if (!shift.date || shift.date < SF1_FRACTIONAL_DOUBLING_FROM) return true;
+  const now = new Date();
+  const day = now.getDay();
+  if (day === 0 || day === 6) return false;
+  if (shift.isHoliday) return false;
+  const minOfDay = now.getHours() * 60 + now.getMinutes();
+  return minOfDay >= 420 && minOfDay < 1020;
+}
+
+// Returns true if the live ticker should be doubling production right
+// now for this shift. Wraps shiftDoublesProduction with the SF1 window.
+function liveProductionDoublingNow(shift) {
+  if (!shiftDoublesProduction(shift)) return false;
+  if (shift && shift.assignmentType === 'SF1') return _isSf1DoublingNowLive(shift);
+  return true;
+}
+
+// Pretty-print the production multiplier as a breakdown row label.
+// 2.0 -> "OB Doubled (x2)"; 1.5 -> "OB Doubled (x1.5, partial)" for SF1
+// cases that only partly overlap the 07:00-17:00 window.
+function _formatProductionMultiplierLabel(mult) {
+  if (mult >= 1.999) return 'OB Doubled (x2)';
+  return 'OB Doubled (x' + (Math.round(mult * 100) / 100).toFixed(2) + ', partial)';
+}
+
+// Returns the production multiplier (1.0 to 2.0) to apply to a case's
+// computed points. For SF1 (Spanish Fork OB) on or after the cutover
+// date, only the portion of the case time inside 07:00-17:00 weekday
+// non-holiday gets doubled — pro-rated. Other doubling shifts double
+// the whole case; non-doubling shifts return 1.
+function caseProductionMultiplier(caseData, shift) {
+  if (!shiftDoublesProduction(shift)) return 1;
+  if (shift && shift.assignmentType === 'SF1' && shift.date && shift.date >= SF1_FRACTIONAL_DOUBLING_FROM) {
+    if (!caseData || !caseData.startTime || !caseData.endTime) return 1;
+    let s = timeToMinutes(caseData.startTime);
+    let e = timeToMinutes(caseData.endTime);
+    if (isNaN(s) || isNaN(e)) return 1;
+    if (e <= s) e += 1440;
+    if (e <= s) return 1;
+    const doubled = _sf1DoubledMinutes(shift, s, e);
+    const total = e - s;
+    return 1 + (doubled / total);
+  }
+  return 2;
+}
+
 function effectivePagerPts(shift, pagerWindow) {
   const overrideH = parseFloat(shift && shift.unrestrictedCallHours);
   if (overrideH > 0) return overrideH * 3.5;
@@ -9097,7 +9202,7 @@ function calcOtherPartyPoints(caseData, shift) {
     if (cs < initStart) initStart -= 1440;
     const handoffOffsetHrs = Math.min((cs - initStart) / 60, 24);
     let pts = 2.5 + laborEpiduralTierPoints(0, handoffOffsetHrs);
-    if (shiftDoublesProduction(shift)) pts *= 2;
+    pts *= caseProductionMultiplier(caseData, shift);
     return round2(pts);
   }
 
@@ -9107,7 +9212,7 @@ function calcOtherPartyPoints(caseData, shift) {
     const pct = parseFloat(caseData.sharedStartupPct) || 50;
     const otherPct = 100 - pct;
     let pts = 0.5 * baseUnits * (otherPct / 100);
-    if (shiftDoublesProduction(shift) && !caseData.isORCase) pts *= 2;
+    if (!caseData.isORCase) pts *= caseProductionMultiplier(caseData, shift);
     return round2(pts);
   }
 
@@ -9176,7 +9281,7 @@ function calcCasePoints(caseData, shift, ignoreManual) {
       const handoffOffsetHrs = Math.min((cs - initStart) / 60, 24);
       const totalElapsedHrs = Math.min((ce - initStart) / 60, 24);
       let pts = laborEpiduralTierPoints(handoffOffsetHrs, totalElapsedHrs);
-      if (shiftDoublesProduction(shift)) pts *= 2;
+      pts *= caseProductionMultiplier(caseData, shift);
       return round2(pts);
     }
 
@@ -9186,7 +9291,7 @@ function calcCasePoints(caseData, shift, ignoreManual) {
     if (durationHrs > 0) pts += Math.min(durationHrs, 1) * 6;
     if (durationHrs > 1) pts += Math.min(durationHrs - 1, 1) * 3;
     if (durationHrs > 2) pts += (durationHrs - 2) * 1.5;
-    if (shiftDoublesProduction(shift)) pts *= 2;
+    pts *= caseProductionMultiplier(caseData, shift);
     return round2(pts);
   }
 
@@ -9221,7 +9326,7 @@ function calcCasePoints(caseData, shift, ignoreManual) {
   const acutePainPoints = caseData.isAcutePain ? 0.375 * (parseFloat(caseData.acutePainUnits) || 0) : 0;
   const emergencyPoints = caseData.isEmergency ? 1 : 0;
   let total = basePoints + timePoints + medicalPoints + acutePainPoints + emergencyPoints + addOnPts;
-  if (shiftDoublesProduction(shift) && !caseData.isORCase) total *= 2;
+  if (!caseData.isORCase) total *= caseProductionMultiplier(caseData, shift);
   return round2(total);
 }
 
@@ -9297,8 +9402,10 @@ function getCaseBreakdown(caseData, shift) {
         const hrs = round2(totalElapsedHrs - Math.max(handoffOffsetHrs, 2));
         if (hrs > 0) { const p = round2(hrs * 1.5); bd.push({label: `3rd+ Hour tier (${hrs}h x 1.5)${estLabel}`, pts: p}); subtotal += p; }
       }
-      if (shiftDoublesProduction(shift)) {
-        bd.push({label: 'OB Doubled (x2)', pts: round2(subtotal)});
+      const _mult1 = caseProductionMultiplier(caseData, shift);
+      if (_mult1 > 1) {
+        const _bonus = round2(subtotal * (_mult1 - 1));
+        bd.push({label: _formatProductionMultiplierLabel(_mult1), pts: _bonus});
       }
       return bd;
     }
@@ -9323,8 +9430,10 @@ function getCaseBreakdown(caseData, shift) {
       bd.push({label: `Additional (${hrs}h x 1.5)${estLabel}`, pts: p});
       subtotal += p;
     }
-    if (shiftDoublesProduction(shift)) {
-      bd.push({label: 'OB Doubled (x2)', pts: round2(subtotal)});
+    const _mult2 = caseProductionMultiplier(caseData, shift);
+    if (_mult2 > 1) {
+      const _bonus = round2(subtotal * (_mult2 - 1));
+      bd.push({label: _formatProductionMultiplierLabel(_mult2), pts: _bonus});
     }
     return bd;
   }
@@ -9372,9 +9481,10 @@ function getCaseBreakdown(caseData, shift) {
   if (caseData.hasTEEExam) bd.push({label: 'TEE Exam', pts: 22});
   if (caseData.hasITMorphine) bd.push({label: 'IT Morphine', pts: 3});
   if (caseData.hasThoracicEpidural) bd.push({label: 'Thoracic Epidural', pts: 3.75});
-  if (shiftDoublesProduction(shift) && !caseData.isORCase) {
+  const _mult3 = caseData.isORCase ? 1 : caseProductionMultiplier(caseData, shift);
+  if (_mult3 > 1) {
     const subtotal = bd.reduce((s,r) => s + r.pts, 0);
-    bd.push({label: 'OB Doubled (x2)', pts: round2(subtotal)});
+    bd.push({label: _formatProductionMultiplierLabel(_mult3), pts: round2(subtotal * (_mult3 - 1))});
   }
   return bd;
 }
@@ -11955,10 +12065,12 @@ function updateTodayRateChips() {
     }
     const pagerRate = inPagerWindow ? 3.5 : 0;
 
-    // In-progress production rate (open cases without end time)
+    // In-progress production rate (open cases without end time). Doubling
+    // is "live" — for SF1 it switches off outside the 07:00-17:00 weekday
+    // window so the rate display reflects what's actually accruing.
     let prodRate = 0;
     const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
-    const isOB = shiftDoublesProduction(shift);
+    const isOB = liveProductionDoublingNow(shift);
     openCases.forEach(c => {
       const cs = timeToMinutes(c.startTime);
       let elapsed = currentMin - cs;
@@ -12114,7 +12226,7 @@ function tickLiveUpdate() {
   }
   const pagerRate = inPagerWindow ? 3.5 : 0;
 
-  const isOB2 = shiftDoublesProduction(shift);
+  const isOB2 = liveProductionDoublingNow(shift);
   let prodRate = 0;
   const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
   openCases.forEach(c => {
@@ -23835,7 +23947,7 @@ function renderProdRecon() {
         const tc = m.tracker;
         const bc = m.billing;
         const oldPts = m.trackerPts;
-        const obMult = (shiftDoublesProduction(shift) && !tc.isORCase) ? 2 : 1;
+        const obMult = tc.isORCase ? 1 : caseProductionMultiplier(tc, shift);
         const addOns = calcAddOnPoints(tc);
         let caseStartMin = timeToMinutes(tc.startTime);
         let caseEndMin = timeToMinutes(tc.endTime);
