@@ -5420,11 +5420,14 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
   html += '</div>';
 
   // Invite to site — visible to both owner and siteAdmin (siteAdmin's dropdown
-  // is filtered to their adminSites by _adminMSSiteOptionsHTML).
+  // is filtered to their adminSites by _adminMSSiteOptionsHTML). Each row
+  // wraps the select on its own line above the action button so the native
+  // picker has full width and isn't squeezed by the flex layout (Chrome
+  // Android wouldn't open it inside the flex row).
   html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:8px;">';
   html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Invite to a site</div>';
+  html += '<select id="adminMSInviteSite_' + uid + '" style="width:100%;margin-bottom:8px;">' + _adminMSSiteOptionsHTML(userSiteId) + '</select>';
   html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">';
-  html += '<select id="adminMSInviteSite_' + uid + '" style="flex:1 1 160px;min-width:160px;min-height:44px;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:16px;cursor:pointer;position:relative;z-index:1;">' + _adminMSSiteOptionsHTML(userSiteId) + '</select>';
   html += '<button class="btn btn-primary btn-sm" onclick="adminMSSendInvite(\'' + uid + '\')">Send invite</button>';
   if (inviteSiteName) {
     html += '<button class="btn btn-sm" onclick="adminMSCancelInvite(\'' + uid + '\')" style="background:var(--surface);color:var(--accent2);">Cancel pending</button>';
@@ -5437,8 +5440,8 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
   if (viewerIsOwner) {
     html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:8px;">';
     html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Change site directly (no user prompt)</div>';
+    html += '<select id="adminMSSetSite_' + uid + '" style="width:100%;margin-bottom:8px;">' + _adminMSSiteOptionsHTML(userSiteId) + '</select>';
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">';
-    html += '<select id="adminMSSetSite_' + uid + '" style="flex:1 1 160px;min-width:160px;min-height:44px;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:16px;cursor:pointer;position:relative;z-index:1;">' + _adminMSSiteOptionsHTML(userSiteId) + '</select>';
     html += '<label style="font-size:0.78rem;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="adminMSSetSiteMigrate_' + uid + '" checked> Migrate data</label>';
     html += '<button class="btn btn-sm" onclick="adminMSSetUserSite(\'' + uid + '\')" style="background:var(--accent2);color:#1e293b;">Apply</button>';
     html += '</div>';
