@@ -3803,11 +3803,15 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
       Pooled shift efficiency from everyone at this site who has data sharing enabled. Rows hide until at least 3 contributors have logged a shift of that type.
     </p>
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
       <label style="font-size:0.82rem;color:var(--text-dim);">Site:</label>
       <select id="communityStatsSiteSelect" onchange="renderCommunityStats()"
         style="flex:1;min-width:160px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;"></select>
       <button class="btn btn-sm" onclick="loadCommunityStats(true)" style="background:var(--surface2);color:var(--text);">Refresh</button>
+    </div>
+    <div style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;">
+      <button class="btn btn-sm" id="communityStatsModeClockedBtn" onclick="setCommunityStatsMode('clocked')">Per clocked hour</button>
+      <button class="btn btn-sm" id="communityStatsMode24Btn" onclick="setCommunityStatsMode('24hr')">Per 24 hr</button>
     </div>
     <div id="communityStatsContent">
       <p style="font-size:0.85rem;color:var(--text-dim);">Loading…</p>
@@ -18099,18 +18103,35 @@ function buildAvgShiftTotals() {
   return html || '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet.</p>';
 }
 
+// 'clocked' = divide each shift's total by its clocked-in hours (skips
+// shifts with no clock-in). '24hr' = divide each shift's total by 24
+// (includes pager-only shifts but skips vacation).
+let shiftEfficiencyMode = 'clocked';
+
+function setShiftEfficiencyMode(mode) {
+  shiftEfficiencyMode = mode;
+  renderAssignData();
+}
+
 function buildShiftEfficiency() {
   // Collect each shift's pts/hr individually so we can compute the mean
-  // and the sample standard deviation across that distribution (rather
-  // than the totalPts/totalHrs weighted average we used to show).
+  // and the sample standard deviation across that distribution.
+  const mode = shiftEfficiencyMode;
   const groups = {};
   Object.values(data.shifts).forEach(shift => {
-    const hrs = calcShiftHours(shift);
-    if (hrs <= 0) return;
+    if (!shift || shift.assignmentType === 'vacation') return;
+    let denom;
+    if (mode === '24hr') {
+      denom = 24;
+    } else {
+      const hrs = calcShiftHours(shift);
+      if (hrs <= 0) return;
+      denom = hrs;
+    }
     const total = calcShiftTotal(shift).total;
     const type = shift.assignmentType;
     if (!groups[type]) groups[type] = [];
-    groups[type].push(total / hrs);
+    groups[type].push(total / denom);
   });
   const ranked = Object.entries(groups)
     .filter(([, vals]) => vals.length >= 1)
@@ -18125,16 +18146,24 @@ function buildShiftEfficiency() {
       return { name: getAssignmentTypeName(type), mean: round2(mean), std: std == null ? null : round2(std), count: n };
     })
     .sort((a, b) => b.mean - a.mean);
+  const clockedActive = mode === 'clocked';
   let html = '';
+  html += '<div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">';
+  html += '<button class="btn btn-sm" onclick="setShiftEfficiencyMode(\'clocked\')" style="background:' + (clockedActive ? 'var(--primary)' : 'var(--surface2)') + ';color:' + (clockedActive ? '#fff' : 'var(--text)') + ';">Per clocked hour</button>';
+  html += '<button class="btn btn-sm" onclick="setShiftEfficiencyMode(\'24hr\')" style="background:' + (!clockedActive ? 'var(--primary)' : 'var(--surface2)') + ';color:' + (!clockedActive ? '#fff' : 'var(--text)') + ';">Per 24 hr</button>';
+  html += '</div>';
   if (ranked.length > 0) {
-    html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Points per hour by shift type — most to least efficient. ± shows sample standard deviation.</div>';
+    const denomText = clockedActive ? 'clocked-in hour' : '24-hour day';
+    html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Points per ' + denomText + ' by shift type — most to least efficient. ± shows sample standard deviation.</div>';
     ranked.forEach(r => {
       const stdStr = r.std == null ? '<span style="color:var(--text-dim);font-size:0.75rem;">&plusmn; n/a</span>'
                                     : '<span style="color:var(--text-dim);font-size:0.75rem;">&plusmn; ' + r.std.toFixed(1) + '</span>';
       html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count} shift${r.count !== 1 ? 's' : ''})</span></span><span class="eff-value" style="color:var(--primary);">${r.mean.toFixed(1)} ${stdStr}</span></div>`;
     });
+  } else {
+    html += '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet for this view.</p>';
   }
-  return html || '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet.</p>';
+  return html;
 }
 
 // ---------- Community Stats (pooled shift efficiency from sharedShifts) ----------
@@ -18179,7 +18208,9 @@ function loadCommunityStats(force) {
       snap.forEach(doc => {
         const d = doc.data() || {};
         if (!d.uid || !d.siteId || !d.assignmentType) return;
-        if (!(d.hours > 0)) return;
+        // Vacation shifts have hours = 0 by definition; the per-24hr view
+        // still wants pager-only nights with 0 clocked hours but >0 points.
+        if (d.assignmentType === 'vacation') return;
         if (!byUid[d.uid]) byUid[d.uid] = [];
         byUid[d.uid].push({
           siteId: d.siteId,
@@ -18198,7 +18229,31 @@ function loadCommunityStats(force) {
     });
 }
 
+// 'clocked' (each shift's pts ÷ its clocked hours, skips no-clock shifts)
+// vs '24hr' (each shift's pts ÷ 24, includes pager-only nights).
+let communityStatsMode = 'clocked';
+
+function setCommunityStatsMode(mode) {
+  communityStatsMode = mode;
+  _updateCommunityStatsModeButtons();
+  renderCommunityStats();
+}
+
+function _updateCommunityStatsModeButtons() {
+  const a = document.getElementById('communityStatsModeClockedBtn');
+  const b = document.getElementById('communityStatsMode24Btn');
+  if (a) {
+    a.style.background = (communityStatsMode === 'clocked') ? 'var(--primary)' : 'var(--surface2)';
+    a.style.color      = (communityStatsMode === 'clocked') ? '#fff' : 'var(--text)';
+  }
+  if (b) {
+    b.style.background = (communityStatsMode === '24hr') ? 'var(--primary)' : 'var(--surface2)';
+    b.style.color      = (communityStatsMode === '24hr') ? '#fff' : 'var(--text)';
+  }
+}
+
 function renderCommunityStats() {
+  _updateCommunityStatsModeButtons();
   const out = document.getElementById('communityStatsContent');
   if (!out) return;
   const sel = document.getElementById('communityStatsSiteSelect');
@@ -18208,16 +18263,24 @@ function renderCommunityStats() {
     out.innerHTML = '<p style="font-size:0.85rem;color:var(--text-dim);">Click Refresh to load.</p>';
     return;
   }
-  // Group: assignmentType -> { uids: Set, vals: [ptsPerHr, ...], totalPts: sum, totalHrs: sum, shiftCount }
+  const mode = communityStatsMode;
+  // Group: assignmentType -> { uids: Set, vals: [ptsPerHr, ...], totalPts, totalHrs, shiftCount }
   const groups = {};
   for (const uid of Object.keys(_communityStatsCache.byUid)) {
     const rows = _communityStatsCache.byUid[uid];
     for (const r of rows) {
       if (siteId && r.siteId !== siteId) continue;
+      let denom;
+      if (mode === '24hr') {
+        denom = 24;
+      } else {
+        if (!(r.hours > 0)) continue;
+        denom = r.hours;
+      }
       const t = r.assignmentType;
       if (!groups[t]) groups[t] = { uids: new Set(), vals: [], totalPts: 0, totalHrs: 0, shiftCount: 0 };
       groups[t].uids.add(uid);
-      groups[t].vals.push(r.points / r.hours);
+      groups[t].vals.push(r.points / denom);
       groups[t].totalPts += r.points;
       groups[t].totalHrs += r.hours;
       groups[t].shiftCount++;
@@ -18252,7 +18315,8 @@ function renderCommunityStats() {
     return;
   }
 
-  let html = '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Pooled across ' + Object.keys(_communityStatsCache.byUid).length + ' contributors total. Rows show mean pts/hr ± sample stddev, plus average shift total.</div>';
+  const denomText = mode === 'clocked' ? 'clocked-in hour' : '24-hour day';
+  let html = '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Pooled across ' + Object.keys(_communityStatsCache.byUid).length + ' contributors total. Rows show mean pts per ' + denomText + ' ± sample stddev, plus average shift total.</div>';
   ranked.forEach(r => {
     const stdStr = r.std == null
       ? '<span style="color:var(--text-dim);font-size:0.75rem;">&plusmn; n/a</span>'
