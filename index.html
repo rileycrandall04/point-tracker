@@ -7599,6 +7599,7 @@ async function syncCalendarEvents(silent) {
     if (typeof renderWeeklyChart === 'function') renderWeeklyChart();
     if (typeof loadShiftForDate === 'function') loadShiftForDate();
     if (dailyEditMode) renderAssignmentEditor();
+    else if (typeof renderDailyTab === 'function') renderDailyTab();
   } catch (err) {
     if (silent) {
       console.log('Auto calendar sync skipped:', err.message);
