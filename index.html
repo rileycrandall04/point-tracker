@@ -4441,6 +4441,21 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 </div>
 
+<!-- Calendar Review Modal -->
+<div class="modal-overlay hidden" id="calReviewModal">
+  <div class="modal" style="max-height:85vh;overflow-y:auto;max-width:520px;">
+    <h2>Review Calendar Assignments</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Confirm or edit the shift type for each date before saving. Pick &mdash; Skip &mdash; on any row to drop it.
+    </p>
+    <div id="calReviewList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="cancelCalReviewModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveCalReviewModal()">Confirm &amp; Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Import confirmation modal -->
 <div class="modal-overlay hidden" id="importConfirmModal">
   <div class="modal">
@@ -7384,94 +7399,153 @@ async function syncCalendarEvents(silent) {
     }
     const events = eventsData.items || [];
 
-    // Clear only calendar-sourced entries in sync window; preserve manual assignments
     const startStr = start.toISOString().substring(0, 10);
     const endStr = end.toISOString().substring(0, 10);
-    // Track which dates had calendar assignments before clearing (to clean up orphaned pager shifts)
-    const prevAssignedDates = new Set(Object.keys(data.calendarAssignments).filter(k => k >= startStr && k <= endStr));
+    const siteIdForRemap = getCurrentSiteId();
+
+    // Snapshot prior state for the sync window (calendar-sourced + manual)
+    const prevByDate = new Map();
     const manualDates = new Set();
     Object.keys(data.calendarAssignments).forEach(k => {
-      if (k >= startStr && k <= endStr) {
-        if (data.calendarAssignments[k].source === 'manual') {
-          manualDates.add(k);
-        } else {
-          delete data.calendarAssignments[k];
-        }
-      }
+      if (k < startStr || k > endStr) return;
+      const v = data.calendarAssignments[k];
+      if (!v) return;
+      if (v.source === 'manual') manualDates.add(k);
+      else prevByDate.set(k, v);
     });
 
-    let count = 0;
-    const newAssignedDates = new Set();
+    // Build PROPOSED map from calendar events (no writes yet).
     if (!settings.calendarMappings) settings.calendarMappings = {};
-    const unmappedEvents = []; // events where parser returned false
+    const proposedByDate = new Map(); // dateStr -> { type, label, source: 'calendar', title }
+    const unmappedEvents = [];
     const unmappedTitles = new Set();
 
     events.forEach(ev => {
       const dateStr = ev.start && (ev.start.date || (ev.start.dateTime && ev.start.dateTime.substring(0, 10)));
       if (!dateStr) return;
-      // Skip dates with manual assignments — never overwrite user's work
-      if (manualDates.has(dateStr)) { newAssignedDates.add(dateStr); return; }
+      if (manualDates.has(dateStr)) return; // never overwrite manual
       const title = (ev.summary || '').trim();
       if (!title) return;
 
-      // 1. Check user's custom mappings first
       if (title in settings.calendarMappings) {
         const mapped = settings.calendarMappings[title];
-        if (mapped === null) return; // user chose to skip this title
-        data.calendarAssignments[dateStr] = { type: mapped.type, label: mapped.label, source: 'calendar' };
-        newAssignedDates.add(dateStr);
-        count++;
+        if (mapped === null) return;
+        proposedByDate.set(dateStr, {
+          type: remapAssignmentTypeForSite(mapped.type, siteIdForRemap),
+          label: mapped.label, source: 'calendar', title
+        });
         return;
       }
 
-      // 2. Try built-in parser
       const parsed = parseCalendarEventTitle(title, dateStr);
-      if (parsed === null) return; // intentional skip (known skip words)
+      if (parsed === null) return;
       if (parsed === false) {
-        // Unrecognized — collect for mapping modal
         unmappedEvents.push({ title, dateStr });
         unmappedTitles.add(title);
         return;
       }
-      // Successfully parsed
-      parsed.source = 'calendar';
-      data.calendarAssignments[dateStr] = parsed;
-      newAssignedDates.add(dateStr);
-      count++;
+      proposedByDate.set(dateStr, {
+        type: remapAssignmentTypeForSite(parsed.type, siteIdForRemap),
+        label: parsed.label, source: 'calendar', title
+      });
     });
 
-    // Show mapping modal for unrecognized titles (manual sync only)
+    // Prompt for unrecognized titles (manual sync only) and fold into proposals
     if (unmappedTitles.size > 0 && !silent) {
       const mappings = await showMappingModal(Array.from(unmappedTitles));
       if (mappings) {
-        // Save new mappings and apply them
         Object.assign(settings.calendarMappings, mappings);
         saveSettings(settings);
         updateMappingCountUI();
-
-        // Apply mappings to collected unmapped events
         unmappedEvents.forEach(({ title, dateStr }) => {
-          if (manualDates.has(dateStr)) { newAssignedDates.add(dateStr); return; }
+          if (manualDates.has(dateStr)) return;
           const mapped = mappings[title];
-          if (!mapped) return; // skipped or not mapped
-          data.calendarAssignments[dateStr] = { type: mapped.type, label: mapped.label, source: 'calendar' };
-          newAssignedDates.add(dateStr);
-          count++;
+          if (!mapped) return;
+          proposedByDate.set(dateStr, {
+            type: remapAssignmentTypeForSite(mapped.type, siteIdForRemap),
+            label: mapped.label, source: 'calendar', title
+          });
         });
       }
     }
 
-    // Sync pager-only shifts: create for new assignments, update changed ones
-    newAssignedDates.forEach(dateStr => {
-      if (typeof syncPagerShift === 'function') syncPagerShift(dateStr, data.calendarAssignments[dateStr].type);
+    // Build review rows: union of prev calendar-sourced dates + proposed dates.
+    // Classify as new/changed/unchanged/removed.
+    const allDates = new Set([...prevByDate.keys(), ...proposedByDate.keys()]);
+    const reviewRows = [];
+    allDates.forEach(dateStr => {
+      const prev = prevByDate.get(dateStr);
+      const prop = proposedByDate.get(dateStr);
+      let action;
+      if (prev && prop) action = (prev.type === prop.type && prev.label === prop.label) ? 'unchanged' : 'changed';
+      else if (prop) action = 'new';
+      else action = 'removed';
+      reviewRows.push({
+        dateStr, action,
+        title: prop ? prop.title : '',
+        proposedType: prop ? prop.type : '',
+        proposedLabel: prop ? prop.label : '',
+        prevType: prev ? prev.type : '',
+        prevLabel: prev ? prev.label : ''
+      });
     });
-    // Clean up orphaned pager-only shifts (dates that lost their assignment)
-    prevAssignedDates.forEach(dateStr => {
-      if (!newAssignedDates.has(dateStr)) {
-        const shift = data.shifts[dateStr];
-        if (shift && !(shift.timeEntries && shift.timeEntries.some(e => e.start))) {
-          delete data.shifts[dateStr];
+    reviewRows.sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+
+    // Manual sync: gate writes behind the review modal whenever there's a
+    // change to confirm. Silent sync auto-applies (no UI prompt at app load).
+    const hasChanges = reviewRows.some(r => r.action !== 'unchanged');
+    let confirmedRows = reviewRows;
+    if (!silent && hasChanges) {
+      const result = await showCalReviewModal(reviewRows);
+      if (!result) return; // user cancelled — no writes
+      confirmedRows = result;
+    }
+
+    // Apply confirmed rows to data.calendarAssignments
+    let count = 0;
+    const finalAssignedDates = new Set(manualDates);
+    confirmedRows.forEach(row => {
+      const finalType = row.finalType !== undefined ? row.finalType : row.proposedType;
+      const finalLabel = row.finalLabel !== undefined ? row.finalLabel : row.proposedLabel;
+      const keepAsManual = !!row.keepAsManual;
+      if (row.action === 'removed' && !keepAsManual) {
+        delete data.calendarAssignments[row.dateStr];
+        return;
+      }
+      if (row.action === 'removed' && keepAsManual) {
+        // Preserve the prev assignment but mark as manual so future syncs don't touch it
+        if (prevByDate.has(row.dateStr)) {
+          data.calendarAssignments[row.dateStr] = { ...prevByDate.get(row.dateStr), source: 'manual' };
+          finalAssignedDates.add(row.dateStr);
         }
+        return;
+      }
+      if (!finalType) {
+        // User picked Skip — drop this date
+        delete data.calendarAssignments[row.dateStr];
+        return;
+      }
+      const prop = proposedByDate.get(row.dateStr);
+      data.calendarAssignments[row.dateStr] = {
+        type: finalType,
+        label: finalLabel || (prop ? prop.label : finalType),
+        source: 'calendar'
+      };
+      finalAssignedDates.add(row.dateStr);
+      if (row.action !== 'unchanged') count++;
+    });
+
+    // Sync pager-only shifts for every date that ends up assigned
+    finalAssignedDates.forEach(dateStr => {
+      const cal = data.calendarAssignments[dateStr];
+      if (cal && cal.type) syncPagerShift(dateStr, cal.type);
+    });
+    // Clean up orphaned placeholder shifts on dates that no longer have any assignment
+    prevByDate.forEach((_v, dateStr) => {
+      if (finalAssignedDates.has(dateStr)) return;
+      const shift = data.shifts[dateStr];
+      if (shift && !(shift.timeEntries && shift.timeEntries.some(e => e.start))) {
+        delete data.shifts[dateStr];
       }
     });
 
@@ -7482,7 +7556,12 @@ async function syncCalendarEvents(silent) {
     const syncTimeEl = document.getElementById('calendarLastSync');
     if (syncTimeEl) syncTimeEl.textContent = 'Last synced: ' + new Date(data.calendarLastSync).toLocaleString();
 
-    if (!silent) showToast('Calendar synced: ' + count + ' assignment' + (count !== 1 ? 's' : ''));
+    if (!silent) {
+      const msg = hasChanges
+        ? 'Calendar synced: ' + count + ' assignment' + (count !== 1 ? 's' : '')
+        : 'Calendar already up to date';
+      showToast(msg);
+    }
 
     // Refresh views if on relevant pages
     if (typeof renderWeeklyChart === 'function') renderWeeklyChart();
@@ -7714,6 +7793,95 @@ function cancelMappingModal() {
   }
 }
 
+// Per-date review modal shown during a manual calendar sync. Lets the user
+// confirm/edit/skip every proposed change before any writes.
+//   Input rows: { dateStr, action, title, proposedType, proposedLabel, prevType, prevLabel }
+//   Output rows: input + { finalType, finalLabel, keepAsManual }
+let calReviewResolve = null;
+
+function showCalReviewModal(rows) {
+  return new Promise((resolve) => {
+    calReviewResolve = resolve;
+    const listEl = document.getElementById('calReviewList');
+    const siteId = getCurrentSiteId();
+    const types = getVisibleShiftTypesForSite(siteId);
+    const optionsHtml = '<option value="">— Skip —</option>' +
+      types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(getShiftTypeLabel(t, siteId))}</option>`).join('');
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const actionStyle = {
+      'new':       { label: 'New',       color: 'var(--accent2)' },
+      'changed':   { label: 'Changed',   color: 'var(--accent)'  },
+      'unchanged': { label: 'Unchanged', color: 'var(--text-dim)' },
+      'removed':   { label: 'Removed',   color: '#f87171' }
+    };
+
+    listEl.innerHTML = rows.map((row, i) => {
+      const dt = new Date(row.dateStr + 'T12:00:00');
+      const dateLbl = `${dayNames[dt.getDay()]} ${monthNames[dt.getMonth()]} ${dt.getDate()}`;
+      const a = actionStyle[row.action] || actionStyle.unchanged;
+      let inner = `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.8rem;margin-bottom:4px;">
+        <span style="color:var(--text);"><strong>${escapeHtml(dateLbl)}</strong></span>
+        <span style="color:${a.color};font-weight:500;">${a.label}</span>
+      </div>`;
+      if (row.title) {
+        inner += `<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:6px;">"${escapeHtml(row.title)}"</div>`;
+      } else if (row.action === 'removed' && row.prevLabel) {
+        inner += `<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:6px;">Was: ${escapeHtml(row.prevLabel)}</div>`;
+      }
+      if (row.action === 'removed') {
+        inner += `<label style="display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--text);">
+          <input type="checkbox" id="calReviewKeep_${i}"> Keep as manual assignment
+        </label>`;
+      } else {
+        inner += `<select id="calReviewType_${i}" style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:0.8rem;">${optionsHtml}</select>`;
+      }
+      return `<div data-row="${i}" style="margin-bottom:10px;padding:8px 10px;background:var(--surface);border-radius:6px;">${inner}</div>`;
+    }).join('');
+
+    // Pre-select proposed types
+    rows.forEach((row, i) => {
+      if (row.action === 'removed') return;
+      const sel = document.getElementById('calReviewType_' + i);
+      if (!sel) return;
+      const want = row.proposedType || '';
+      if ([...sel.options].some(o => o.value === want)) sel.value = want;
+    });
+    listEl.dataset.rows = JSON.stringify(rows);
+    document.getElementById('calReviewModal').classList.remove('hidden');
+  });
+}
+
+function saveCalReviewModal() {
+  const listEl = document.getElementById('calReviewList');
+  const rows = JSON.parse(listEl.dataset.rows);
+  const siteId = getCurrentSiteId();
+  const finalRows = rows.map((row, i) => {
+    if (row.action === 'removed') {
+      const keep = !!document.getElementById('calReviewKeep_' + i)?.checked;
+      return { ...row, finalType: keep ? row.prevType : '', finalLabel: row.prevLabel, keepAsManual: keep };
+    }
+    const type = document.getElementById('calReviewType_' + i)?.value || '';
+    const label = type ? (row.proposedLabel || getShiftTypeLabel(type, siteId)) : '';
+    return { ...row, finalType: type, finalLabel: label, keepAsManual: false };
+  });
+  document.getElementById('calReviewModal').classList.add('hidden');
+  if (calReviewResolve) {
+    const r = calReviewResolve;
+    calReviewResolve = null;
+    r(finalRows);
+  }
+}
+
+function cancelCalReviewModal() {
+  document.getElementById('calReviewModal').classList.add('hidden');
+  if (calReviewResolve) {
+    const r = calReviewResolve;
+    calReviewResolve = null;
+    r(null);
+  }
+}
+
 function updateMappingCountUI() {
   const el = document.getElementById('calMappingCount');
   const clearBtn = document.getElementById('clearMappingsBtn');
@@ -7856,6 +8024,18 @@ function refreshAllShiftTypeDropdowns() {
 function isUnrestrictedCallType(type, siteId) {
   const rule = getResolvedShiftRules(siteId)[type];
   return !!(rule && rule.unrestrictedCall);
+}
+
+// Translate a calendar-/parser-emitted shift type (always UVH-flavor keys:
+// '1st_call', 'OB_restricted', etc.) into the type key the destination site
+// actually uses. Looks up sites/{siteId}.otherMigrationMap; returns the type
+// unchanged when no mapping exists.
+function remapAssignmentTypeForSite(type, siteId) {
+  if (!type) return type;
+  if (!siteId) siteId = getCurrentSiteId();
+  const map = (sitesCache[siteId] && sitesCache[siteId].otherMigrationMap) || null;
+  if (map && map[type]) return map[type];
+  return type;
 }
 
 // A "flat-payment" shift type pays a fixed point amount with no clock-in
@@ -10035,22 +10215,23 @@ function loadShiftForDate() {
       document.getElementById('timeEntriesGroup').classList.remove('hidden');
     }
   } else {
-    // Check for calendar assignment auto-fill
+    // Check for calendar assignment auto-fill. Remap defensively in case the
+    // saved type is in UVH-flavor for a non-UVH site (legacy data pre-remap).
     const calAssignment = data.calendarAssignments[date];
+    const calType = calAssignment ? remapAssignmentTypeForSite(calAssignment.type, getCurrentSiteId()) : 'OR';
     if (calAssignment) {
       banner.textContent = 'Calendar: ' + calAssignment.label;
       banner.style.borderColor = 'var(--accent2)';
       banner.style.background = 'rgba(52,211,153,0.12)';
       banner.style.color = 'var(--accent2)';
       banner.classList.remove('hidden');
-      document.getElementById('shiftAssignmentType').value = calAssignment.type;
+      document.getElementById('shiftAssignmentType').value = calType;
       document.getElementById('shiftAssignmentType').dispatchEvent(new Event('change'));
     } else {
       banner.classList.add('hidden');
       document.getElementById('shiftAssignmentType').value = 'OR';
       document.getElementById('timeEntriesGroup').classList.remove('hidden');
     }
-    const calType = calAssignment ? calAssignment.type : 'OR';
     if (calType === 'forced_off') {
       populateTimeEntries([{ start: '', end: '' }]);
     } else {
@@ -19511,6 +19692,10 @@ function closeAssignPicker() {
 // Never overwrites shifts with real time entries or existing vacation/forced_off.
 function syncPagerShift(dateStr, type) {
   const shift = data.shifts[dateStr];
+  // Defensive: remap UVH-flavor types to site-specific equivalents (e.g.
+  // '1st_call' → 'IMC_1st_call' for IMC users). Calendar parser emits
+  // UVH-flavor; pre-remap legacy data may still have those keys saved.
+  type = remapAssignmentTypeForSite(type, shift && shift.siteId);
   const hasRealEntries = shift && shift.timeEntries && shift.timeEntries.some(e => e.start);
   const isVacOrOff = type === 'vacation' || type === 'forced_off';
   const existingIsVacOrOff = shift && (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off');
