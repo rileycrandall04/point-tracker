@@ -4045,11 +4045,17 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <legend style="padding:0 6px;font-size:0.78rem;color:var(--text-dim);">Pager window</legend>
         <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:center;font-size:0.82rem;">
           <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="adminRulesModalPagerWeekday" style="width:13px;height:13px;margin:0;flex:none;"> Weekday</label>
-          <input type="time" id="adminRulesModalPagerWeekdayStart">
-          <input type="time" id="adminRulesModalPagerWeekdayEnd">
+          <input type="time" id="adminRulesModalPagerWeekdayStart" oninput="adminRulesUpdateNextDayHints()">
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="time" id="adminRulesModalPagerWeekdayEnd" style="flex:1;min-width:0;" oninput="adminRulesUpdateNextDayHints()">
+            <span id="adminRulesModalPagerWeekdayEndPlusDay" class="hidden" style="font-size:0.7rem;color:var(--accent2);font-weight:600;">+1d</span>
+          </div>
           <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="adminRulesModalPagerWeekend" style="width:13px;height:13px;margin:0;flex:none;"> Weekend</label>
-          <input type="time" id="adminRulesModalPagerWeekendStart">
-          <input type="time" id="adminRulesModalPagerWeekendEnd">
+          <input type="time" id="adminRulesModalPagerWeekendStart" oninput="adminRulesUpdateNextDayHints()">
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="time" id="adminRulesModalPagerWeekendEnd" style="flex:1;min-width:0;" oninput="adminRulesUpdateNextDayHints()">
+            <span id="adminRulesModalPagerWeekendEndPlusDay" class="hidden" style="font-size:0.7rem;color:var(--accent2);font-weight:600;">+1d</span>
+          </div>
         </div>
       </fieldset>
 
@@ -5929,11 +5935,15 @@ function adminRulesOpenModal(typeId) {
   const wd = pw.weekday || (useDefaults ? ADMIN_RULES_CUSTOM_DEFAULTS.pagerWeekday : null);
   const we = pw.weekend || (useDefaults ? ADMIN_RULES_CUSTOM_DEFAULTS.pagerWeekend : null);
   document.getElementById('adminRulesModalPagerWeekday').checked = !!wd;
+  // End times >24:00 are stored as raw minutes (e.g. 1860 = 07:00 next day);
+  // wrap them to clock time for the time input. The +1d hint is rebuilt
+  // below from start vs end comparison.
   document.getElementById('adminRulesModalPagerWeekdayStart').value = wd ? _minToHHMM(wd.start) : '';
-  document.getElementById('adminRulesModalPagerWeekdayEnd').value   = wd ? _minToHHMM(wd.end)   : '';
+  document.getElementById('adminRulesModalPagerWeekdayEnd').value   = wd ? _minToHHMMClock(wd.end) : '';
   document.getElementById('adminRulesModalPagerWeekend').checked = !!we;
   document.getElementById('adminRulesModalPagerWeekendStart').value = we ? _minToHHMM(we.start) : '';
-  document.getElementById('adminRulesModalPagerWeekendEnd').value   = we ? _minToHHMM(we.end)   : '';
+  document.getElementById('adminRulesModalPagerWeekendEnd').value   = we ? _minToHHMMClock(we.end) : '';
+  adminRulesUpdateNextDayHints();
 
   const ur = rule.unrestrictedCall || {};
   const urW = (ur.weekday !== undefined ? ur.weekday : (useDefaults ? ADMIN_RULES_CUSTOM_DEFAULTS.urWeekday : null));
@@ -5976,7 +5986,25 @@ function adminRulesModalSetMode(mode) {
   } else {
     inh.classList.add('hidden');
     cus.classList.remove('hidden');
+    adminRulesUpdateNextDayHints();
   }
+}
+
+// Time inputs are clock-only (00:00-23:59). When the pager end time is
+// equal to or earlier than the start time, the window crosses midnight —
+// show a "+1d" badge on the end input so admins know the second time
+// represents the next day. Saving adds 1440 minutes to end in that case.
+function adminRulesUpdateNextDayHints() {
+  ['Weekday', 'Weekend'].forEach(suffix => {
+    const startEl = document.getElementById('adminRulesModalPager' + suffix + 'Start');
+    const endEl = document.getElementById('adminRulesModalPager' + suffix + 'End');
+    const badge = document.getElementById('adminRulesModalPager' + suffix + 'EndPlusDay');
+    if (!startEl || !endEl || !badge) return;
+    const start = _HHMMtoMin(startEl.value);
+    const end = _HHMMtoMin(endEl.value);
+    const nextDay = (start != null && end != null && end <= start);
+    badge.classList.toggle('hidden', !nextDay);
+  });
 }
 
 function adminRulesModalToggleField() { /* placeholder for future enable/disable wiring */ }
@@ -6011,8 +6039,8 @@ function adminRulesSaveModal() {
     const pwe = document.getElementById('adminRulesModalPagerWeekend').checked;
     if (pwd || pwe) {
       rule.pagerWindow = {
-        weekday: pwd ? { start: _HHMMtoMin(document.getElementById('adminRulesModalPagerWeekdayStart').value), end: _HHMMtoMin(document.getElementById('adminRulesModalPagerWeekdayEnd').value) } : null,
-        weekend: pwe ? { start: _HHMMtoMin(document.getElementById('adminRulesModalPagerWeekendStart').value), end: _HHMMtoMin(document.getElementById('adminRulesModalPagerWeekendEnd').value) } : null
+        weekday: pwd ? _adminRulesReadPagerWindow('Weekday') : null,
+        weekend: pwe ? _adminRulesReadPagerWindow('Weekend') : null
       };
     } else {
       rule.pagerWindow = null;
@@ -6043,6 +6071,20 @@ function adminRulesSaveModal() {
   adminRulesRender();
 }
 
+// Read a pager window (start, end) with next-day rollover applied —
+// when end <= start in clock time, the window crosses midnight, so
+// store end as +1440 minutes (e.g. start 17:00 + end 07:00 -> 1020/1860).
+// Equal start/end means a full 24-hour window.
+function _adminRulesReadPagerWindow(suffix) {
+  const startEl = document.getElementById('adminRulesModalPager' + suffix + 'Start');
+  const endEl = document.getElementById('adminRulesModalPager' + suffix + 'End');
+  const start = _HHMMtoMin(startEl.value);
+  let end = _HHMMtoMin(endEl.value);
+  if (start == null || end == null) return null;
+  if (end <= start) end += 1440;
+  return { start: start, end: end };
+}
+
 function _adminRulesReadUR(suffix) {
   const sel = document.getElementById('adminRulesModalUR' + suffix);
   const after = document.getElementById('adminRulesModalUR' + suffix + 'After');
@@ -6061,6 +6103,13 @@ function _minToHHMM(min) {
   if (min == null || isNaN(min)) return '';
   const h = Math.floor(min / 60), m = min % 60;
   return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+// Wraps minutes-from-midnight values that exceed 1440 (e.g. 1860 = 07:00
+// next day) back into a 00:00-23:59 clock string for <input type="time">.
+function _minToHHMMClock(min) {
+  if (min == null || isNaN(min)) return '';
+  const wrapped = ((min % 1440) + 1440) % 1440;
+  return _minToHHMM(wrapped);
 }
 function _HHMMtoMin(s) {
   if (!s) return null;
