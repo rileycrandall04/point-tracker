@@ -5743,7 +5743,13 @@ function _adminRulesRenderVisibleList() {
   const out = document.getElementById('adminRulesVisibleList');
   if (!out) return;
   const visible = adminRulesDraft.visibleShiftTypes || [];
-  const ids = _adminRulesKnownTypeIds();
+  // Only list this site's own shift types — UVH defaults aren't relevant
+  // unless the site has explicitly defined a shift around them.
+  const ids = Object.keys(adminRulesDraft.shiftRulesOverride || {}).sort();
+  if (ids.length === 0) {
+    out.innerHTML = '<p style="color:var(--text-dim);font-size:0.78rem;margin:0;">Add a shift type above to make it available here.</p>';
+    return;
+  }
   let html = '<div style="background:var(--surface);border-radius:6px;border:1px solid var(--border);overflow:hidden;">';
   for (let i = 0; i < ids.length; i++) {
     const id = ids[i];
