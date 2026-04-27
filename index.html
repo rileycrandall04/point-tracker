@@ -20481,7 +20481,10 @@ function renderAssignmentEditor() {
   const today = new Date();
   const todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
 
-  let html = '<div class="assign-editor-cal">';
+  let html = `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+    <button class="btn btn-outline btn-sm" onclick="clearAllAssignmentsForMonth()" style="font-size:0.7rem;padding:3px 10px;color:var(--accent2);border-color:var(--accent2);">Clear all this month</button>
+  </div>
+  <div class="assign-editor-cal">`;
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   dayNames.forEach(d => { html += `<div class="daily-cal-header">${d}</div>`; });
 
@@ -20616,6 +20619,30 @@ function clearAssignment() {
   saveData(data);
   closeAssignPicker();
   renderAssignmentEditor();
+}
+
+// Bulk-clear every calendar assignment for the month currently shown in
+// the daily assignment editor. Also drops any placeholder shifts that
+// hadn't been clocked in (mirrors the per-day clearAssignment behavior).
+// Real shifts with time entries are left alone.
+function clearAllAssignmentsForMonth() {
+  const prefix = dailyYear + '-' + String(dailyMonth + 1).padStart(2, '0');
+  const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][dailyMonth];
+  const dates = Object.keys(data.calendarAssignments || {}).filter(k => k.startsWith(prefix));
+  if (dates.length === 0) { showToast('No assignments to clear for ' + monthName); return; }
+  if (!confirm('Clear ' + dates.length + ' assignment' + (dates.length !== 1 ? 's' : '') + ' for ' + monthName + ' ' + dailyYear + '? Placeholder shifts that have not been clocked in will also be removed.')) return;
+  let droppedShifts = 0;
+  dates.forEach(dateStr => {
+    delete data.calendarAssignments[dateStr];
+    const shift = data.shifts[dateStr];
+    if (shift && !(shift.timeEntries && shift.timeEntries.some(e => e.start))) {
+      delete data.shifts[dateStr];
+      droppedShifts++;
+    }
+  });
+  saveData(data);
+  renderAssignmentEditor();
+  showToast('Cleared ' + dates.length + ' assignment' + (dates.length !== 1 ? 's' : '') + (droppedShifts ? ' (' + droppedShifts + ' placeholder shift' + (droppedShifts !== 1 ? 's' : '') + ' removed)' : ''));
 }
 
 // ================================================================
