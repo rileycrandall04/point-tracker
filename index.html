@@ -8168,8 +8168,8 @@ const SF1_FRACTIONAL_DOUBLING_FROM = '2026-04-27';
 // track day offsets.
 function _isSf1DoublingNowLive(shift) {
   if (!shift || shift.assignmentType !== 'SF1') return false;
-  // Pre-cutover shifts keep the old "always doubled" behavior.
-  if (!shift.date || shift.date < SF1_FRACTIONAL_DOUBLING_FROM) return true;
+  // Pre-cutover shifts: SF1 OB doubling is disabled entirely.
+  if (!shift.date || shift.date < SF1_FRACTIONAL_DOUBLING_FROM) return false;
   const now = new Date();
   const day = now.getDay();
   if (day === 0 || day === 6) return false;
@@ -8195,13 +8195,19 @@ function _formatProductionMultiplierLabel(mult) {
 }
 
 // Returns the production multiplier (1.0 to 2.0) to apply to a case's
-// computed points. For SF1 (Spanish Fork OB) on or after the cutover
-// date, only the portion of the case time inside 07:00-17:00 weekday
-// non-holiday gets doubled — pro-rated. Other doubling shifts double
-// the whole case; non-doubling shifts return 1.
+// computed points.
+//   - SF1 (Spanish Fork OB) on or after the cutover: only the portion
+//     of the case time inside 07:00-17:00 weekday non-holiday gets
+//     doubled — pro-rated.
+//   - SF1 before the cutover: no doubling (1x). The old "always
+//     doubled" behavior is intentionally retired so historical SF1
+//     totals stop counting OB doubling.
+//   - Other doubling shifts: 2x for the whole case.
+//   - Non-doubling shifts: 1x.
 function caseProductionMultiplier(caseData, shift) {
   if (!shiftDoublesProduction(shift)) return 1;
-  if (shift && shift.assignmentType === 'SF1' && shift.date && shift.date >= SF1_FRACTIONAL_DOUBLING_FROM) {
+  if (shift && shift.assignmentType === 'SF1') {
+    if (!shift.date || shift.date < SF1_FRACTIONAL_DOUBLING_FROM) return 1;
     if (!caseData || !caseData.startTime || !caseData.endTime) return 1;
     let s = timeToMinutes(caseData.startTime);
     let e = timeToMinutes(caseData.endTime);
