@@ -3894,7 +3894,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:10px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
           <strong style="font-size:0.85rem;">Site shift types</strong>
-          <button class="btn btn-primary btn-sm" onclick="adminRulesOpenModal(null)">+ Add shift type</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-sm hidden" id="adminRulesDeleteSelectedBtn" onclick="adminRulesDeleteSelected()" style="background:var(--surface2);color:var(--accent2);">Delete selected</button>
+            <button class="btn btn-primary btn-sm" onclick="adminRulesOpenModal(null)">+ Add shift type</button>
+          </div>
         </div>
         <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px 0;">
           Override entries for this site. Inherited rules show their UVH base in italics.
@@ -3911,8 +3914,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div id="adminRulesVisibleList"></div>
       </div>
 
-      <!-- otherMigrationMap -->
-      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:10px;">
+      <!-- otherMigrationMap (app owner only) -->
+      <div id="adminRulesMigrationCard" class="hidden" style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:10px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
           <strong style="font-size:0.85rem;">Migration map (legacy &rarr; site shift)</strong>
           <button class="btn btn-sm" onclick="adminRulesAddMigrationEntry()" style="background:var(--surface);color:var(--text);">+ Add row</button>
@@ -5539,6 +5542,9 @@ function adminRulesRender() {
   _adminRulesRenderBaseRefList();
   _adminRulesRenderTypeList();
   _adminRulesRenderVisibleList();
+  // Migration map is app-owner only — siteAdmins shouldn't see or edit it.
+  const migCard = document.getElementById('adminRulesMigrationCard');
+  if (migCard) migCard.classList.toggle('hidden', !(isAppOwner() || isLegacyAdmin()));
   _adminRulesRenderMigrationList();
 }
 
@@ -5549,6 +5555,7 @@ function _adminRulesRenderTypeList() {
   const ids = Object.keys(overrides).sort();
   if (ids.length === 0) {
     out.innerHTML = '<p style="color:var(--text-dim);font-size:0.78rem;">No site-specific shift types yet. Click "Add shift type" or click an inherited rule below to override it.</p>';
+    _adminRulesUpdateDeleteSelectedBtn();
     return;
   }
   let html = '<div style="background:var(--surface);border-radius:6px;border:1px solid var(--border);overflow:hidden;">';
@@ -5560,10 +5567,12 @@ function _adminRulesRenderTypeList() {
       ? '<em style="color:var(--text-dim);">inherits ' + escapeHtml(inh) + '</em>'
       : _adminRulesSummary(rule);
     const border = i < ids.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
+    const idAttr = escapeHtml(id);
     html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:0.78rem;' + border + '">';
+    html += '<input type="checkbox" class="adminRulesTypeCheckbox" data-id="' + idAttr + '" onchange="_adminRulesUpdateDeleteSelectedBtn()" style="flex:none;width:12px;height:12px;margin:0;">';
     html += '<div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">';
     html += '<strong>' + escapeHtml(rule.label || id) + '</strong>';
-    html += ' <span style="color:var(--text-dim);font-size:0.7rem;">(' + escapeHtml(id) + ')</span>';
+    html += ' <span style="color:var(--text-dim);font-size:0.7rem;">(' + idAttr + ')</span>';
     html += ' &middot; <span style="font-size:0.72rem;">' + summary + '</span>';
     html += '</div>';
     html += '<button title="Edit" onclick="adminRulesOpenModal(\'' + id + '\')" style="flex:none;border:none;background:transparent;color:var(--primary);cursor:pointer;font-size:0.78rem;padding:2px 6px;">Edit</button>';
@@ -5572,6 +5581,34 @@ function _adminRulesRenderTypeList() {
   }
   html += '</div>';
   out.innerHTML = html;
+  _adminRulesUpdateDeleteSelectedBtn();
+}
+
+function _adminRulesUpdateDeleteSelectedBtn() {
+  const btn = document.getElementById('adminRulesDeleteSelectedBtn');
+  if (!btn) return;
+  const checked = document.querySelectorAll('.adminRulesTypeCheckbox:checked').length;
+  if (checked === 0) {
+    btn.classList.add('hidden');
+    btn.textContent = 'Delete selected';
+  } else {
+    btn.classList.remove('hidden');
+    btn.textContent = 'Delete selected (' + checked + ')';
+  }
+}
+
+function adminRulesDeleteSelected() {
+  const boxes = document.querySelectorAll('.adminRulesTypeCheckbox:checked');
+  const ids = Array.from(boxes).map(b => b.getAttribute('data-id')).filter(Boolean);
+  if (ids.length === 0) return;
+  if (!confirm('Delete ' + ids.length + ' shift type' + (ids.length !== 1 ? 's' : '') + ' from this site?')) return;
+  for (const id of ids) {
+    delete adminRulesDraft.shiftRulesOverride[id];
+    if (adminRulesDraft.visibleShiftTypes) {
+      adminRulesDraft.visibleShiftTypes = adminRulesDraft.visibleShiftTypes.filter(t => t !== id);
+    }
+  }
+  adminRulesRender();
 }
 
 function _adminRulesSummary(rule) {
@@ -5591,29 +5628,33 @@ function _adminRulesSummary(rule) {
 
 // Plain-English description for the base-rule reference panel and modal preview.
 // Returns an HTML <ul> bullet list of what the rule pays out.
-function _adminRulesDescribe(rule) {
+function _adminRulesDescribe(rule, key) {
   if (!rule) return '<em style="color:var(--text-dim);">no rule</em>';
   const lines = [];
 
   // AR rate
   const arMode = rule.arRate && rule.arRate.mode;
-  if (arMode === 'general') lines.push('AR rate: <strong>general</strong> (20 pts/hr base; 13 pts/hr OB; weekday daytime SF1 if applicable)');
-  else if (arMode === 'ob') lines.push('AR rate: <strong>OB</strong> (13 pts/hr restricted-OB rate)');
-  else if (arMode === 'sf1') lines.push('AR rate: <strong>SF1</strong> (13 pts/hr daytime weekday non-holiday, 20 pts/hr otherwise)');
-  else if (arMode === 'none' || arMode == null) lines.push('AR rate: <strong>none</strong> (no AR earned)');
-  else lines.push('AR rate: <strong>' + escapeHtml(arMode) + '</strong>');
+  if (arMode === 'general') lines.push('Base AR rate: <strong>20 pts/hr</strong> (standard).');
+  else if (arMode === 'ob') lines.push('Base AR rate: <strong>13 pts/hr</strong> (restricted OB rate). Case production is doubled — non-OR cases worth 2× points.');
+  else if (arMode === 'sf1') lines.push('Base AR rate: <strong>13 pts/hr during daytime weekday hours</strong>, <strong>20 pts/hr otherwise</strong> (split rate). Case production is doubled — non-OR cases worth 2× points.');
+  else if (arMode === 'none' || arMode == null) lines.push('Base AR rate: <strong>none</strong> (no AR earned during the shift).');
+  else lines.push('AR rate mode: <strong>' + escapeHtml(arMode) + '</strong>');
 
-  // Pager window — paid at 3.5 pts/hr
+  // Pager / unrestricted call window — paid at 3.5 pts/hr.
+  // For shifts where pager pay IS the unrestricted-call window (most call
+  // shifts), the two are the same thing — describe accordingly.
   if (rule.pagerWindow) {
     const wd = rule.pagerWindow.weekday, we = rule.pagerWindow.weekend;
     const wdStr = wd ? (_fmtMin(wd.start) + '-' + _fmtMin(wd.end) + ' (' + _fmtHours(wd.end - wd.start) + ')') : 'none';
     const weStr = we ? (_fmtMin(we.start) + '-' + _fmtMin(we.end) + ' (' + _fmtHours(we.end - we.start) + ')') : 'none';
-    lines.push('Pager pay (3.5 pts/hr): weekday ' + wdStr + ', weekend/holiday ' + weStr);
+    lines.push('Unrestricted call window (paid 3.5 pts/hr): weekday ' + wdStr + ', weekend/holiday ' + weStr + '.');
   } else {
-    lines.push('Pager pay: <em style="color:var(--text-dim);">none</em>');
+    lines.push('Unrestricted call window: <em style="color:var(--text-dim);">none</em>.');
   }
 
-  // Unrestricted call
+  // unrestrictedCall is the engine signal that AR continues to accrue
+  // during off-shift hours. Only call it out when it differs from the
+  // pager window above, otherwise it's redundant with the line above.
   if (rule.unrestrictedCall) {
     const fmt = (v) => {
       if (v == null) return 'none';
@@ -5621,21 +5662,27 @@ function _adminRulesDescribe(rule) {
       if (v && typeof v === 'object' && v.afterMin != null) return 'after ' + _fmtMin(v.afterMin);
       return String(v);
     };
-    lines.push('Unrestricted call eligible: weekday ' + fmt(rule.unrestrictedCall.weekday) + ', weekend ' + fmt(rule.unrestrictedCall.weekend));
-  } else {
-    lines.push('Unrestricted call: <em style="color:var(--text-dim);">none</em>');
+    lines.push('AR continues to accrue during unrestricted hours: weekday ' + fmt(rule.unrestrictedCall.weekday) + ', weekend ' + fmt(rule.unrestrictedCall.weekend) + '.');
   }
 
   // Multipliers / bonuses / flags
   if (rule.productionMultiplier && rule.productionMultiplier !== 1) {
-    lines.push('Production multiplier: <strong>×' + rule.productionMultiplier + '</strong> (case points doubled' + (rule.productionMultiplier !== 2 ? '/scaled' : '') + ')');
+    lines.push('Production multiplier: <strong>×' + rule.productionMultiplier + '</strong> on non-OR case points.');
   }
-  if (rule.flatPoints) lines.push('Flat points: <strong>' + rule.flatPoints + '</strong> (paid regardless of duration)');
-  if (rule.floatBonus)  lines.push('Float bonus: <strong>+' + rule.floatBonus + '</strong> pts');
-  if (rule.cardiacBonus) lines.push('Exposes <strong>cardiac subspecialty</strong> toggle on shift entry (+45 pts/day when checked)');
-  if (rule.liverBonus)   lines.push('Exposes <strong>liver subspecialty</strong> toggle on shift entry (+45 pts/day when checked)');
-  if (rule.noProductivity) lines.push('<strong>No productivity</strong> — pay = flat points only, no AR or case points');
-  if (rule.unrestrictedCallEntry) lines.push('User enters <strong>unrestricted call hours</strong> at shift time (paid 3.5 pts/hr)');
+  if (rule.flatPoints) lines.push('Flat points: <strong>' + rule.flatPoints + '</strong> (paid regardless of duration).');
+  if (rule.floatBonus)  lines.push('Float bonus: <strong>+' + rule.floatBonus + '</strong> pts.');
+  if (rule.cardiacBonus) lines.push('Exposes a <strong>cardiac subspecialty</strong> toggle on shift entry (+45 pts/day when checked).');
+  if (rule.liverBonus)   lines.push('Exposes a <strong>liver subspecialty</strong> toggle on shift entry (+45 pts/day when checked).');
+  if (rule.noProductivity) lines.push('<strong>No productivity</strong> — pay is flat points only; no AR or case points.');
+  if (rule.unrestrictedCallEntry) lines.push('User enters <strong>unrestricted call hours</strong> manually on the shift form (paid 3.5 pts/hr).');
+
+  // Per-base-rule call-outs that reflect engine behavior beyond the schema.
+  if (key === 'cardiac_liver') {
+    lines.push('Engine auto-adds the <strong>+45 pt subspecialty bonus</strong>; base totals are 94 pts weekday / 129 pts weekend.');
+  }
+  if (key === 'OR' || key === 'OR_float' || key === 'pre_call') {
+    lines.push('Engine adds a <strong>4 hr / 80 pt minimum</strong> on weekday non-holidays.');
+  }
 
   return '<ul style="margin:4px 0 0 0;padding-left:18px;line-height:1.45;">'
        + lines.map(l => '<li>' + l + '</li>').join('')
@@ -5657,16 +5704,41 @@ function _fmtHours(min) {
   return (Number.isInteger(h) ? h : h.toFixed(1)) + ' hr';
 }
 
+// Editor-only display labels — strip UVH-specific nomenclature so site
+// admins see neutral names. Underlying rule.label still drives what UVH
+// users see in their own assignment dropdowns.
+const ADMIN_RULES_EDITOR_LABELS = {
+  OB_restricted: 'OB',
+  SF1: 'Unrestricted OB',
+  mole: 'Overnight'
+};
+
+// Base rules hidden from the editor's reference panel + inherit dropdown.
+// (SF2 / ACS / NORA / Pre-Call / CRNA Supervision are UVH-specific or
+// effectively duplicates of OR; site admins shouldn't pick them as a
+// base when defining their own shifts.)
+const ADMIN_RULES_EDITOR_HIDDEN = ['SF2', 'ACS', 'NORA', 'pre_call', 'CRNA_supervision'];
+
+function _adminRulesEditorLabel(key, fallbackLabel) {
+  return ADMIN_RULES_EDITOR_LABELS[key] || fallbackLabel || key;
+}
+
+function _adminRulesEditorVisibleBaseKeys() {
+  const hide = new Set(ADMIN_RULES_EDITOR_HIDDEN);
+  return Object.keys(DEFAULT_SHIFT_RULES).filter(k => !hide.has(k)).sort();
+}
+
 function _adminRulesRenderBaseRefList() {
   const out = document.getElementById('adminRulesBaseRefList');
   if (!out) return;
-  const keys = Object.keys(DEFAULT_SHIFT_RULES).sort();
+  const keys = _adminRulesEditorVisibleBaseKeys();
   let html = '';
   for (const k of keys) {
     const rule = DEFAULT_SHIFT_RULES[k];
+    const display = _adminRulesEditorLabel(k, rule.label);
     html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;">';
-    html += '<div style="font-weight:600;">' + escapeHtml(rule.label || k) + ' <span style="font-weight:400;color:var(--text-dim);font-size:0.74rem;">(' + escapeHtml(k) + ')</span></div>';
-    html += _adminRulesDescribe(rule);
+    html += '<div style="font-weight:600;">' + escapeHtml(display) + ' <span style="font-weight:400;color:var(--text-dim);font-size:0.74rem;">(' + escapeHtml(k) + ')</span></div>';
+    html += _adminRulesDescribe(rule, k);
     html += '</div>';
   }
   out.innerHTML = html;
@@ -5679,8 +5751,9 @@ function adminRulesUpdateInheritPreview() {
   const k = sel.value;
   const rule = DEFAULT_SHIFT_RULES[k];
   if (!rule) { out.innerHTML = '<em style="color:var(--text-dim);">No preview available.</em>'; return; }
-  out.innerHTML = '<div style="font-weight:600;margin-bottom:4px;">' + escapeHtml(rule.label || k) + ' <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">(' + escapeHtml(k) + ')</span></div>'
-    + _adminRulesDescribe(rule);
+  const display = _adminRulesEditorLabel(k, rule.label);
+  out.innerHTML = '<div style="font-weight:600;margin-bottom:4px;">' + escapeHtml(display) + ' <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">(' + escapeHtml(k) + ')</span></div>'
+    + _adminRulesDescribe(rule, k);
 }
 
 function _adminRulesRenderVisibleList() {
@@ -5694,8 +5767,8 @@ function _adminRulesRenderVisibleList() {
     const checked = visible.indexOf(id) !== -1 ? ' checked' : '';
     const label = _adminRulesLabelFor(id);
     const border = i < ids.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
-    html += '<label style="display:flex;align-items:center;gap:6px;padding:4px 10px;font-size:0.78rem;cursor:pointer;' + border + '">';
-    html += '<input type="checkbox" onchange="adminRulesToggleVisible(\'' + id + '\')"' + checked + ' style="flex:none;width:10px;height:10px;margin:0;">';
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:0.78rem;cursor:pointer;' + border + '">';
+    html += '<input type="checkbox" onchange="adminRulesToggleVisible(\'' + id + '\')"' + checked + ' style="flex:none;width:12px;height:12px;margin:0;">';
     html += '<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(label) + '</span>';
     html += '</label>';
   }
@@ -5798,11 +5871,20 @@ function adminRulesOpenModal(typeId) {
   const errEl = document.getElementById('adminRulesModalError');
   errEl.textContent = '';
 
-  // Populate base-rule dropdown with UVH defaults + this site's overrides.
+  // Populate base-rule dropdown with the editor-visible UVH defaults.
+  // If the rule we're editing already inherits from a hidden base, include
+  // that one too so the existing value isn't silently dropped.
   const inheritSel = document.getElementById('adminRulesModalInheritFrom');
+  const visibleKeys = _adminRulesEditorVisibleBaseKeys();
+  const existingInherit = (typeId && adminRulesDraft.shiftRulesOverride[typeId] && adminRulesDraft.shiftRulesOverride[typeId].inherit_uvh) || null;
+  if (existingInherit && DEFAULT_SHIFT_RULES[existingInherit] && visibleKeys.indexOf(existingInherit) === -1) {
+    visibleKeys.push(existingInherit);
+    visibleKeys.sort();
+  }
   let opts = '';
-  for (const k of Object.keys(DEFAULT_SHIFT_RULES).sort()) {
-    opts += '<option value="' + k + '">' + escapeHtml(DEFAULT_SHIFT_RULES[k].label || k) + ' (' + k + ')</option>';
+  for (const k of visibleKeys) {
+    const display = _adminRulesEditorLabel(k, DEFAULT_SHIFT_RULES[k].label);
+    opts += '<option value="' + k + '">' + escapeHtml(display) + ' (' + k + ')</option>';
   }
   inheritSel.innerHTML = opts;
 
@@ -7266,7 +7348,7 @@ const DEFAULT_SHIFT_RULES = {
                       arRate: { mode: 'general' } },
   '4th_call':       { label: '4th Call',
                       pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
-                      unrestrictedCall: { weekday: null,                        weekend: 'all' },
+                      unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
                       arRate: { mode: 'general' } },
   endo:             { label: 'Endo',
                       pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
