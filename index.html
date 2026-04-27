@@ -3881,6 +3881,15 @@ body.hide-monetary .monetary-hide { display: none !important; }
         Edits stay local until you click "Save changes". Saving writes the new rules to Firestore and appends a row to the audit log.
       </p>
 
+      <!-- UVH base rule reference -->
+      <details style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:10px;">
+        <summary style="cursor:pointer;font-size:0.85rem;font-weight:600;">Base rule reference (UVH defaults)</summary>
+        <p style="font-size:0.72rem;color:var(--text-dim);margin:8px 0;">
+          These are the UVH base rules a site shift can inherit from. Each shows what the rule pays out of the box; an inheriting site shift starts with these rules and only changes the label, unless you switch to Custom mode.
+        </p>
+        <div id="adminRulesBaseRefList" style="font-size:0.8rem;"></div>
+      </details>
+
       <!-- Shift type list -->
       <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:10px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
@@ -4015,8 +4024,9 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div id="adminRulesModalInheritBox">
       <div class="form-group">
         <label>Base rule</label>
-        <select id="adminRulesModalInheritFrom" style="width:100%;"></select>
+        <select id="adminRulesModalInheritFrom" onchange="adminRulesUpdateInheritPreview()" style="width:100%;"></select>
       </div>
+      <div id="adminRulesModalInheritPreview" style="background:var(--surface);padding:8px 10px;border-radius:6px;font-size:0.78rem;margin-bottom:10px;"></div>
     </div>
 
     <!-- Custom-mode fields -->
@@ -5526,6 +5536,7 @@ function _adminRulesLabelFor(typeId) {
 
 function adminRulesRender() {
   _adminRulesUpdateDirtyUI();
+  _adminRulesRenderBaseRefList();
   _adminRulesRenderTypeList();
   _adminRulesRenderVisibleList();
   _adminRulesRenderMigrationList();
@@ -5573,6 +5584,100 @@ function _adminRulesSummary(rule) {
   if (rule.noProductivity) parts.push('no-prod');
   if (rule.unrestrictedCallEntry) parts.push('user-hours');
   return parts.length ? '<span style="color:var(--text-dim);">' + parts.join(' &middot; ') + '</span>' : '<span style="color:var(--text-dim);">(empty rule)</span>';
+}
+
+// Plain-English description for the base-rule reference panel and modal preview.
+// Returns an HTML <ul> bullet list of what the rule pays out.
+function _adminRulesDescribe(rule) {
+  if (!rule) return '<em style="color:var(--text-dim);">no rule</em>';
+  const lines = [];
+
+  // AR rate
+  const arMode = rule.arRate && rule.arRate.mode;
+  if (arMode === 'general') lines.push('AR rate: <strong>general</strong> (20 pts/hr base; 13 pts/hr OB; weekday daytime SF1 if applicable)');
+  else if (arMode === 'ob') lines.push('AR rate: <strong>OB</strong> (13 pts/hr restricted-OB rate)');
+  else if (arMode === 'sf1') lines.push('AR rate: <strong>SF1</strong> (13 pts/hr daytime weekday non-holiday, 20 pts/hr otherwise)');
+  else if (arMode === 'none' || arMode == null) lines.push('AR rate: <strong>none</strong> (no AR earned)');
+  else lines.push('AR rate: <strong>' + escapeHtml(arMode) + '</strong>');
+
+  // Pager window — paid at 3.5 pts/hr
+  if (rule.pagerWindow) {
+    const wd = rule.pagerWindow.weekday, we = rule.pagerWindow.weekend;
+    const wdStr = wd ? (_fmtMin(wd.start) + '-' + _fmtMin(wd.end) + ' (' + _fmtHours(wd.end - wd.start) + ')') : 'none';
+    const weStr = we ? (_fmtMin(we.start) + '-' + _fmtMin(we.end) + ' (' + _fmtHours(we.end - we.start) + ')') : 'none';
+    lines.push('Pager pay (3.5 pts/hr): weekday ' + wdStr + ', weekend/holiday ' + weStr);
+  } else {
+    lines.push('Pager pay: <em style="color:var(--text-dim);">none</em>');
+  }
+
+  // Unrestricted call
+  if (rule.unrestrictedCall) {
+    const fmt = (v) => {
+      if (v == null) return 'none';
+      if (v === 'all') return 'all day';
+      if (v && typeof v === 'object' && v.afterMin != null) return 'after ' + _fmtMin(v.afterMin);
+      return String(v);
+    };
+    lines.push('Unrestricted call eligible: weekday ' + fmt(rule.unrestrictedCall.weekday) + ', weekend ' + fmt(rule.unrestrictedCall.weekend));
+  } else {
+    lines.push('Unrestricted call: <em style="color:var(--text-dim);">none</em>');
+  }
+
+  // Multipliers / bonuses / flags
+  if (rule.productionMultiplier && rule.productionMultiplier !== 1) {
+    lines.push('Production multiplier: <strong>×' + rule.productionMultiplier + '</strong> (case points doubled' + (rule.productionMultiplier !== 2 ? '/scaled' : '') + ')');
+  }
+  if (rule.flatPoints) lines.push('Flat points: <strong>' + rule.flatPoints + '</strong> (paid regardless of duration)');
+  if (rule.floatBonus)  lines.push('Float bonus: <strong>+' + rule.floatBonus + '</strong> pts');
+  if (rule.cardiacBonus) lines.push('Exposes <strong>cardiac subspecialty</strong> toggle on shift entry (+45 pts/day when checked)');
+  if (rule.liverBonus)   lines.push('Exposes <strong>liver subspecialty</strong> toggle on shift entry (+45 pts/day when checked)');
+  if (rule.noProductivity) lines.push('<strong>No productivity</strong> — pay = flat points only, no AR or case points');
+  if (rule.unrestrictedCallEntry) lines.push('User enters <strong>unrestricted call hours</strong> at shift time (paid 3.5 pts/hr)');
+
+  return '<ul style="margin:4px 0 0 0;padding-left:18px;line-height:1.45;">'
+       + lines.map(l => '<li>' + l + '</li>').join('')
+       + '</ul>';
+}
+
+function _fmtMin(min) {
+  if (min == null || isNaN(min)) return '—';
+  // Engine uses minutes-from-midnight, with end values that may exceed 1440
+  // (e.g. 1860 = 07:00 next day). Display as 24h clock with "+1d" suffix.
+  const wrapped = ((min % 1440) + 1440) % 1440;
+  const nextDay = min >= 1440 ? '+1d' : '';
+  const h = Math.floor(wrapped / 60), m = wrapped % 60;
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + nextDay;
+}
+function _fmtHours(min) {
+  if (min == null || isNaN(min)) return '';
+  const h = min / 60;
+  return (Number.isInteger(h) ? h : h.toFixed(1)) + ' hr';
+}
+
+function _adminRulesRenderBaseRefList() {
+  const out = document.getElementById('adminRulesBaseRefList');
+  if (!out) return;
+  const keys = Object.keys(DEFAULT_SHIFT_RULES).sort();
+  let html = '';
+  for (const k of keys) {
+    const rule = DEFAULT_SHIFT_RULES[k];
+    html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;">';
+    html += '<div style="font-weight:600;">' + escapeHtml(rule.label || k) + ' <span style="font-weight:400;color:var(--text-dim);font-size:0.74rem;">(' + escapeHtml(k) + ')</span></div>';
+    html += _adminRulesDescribe(rule);
+    html += '</div>';
+  }
+  out.innerHTML = html;
+}
+
+function adminRulesUpdateInheritPreview() {
+  const sel = document.getElementById('adminRulesModalInheritFrom');
+  const out = document.getElementById('adminRulesModalInheritPreview');
+  if (!sel || !out) return;
+  const k = sel.value;
+  const rule = DEFAULT_SHIFT_RULES[k];
+  if (!rule) { out.innerHTML = '<em style="color:var(--text-dim);">No preview available.</em>'; return; }
+  out.innerHTML = '<div style="font-weight:600;margin-bottom:4px;">' + escapeHtml(rule.label || k) + ' <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">(' + escapeHtml(k) + ')</span></div>'
+    + _adminRulesDescribe(rule);
 }
 
 function _adminRulesRenderVisibleList() {
@@ -5705,11 +5810,12 @@ function adminRulesOpenModal(typeId) {
   idHint.textContent = isNew ? '(prefix with site code, e.g. ' + adminRulesSiteId + '_my_shift)' : '';
   labelEl.value = rule.label || '';
 
-  // Mode radios
+  // Mode radios. Set the inherit dropdown's value BEFORE flipping mode so
+  // the auto-rendered preview shows the right base rule on first open.
   const mode = isInherit ? 'inherit' : 'custom';
   document.querySelectorAll('input[name="adminRulesModalMode"]').forEach(r => { r.checked = (r.value === mode); });
-  adminRulesModalSetMode(mode);
   if (isInherit) inheritSel.value = rule.inherit_uvh;
+  adminRulesModalSetMode(mode);
 
   // Custom fields
   document.getElementById('adminRulesModalArMode').value = (rule.arRate && rule.arRate.mode) || 'general';
@@ -5755,8 +5861,14 @@ function _adminRulesURSet(suffix, val) {
 function adminRulesModalSetMode(mode) {
   const inh = document.getElementById('adminRulesModalInheritBox');
   const cus = document.getElementById('adminRulesModalCustomBox');
-  if (mode === 'inherit') { inh.classList.remove('hidden'); cus.classList.add('hidden'); }
-  else                    { inh.classList.add('hidden');    cus.classList.remove('hidden'); }
+  if (mode === 'inherit') {
+    inh.classList.remove('hidden');
+    cus.classList.add('hidden');
+    adminRulesUpdateInheritPreview();
+  } else {
+    inh.classList.add('hidden');
+    cus.classList.remove('hidden');
+  }
 }
 
 function adminRulesModalToggleField() { /* placeholder for future enable/disable wiring */ }
