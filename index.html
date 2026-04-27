@@ -8172,12 +8172,21 @@ function renderCalendarMappingsEditor() {
     // Native <select> on its own full-width line above the Remove button —
     // same Chrome Android fix we used on the admin user card. Lets the
     // mobile picker open without competing with a flex sibling for space.
+    // "Promote to site" only on personal rows for site admins — copies
+    // the personal entry to the site map and removes it from personal,
+    // staged into _calMappingsEditorPending.
+    const promoteBtn = (kind === 'personal' && isAdmin)
+      ? `<button class="btn btn-outline btn-sm cal-mappings-editor-promote" style="font-size:0.7rem;padding:2px 8px;">Promote to site</button>`
+      : '';
     return `<div data-kind="${kind}" data-title="${escapeHtml(title)}" style="margin-bottom:8px;padding:8px 10px;background:var(--surface);border-radius:6px;">
       <div style="font-size:0.78rem;color:var(--text);margin-bottom:6px;word-break:break-word;"><strong>${escapeHtml(title)}</strong>${skipBadge}</div>
       <select class="cal-mappings-editor-type" data-id="${idSafe}" ${readonly ? 'disabled' : ''} style="width:100%;margin-bottom:6px;">${optionsHtml}</select>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
         ${labelHint ? `<span style="font-size:0.7rem;color:var(--text-dim);">Label: ${escapeHtml(labelHint)}</span>` : '<span></span>'}
-        <button class="btn btn-outline btn-sm cal-mappings-editor-delete" data-id="${idSafe}" ${readonly ? 'disabled' : ''} style="font-size:0.7rem;padding:2px 8px;">Remove</button>
+        <div style="display:flex;gap:6px;">
+          ${promoteBtn}
+          <button class="btn btn-outline btn-sm cal-mappings-editor-delete" data-id="${idSafe}" ${readonly ? 'disabled' : ''} style="font-size:0.7rem;padding:2px 8px;">Remove</button>
+        </div>
       </div>
     </div>`;
   };
@@ -8220,7 +8229,12 @@ function renderCalendarMappingsEditor() {
     siteTitles.forEach(t => { html += buildRow('site', t, siteEffective[t], !isAdmin); });
   }
   // Personal section
-  html += `<div style="margin-top:14px;margin-bottom:4px;font-size:0.85rem;font-weight:600;color:var(--text);">Your overrides <span style="font-weight:400;font-size:0.7rem;color:var(--text-dim);">— apply only to you, beat the site mapping</span></div>`;
+  html += `<div style="margin-top:14px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+    <span style="font-size:0.85rem;font-weight:600;color:var(--text);">Your overrides <span style="font-weight:400;font-size:0.7rem;color:var(--text-dim);">— apply only to you, beat the site mapping</span></span>
+    ${(isAdmin && Object.keys(personalEffective).length > 0)
+      ? `<button class="btn btn-outline btn-sm" onclick="calMappingsEditorPromoteAllPersonal()" style="font-size:0.7rem;padding:2px 8px;">Promote all to ${escapeHtml(siteName)}</button>`
+      : ''}
+  </div>`;
   const personalTitles = Object.keys(personalEffective).sort();
   if (personalTitles.length === 0) {
     html += '<div style="font-size:0.78rem;color:var(--text-dim);">None &mdash; sync results that match the site default don\'t need an override.</div>';
@@ -8267,6 +8281,47 @@ function renderCalendarMappingsEditor() {
       renderCalendarMappingsEditor();
     });
   });
+  out.querySelectorAll('.cal-mappings-editor-promote').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rowEl = btn.closest('[data-kind][data-title]');
+      if (!rowEl) return;
+      const title = rowEl.dataset.title;
+      // Resolve the effective personal mapping for this title (source ∪ pending edits)
+      const personalSrcEff = composeEffective(personalSrc, _calMappingsEditorPending.personalEdits);
+      const m = personalSrcEff[title];
+      if (!m || m === null) { showToast('Nothing to promote'); return; }
+      _calMappingsEditorPending.siteEdits[title] = { type: m.type, label: m.label };
+      _calMappingsEditorPending.personalEdits[title] = undefined; // delete from personal
+      renderCalendarMappingsEditor();
+    });
+  });
+}
+
+// Bulk: copy every effective personal override into the site map (staged).
+// Personal entries are marked for deletion since the site map will provide
+// the same mapping. User reviews and clicks Save Changes to commit.
+function calMappingsEditorPromoteAllPersonal() {
+  if (!_calMappingsEditorPending) return;
+  const siteId = getCurrentSiteId();
+  if (!isSiteAdmin(siteId)) { showToast('Site admins only'); return; }
+  const personalSrc = (settings && settings.calendarMappings) || {};
+  const composed = { ...personalSrc };
+  for (const t of Object.keys(_calMappingsEditorPending.personalEdits || {})) {
+    const v = _calMappingsEditorPending.personalEdits[t];
+    if (v === undefined) delete composed[t];
+    else composed[t] = v;
+  }
+  let count = 0;
+  for (const t of Object.keys(composed)) {
+    const v = composed[t];
+    if (!v || !v.type) continue;
+    _calMappingsEditorPending.siteEdits[t] = { type: v.type, label: v.label };
+    _calMappingsEditorPending.personalEdits[t] = undefined;
+    count++;
+  }
+  if (count === 0) { showToast('No personal mappings to promote'); return; }
+  showToast('Staged ' + count + ' mapping' + (count !== 1 ? 's' : '') + ' for site — tap Save Changes to publish');
+  renderCalendarMappingsEditor();
 }
 
 // Add-new-mapping form handler. Reads the inputs, stages the new
