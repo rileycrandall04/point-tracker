@@ -3855,6 +3855,14 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <h2 style="margin-bottom:6px;">Admin</h2>
     <p style="font-size:0.78rem;color:var(--text-dim);margin:0;" id="adminPageRoleBadge"></p>
   </div>
+  <!-- Privileges list — populated by renderAdminPage() -->
+  <div class="card" id="adminPrivilegesCard" style="margin-top:12px;">
+    <h3 style="margin:0 0 6px 0;font-size:0.95rem;">Your privileges</h3>
+    <p style="font-size:0.75rem;color:var(--text-dim);margin:0 0 10px 0;">
+      What you can do based on your role &mdash; tap any link to jump to the page where you exercise that privilege.
+    </p>
+    <ul id="adminPrivilegesList" style="margin:0;padding-left:18px;font-size:0.8rem;line-height:1.7;color:var(--text);"></ul>
+  </div>
   <!-- Claude AI Settings (admin only) -->
   <div class="card hidden" id="claudeAISettingsCard" style="margin-top:12px;">
     <h2>AI Analysis (Claude API)</h2>
@@ -3904,8 +3912,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <select id="adminMSUserGroupBy"
           onchange="adminMSListUsers()"
           style="padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+          <option value="site" selected>Group by site</option>
           <option value="none">Alphabetical</option>
-          <option value="site">Group by site</option>
         </select>
         <button class="btn btn-primary btn-sm" onclick="adminMSListUsers()">List Users</button>
       </div>
@@ -4478,6 +4486,23 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeCalendarMappingsEditor()">Close</button>
       <button class="btn btn-primary btn-sm" id="calMappingsEditorSaveBtn" onclick="saveCalendarMappingsEditor()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- One-time surgeon naming guidance -->
+<div class="modal-overlay hidden" id="surgeonNamingTipModal">
+  <div class="modal" style="max-width:420px;">
+    <h2>One quick tip</h2>
+    <p style="font-size:0.85rem;line-height:1.5;color:var(--text);margin-bottom:10px;">
+      For surgeon names, please use <strong>first initial + last name</strong> &mdash; for example
+      <strong>"T. Cook"</strong> instead of just <em>Cook</em> or <em>Tony Cook</em>.
+    </p>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:14px;">
+      Consistent formatting helps the app group every case under one surgeon and keeps the procedure-time data clean. Site admins can still merge duplicates after the fact, but a little discipline up front keeps it tidy for everyone.
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-primary btn-sm" onclick="dismissSurgeonNamingTip()">Got it</button>
     </div>
   </div>
 </div>
@@ -10306,6 +10331,116 @@ function renderAdminPage() {
     const testTab = document.getElementById('adminMSTabTest');
     if (testTab) testTab.style.display = '';
   }
+
+  renderAdminPrivilegesList(isOwner, isSAdmin);
+}
+
+// Lists what the signed-in admin can do, with deeplinks to the page where
+// each privilege is exercised. Some privileges live right here on the Admin
+// page (anchor scrolls to the relevant card); others are on Stats > Daily
+// (Calendar Mappings) or Compensation > Procedure Lookup (surgeon names).
+function renderAdminPrivilegesList(isOwner, isSAdmin) {
+  const card = document.getElementById('adminPrivilegesCard');
+  const ul = document.getElementById('adminPrivilegesList');
+  if (!card || !ul) return;
+  if (!isOwner && !isSAdmin) {
+    card.classList.add('hidden');
+    ul.innerHTML = '';
+    return;
+  }
+  card.classList.remove('hidden');
+
+  // Each entry: { label, action: () => void, ownerOnly: bool }. Action runs
+  // on click (navigation + scroll/expand the relevant section).
+  const items = [];
+
+  if (isSAdmin) {
+    items.push({
+      label: 'Manage <strong>users at your site(s)</strong> &mdash; invite, change site, promote to site admin.',
+      action: () => { _adminPrivScrollTo('adminMultiSiteCard'); typeof adminMSSetTab === 'function' && adminMSSetTab('users'); }
+    });
+    items.push({
+      label: 'Edit <strong>shift rules</strong> for your site(s) &mdash; pager windows, AR base, subspec bonuses, flat-points shifts.',
+      action: () => { _adminPrivScrollTo('adminMultiSiteCard'); typeof adminMSSetTab === 'function' && adminMSSetTab('rules'); }
+    });
+    items.push({
+      label: 'Edit <strong>calendar mappings</strong> shared across your site (title &rarr; shift type).',
+      action: () => _adminPrivOpenCalendarMappings()
+    });
+    items.push({
+      label: 'Edit <strong>surgeon names</strong> from the Procedure Lookup &mdash; merge "Cook" into "T. Cook" for everyone.',
+      action: () => _adminPrivOpenProcLookup()
+    });
+  }
+  if (isOwner) {
+    items.push({ ownerOnly: true,
+      label: '<strong>Lock / unlock sites</strong> for new-user signups.',
+      action: () => { _adminPrivScrollTo('adminMultiSiteCard'); typeof adminMSSetTab === 'function' && adminMSSetTab('sites'); }
+    });
+    items.push({ ownerOnly: true,
+      label: '<strong>Promote / demote site admins</strong> and set their site scope.',
+      action: () => { _adminPrivScrollTo('adminMultiSiteCard'); typeof adminMSSetTab === 'function' && adminMSSetTab('users'); }
+    });
+    items.push({ ownerOnly: true,
+      label: '<strong>Look up any user&rsquo;s data</strong> directly (read-only debug).',
+      action: () => _adminPrivScrollTo('adminUserLookupCard')
+    });
+    items.push({ ownerOnly: true,
+      label: '<strong>Configure the Claude AI key</strong> for this group.',
+      action: () => _adminPrivScrollTo('claudeAISettingsCard')
+    });
+  }
+
+  ul.innerHTML = items.map((it, i) =>
+    `<li><a href="#" data-aprividx="${i}" style="color:var(--primary);text-decoration:none;">&#10142;</a> ${it.label}${it.ownerOnly ? ' <span style="font-size:0.7rem;color:var(--text-dim);">(owner only)</span>' : ''}</li>`
+  ).join('');
+  ul.querySelectorAll('[data-aprividx]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      const idx = parseInt(a.dataset.aprividx, 10);
+      const it = items[idx];
+      if (it && typeof it.action === 'function') it.action();
+    });
+  });
+}
+
+function _adminPrivScrollTo(cardId) {
+  const el = document.getElementById(cardId);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function _adminPrivOpenCalendarMappings() {
+  closeDrawer && closeDrawer();
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const dashPage = document.getElementById('page-dashboard');
+  if (dashPage) dashPage.classList.add('active');
+  const dashBtn = document.querySelector('.bottom-nav button[data-page="dashboard"]');
+  if (dashBtn) dashBtn.classList.add('active');
+  if (typeof switchDashboardTab === 'function') switchDashboardTab('daily');
+  setTimeout(() => {
+    const det = document.getElementById('calendarSyncDetails');
+    if (det) det.open = true;
+    const card = document.getElementById('calendarSyncCard');
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (typeof openCalendarMappingsEditor === 'function') openCalendarMappingsEditor();
+  }, 120);
+}
+
+function _adminPrivOpenProcLookup() {
+  closeDrawer && closeDrawer();
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  // Procedure Lookup lives on the Compensation page. Activate that and
+  // scroll the search input into view.
+  const compPage = document.getElementById('page-compensation');
+  if (compPage) compPage.classList.add('active');
+  const compBtn = document.querySelector('.bottom-nav button[data-page="compensation"]');
+  if (compBtn) compBtn.classList.add('active');
+  setTimeout(() => {
+    const search = document.getElementById('procLookupSearch');
+    if (search) { search.scrollIntoView({ behavior: 'smooth', block: 'start' }); search.focus(); }
+  }, 120);
 }
 
 // ================================================================
@@ -10862,6 +10997,23 @@ function updateDEStickyHeaderSpacer() {
   });
 }
 
+// One-shot tip nudging users toward consistent surgeon naming. Triggered
+// from loadDataEntryPage. Shows once per user — settings.surgeonNamingTipShown
+// is set the first time they dismiss it. Existing users get the tip on their
+// next visit to the data entry page after deploy (the flag is unset for them).
+function maybeShowSurgeonNamingTip() {
+  if (settings && settings.surgeonNamingTipShown === true) return;
+  const modal = document.getElementById('surgeonNamingTipModal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+}
+function dismissSurgeonNamingTip() {
+  const modal = document.getElementById('surgeonNamingTipModal');
+  if (modal) modal.classList.add('hidden');
+  settings.surgeonNamingTipShown = true;
+  saveSettings(settings);
+}
+
 function loadDataEntryPage() {
   loadShiftForDate();
   // Default case type based on shift (e.g. labor epidural for OB/SF1 shifts)
@@ -10874,6 +11026,11 @@ function loadDataEntryPage() {
   renderDECaseList();
   updateDETally();
   initScanPage();
+  // One-shot guidance on first visit to the case editor — both for brand-new
+  // users and for existing users (the flag is unset for everyone the first
+  // time this code runs after deploy). Cleared after the toast so they only
+  // see it once.
+  maybeShowSurgeonNamingTip();
   // Ensure community data is loaded for autocomplete suggestions
   if (!sharedCasesLoaded || sharedCasesCache.length === 0) {
     loadSharedCases().catch(() => {});
@@ -19741,11 +19898,16 @@ function renderProcLookup() {
       bySurgeon[key].push(c);
     });
 
+    const canEditSurgeon = isSiteAdmin();
     Object.entries(bySurgeon).sort((a, b) => a[0].localeCompare(b[0])).forEach(([surgName, cases]) => {
       const totalMins = cases.reduce((s, c) => s + c.mins, 0);
       const avgAll = Math.round(totalMins / cases.length);
+      const surgKey = (surgName || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const editBtn = canEditSurgeon
+        ? ` <button class="proc-rename-btn" onclick="event.stopPropagation();renameSurgeonName('${surgKey}')" title="Rename this surgeon (site admins) — combines duplicates">&#9998;</button>`
+        : '';
       html += `<div style="margin-bottom:16px;">`;
-      html += `<div style="font-weight:700;font-size:0.9rem;margin-bottom:6px;color:var(--text);">${escHtml(surgName)}</div>`;
+      html += `<div style="font-weight:700;font-size:0.9rem;margin-bottom:6px;color:var(--text);display:flex;align-items:center;gap:6px;">${escHtml(surgName)}${editBtn}</div>`;
       html += `<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">${cases.length} total case${cases.length !== 1 ? 's' : ''} &middot; overall avg ${avgAll} min</div>`;
 
       // Group by procedure under this surgeon
@@ -19812,9 +19974,14 @@ function renderProcLookup() {
           return { name, avg, count: durations.length, sd, items };
         })
         .sort((a, b) => a.avg - b.avg);
+      const canEditSurgeon = isSiteAdmin();
       surgeons.forEach(s => {
         const sdTag = s.count >= 2 ? ` <span style="color:var(--text-dim);font-size:0.72rem;">\u00b1${s.sd}</span>` : '';
-        html += `<div class="efficiency-item proc-lookup-row" onclick="toggleProcCaseList(this)" style="cursor:pointer;"><span class="eff-label">${escHtml(s.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.count})</span></span><span class="eff-value">${s.avg}${sdTag} min <span style="font-size:0.7rem;color:var(--text-dim);">&#9662;</span></span></div>`;
+        const surgKey = (s.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const editBtn = canEditSurgeon
+          ? ` <button class="proc-rename-btn" onclick="event.stopPropagation();renameSurgeonName('${surgKey}')" title="Rename this surgeon (site admins) \u2014 combines duplicates">&#9998;</button>`
+          : '';
+        html += `<div class="efficiency-item proc-lookup-row" onclick="toggleProcCaseList(this)" style="cursor:pointer;"><span class="eff-label">${escHtml(s.name)}${editBtn} <span style="color:var(--text-dim);font-size:0.75rem;">(${s.count})</span></span><span class="eff-value">${s.avg}${sdTag} min <span style="font-size:0.7rem;color:var(--text-dim);">&#9662;</span></span></div>`;
       // Hidden case list
       html += `<div class="proc-case-list" style="display:none;">`;
       s.items.sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach(ci => {
@@ -19862,6 +20029,52 @@ function renameSingleCase(caseId) {
   saveData(data);
   renderProcLookup();
   showToast('Case procedure renamed');
+}
+
+// Inline surgeon rename from the Procedure Lookup. Site-admin only.
+// Writes a mapping (oldName → trimmedNew) into the site-shared surgeonMappings
+// doc so the rename takes effect for everyone — every case authored by anyone
+// whose surgeon field matches `oldName` will be displayed/grouped under the
+// new name. Existing mappings whose canonical was the old name are updated
+// transitively so we don't leave dangling chains.
+async function renameSurgeonName(oldName) {
+  if (!isSiteAdmin()) { showToast('Site admins only'); return; }
+  if (!oldName) return;
+  const newName = prompt(
+    'Rename "' + oldName + '" to:\n\n' +
+    'Combines every case under the new name across the whole site. ' +
+    'Use "first initial + last name" (e.g. "T. Cook") to avoid duplicates.',
+    oldName
+  );
+  if (!newName) return;
+  const trimmed = newName.trim();
+  if (!trimmed || trimmed === oldName) return;
+  if (!surgeonMappingsCache) surgeonMappingsCache = {};
+  // Map the old name to the new one.
+  surgeonMappingsCache[oldName] = trimmed;
+  // Update any variant whose canonical was the old name so the chain
+  // collapses (variant → trimmed, not variant → oldName → trimmed).
+  for (const [variant, canonical] of Object.entries(surgeonMappingsCache)) {
+    if (canonical === oldName) surgeonMappingsCache[variant] = trimmed;
+  }
+  // Self-loop cleanup: if trimmed maps to itself for any reason, drop it.
+  if (surgeonMappingsCache[trimmed] === trimmed) delete surgeonMappingsCache[trimmed];
+  try {
+    await db.collection('surgeonMappings').doc(getCurrentSiteId()).set({
+      mappings: surgeonMappingsCache,
+      siteId: getCurrentSiteId(),
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser.uid
+    });
+    showToast('Renamed "' + oldName + '" → "' + trimmed + '"');
+    if (typeof renderProcLookup === 'function') renderProcLookup();
+    if (typeof renderSurgeonEfficiency === 'function') renderSurgeonEfficiency();
+    if (typeof renderTopProcedures === 'function') renderTopProcedures();
+    if (typeof renderCollectiveCases === 'function') renderCollectiveCases();
+  } catch (err) {
+    console.error('renameSurgeonName failed:', err);
+    showToast('Save failed: ' + (err.message || err));
+  }
 }
 
 // ================================================================
@@ -20727,7 +20940,7 @@ async function saveAdminCaseGroup(groupIdx) {
 
 // ---- Surgeon Name Mapping Admin UI ----
 function openSurgeonMappingModal() {
-  if (!isAppOwner()) return;
+  if (!isSiteAdmin()) return;
   const nameMap = {};
   data.cases.forEach(c => {
     const name = (c.notes || '').trim();
@@ -20842,7 +21055,7 @@ function toggleSingleSurgeonGroups() {
 }
 
 async function saveSurgeonMappings() {
-  if (!isAppOwner()) return;
+  if (!isSiteAdmin()) return;
   const el = document.getElementById('surgeonMappingList');
   const groups = el._groups || [];
   const newMappings = {};
@@ -20874,7 +21087,7 @@ async function saveSurgeonMappings() {
 }
 
 async function resetSurgeonMappings() {
-  if (!isAppOwner()) return;
+  if (!isSiteAdmin()) return;
   if (!confirm('Reset all surgeon name mappings? Original names will be restored. This cannot be undone.')) return;
   try {
     await db.collection('surgeonMappings').doc(getCurrentSiteId()).delete();
