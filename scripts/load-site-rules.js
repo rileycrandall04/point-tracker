@@ -2,6 +2,11 @@
 /*
  * Load each `site-rules-{XXX}.js` module in this directory into Firestore.
  *
+ * NOTE: As of Stage 2 of the admin tier work, shift rules can be edited
+ * live in-app from the Admin page. The static site-rules-*.js files are
+ * FROZEN snapshots of the original seed; running this script will CLOBBER
+ * any live edits. Pass --force to confirm you really want to overwrite.
+ *
  * For every module that exports `{ siteId, shiftRulesOverride }`, this writes:
  *   sites/{siteId}.shiftRulesOverride = override
  *   sites/{siteId}.visibleShiftTypes  = Object.keys(override)
@@ -11,12 +16,10 @@
  *
  * Run from Cloud Shell:
  *   gcloud config set project mwa-point-tracker
- *   node scripts/load-site-rules.js
- *
- * Idempotent — safe to re-run when site-rules-*.js files change.
+ *   node scripts/load-site-rules.js --force
  *
  * Optional: pass site IDs as args to limit the load:
- *   node scripts/load-site-rules.js IMC SG
+ *   node scripts/load-site-rules.js --force IMC SG
  */
 
 const admin = require('firebase-admin');
@@ -30,8 +33,18 @@ const db = admin.firestore();
 const SCRIPTS_DIR = __dirname;
 const FILE_PATTERN = /^site-rules-([A-Za-z0-9_-]+)\.js$/;
 
-const argSiteIds = process.argv.slice(2).map(s => s.trim()).filter(Boolean);
+const rawArgs = process.argv.slice(2).map(s => s.trim()).filter(Boolean);
+const force = rawArgs.includes('--force');
+const argSiteIds = rawArgs.filter(a => a !== '--force');
 const filterSet = argSiteIds.length > 0 ? new Set(argSiteIds) : null;
+
+if (!force) {
+  console.error('Refusing to run without --force.');
+  console.error('Shift rules are now editable live from the Admin page; running this');
+  console.error('script will overwrite any in-app edits with the static seed values.');
+  console.error('Pass --force if you really want to clobber.');
+  process.exit(1);
+}
 
 (async () => {
   try {
