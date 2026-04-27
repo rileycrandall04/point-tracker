@@ -8137,10 +8137,16 @@ function clearCalendarMappings() {
 // a {type,label} object = set/update; `null` = explicit skip.
 let _calMappingsEditorPending = null;
 
-function openCalendarMappingsEditor() {
+async function openCalendarMappingsEditor() {
   const siteId = getCurrentSiteId();
   const isAdmin = isSiteAdmin(siteId);
   _calMappingsEditorPending = { siteEdits: {}, personalEdits: {} };
+  // Force a fresh sites read so a stale cache (after migrate/site-switch)
+  // can't make saved site mappings look missing. Also re-runs if the cache
+  // is empty for any other reason.
+  if (typeof loadSites === 'function' && firestoreSyncEnabled && db) {
+    try { await loadSites(); } catch (e) { console.warn('loadSites in openCalendarMappingsEditor failed:', e); }
+  }
   const note = isAdmin
     ? 'Site mappings are shared across everyone at this site. Personal overrides apply just to you and beat the site map.'
     : 'Site mappings are shared across everyone at this site (read-only — ask an admin to change). Personal overrides apply just to you and beat the site map.';
@@ -8221,16 +8227,17 @@ function renderCalendarMappingsEditor() {
   </div>`;
 
   // Site section
-  html += `<div style="margin-top:6px;margin-bottom:4px;font-size:0.85rem;font-weight:600;color:var(--text);">Site mappings ${isAdmin ? '<span style="font-weight:400;font-size:0.7rem;color:var(--text-dim);">— editing changes the mapping for everyone at the site</span>' : '<span style="font-weight:400;font-size:0.7rem;color:var(--text-dim);">(read-only — ask an admin)</span>'}</div>`;
   const siteTitles = Object.keys(siteEffective).sort();
+  html += `<div style="margin-top:6px;margin-bottom:4px;font-size:0.85rem;font-weight:600;color:var(--text);">Site mappings <span style="font-weight:400;font-size:0.75rem;color:var(--text-dim);">(${siteTitles.length})</span> ${isAdmin ? '<span style="font-weight:400;font-size:0.7rem;color:var(--text-dim);">— editing changes the mapping for everyone at the site</span>' : '<span style="font-weight:400;font-size:0.7rem;color:var(--text-dim);">(read-only — ask an admin)</span>'}</div>`;
   if (siteTitles.length === 0) {
     html += '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;">No site mappings yet. Add one above or confirm a sync to seed them.</div>';
   } else {
     siteTitles.forEach(t => { html += buildRow('site', t, siteEffective[t], !isAdmin); });
   }
   // Personal section
+  const personalCount = Object.keys(personalEffective).length;
   html += `<div style="margin-top:14px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-    <span style="font-size:0.85rem;font-weight:600;color:var(--text);">Your overrides <span style="font-weight:400;font-size:0.7rem;color:var(--text-dim);">— apply only to you, beat the site mapping</span></span>
+    <span style="font-size:0.85rem;font-weight:600;color:var(--text);">Your overrides <span style="font-weight:400;font-size:0.75rem;color:var(--text-dim);">(${personalCount})</span> <span style="font-weight:400;font-size:0.7rem;color:var(--text-dim);">— apply only to you, beat the site mapping</span></span>
     ${(isAdmin && Object.keys(personalEffective).length > 0)
       ? `<button class="btn btn-outline btn-sm" onclick="calMappingsEditorPromoteAllPersonal()" style="font-size:0.7rem;padding:2px 8px;">Promote all to ${escapeHtml(siteName)}</button>`
       : ''}
@@ -8365,7 +8372,10 @@ async function saveCalendarMappingsEditor() {
     if (hasSiteEdits) {
       if (!isSiteAdmin(siteId)) {
         showToast('Only site admins can edit site mappings');
-      } else if (firestoreSyncEnabled && db) {
+        throw new Error('Not authorized to edit site mappings');
+      } else if (!(firestoreSyncEnabled && db)) {
+        throw new Error('Not signed in / Firestore unavailable');
+      } else {
         const ref = db.collection('sites').doc(siteId);
         const snap = await ref.get();
         const cur = (snap.exists && snap.data().calendarMappings) || {};
@@ -8374,9 +8384,19 @@ async function saveCalendarMappingsEditor() {
           if (v === undefined) delete cur[t];
           else cur[t] = v;
         }
-        await ref.update({ calendarMappings: cur });
+        // Use update() if the doc exists (so deletes inside the map take
+        // effect by full-field replace), but fall back to set+merge if
+        // the site doc hasn't been created yet (avoids "document does not
+        // exist" errors that previously made saves look successful in the
+        // toast but never persisted).
+        if (snap.exists) {
+          await ref.update({ calendarMappings: cur });
+        } else {
+          await ref.set({ calendarMappings: cur }, { merge: true });
+        }
         if (!sitesCache[siteId]) sitesCache[siteId] = {};
         sitesCache[siteId].calendarMappings = cur;
+        console.log('[calendarMappings] saved ' + Object.keys(cur).length + ' to sites/' + siteId);
       }
     }
     if (hasPersonalEdits) {
