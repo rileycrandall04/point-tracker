@@ -7202,6 +7202,7 @@ migrateData(data);
 function parseCalendarEventTitle(title, dateStr) {
   if (!title || !title.trim()) return null;
   const t = title.trim();
+  const siteId = getCurrentSiteId();
 
   // Try the full title first, then progressively shorter versions by
   // trimming whitespace-separated trailing tokens. This handles formats
@@ -7209,14 +7210,43 @@ function parseCalendarEventTitle(title, dateStr) {
   // follows the actual assignment.
   let working = t;
   while (true) {
+    // 1. UVH-flavor regex parser first. Returns null for bare skip words
+    //    ("Vacation", "Off", "Holiday", ...) so those continue to be
+    //    intentionally skipped no matter which site is active.
     const result = matchAssignmentTitle(working, dateStr);
-    if (result !== false) return result; // matched or intentional skip
+    if (result !== false) return result;
+    // 2. Then site-specific label match — covers calendars whose titles
+    //    are written in site-prefixed form like "IMC 1st Call" / "IMC AOD".
+    const siteMatch = matchTitleAgainstSiteRules(working, siteId);
+    if (siteMatch) return siteMatch;
     const lastSpace = working.lastIndexOf(' ');
     if (lastSpace <= 0) break;
     working = working.substring(0, lastSpace).trim();
     if (!working) break;
   }
   return false;
+}
+
+// Compare a calendar event title against every visible shift type's label
+// for the current site (case + whitespace insensitive). Falls back to a
+// label-without-parenthetical comparison so e.g. "IMC Endo Call" matches
+// the rule labelled "IMC Endo Call (IP Endo)". Returns { type, label } or null.
+function matchTitleAgainstSiteRules(title, siteId) {
+  if (!title) return null;
+  if (!siteId) siteId = getCurrentSiteId();
+  const rules = getResolvedShiftRules(siteId);
+  const visibleTypes = getVisibleShiftTypesForSite(siteId);
+  const norm = (s) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const tNorm = norm(title);
+  for (const type of visibleTypes) {
+    const rule = rules[type];
+    if (!rule || !rule.label) continue;
+    const labelNorm = norm(rule.label);
+    if (labelNorm === tNorm) return { type, label: rule.label };
+    const labelNoParen = norm(rule.label.replace(/\s*\([^)]*\)\s*/g, ' '));
+    if (labelNoParen && labelNoParen === tNorm) return { type, label: rule.label };
+  }
+  return null;
 }
 
 function matchAssignmentTitle(t, dateStr) {
