@@ -2522,8 +2522,11 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
       <div class="form-group notes-autocomplete">
         <label>Surgeon</label>
-        <textarea id="caseNotes" placeholder="Surgeon name" autocomplete="off" rows="1" style="min-height:auto;"></textarea>
+        <textarea id="caseNotes" placeholder="Surgeon name" title="Use first initial + last name, e.g. T. Cook" autocomplete="off" rows="1" style="min-height:auto;"></textarea>
         <div class="surgeon-suggestions hidden" id="surgeonSuggestions"></div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;line-height:1.4;">
+          Tip: use <strong>first initial + last name</strong> (e.g. <em>T. Cook</em>) so cases group correctly.
+        </div>
       </div>
       <div class="form-group">
         <label>Notes (optional)</label>
@@ -4490,22 +4493,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 </div>
 
-<!-- One-time surgeon naming guidance -->
-<div class="modal-overlay hidden" id="surgeonNamingTipModal">
-  <div class="modal" style="max-width:420px;">
-    <h2>One quick tip</h2>
-    <p style="font-size:0.85rem;line-height:1.5;color:var(--text);margin-bottom:10px;">
-      For surgeon names, please use <strong>first initial + last name</strong> &mdash; for example
-      <strong>"T. Cook"</strong> instead of just <em>Cook</em> or <em>Tony Cook</em>.
-    </p>
-    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:14px;">
-      Consistent formatting helps the app group every case under one surgeon and keeps the procedure-time data clean. Site admins can still merge duplicates after the fact, but a little discipline up front keeps it tidy for everyone.
-    </p>
-    <div class="modal-actions">
-      <button class="btn btn-primary btn-sm" onclick="dismissSurgeonNamingTip()">Got it</button>
-    </div>
-  </div>
-</div>
 
 <!-- Import confirmation modal -->
 <div class="modal-overlay hidden" id="importConfirmModal">
@@ -10997,23 +10984,6 @@ function updateDEStickyHeaderSpacer() {
   });
 }
 
-// One-shot tip nudging users toward consistent surgeon naming. Triggered
-// from loadDataEntryPage. Shows once per user — settings.surgeonNamingTipShown
-// is set the first time they dismiss it. Existing users get the tip on their
-// next visit to the data entry page after deploy (the flag is unset for them).
-function maybeShowSurgeonNamingTip() {
-  if (settings && settings.surgeonNamingTipShown === true) return;
-  const modal = document.getElementById('surgeonNamingTipModal');
-  if (!modal) return;
-  modal.classList.remove('hidden');
-}
-function dismissSurgeonNamingTip() {
-  const modal = document.getElementById('surgeonNamingTipModal');
-  if (modal) modal.classList.add('hidden');
-  settings.surgeonNamingTipShown = true;
-  saveSettings(settings);
-}
-
 function loadDataEntryPage() {
   loadShiftForDate();
   // Default case type based on shift (e.g. labor epidural for OB/SF1 shifts)
@@ -11026,11 +10996,6 @@ function loadDataEntryPage() {
   renderDECaseList();
   updateDETally();
   initScanPage();
-  // One-shot guidance on first visit to the case editor — both for brand-new
-  // users and for existing users (the flag is unset for everyone the first
-  // time this code runs after deploy). Cleared after the toast so they only
-  // see it once.
-  maybeShowSurgeonNamingTip();
   // Ensure community data is loaded for autocomplete suggestions
   if (!sharedCasesLoaded || sharedCasesCache.length === 0) {
     loadSharedCases().catch(() => {});
