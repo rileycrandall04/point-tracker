@@ -18173,11 +18173,13 @@ let _communityStatsCurrentSite = null; // currently-displayed siteId
 const COMMUNITY_STATS_MIN_CONTRIBUTORS = 3;
 
 function initCommunityStats() {
-  // Populate the site dropdown from sitesCache and default to the user's site.
+  // Populate the site dropdown from sitesCache. "All sites" option lives
+  // at the top so admins can sanity-check that data is flowing from
+  // multiple sites; default selection is the user's own site.
   const sel = document.getElementById('communityStatsSiteSelect');
   if (!sel) return;
   const ids = Object.keys(sitesCache || {}).slice().sort();
-  let html = '';
+  let html = '<option value="">All sites</option>';
   for (const id of ids) {
     const name = (sitesCache[id] && sitesCache[id].name) || id;
     html += '<option value="' + id + '">' + escapeHtml(name) + '</option>';
@@ -18264,7 +18266,10 @@ function renderCommunityStats() {
     return;
   }
   const mode = communityStatsMode;
-  // Group: assignmentType -> { uids: Set, vals: [ptsPerHr, ...], totalPts, totalHrs, shiftCount }
+  const allSites = !siteId; // empty value = "All sites"
+  // Group key: when scoped to one site, group by assignmentType. When showing
+  // all sites, group by `siteId|assignmentType` so different sites' shift
+  // types stay separate and the row can label which site they came from.
   const groups = {};
   for (const uid of Object.keys(_communityStatsCache.byUid)) {
     const rows = _communityStatsCache.byUid[uid];
@@ -18277,19 +18282,22 @@ function renderCommunityStats() {
         if (!(r.hours > 0)) continue;
         denom = r.hours;
       }
-      const t = r.assignmentType;
-      if (!groups[t]) groups[t] = { uids: new Set(), vals: [], totalPts: 0, totalHrs: 0, shiftCount: 0 };
-      groups[t].uids.add(uid);
-      groups[t].vals.push(r.points / denom);
-      groups[t].totalPts += r.points;
-      groups[t].totalHrs += r.hours;
-      groups[t].shiftCount++;
+      const groupKey = allSites ? (r.siteId + '|' + r.assignmentType) : r.assignmentType;
+      if (!groups[groupKey]) groups[groupKey] = {
+        siteId: r.siteId, assignmentType: r.assignmentType,
+        uids: new Set(), vals: [], totalPts: 0, totalHrs: 0, shiftCount: 0
+      };
+      groups[groupKey].uids.add(uid);
+      groups[groupKey].vals.push(r.points / denom);
+      groups[groupKey].totalPts += r.points;
+      groups[groupKey].totalHrs += r.hours;
+      groups[groupKey].shiftCount++;
     }
   }
   // Filter to groups with enough distinct contributors to anonymize.
   const ranked = Object.entries(groups)
     .filter(([, g]) => g.uids.size >= COMMUNITY_STATS_MIN_CONTRIBUTORS)
-    .map(([type, g]) => {
+    .map(([_, g]) => {
       const n = g.vals.length;
       const mean = g.vals.reduce((a, b) => a + b, 0) / n;
       let std = null;
@@ -18298,8 +18306,10 @@ function renderCommunityStats() {
         std = Math.sqrt(variance);
       }
       return {
-        name: getAssignmentTypeName(type, siteId),
-        type: type,
+        name: getAssignmentTypeName(g.assignmentType, g.siteId),
+        siteId: g.siteId,
+        siteName: (sitesCache[g.siteId] && sitesCache[g.siteId].name) || g.siteId,
+        type: g.assignmentType,
         mean: round2(mean),
         std: std == null ? null : round2(std),
         avgTotal: round2(g.totalPts / g.shiftCount),
@@ -18311,7 +18321,10 @@ function renderCommunityStats() {
     .sort((a, b) => b.mean - a.mean);
 
   if (ranked.length === 0) {
-    out.innerHTML = '<p style="font-size:0.85rem;color:var(--text-dim);">No pooled data yet for this site (need at least ' + COMMUNITY_STATS_MIN_CONTRIBUTORS + ' contributors per shift type).</p>';
+    const scopeMsg = allSites
+      ? 'No pooled data yet (need at least ' + COMMUNITY_STATS_MIN_CONTRIBUTORS + ' contributors per shift type).'
+      : 'No pooled data yet for this site (need at least ' + COMMUNITY_STATS_MIN_CONTRIBUTORS + ' contributors per shift type).';
+    out.innerHTML = '<p style="font-size:0.85rem;color:var(--text-dim);">' + scopeMsg + '</p>';
     return;
   }
 
@@ -18321,8 +18334,11 @@ function renderCommunityStats() {
     const stdStr = r.std == null
       ? '<span style="color:var(--text-dim);font-size:0.75rem;">&plusmn; n/a</span>'
       : '<span style="color:var(--text-dim);font-size:0.75rem;">&plusmn; ' + r.std.toFixed(1) + '</span>';
+    const sitePrefix = allSites
+      ? '<span style="color:var(--text-dim);font-size:0.72rem;">[' + escHtml(r.siteName) + ']</span> '
+      : '';
     html += '<div class="efficiency-item" style="flex-wrap:wrap;gap:2px;">';
-    html += '<span class="eff-label">' + escHtml(r.name);
+    html += '<span class="eff-label">' + sitePrefix + escHtml(r.name);
     html += ' <span style="color:var(--text-dim);font-size:0.72rem;">(' + r.shifts + ' shift' + (r.shifts !== 1 ? 's' : '') + ' · ' + r.contributors + ' people)</span></span>';
     html += '<span style="font-size:0.85rem;">';
     html += '<span class="eff-value" style="color:var(--primary);">' + r.mean.toFixed(1) + ' ' + stdStr + '</span>';
