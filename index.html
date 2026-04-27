@@ -5549,26 +5549,29 @@ function _adminRulesRenderTypeList() {
   const ids = Object.keys(overrides).sort();
   if (ids.length === 0) {
     out.innerHTML = '<p style="color:var(--text-dim);font-size:0.78rem;">No site-specific shift types yet. Click "Add shift type" or click an inherited rule below to override it.</p>';
-  } else {
-    let html = '';
-    for (const id of ids) {
-      const rule = overrides[id] || {};
-      const inh = rule.inherit_uvh;
-      const summary = inh
-        ? '<em style="color:var(--text-dim);">inherits ' + escapeHtml(inh) + '</em>'
-        : _adminRulesSummary(rule);
-      html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">';
-      html += '<div style="flex:1;min-width:160px;"><strong>' + escapeHtml(rule.label || id) + '</strong>';
-      html += ' <span style="font-size:0.7rem;color:var(--text-dim);">(' + escapeHtml(id) + ')</span>';
-      html += '<br><span style="font-size:0.74rem;">' + summary + '</span></div>';
-      html += '<div style="display:flex;gap:4px;">';
-      html += '<button class="btn btn-sm" onclick="adminRulesOpenModal(\'' + id + '\')">Edit</button>';
-      html += '<button class="btn btn-sm" onclick="adminRulesDeleteType(\'' + id + '\')" style="background:var(--surface2);color:var(--accent2);">Delete</button>';
-      html += '</div>';
-      html += '</div>';
-    }
-    out.innerHTML = html;
+    return;
   }
+  let html = '<div style="background:var(--surface);border-radius:6px;border:1px solid var(--border);overflow:hidden;">';
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i];
+    const rule = overrides[id] || {};
+    const inh = rule.inherit_uvh;
+    const summary = inh
+      ? '<em style="color:var(--text-dim);">inherits ' + escapeHtml(inh) + '</em>'
+      : _adminRulesSummary(rule);
+    const border = i < ids.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:0.78rem;' + border + '">';
+    html += '<div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">';
+    html += '<strong>' + escapeHtml(rule.label || id) + '</strong>';
+    html += ' <span style="color:var(--text-dim);font-size:0.7rem;">(' + escapeHtml(id) + ')</span>';
+    html += ' &middot; <span style="font-size:0.72rem;">' + summary + '</span>';
+    html += '</div>';
+    html += '<button title="Edit" onclick="adminRulesOpenModal(\'' + id + '\')" style="flex:none;border:none;background:transparent;color:var(--primary);cursor:pointer;font-size:0.78rem;padding:2px 6px;">Edit</button>';
+    html += '<button title="Delete" onclick="adminRulesDeleteType(\'' + id + '\')" style="flex:none;border:none;background:transparent;color:var(--accent2);cursor:pointer;font-size:0.95rem;padding:2px 6px;line-height:1;">&times;</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+  out.innerHTML = html;
 }
 
 function _adminRulesSummary(rule) {
