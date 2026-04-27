@@ -3899,6 +3899,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
         <input type="text" id="adminMSUserEmail" placeholder="filter by email (optional)"
           style="flex:1;min-width:200px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+        <select id="adminMSUserGroupBy"
+          onchange="adminMSListUsers()"
+          style="padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+          <option value="none">Alphabetical</option>
+          <option value="site">Group by site</option>
+        </select>
         <button class="btn btn-primary btn-sm" onclick="adminMSListUsers()">List Users</button>
       </div>
       <div id="adminMSUsersList" style="font-size:0.85rem;"></div>
@@ -4856,7 +4862,43 @@ async function setUserRole(targetUid, role, adminSites) {
     payload.role = FieldValue.delete();
     payload.adminSites = FieldValue.delete();
   }
+  // Stamp a one-shot notice the user will see on their next sign-in.
+  // Cleared the first time it's shown (see consumeAdminPromotionNotice).
+  if (role === 'siteAdmin') {
+    payload.adminPromotionNotice = {
+      siteIds: Array.isArray(adminSites) ? adminSites.slice() : [],
+      promotedAt: new Date().toISOString(),
+      promotedBy: (currentUser && currentUser.email) || (currentUser && currentUser.uid) || ''
+    };
+  } else if (role === null || role === undefined) {
+    // Revoking admin → also clear any pending notice so they don't see a
+    // stale "you're an admin now" toast after demotion.
+    payload.adminPromotionNotice = FieldValue.delete();
+  }
   await db.collection('userProfiles').doc(targetUid).set(payload, { merge: true });
+}
+
+// One-shot toast for users who were just promoted/had their scope changed.
+// Reads adminPromotionNotice off the profile, shows a toast, deletes the
+// field. Safe no-op if no notice is present.
+async function consumeAdminPromotionNotice() {
+  if (!currentUser || !currentUserProfile) return;
+  const notice = currentUserProfile.adminPromotionNotice;
+  if (!notice || typeof notice !== 'object') return;
+  try {
+    const sites = Array.isArray(notice.siteIds) ? notice.siteIds : [];
+    const siteNames = sites.map(s => (sitesCache[s] && sitesCache[s].name) || s);
+    const scopeText = siteNames.length === 0
+      ? '(no sites assigned yet)'
+      : siteNames.join(', ');
+    showToast('You\'re now a site admin for: ' + scopeText, 6000);
+    await db.collection('userProfiles').doc(currentUser.uid).set({
+      adminPromotionNotice: firebase.firestore.FieldValue.delete()
+    }, { merge: true });
+    if (currentUserProfile) delete currentUserProfile.adminPromotionNotice;
+  } catch (err) {
+    console.warn('consumeAdminPromotionNotice failed:', err);
+  }
 }
 
 // Legacy wrapper — toggles isAdmin only. Kept so any existing UI still
@@ -5201,9 +5243,47 @@ function _adminMSSiteOptionsHTML(currentSiteId) {
   return html;
 }
 
+// Render a single user-list row. Extracted so the alphabetical and
+// grouped-by-site paths share the same markup.
+function _adminMSRenderUserRow(r) {
+  const name = r.profile.displayName || '(no name)';
+  const email = r.profile.email || '(no email)';
+  const isMaster = r.uid === ADMIN_UID;
+  const userRole = isMaster ? 'app_owner'
+    : (r.profile.role === 'app_owner' || r.profile.role === 'siteAdmin') ? r.profile.role
+    : (r.profile.isAdmin === true ? 'siteAdmin' : null);
+  const userIsAdmin = !!userRole;
+  const userIsOwner = userRole === 'app_owner';
+  const inv = r.profile.pendingInvite;
+  const inviteSite = inv && inv.siteId ? ((sitesCache[inv.siteId] && sitesCache[inv.siteId].name) || inv.siteId) : null;
+  let html = '';
+  html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;" onclick="adminMSOpenUser(\'' + r.uid + '\')">';
+  html += '<div><strong>' + escapeHtml(name) + '</strong>';
+  if (userIsAdmin) {
+    const tag = userIsOwner ? (isMaster ? 'owner/master' : 'owner') : 'site admin';
+    html += ' <span style="font-size:0.65rem;color:var(--accent);">[' + tag + ']</span>';
+  }
+  // For siteAdmins, list the sites they admin so the table at a glance
+  // shows scope. App owners/master have implicit "all" scope.
+  if (userRole === 'siteAdmin' && Array.isArray(r.profile.adminSites) && r.profile.adminSites.length > 0) {
+    const labels = r.profile.adminSites.map(sid => (sitesCache[sid] && sitesCache[sid].name) || sid);
+    html += ' <span style="font-size:0.65rem;color:var(--text-dim);">(' + escapeHtml(labels.join(', ')) + ')</span>';
+  } else if (userIsOwner) {
+    html += ' <span style="font-size:0.65rem;color:var(--text-dim);">(all sites)</span>';
+  }
+  html += '<br><span style="font-size:0.72rem;color:var(--text-dim);">' + escapeHtml(email) + '</span>';
+  if (inviteSite) html += '<br><span style="font-size:0.68rem;color:var(--accent2);">pending invite → ' + escapeHtml(inviteSite) + '</span>';
+  html += '</div>';
+  html += '<span style="font-size:0.7rem;color:var(--primary);">Open &rsaquo;</span>';
+  html += '</div>';
+  return html;
+}
+
 async function adminMSListUsers() {
   if (!isSiteAdmin()) return;
   const filterRaw = (document.getElementById('adminMSUserEmail').value || '').trim().toLowerCase();
+  const groupSel = document.getElementById('adminMSUserGroupBy');
+  const groupBy = (groupSel && groupSel.value) || 'none';
   const listOut = document.getElementById('adminMSUsersList');
   const cardOut = document.getElementById('adminMSUserCard');
   cardOut.innerHTML = '';
@@ -5224,30 +5304,40 @@ async function adminMSListUsers() {
       listOut.innerHTML = '<p style="color:var(--accent2);">No users match "' + escapeHtml(filterRaw) + '".</p>';
       return;
     }
-    let html = '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:6px;">' + rows.length + ' user' + (rows.length !== 1 ? 's' : '') + '</div>';
-    for (const r of rows) {
-      const name = r.profile.displayName || '(no name)';
-      const email = r.profile.email || '(no email)';
-      const isMaster = r.uid === ADMIN_UID;
-      const userRole = isMaster ? 'app_owner'
-        : (r.profile.role === 'app_owner' || r.profile.role === 'siteAdmin') ? r.profile.role
-        : (r.profile.isAdmin === true ? 'siteAdmin' : null);
-      const userIsAdmin = !!userRole;
-      const userIsOwner = userRole === 'app_owner';
-      const inv = r.profile.pendingInvite;
-      const inviteSite = inv && inv.siteId ? ((sitesCache[inv.siteId] && sitesCache[inv.siteId].name) || inv.siteId) : null;
-      html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;" onclick="adminMSOpenUser(\'' + r.uid + '\')">';
-      html += '<div><strong>' + escapeHtml(name) + '</strong>';
-      if (userIsAdmin) {
-        const tag = userIsOwner ? (isMaster ? 'owner/master' : 'owner') : 'site admin';
-        html += ' <span style="font-size:0.65rem;color:var(--accent);">[' + tag + ']</span>';
+
+    if (groupBy === 'site') {
+      // Group-by-site: one settings doc per user, fetched in parallel.
+      // Cheap for modest user counts; switch to a collectionGroup query if
+      // this gets slow for big rosters.
+      listOut.innerHTML = '<p>Loading sites for ' + rows.length + ' user' + (rows.length !== 1 ? 's' : '') + '…</p>';
+      const fetches = rows.map(r => db.collection('users').doc(r.uid).collection('data').doc('settings').get()
+        .then(doc => { r.userSiteId = (doc.exists && doc.data().siteId) || DEFAULT_SITE_ID; })
+        .catch(() => { r.userSiteId = DEFAULT_SITE_ID; }));
+      await Promise.all(fetches);
+      const buckets = {};
+      for (const r of rows) {
+        const sid = r.userSiteId || DEFAULT_SITE_ID;
+        if (!buckets[sid]) buckets[sid] = [];
+        buckets[sid].push(r);
       }
-      html += '<br><span style="font-size:0.72rem;color:var(--text-dim);">' + escapeHtml(email) + '</span>';
-      if (inviteSite) html += '<br><span style="font-size:0.68rem;color:var(--accent2);">pending invite → ' + escapeHtml(inviteSite) + '</span>';
-      html += '</div>';
-      html += '<span style="font-size:0.7rem;color:var(--primary);">Open &rsaquo;</span>';
-      html += '</div>';
+      const orderedSiteIds = Object.keys(buckets).sort((a, b) => {
+        const an = (sitesCache[a] && sitesCache[a].name) || a;
+        const bn = (sitesCache[b] && sitesCache[b].name) || b;
+        return an.localeCompare(bn);
+      });
+      let html = '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:6px;">' + rows.length + ' user' + (rows.length !== 1 ? 's' : '') + ' across ' + orderedSiteIds.length + ' site' + (orderedSiteIds.length !== 1 ? 's' : '') + '</div>';
+      for (const sid of orderedSiteIds) {
+        const sname = (sitesCache[sid] && sitesCache[sid].name) || sid;
+        const bucket = buckets[sid];
+        html += '<div style="margin:10px 0 4px 0;font-size:0.85rem;font-weight:600;color:var(--text);">' + escapeHtml(sname) + ' <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400;">(' + bucket.length + ')</span></div>';
+        for (const r of bucket) html += _adminMSRenderUserRow(r);
+      }
+      listOut.innerHTML = html;
+      return;
     }
+
+    let html = '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:6px;">' + rows.length + ' user' + (rows.length !== 1 ? 's' : '') + '</div>';
+    for (const r of rows) html += _adminMSRenderUserRow(r);
     listOut.innerHTML = html;
   } catch (err) {
     console.error('Admin user list error:', err);
@@ -8650,11 +8740,12 @@ document.addEventListener('pointerleave', function(e) {
   if (e.target.closest('.info-icon') && e.pointerType === 'mouse') _hideTip();
 }, true);
 
-function showToast(msg) {
+function showToast(msg, durationMs) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2000);
+  const dur = (typeof durationMs === 'number' && durationMs > 0) ? durationMs : 2000;
+  setTimeout(() => t.classList.remove('show'), dur);
 }
 
 function formatDate(dateStr) {
@@ -25675,6 +25766,9 @@ auth.onAuthStateChanged(async (user) => {
     }
     // Show the Admin drawer entry once we know the user has any admin role.
     refreshAdminDrawerVisibility();
+    // One-shot toast for users newly promoted (or whose admin scope changed)
+    // since their last sign-in. Deletes the notice from their profile.
+    consumeAdminPromotionNotice().catch(err => console.warn('admin notice consume:', err));
 
     if (result === 'migrated') {
       showToast('Local data synced to cloud');
