@@ -7858,6 +7858,24 @@ function isUnrestrictedCallType(type, siteId) {
   return !!(rule && rule.unrestrictedCall);
 }
 
+// A "flat-payment" shift type pays a fixed point amount with no clock-in
+// (e.g. IMC AOD = 235). Triggered by `flatPoints` + `noProductivity` on the
+// resolved rule. Excludes `unrestricted_call_entry`-style rules, which have
+// `noProductivity` but no `flatPoints` and use their own user-hours flow.
+function getFlatPaymentRule(typeOrShift, siteId) {
+  let type;
+  if (typeOrShift && typeof typeOrShift === 'object') {
+    type = typeOrShift.assignmentType;
+    siteId = typeOrShift.siteId || siteId;
+  } else {
+    type = typeOrShift;
+  }
+  if (!type) return null;
+  const rule = getResolvedShiftRules(siteId)[type];
+  if (rule && rule.noProductivity && rule.flatPoints > 0 && !rule.unrestrictedCallEntry) return rule;
+  return null;
+}
+
 // Returns true if the given minute is eligible for unrestricted call pay (3.5 pts/hr)
 // minuteOfDay: 0-1439, isWeekendOrHoliday: boolean
 function isUnrestrictedCallEligible(assignmentType, minuteOfDay, isWeekendOrHoliday, siteId) {
@@ -8444,6 +8462,8 @@ function calcPreCallOverlayPts(shift) {
 function calcARPoints(shift) {
   if (shift.assignmentType === 'vacation') return 0;
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return 56;
+  const flatRule = getFlatPaymentRule(shift);
+  if (flatRule) return flatRule.flatPoints;
   const preCallPts = calcPreCallOverlayPts(shift);
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
@@ -8650,6 +8670,8 @@ function getNextShiftStartMin(shiftDate) {
 function calcARBreakdown(shift) {
   if (shift.assignmentType === 'vacation') return { ar: 0, call: 0, preCall: 0 };
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return { ar: 56, call: 0, preCall: 0 };
+  const flatRuleBD = getFlatPaymentRule(shift);
+  if (flatRuleBD) return { ar: flatRuleBD.flatPoints, call: 0, preCall: 0 };
   const _preCallOverlay = calcPreCallOverlayPts(shift);
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
@@ -9770,8 +9792,10 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
       helpEl.classList.add('hidden');
     }
   }
-  // Vacation and forced-off shifts have no clocked-in time at all.
-  if (type === 'forced_off' || type === 'vacation') {
+  // Vacation, forced-off, and flat-payment shifts (e.g. IMC AOD) have no
+  // clocked-in time at all.
+  const isFlatPayment = !!getFlatPaymentRule(type, getCurrentSiteId());
+  if (type === 'forced_off' || type === 'vacation' || isFlatPayment) {
     populateTimeEntries([{ start: '', end: '' }]);
     document.getElementById('timeEntriesGroup').classList.add('hidden');
   } else {
@@ -9921,6 +9945,7 @@ function loadShiftForDate() {
       document.getElementById('shiftAssignmentType').value = effectiveType;
       const isPreCall = effectiveType === 'pre_call';
       const isForcedOff = effectiveType === 'forced_off';
+      const isFlatPaymentLoad = !!getFlatPaymentRule(effectiveType, shift.siteId);
       document.getElementById('timeEntriesLabel').textContent = isPreCall ? 'Pre-Call Times' : 'Time Entries';
       document.getElementById('eveningAssignmentSection').classList.toggle('hidden', !isPreCall);
       if (!isPreCall) {
@@ -9928,7 +9953,7 @@ function loadShiftForDate() {
         document.getElementById('eveningTimeSection').classList.add('hidden');
         document.getElementById('eveningTimeEntriesContainer').innerHTML = '';
       }
-      if (isForcedOff) {
+      if (isForcedOff || isFlatPaymentLoad) {
         populateTimeEntries([{ start: '', end: '' }]);
         document.getElementById('timeEntriesGroup').classList.add('hidden');
       } else {
@@ -10294,11 +10319,13 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
   const eveningAssignment = assignmentType === 'pre_call' ? (document.getElementById('eveningAssignmentType').value || '') : '';
   const isVacation = assignmentType === 'vacation';
   const isForcedOff = assignmentType === 'forced_off';
-  const timeEntries = isVacation || isForcedOff ? [{ start: '', end: '' }] : collectTimeEntries();
+  const isFlatPaymentSave = !!getFlatPaymentRule(assignmentType, getCurrentSiteId());
+  const skipTimeEntries = isVacation || isForcedOff || isFlatPaymentSave;
+  const timeEntries = skipTimeEntries ? [{ start: '', end: '' }] : collectTimeEntries();
   const effectiveType = eveningAssignment || assignmentType;
   const hasPagerWindow = getPagerPayWindow(effectiveType, isWeekend(date) || document.getElementById('holidayCheck')?.checked, date) !== null;
   const ucHoursVal = parseFloat(document.getElementById('unrestrictedCallHours')?.value) || 0;
-  if (!isVacation && !isForcedOff && (timeEntries.length === 0 || !timeEntries[0].start) && !hasPagerWindow && !(ucHoursVal > 0)) {
+  if (!skipTimeEntries && (timeEntries.length === 0 || !timeEntries[0].start) && !hasPagerWindow && !(ucHoursVal > 0)) {
     showToast('Please enter at least one start time');
     return;
   }
@@ -10306,7 +10333,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
   // Cross-midnight aware over multiple days so >24 h shifts (extended OB
   // call etc.) compose correctly: each entry must start at or after the
   // previous entry's end, with full days added as needed.
-  if (!isVacation && !isForcedOff) {
+  if (!skipTimeEntries) {
     let prevEndAbs = null;
     let absOffset = 0;
     for (let i = 0; i < timeEntries.length; i++) {
@@ -10392,7 +10419,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
   });
   saveData(data);
   // Auto-fill supervision end time when shift ends with open supervision
-  if (datesToSave.length === 1 && !isVacation && !isForcedOff) {
+  if (datesToSave.length === 1 && !skipTimeEntries) {
     const savedShift = data.shifts[date];
     if (savedShift && savedShift.endTime && savedShift.supervisionStart && !savedShift.supervisionEnd) {
       savedShift.supervisionEnd = savedShift.endTime;
@@ -10401,7 +10428,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     }
   }
   // Auto-fill open epidural end times when shift end time is set
-  if (datesToSave.length === 1 && !isVacation && !isForcedOff) {
+  if (datesToSave.length === 1 && !skipTimeEntries) {
     const savedShift = data.shifts[date];
     if (savedShift && savedShift.endTime) {
       checkShiftEndEpiduralAutoFill(date, savedShift.endTime);
@@ -12865,6 +12892,8 @@ function getPayCodeName(normalizedMin, assignmentType, isWknd, isHol) {
 function getShiftPayBreakdown(shift) {
   if (shift.assignmentType === 'vacation') return [];
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return [{ clockIn: '', clockOut: '', payCode: 'Forced Off', durationMin: 0, payRate: 0, amount: 56 }];
+  const flatRulePB = getFlatPaymentRule(shift);
+  if (flatRulePB) return [{ clockIn: '', clockOut: '', payCode: flatRulePB.label || 'Flat', durationMin: 0, payRate: 0, amount: flatRulePB.flatPoints }];
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
