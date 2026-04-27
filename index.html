@@ -5694,10 +5694,9 @@ function _adminRulesRenderVisibleList() {
     const checked = visible.indexOf(id) !== -1 ? ' checked' : '';
     const label = _adminRulesLabelFor(id);
     const border = i < ids.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
-    html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:0.78rem;cursor:pointer;' + border + '">';
-    html += '<input type="checkbox" onchange="adminRulesToggleVisible(\'' + id + '\')"' + checked + ' style="flex:none;">';
-    html += '<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(label) + '</span>';
-    html += '<span style="color:var(--text-dim);font-size:0.7rem;flex:none;white-space:nowrap;">' + escapeHtml(id) + '</span>';
+    html += '<label style="display:flex;align-items:center;gap:6px;padding:4px 10px;font-size:0.78rem;cursor:pointer;' + border + '">';
+    html += '<input type="checkbox" onchange="adminRulesToggleVisible(\'' + id + '\')"' + checked + ' style="flex:none;width:10px;height:10px;margin:0;">';
+    html += '<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(label) + '</span>';
     html += '</label>';
   }
   html += '</div>';
