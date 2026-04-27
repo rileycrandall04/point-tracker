@@ -4003,22 +4003,20 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="modal" style="max-width:520px;">
     <h2 id="adminRulesModalTitle">Edit shift type</h2>
     <div class="form-group">
-      <label>Type ID <span id="adminRulesModalIdHint" style="font-size:0.7rem;color:var(--text-dim);"></span></label>
-      <input type="text" id="adminRulesModalId" placeholder="IMC_my_shift" style="width:100%;">
-    </div>
-    <div class="form-group">
-      <label>Display label</label>
-      <input type="text" id="adminRulesModalLabel" placeholder="My Shift" style="width:100%;">
+      <label>Label</label>
+      <input type="text" id="adminRulesModalLabel" placeholder="Shift name as users will see it" style="width:100%;">
     </div>
 
     <div class="form-group">
       <label>Mode</label>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;">
-        <label style="font-size:0.85rem;display:flex;align-items:center;gap:4px;">
-          <input type="radio" name="adminRulesModalMode" value="inherit" onchange="adminRulesModalSetMode('inherit')"> Inherit from base rule
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+        <label style="font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="radio" name="adminRulesModalMode" value="inherit" onchange="adminRulesModalSetMode('inherit')" style="width:13px;height:13px;margin:0;flex:none;">
+          <span>Inherit from base rule</span>
         </label>
-        <label style="font-size:0.85rem;display:flex;align-items:center;gap:4px;">
-          <input type="radio" name="adminRulesModalMode" value="custom" onchange="adminRulesModalSetMode('custom')"> Custom
+        <label style="font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="radio" name="adminRulesModalMode" value="custom" onchange="adminRulesModalSetMode('custom')" style="width:13px;height:13px;margin:0;flex:none;">
+          <span>Custom</span>
         </label>
       </div>
     </div>
@@ -4035,22 +4033,21 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <!-- Custom-mode fields -->
     <div id="adminRulesModalCustomBox" class="hidden">
       <div class="form-group">
-        <label>AR rate mode</label>
+        <label>Base AR rate</label>
         <select id="adminRulesModalArMode" style="width:100%;">
-          <option value="general">general</option>
-          <option value="ob">ob</option>
-          <option value="sf1">sf1</option>
-          <option value="none">none (no AR)</option>
+          <option value="general">20 pts/hr (standard)</option>
+          <option value="ob">13 pts/hr (OB rate, doubles non-OR case points)</option>
+          <option value="none">No AR rate</option>
         </select>
       </div>
 
       <fieldset style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:10px;">
         <legend style="padding:0 6px;font-size:0.78rem;color:var(--text-dim);">Pager window</legend>
         <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:center;font-size:0.82rem;">
-          <label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" id="adminRulesModalPagerWeekday" onchange="adminRulesModalToggleField()"> Weekday</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="adminRulesModalPagerWeekday" style="width:13px;height:13px;margin:0;flex:none;"> Weekday</label>
           <input type="time" id="adminRulesModalPagerWeekdayStart">
           <input type="time" id="adminRulesModalPagerWeekdayEnd">
-          <label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" id="adminRulesModalPagerWeekend" onchange="adminRulesModalToggleField()"> Weekend</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="adminRulesModalPagerWeekend" style="width:13px;height:13px;margin:0;flex:none;"> Weekend</label>
           <input type="time" id="adminRulesModalPagerWeekendStart">
           <input type="time" id="adminRulesModalPagerWeekendEnd">
         </div>
@@ -4060,12 +4057,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <legend style="padding:0 6px;font-size:0.78rem;color:var(--text-dim);">Unrestricted call</legend>
         <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:center;font-size:0.82rem;">
           <label>Weekday</label>
-          <select id="adminRulesModalURWeekday" onchange="adminRulesModalToggleField()">
+          <select id="adminRulesModalURWeekday">
             <option value="none">none</option><option value="all">all day</option><option value="after">after time</option>
           </select>
           <input type="time" id="adminRulesModalURWeekdayAfter">
           <label>Weekend</label>
-          <select id="adminRulesModalURWeekend" onchange="adminRulesModalToggleField()">
+          <select id="adminRulesModalURWeekend">
             <option value="none">none</option><option value="all">all day</option><option value="after">after time</option>
           </select>
           <input type="time" id="adminRulesModalURWeekendAfter">
@@ -4087,11 +4084,11 @@ body.hide-monetary .monetary-hide { display: none !important; }
         </div>
       </div>
 
-      <div style="display:flex;flex-direction:column;gap:4px;font-size:0.85rem;margin-bottom:10px;">
-        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="adminRulesModalCardiacBonus"> Show "cardiac subspecialty" bonus toggle (+45 pts)</label>
-        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="adminRulesModalLiverBonus"> Show "liver subspecialty" bonus toggle (+45 pts)</label>
-        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="adminRulesModalNoProd"> No productivity (flat-only pay)</label>
-        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="adminRulesModalUnrestrictedEntry"> User enters unrestricted call hours</label>
+      <div style="display:flex;flex-direction:column;gap:5px;font-size:0.82rem;margin-bottom:10px;">
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="adminRulesModalCardiacBonus" style="width:13px;height:13px;margin:0;flex:none;"> Show "cardiac subspecialty" bonus toggle (+45 pts)</label>
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="adminRulesModalLiverBonus" style="width:13px;height:13px;margin:0;flex:none;"> Show "liver subspecialty" bonus toggle (+45 pts)</label>
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="adminRulesModalNoProd" style="width:13px;height:13px;margin:0;flex:none;"> No productivity (flat-only pay)</label>
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="adminRulesModalUnrestrictedEntry" style="width:13px;height:13px;margin:0;flex:none;"> User enters unrestricted call hours</label>
       </div>
     </div>
 
@@ -5572,7 +5569,6 @@ function _adminRulesRenderTypeList() {
     html += '<input type="checkbox" class="adminRulesTypeCheckbox" data-id="' + idAttr + '" onchange="_adminRulesUpdateDeleteSelectedBtn()" style="flex:none;width:12px;height:12px;margin:0;">';
     html += '<div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">';
     html += '<strong>' + escapeHtml(rule.label || id) + '</strong>';
-    html += ' <span style="color:var(--text-dim);font-size:0.7rem;">(' + idAttr + ')</span>';
     html += ' &middot; <span style="font-size:0.72rem;">' + summary + '</span>';
     html += '</div>';
     html += '<button title="Edit" onclick="adminRulesOpenModal(\'' + id + '\')" style="flex:none;border:none;background:transparent;color:var(--primary);cursor:pointer;font-size:0.78rem;padding:2px 6px;">Edit</button>';
@@ -5632,37 +5628,24 @@ function _adminRulesDescribe(rule, key) {
   if (!rule) return '<em style="color:var(--text-dim);">no rule</em>';
   const lines = [];
 
-  // AR rate
+  // Base AR rate — plain number for general; OB explicitly says doubling
+  // applies; "Unrestricted OB" is the editor name for the SF1 split rate.
   const arMode = rule.arRate && rule.arRate.mode;
-  if (arMode === 'general') lines.push('Base AR rate: <strong>20 pts/hr</strong> (standard).');
-  else if (arMode === 'ob') lines.push('Base AR rate: <strong>13 pts/hr</strong> (restricted OB rate). Case production is doubled — non-OR cases worth 2× points.');
-  else if (arMode === 'sf1') lines.push('Base AR rate: <strong>13 pts/hr during daytime weekday hours</strong>, <strong>20 pts/hr otherwise</strong> (split rate). Case production is doubled — non-OR cases worth 2× points.');
-  else if (arMode === 'none' || arMode == null) lines.push('Base AR rate: <strong>none</strong> (no AR earned during the shift).');
-  else lines.push('AR rate mode: <strong>' + escapeHtml(arMode) + '</strong>');
+  if (arMode === 'general') lines.push('Base AR rate: <strong>20 pts/hr</strong>.');
+  else if (arMode === 'ob') lines.push('Base AR rate: <strong>13 pts/hr</strong>. Non-OR case production is doubled.');
+  else if (arMode === 'sf1') lines.push('Base AR rate: <strong>Unrestricted OB</strong> (13 pts/hr restricted hours, 20 pts/hr unrestricted hours). Non-OR case production is doubled.');
+  else if (arMode === 'none' || arMode == null) lines.push('Base AR rate: <strong>none</strong>.');
+  else lines.push('Base AR rate: <strong>' + escapeHtml(arMode) + '</strong>.');
 
-  // Pager / unrestricted call window — paid at 3.5 pts/hr.
-  // For shifts where pager pay IS the unrestricted-call window (most call
-  // shifts), the two are the same thing — describe accordingly.
+  // Unrestricted call total hours — admins want just the totals, not the
+  // start/end window. Pager pay is the unrestricted-call window so we use
+  // a single line for both concepts.
   if (rule.pagerWindow) {
     const wd = rule.pagerWindow.weekday, we = rule.pagerWindow.weekend;
-    const wdStr = wd ? (_fmtMin(wd.start) + '-' + _fmtMin(wd.end) + ' (' + _fmtHours(wd.end - wd.start) + ')') : 'none';
-    const weStr = we ? (_fmtMin(we.start) + '-' + _fmtMin(we.end) + ' (' + _fmtHours(we.end - we.start) + ')') : 'none';
-    lines.push('Unrestricted call window (paid 3.5 pts/hr): weekday ' + wdStr + ', weekend/holiday ' + weStr + '.');
-  } else {
-    lines.push('Unrestricted call window: <em style="color:var(--text-dim);">none</em>.');
-  }
-
-  // unrestrictedCall is the engine signal that AR continues to accrue
-  // during off-shift hours. Only call it out when it differs from the
-  // pager window above, otherwise it's redundant with the line above.
-  if (rule.unrestrictedCall) {
-    const fmt = (v) => {
-      if (v == null) return 'none';
-      if (v === 'all') return 'all day';
-      if (v && typeof v === 'object' && v.afterMin != null) return 'after ' + _fmtMin(v.afterMin);
-      return String(v);
-    };
-    lines.push('AR continues to accrue during unrestricted hours: weekday ' + fmt(rule.unrestrictedCall.weekday) + ', weekend ' + fmt(rule.unrestrictedCall.weekend) + '.');
+    const parts = [];
+    if (wd) parts.push('<strong>' + _fmtHours(wd.end - wd.start) + ' weekday</strong>'); else parts.push('none weekday');
+    if (we) parts.push('<strong>' + _fmtHours(we.end - we.start) + ' weekend/holiday</strong>'); else parts.push('none weekend');
+    lines.push('Unrestricted call (paid 3.5 pts/hr): ' + parts.join(', ') + '.');
   }
 
   // Multipliers / bonuses / flags
@@ -5680,7 +5663,7 @@ function _adminRulesDescribe(rule, key) {
   if (key === 'cardiac_liver') {
     lines.push('Engine auto-adds the <strong>+45 pt subspecialty bonus</strong>; base totals are 94 pts weekday / 129 pts weekend.');
   }
-  if (key === 'OR' || key === 'OR_float' || key === 'pre_call') {
+  if (key === 'OR' || key === 'OR_float') {
     lines.push('Engine adds a <strong>4 hr / 80 pt minimum</strong> on weekday non-holidays.');
   }
 
@@ -5737,7 +5720,7 @@ function _adminRulesRenderBaseRefList() {
     const rule = DEFAULT_SHIFT_RULES[k];
     const display = _adminRulesEditorLabel(k, rule.label);
     html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;">';
-    html += '<div style="font-weight:600;">' + escapeHtml(display) + ' <span style="font-weight:400;color:var(--text-dim);font-size:0.74rem;">(' + escapeHtml(k) + ')</span></div>';
+    html += '<div style="font-weight:600;">' + escapeHtml(display) + '</div>';
     html += _adminRulesDescribe(rule, k);
     html += '</div>';
   }
@@ -5752,7 +5735,7 @@ function adminRulesUpdateInheritPreview() {
   const rule = DEFAULT_SHIFT_RULES[k];
   if (!rule) { out.innerHTML = '<em style="color:var(--text-dim);">No preview available.</em>'; return; }
   const display = _adminRulesEditorLabel(k, rule.label);
-  out.innerHTML = '<div style="font-weight:600;margin-bottom:4px;">' + escapeHtml(display) + ' <span style="font-weight:400;color:var(--text-dim);font-size:0.72rem;">(' + escapeHtml(k) + ')</span></div>'
+  out.innerHTML = '<div style="font-weight:600;margin-bottom:4px;">' + escapeHtml(display) + '</div>'
     + _adminRulesDescribe(rule, k);
 }
 
@@ -5862,10 +5845,19 @@ function adminRulesDeleteType(typeId) {
 
 // ----- Edit modal -----
 
+// Default values pre-loaded into the custom form for a brand-new shift —
+// match the typical 1st-call pattern (weekday 17:00-07:00 pager + after-17:00
+// unrestricted call, weekend 24-hour pager + all-day unrestricted).
+const ADMIN_RULES_CUSTOM_DEFAULTS = {
+  arMode: 'general',
+  pagerWeekday: { start: 1020, end: 1860 },
+  pagerWeekend: { start: 420, end: 1860 },
+  urWeekday: { afterMin: 1020 },
+  urWeekend: 'all'
+};
+
 function adminRulesOpenModal(typeId) {
   adminRulesEditingId = typeId; // null for new
-  const idEl = document.getElementById('adminRulesModalId');
-  const idHint = document.getElementById('adminRulesModalIdHint');
   const labelEl = document.getElementById('adminRulesModalLabel');
   const titleEl = document.getElementById('adminRulesModalTitle');
   const errEl = document.getElementById('adminRulesModalError');
@@ -5884,32 +5876,50 @@ function adminRulesOpenModal(typeId) {
   let opts = '';
   for (const k of visibleKeys) {
     const display = _adminRulesEditorLabel(k, DEFAULT_SHIFT_RULES[k].label);
-    opts += '<option value="' + k + '">' + escapeHtml(display) + ' (' + k + ')</option>';
+    opts += '<option value="' + k + '">' + escapeHtml(display) + '</option>';
   }
   inheritSel.innerHTML = opts;
+
+  // AR rate dropdown: only general/ob/none. If editing a rule with sf1 mode,
+  // tack it on so the existing value shows up.
+  const arSel = document.getElementById('adminRulesModalArMode');
+  // Reset to the canonical 3 options first so re-opens don't accumulate.
+  arSel.innerHTML = '<option value="general">20 pts/hr (standard)</option>'
+                  + '<option value="ob">13 pts/hr (OB rate, doubles non-OR case points)</option>'
+                  + '<option value="none">No AR rate</option>';
+  const existingArMode = typeId && adminRulesDraft.shiftRulesOverride[typeId]
+    && adminRulesDraft.shiftRulesOverride[typeId].arRate
+    && adminRulesDraft.shiftRulesOverride[typeId].arRate.mode;
+  if (existingArMode === 'sf1') {
+    arSel.insertAdjacentHTML('beforeend', '<option value="sf1">Unrestricted OB rate (existing)</option>');
+  }
 
   const rule = typeId ? (adminRulesDraft.shiftRulesOverride[typeId] || {}) : {};
   const isInherit = !!rule.inherit_uvh;
   const isNew = !typeId;
 
   titleEl.textContent = isNew ? 'Add shift type' : 'Edit shift type';
-  idEl.value = typeId || '';
-  idEl.disabled = !isNew;
-  idHint.textContent = isNew ? '(prefix with site code, e.g. ' + adminRulesSiteId + '_my_shift)' : '';
   labelEl.value = rule.label || '';
 
-  // Mode radios. Set the inherit dropdown's value BEFORE flipping mode so
-  // the auto-rendered preview shows the right base rule on first open.
-  const mode = isInherit ? 'inherit' : 'custom';
+  // Mode radios. Default new shifts to inherit; existing shifts pick up
+  // whichever mode they were saved with. Set the inherit dropdown's value
+  // BEFORE flipping mode so the auto-rendered preview shows the right base
+  // rule on first open.
+  const mode = isNew ? 'inherit' : (isInherit ? 'inherit' : 'custom');
   document.querySelectorAll('input[name="adminRulesModalMode"]').forEach(r => { r.checked = (r.value === mode); });
   if (isInherit) inheritSel.value = rule.inherit_uvh;
   adminRulesModalSetMode(mode);
 
-  // Custom fields
-  document.getElementById('adminRulesModalArMode').value = (rule.arRate && rule.arRate.mode) || 'general';
+  // Custom fields — pre-populate with existing values, OR with the standard
+  // call-shift defaults for a brand-new shift, OR with the rule's resolved
+  // values for an existing custom rule.
+  const useDefaults = isNew;
+  const arMode = (rule.arRate && rule.arRate.mode) || (useDefaults ? ADMIN_RULES_CUSTOM_DEFAULTS.arMode : 'general');
+  arSel.value = arMode;
 
   const pw = rule.pagerWindow || {};
-  const wd = pw.weekday, we = pw.weekend;
+  const wd = pw.weekday || (useDefaults ? ADMIN_RULES_CUSTOM_DEFAULTS.pagerWeekday : null);
+  const we = pw.weekend || (useDefaults ? ADMIN_RULES_CUSTOM_DEFAULTS.pagerWeekend : null);
   document.getElementById('adminRulesModalPagerWeekday').checked = !!wd;
   document.getElementById('adminRulesModalPagerWeekdayStart').value = wd ? _minToHHMM(wd.start) : '';
   document.getElementById('adminRulesModalPagerWeekdayEnd').value   = wd ? _minToHHMM(wd.end)   : '';
@@ -5918,8 +5928,10 @@ function adminRulesOpenModal(typeId) {
   document.getElementById('adminRulesModalPagerWeekendEnd').value   = we ? _minToHHMM(we.end)   : '';
 
   const ur = rule.unrestrictedCall || {};
-  _adminRulesURSet('Weekday', ur.weekday);
-  _adminRulesURSet('Weekend', ur.weekend);
+  const urW = (ur.weekday !== undefined ? ur.weekday : (useDefaults ? ADMIN_RULES_CUSTOM_DEFAULTS.urWeekday : null));
+  const urE = (ur.weekend !== undefined ? ur.weekend : (useDefaults ? ADMIN_RULES_CUSTOM_DEFAULTS.urWeekend : null));
+  _adminRulesURSet('Weekday', urW);
+  _adminRulesURSet('Weekend', urE);
 
   document.getElementById('adminRulesModalProdMult').value      = rule.productionMultiplier || '';
   document.getElementById('adminRulesModalFlatPoints').value    = rule.flatPoints || '';
@@ -5969,18 +5981,15 @@ function adminRulesCloseModal() {
 function adminRulesSaveModal() {
   const errEl = document.getElementById('adminRulesModalError');
   errEl.textContent = '';
-  const idEl = document.getElementById('adminRulesModalId');
   const labelEl = document.getElementById('adminRulesModalLabel');
-  const id = (idEl.value || '').trim();
   const label = (labelEl.value || '').trim();
-  if (!id) { errEl.textContent = 'Type ID is required.'; return; }
-  if (!/^[A-Za-z0-9_]+$/.test(id)) { errEl.textContent = 'Type ID may only contain letters, numbers, and underscores.'; return; }
-  if (!label) { errEl.textContent = 'Display label is required.'; return; }
-  // Disallow rename collisions.
-  if (adminRulesEditingId == null && adminRulesDraft.shiftRulesOverride[id]) {
-    errEl.textContent = 'A rule with that ID already exists.';
-    return;
-  }
+  if (!label) { errEl.textContent = 'Label is required.'; return; }
+
+  // Editing keeps the original ID; new shifts auto-generate one from the
+  // label (siteId_slug, deduplicated). IDs aren't surfaced anywhere in the
+  // editor anymore — they're just internal keys for Firestore + migration.
+  const id = adminRulesEditingId || _adminRulesAutoTypeId(label);
+  if (!id) { errEl.textContent = 'Could not generate a type ID from that label.'; return; }
 
   const modeRadio = document.querySelector('input[name="adminRulesModalMode"]:checked');
   const mode = modeRadio ? modeRadio.value : 'custom';
@@ -6050,6 +6059,23 @@ function _HHMMtoMin(s) {
   const m = String(s).match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return null;
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+}
+
+// Build a Firestore-safe key from the user-entered label, prefixed with
+// the site ID and de-duplicated against existing keys.
+function _adminRulesAutoTypeId(label) {
+  const slug = (label || '').trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (!slug) return '';
+  const existing = adminRulesDraft.shiftRulesOverride || {};
+  let candidate = adminRulesSiteId + '_' + slug;
+  let n = 2;
+  while (existing[candidate]) {
+    candidate = adminRulesSiteId + '_' + slug + '_' + n;
+    n++;
+  }
+  return candidate;
 }
 
 // ----- Save flow + audit log -----
