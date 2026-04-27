@@ -8197,19 +8197,33 @@ function renderCalendarMappingsEditor() {
   const personalEffective = composeEffective(personalSrc, _calMappingsEditorPending.personalEdits);
 
   let html = '';
+  // Add-new form — admins can target either Site (shared) or Personal;
+  // non-admins can only add personal overrides.
+  const siteName = (sitesCache[siteId] && sitesCache[siteId].name) || siteId;
+  html += `<div style="background:var(--surface2);padding:10px;border-radius:6px;margin-bottom:14px;">
+    <div style="font-size:0.85rem;font-weight:600;margin-bottom:8px;">Add a mapping</div>
+    <input type="text" id="calMappingsEditorAddTitle" placeholder="Calendar event title (e.g. Tier 5 IMC)" style="width:100%;margin-bottom:6px;">
+    <select id="calMappingsEditorAddType" style="width:100%;margin-bottom:6px;">${optionsHtml}</select>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:0.78rem;color:var(--text);">
+      ${isAdmin ? `<label style="display:flex;align-items:center;gap:4px;"><input type="radio" name="calMappingsEditorAddTarget" value="site" checked> Site (everyone at ${escapeHtml(siteName)})</label>` : ''}
+      <label style="display:flex;align-items:center;gap:4px;"><input type="radio" name="calMappingsEditorAddTarget" value="personal"${isAdmin ? '' : ' checked'}> Just me</label>
+      <button class="btn btn-primary btn-sm" onclick="calMappingsEditorAddRow()" style="margin-left:auto;">Add</button>
+    </div>
+  </div>`;
+
   // Site section
-  html += `<div style="margin-top:6px;margin-bottom:4px;font-size:0.85rem;font-weight:600;color:var(--text);">Site mappings ${isAdmin ? '' : '(read-only)'}</div>`;
+  html += `<div style="margin-top:6px;margin-bottom:4px;font-size:0.85rem;font-weight:600;color:var(--text);">Site mappings ${isAdmin ? '<span style="font-weight:400;font-size:0.7rem;color:var(--text-dim);">— editing changes the mapping for everyone at the site</span>' : '<span style="font-weight:400;font-size:0.7rem;color:var(--text-dim);">(read-only — ask an admin)</span>'}</div>`;
   const siteTitles = Object.keys(siteEffective).sort();
   if (siteTitles.length === 0) {
-    html += '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;">No site mappings yet. Confirm a sync to add some.</div>';
+    html += '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;">No site mappings yet. Add one above or confirm a sync to seed them.</div>';
   } else {
     siteTitles.forEach(t => { html += buildRow('site', t, siteEffective[t], !isAdmin); });
   }
   // Personal section
-  html += `<div style="margin-top:14px;margin-bottom:4px;font-size:0.85rem;font-weight:600;color:var(--text);">Your overrides</div>`;
+  html += `<div style="margin-top:14px;margin-bottom:4px;font-size:0.85rem;font-weight:600;color:var(--text);">Your overrides <span style="font-weight:400;font-size:0.7rem;color:var(--text-dim);">— apply only to you, beat the site mapping</span></div>`;
   const personalTitles = Object.keys(personalEffective).sort();
   if (personalTitles.length === 0) {
-    html += '<div style="font-size:0.78rem;color:var(--text-dim);">None — sync results that match the site default don\'t need an override.</div>';
+    html += '<div style="font-size:0.78rem;color:var(--text-dim);">None &mdash; sync results that match the site default don\'t need an override.</div>';
   } else {
     personalTitles.forEach(t => { html += buildRow('personal', t, personalEffective[t], false); });
   }
@@ -8253,6 +8267,30 @@ function renderCalendarMappingsEditor() {
       renderCalendarMappingsEditor();
     });
   });
+}
+
+// Add-new-mapping form handler. Reads the inputs, stages the new
+// mapping into _calMappingsEditorPending (site or personal), then
+// re-renders so the row shows up in the list. The change isn't
+// persisted until the user clicks Save Changes.
+function calMappingsEditorAddRow() {
+  if (!_calMappingsEditorPending) return;
+  const titleEl = document.getElementById('calMappingsEditorAddTitle');
+  const typeEl = document.getElementById('calMappingsEditorAddType');
+  const title = (titleEl && titleEl.value || '').trim();
+  const type = typeEl && typeEl.value || '';
+  if (!title) { showToast('Enter a calendar event title'); return; }
+  if (!type) { showToast('Pick a shift type'); return; }
+  const targetEl = document.querySelector('input[name="calMappingsEditorAddTarget"]:checked');
+  const target = (targetEl && targetEl.value) || 'personal';
+  if (target === 'site' && !isSiteAdmin(getCurrentSiteId())) {
+    showToast('Site admins only — adding to your overrides instead');
+  }
+  const useSite = target === 'site' && isSiteAdmin(getCurrentSiteId());
+  const dest = useSite ? _calMappingsEditorPending.siteEdits : _calMappingsEditorPending.personalEdits;
+  dest[title] = { type, label: getShiftTypeLabel(type, getCurrentSiteId()) };
+  if (titleEl) titleEl.value = '';
+  renderCalendarMappingsEditor();
 }
 
 async function saveCalendarMappingsEditor() {
