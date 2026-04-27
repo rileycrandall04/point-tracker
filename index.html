@@ -3837,9 +3837,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
       Pooled shift efficiency from everyone at this site who has data sharing enabled. Rows hide until at least 3 contributors have logged a shift of that type.
     </p>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-      <label style="font-size:0.82rem;color:var(--text-dim);">Site:</label>
-      <select id="communityStatsSiteSelect" onchange="renderCommunityStats()"
-        style="flex:1;min-width:160px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;"></select>
+      <span style="font-size:0.82rem;color:var(--text-dim);">Site:</span>
+      <span id="communityStatsSiteLabel" style="font-size:0.85rem;color:var(--text);font-weight:600;flex:1;">&mdash;</span>
       <button class="btn btn-sm" onclick="loadCommunityStats(true)" style="background:var(--surface2);color:var(--text);">Refresh</button>
     </div>
     <div style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;">
@@ -19279,20 +19278,16 @@ let _communityStatsCurrentSite = null; // currently-displayed siteId
 const COMMUNITY_STATS_MIN_CONTRIBUTORS = 1;
 
 function initCommunityStats() {
-  // Populate the site dropdown from sitesCache. "All sites" option lives
-  // at the top so admins can sanity-check that data is flowing from
-  // multiple sites; default selection is the user's own site.
-  const sel = document.getElementById('communityStatsSiteSelect');
-  if (!sel) return;
-  const ids = Object.keys(sitesCache || {}).slice().sort();
-  let html = '<option value="">All sites</option>';
-  for (const id of ids) {
-    const name = (sitesCache[id] && sitesCache[id].name) || id;
-    html += '<option value="' + id + '">' + escapeHtml(name) + '</option>';
-  }
-  sel.innerHTML = html;
+  // Community Stats is now scoped to the user's own site. Render a static
+  // label showing which site is in view (no dropdown — both because it
+  // simplifies UX, and because users shouldn't see other sites' pooled data).
+  const labelEl = document.getElementById('communityStatsSiteLabel');
   const mySite = getCurrentSiteId();
-  if (mySite && ids.indexOf(mySite) !== -1) sel.value = mySite;
+  if (labelEl) {
+    const name = (sitesCache[mySite] && sitesCache[mySite].name) || mySite || '—';
+    labelEl.textContent = name + ' (' + (mySite || '') + ')';
+  }
+  _communityStatsCurrentSite = mySite;
   loadCommunityStats(false);
 }
 
@@ -19310,7 +19305,11 @@ function loadCommunityStats(force) {
     out.innerHTML = '<p style="font-size:0.85rem;color:var(--accent2);">Sign in to load community data.</p>';
     return;
   }
-  db.collection('sharedShifts').get()
+  // Scope the fetch to the user's own site — Community Stats no longer
+  // exposes other sites' pooled data, and a where() clause is cheaper
+  // than pulling everything and filtering client-side.
+  const mySite = getCurrentSiteId();
+  db.collection('sharedShifts').where('siteId', '==', mySite).get()
     .then(snap => {
       const byUid = {};
       snap.forEach(doc => {
@@ -19364,8 +19363,9 @@ function renderCommunityStats() {
   _updateCommunityStatsModeButtons();
   const out = document.getElementById('communityStatsContent');
   if (!out) return;
-  const sel = document.getElementById('communityStatsSiteSelect');
-  const siteId = sel && sel.value;
+  // Always scope to the user's own site — Community Stats no longer
+  // exposes other sites' pooled data.
+  const siteId = getCurrentSiteId();
   _communityStatsCurrentSite = siteId;
   if (!_communityStatsCache) {
     out.innerHTML = '<p style="font-size:0.85rem;color:var(--text-dim);">Click Refresh to load.</p>';
