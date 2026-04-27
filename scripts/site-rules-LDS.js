@@ -1,3 +1,8 @@
+// FROZEN: original seed. Live edits now happen via Admin → Shift Rules in-app
+// and write directly to Firestore. Running scripts/load-site-rules.js --force
+// will OVERWRITE the live rules with this file. Don't edit unless you've
+// coordinated with whoever may be editing live.
+//
 // LDS Hospital (site ID: LDS) compensation rules — FILLED IN, rev 3.
 //
 // LDSH = LDS Hospital.

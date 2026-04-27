@@ -1,3 +1,8 @@
+// FROZEN: original seed. Live edits now happen via Admin → Shift Rules in-app
+// and write directly to Firestore. Running scripts/load-site-rules.js --force
+// will OVERWRITE the live rules with this file. Don't edit unless you've
+// coordinated with whoever may be editing live.
+//
 // IMC (Intermountain Medical Center, site ID: IMC) compensation rules — FILLED IN.
 //
 // See top of file for format docs in the original template; preserved here.

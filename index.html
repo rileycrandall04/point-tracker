@@ -3841,6 +3841,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
         style="border-radius:6px 6px 0 0;background:var(--primary);color:#fff;">Users</button>
       <button class="btn btn-sm" id="adminMSTabSites" onclick="adminMSSetTab('sites')"
         style="border-radius:6px 6px 0 0;background:var(--surface2);">Sites</button>
+      <button class="btn btn-sm" id="adminMSTabRules" onclick="adminMSSetTab('rules')"
+        style="border-radius:6px 6px 0 0;background:var(--surface2);">Shift Rules</button>
       <button class="btn btn-sm" id="adminMSTabTest" onclick="adminMSSetTab('test')"
         style="border-radius:6px 6px 0 0;background:var(--surface2);">Test cleanup</button>
     </div>
@@ -3865,6 +3867,58 @@ body.hide-monetary .monetary-hide { display: none !important; }
         Toggle "Unlocked for signups" once you've confirmed compensation rules with the site supervisors. Locked sites can still be invited to manually.
       </p>
       <div id="adminMSSitesList"></div>
+    </div>
+
+    <!-- Shift Rules tab -->
+    <div id="adminMSRulesPane" class="hidden">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <label style="font-size:0.82rem;color:var(--text-dim);">Editing site:</label>
+        <select id="adminRulesSiteSelect" onchange="adminRulesOnSiteChange()"
+          style="flex:1;min-width:160px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;"></select>
+        <span id="adminRulesDirtyBadge" class="hidden" style="font-size:0.7rem;color:var(--accent2);">unsaved changes</span>
+      </div>
+      <p style="font-size:0.74rem;color:var(--text-dim);margin:0 0 12px 0;">
+        Edits stay local until you click "Save changes". Saving writes the new rules to Firestore and appends a row to the audit log.
+      </p>
+
+      <!-- Shift type list -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+          <strong style="font-size:0.85rem;">Site shift types</strong>
+          <button class="btn btn-primary btn-sm" onclick="adminRulesOpenModal(null)">+ Add shift type</button>
+        </div>
+        <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px 0;">
+          Override entries for this site. Inherited rules show their UVH base in italics.
+        </p>
+        <div id="adminRulesTypeList" style="font-size:0.84rem;"></div>
+      </div>
+
+      <!-- Visible shift types -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:10px;">
+        <div style="margin-bottom:6px;"><strong style="font-size:0.85rem;">Shifts visible in dropdowns</strong></div>
+        <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px 0;">
+          Controls which shift types this site's users see when adding a shift. Leave all unchecked to fall back to every UVH default.
+        </p>
+        <div id="adminRulesVisibleList" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+      </div>
+
+      <!-- otherMigrationMap -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
+          <strong style="font-size:0.85rem;">Migration map (legacy &rarr; site shift)</strong>
+          <button class="btn btn-sm" onclick="adminRulesAddMigrationEntry()" style="background:var(--surface);color:var(--text);">+ Add row</button>
+        </div>
+        <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px 0;">
+          When a user moves to this site, shifts tagged with the legacy key are remapped to the chosen site shift.
+        </p>
+        <div id="adminRulesMigrationList" style="font-size:0.82rem;"></div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-sm" onclick="adminRulesDiscard()" style="background:var(--surface);color:var(--text-dim);">Discard</button>
+        <button class="btn btn-primary btn-sm" id="adminRulesSaveBtn" onclick="adminRulesSaveAll()" disabled>Save changes</button>
+      </div>
+      <div id="adminRulesStatus" style="margin-top:8px;font-size:0.8rem;"></div>
     </div>
 
     <!-- Test cleanup tab -->
@@ -3928,6 +3982,110 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <button class="btn btn-outline btn-sm" id="cancelDatePicker">Cancel</button>
       <button class="btn btn-sm" id="todayDatePicker" style="width:auto;background:var(--accent2);color:#fff;">Today</button>
       <button class="btn btn-primary btn-sm" id="applyDatePicker" style="width:auto;">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin shift-rule edit modal -->
+<div class="modal-overlay hidden" id="adminRulesModal">
+  <div class="modal" style="max-width:520px;">
+    <h2 id="adminRulesModalTitle">Edit shift type</h2>
+    <div class="form-group">
+      <label>Type ID <span id="adminRulesModalIdHint" style="font-size:0.7rem;color:var(--text-dim);"></span></label>
+      <input type="text" id="adminRulesModalId" placeholder="IMC_my_shift" style="width:100%;">
+    </div>
+    <div class="form-group">
+      <label>Display label</label>
+      <input type="text" id="adminRulesModalLabel" placeholder="My Shift" style="width:100%;">
+    </div>
+
+    <div class="form-group">
+      <label>Mode</label>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <label style="font-size:0.85rem;display:flex;align-items:center;gap:4px;">
+          <input type="radio" name="adminRulesModalMode" value="inherit" onchange="adminRulesModalSetMode('inherit')"> Inherit from base rule
+        </label>
+        <label style="font-size:0.85rem;display:flex;align-items:center;gap:4px;">
+          <input type="radio" name="adminRulesModalMode" value="custom" onchange="adminRulesModalSetMode('custom')"> Custom
+        </label>
+      </div>
+    </div>
+
+    <!-- Inherit-mode fields -->
+    <div id="adminRulesModalInheritBox">
+      <div class="form-group">
+        <label>Base rule</label>
+        <select id="adminRulesModalInheritFrom" style="width:100%;"></select>
+      </div>
+    </div>
+
+    <!-- Custom-mode fields -->
+    <div id="adminRulesModalCustomBox" class="hidden">
+      <div class="form-group">
+        <label>AR rate mode</label>
+        <select id="adminRulesModalArMode" style="width:100%;">
+          <option value="general">general</option>
+          <option value="ob">ob</option>
+          <option value="sf1">sf1</option>
+          <option value="none">none (no AR)</option>
+        </select>
+      </div>
+
+      <fieldset style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:10px;">
+        <legend style="padding:0 6px;font-size:0.78rem;color:var(--text-dim);">Pager window</legend>
+        <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:center;font-size:0.82rem;">
+          <label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" id="adminRulesModalPagerWeekday" onchange="adminRulesModalToggleField()"> Weekday</label>
+          <input type="time" id="adminRulesModalPagerWeekdayStart">
+          <input type="time" id="adminRulesModalPagerWeekdayEnd">
+          <label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" id="adminRulesModalPagerWeekend" onchange="adminRulesModalToggleField()"> Weekend</label>
+          <input type="time" id="adminRulesModalPagerWeekendStart">
+          <input type="time" id="adminRulesModalPagerWeekendEnd">
+        </div>
+      </fieldset>
+
+      <fieldset style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:10px;">
+        <legend style="padding:0 6px;font-size:0.78rem;color:var(--text-dim);">Unrestricted call</legend>
+        <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:center;font-size:0.82rem;">
+          <label>Weekday</label>
+          <select id="adminRulesModalURWeekday" onchange="adminRulesModalToggleField()">
+            <option value="none">none</option><option value="all">all day</option><option value="after">after time</option>
+          </select>
+          <input type="time" id="adminRulesModalURWeekdayAfter">
+          <label>Weekend</label>
+          <select id="adminRulesModalURWeekend" onchange="adminRulesModalToggleField()">
+            <option value="none">none</option><option value="all">all day</option><option value="after">after time</option>
+          </select>
+          <input type="time" id="adminRulesModalURWeekendAfter">
+        </div>
+      </fieldset>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Production multiplier</label>
+          <input type="number" id="adminRulesModalProdMult" min="1" step="0.5" placeholder="1" style="width:100%;">
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Flat points</label>
+          <input type="number" id="adminRulesModalFlatPoints" min="0" step="1" placeholder="0" style="width:100%;">
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Float bonus</label>
+          <input type="number" id="adminRulesModalFloatBonus" min="0" step="1" placeholder="0" style="width:100%;">
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:0.85rem;margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="adminRulesModalCardiacBonus"> Show "cardiac subspecialty" bonus toggle (+45 pts)</label>
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="adminRulesModalLiverBonus"> Show "liver subspecialty" bonus toggle (+45 pts)</label>
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="adminRulesModalNoProd"> No productivity (flat-only pay)</label>
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="adminRulesModalUnrestrictedEntry"> User enters unrestricted call hours</label>
+      </div>
+    </div>
+
+    <div id="adminRulesModalError" style="color:var(--accent2);font-size:0.8rem;margin-bottom:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="adminRulesCloseModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="adminRulesSaveModal()">Apply</button>
     </div>
   </div>
 </div>
@@ -4901,6 +5059,7 @@ function adminMSSetTab(tab) {
   const tabs = [
     { id: 'users', btn: 'adminMSTabUsers', pane: 'adminMSUsersPane' },
     { id: 'sites', btn: 'adminMSTabSites', pane: 'adminMSSitesPane' },
+    { id: 'rules', btn: 'adminMSTabRules', pane: 'adminMSRulesPane' },
     { id: 'test',  btn: 'adminMSTabTest',  pane: 'adminMSTestPane'  }
   ];
   for (const t of tabs) {
@@ -4918,6 +5077,7 @@ function adminMSSetTab(tab) {
     }
   }
   if (tab === 'sites') renderAdminMSSitesList();
+  if (tab === 'rules') adminRulesInit();
 }
 
 function _adminMSSiteOptionsHTML(currentSiteId) {
@@ -5246,6 +5406,518 @@ async function adminMSToggleSiteUnlock(siteId, unlock) {
     renderAdminMSSitesList();
   } catch (err) {
     alert('Failed: ' + (err.message || err));
+  }
+}
+
+// ----- Shift Rules editor tab -----
+//
+// Local draft of the currently-edited site's rules. Every edit goes here
+// first; only "Save changes" commits to Firestore + appends an audit log
+// entry. Original is kept so we can compute the before/after diff.
+
+let adminRulesSiteId = null;
+let adminRulesDraft = null;     // { shiftRulesOverride, visibleShiftTypes, otherMigrationMap }
+let adminRulesOriginal = null;  // deep-copy of the loaded site's rule fields
+let adminRulesEditingId = null; // type id currently in the modal (null = new)
+
+function _adminRulesAllowedSiteIds() {
+  const all = Object.keys(sitesCache || {}).slice().sort();
+  if (isAppOwner() || isLegacyAdmin()) return all;
+  const allowed = getAdminSites();
+  return all.filter(id => allowed.indexOf(id) !== -1);
+}
+
+function _adminRulesDeepClone(obj) {
+  if (obj === null || obj === undefined) return obj;
+  return JSON.parse(JSON.stringify(obj));
+}
+
+function _adminRulesIsDirty() {
+  if (!adminRulesDraft || !adminRulesOriginal) return false;
+  return JSON.stringify(adminRulesDraft) !== JSON.stringify(adminRulesOriginal);
+}
+
+function _adminRulesUpdateDirtyUI() {
+  const dirty = _adminRulesIsDirty();
+  const badge = document.getElementById('adminRulesDirtyBadge');
+  const btn = document.getElementById('adminRulesSaveBtn');
+  if (badge) badge.classList.toggle('hidden', !dirty);
+  if (btn) btn.disabled = !dirty;
+}
+
+function adminRulesInit() {
+  const sel = document.getElementById('adminRulesSiteSelect');
+  if (!sel) return;
+  const ids = _adminRulesAllowedSiteIds();
+  if (ids.length === 0) {
+    sel.innerHTML = '<option value="">(no sites)</option>';
+    document.getElementById('adminRulesTypeList').innerHTML = '<p style="color:var(--text-dim);">You have no sites to administer.</p>';
+    return;
+  }
+  // Preserve current selection if still in the allowed list.
+  const prev = adminRulesSiteId;
+  let html = '';
+  for (const id of ids) {
+    const name = (sitesCache[id] && sitesCache[id].name) || id;
+    html += '<option value="' + id + '">' + escapeHtml(name) + ' (' + id + ')</option>';
+  }
+  sel.innerHTML = html;
+  const target = (prev && ids.indexOf(prev) !== -1) ? prev : ids[0];
+  sel.value = target;
+  adminRulesLoadSite(target);
+}
+
+function adminRulesOnSiteChange() {
+  const sel = document.getElementById('adminRulesSiteSelect');
+  const newId = sel && sel.value;
+  if (!newId) return;
+  if (_adminRulesIsDirty()) {
+    if (!confirm('Discard unsaved changes for ' + adminRulesSiteId + '?')) {
+      sel.value = adminRulesSiteId;
+      return;
+    }
+  }
+  adminRulesLoadSite(newId);
+}
+
+function adminRulesLoadSite(siteId) {
+  adminRulesSiteId = siteId;
+  const site = sitesCache[siteId] || {};
+  adminRulesDraft = {
+    shiftRulesOverride: _adminRulesDeepClone(site.shiftRulesOverride) || {},
+    visibleShiftTypes:  _adminRulesDeepClone(site.visibleShiftTypes)  || [],
+    otherMigrationMap:  _adminRulesDeepClone(site.otherMigrationMap)  || {}
+  };
+  adminRulesOriginal = _adminRulesDeepClone(adminRulesDraft);
+  _adminRulesSetStatus('', false);
+  adminRulesRender();
+}
+
+function adminRulesDiscard() {
+  if (!_adminRulesIsDirty()) return;
+  if (!confirm('Discard all unsaved changes?')) return;
+  adminRulesDraft = _adminRulesDeepClone(adminRulesOriginal);
+  adminRulesRender();
+}
+
+function _adminRulesSetStatus(msg, isError) {
+  const el = document.getElementById('adminRulesStatus');
+  if (!el) return;
+  el.style.color = isError ? 'var(--accent2)' : 'var(--accent)';
+  el.textContent = msg || '';
+}
+
+// All shift-type IDs known for the picker / migration target dropdown:
+// the site's overrides + every UVH default key.
+function _adminRulesKnownTypeIds() {
+  const set = {};
+  for (const k of Object.keys(adminRulesDraft.shiftRulesOverride || {})) set[k] = true;
+  for (const k of Object.keys(DEFAULT_SHIFT_RULES)) set[k] = true;
+  return Object.keys(set).sort();
+}
+
+function _adminRulesLabelFor(typeId) {
+  const o = adminRulesDraft.shiftRulesOverride[typeId];
+  if (o && o.label) return o.label;
+  const d = DEFAULT_SHIFT_RULES[typeId];
+  if (d && d.label) return d.label;
+  return typeId;
+}
+
+function adminRulesRender() {
+  _adminRulesUpdateDirtyUI();
+  _adminRulesRenderTypeList();
+  _adminRulesRenderVisibleList();
+  _adminRulesRenderMigrationList();
+}
+
+function _adminRulesRenderTypeList() {
+  const out = document.getElementById('adminRulesTypeList');
+  if (!out) return;
+  const overrides = adminRulesDraft.shiftRulesOverride || {};
+  const ids = Object.keys(overrides).sort();
+  if (ids.length === 0) {
+    out.innerHTML = '<p style="color:var(--text-dim);font-size:0.78rem;">No site-specific shift types yet. Click "Add shift type" or click an inherited rule below to override it.</p>';
+  } else {
+    let html = '';
+    for (const id of ids) {
+      const rule = overrides[id] || {};
+      const inh = rule.inherit_uvh;
+      const summary = inh
+        ? '<em style="color:var(--text-dim);">inherits ' + escapeHtml(inh) + '</em>'
+        : _adminRulesSummary(rule);
+      html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">';
+      html += '<div style="flex:1;min-width:160px;"><strong>' + escapeHtml(rule.label || id) + '</strong>';
+      html += ' <span style="font-size:0.7rem;color:var(--text-dim);">(' + escapeHtml(id) + ')</span>';
+      html += '<br><span style="font-size:0.74rem;">' + summary + '</span></div>';
+      html += '<div style="display:flex;gap:4px;">';
+      html += '<button class="btn btn-sm" onclick="adminRulesOpenModal(\'' + id + '\')">Edit</button>';
+      html += '<button class="btn btn-sm" onclick="adminRulesDeleteType(\'' + id + '\')" style="background:var(--surface2);color:var(--accent2);">Delete</button>';
+      html += '</div>';
+      html += '</div>';
+    }
+    out.innerHTML = html;
+  }
+}
+
+function _adminRulesSummary(rule) {
+  const parts = [];
+  if (rule.arRate && rule.arRate.mode) parts.push('AR:' + rule.arRate.mode);
+  if (rule.pagerWindow) parts.push('pager');
+  if (rule.unrestrictedCall) parts.push('unrestricted');
+  if (rule.productionMultiplier && rule.productionMultiplier !== 1) parts.push('prod×' + rule.productionMultiplier);
+  if (rule.flatPoints) parts.push(rule.flatPoints + ' flat pts');
+  if (rule.floatBonus) parts.push('+' + rule.floatBonus + ' float');
+  if (rule.cardiacBonus) parts.push('cardiac+');
+  if (rule.liverBonus) parts.push('liver+');
+  if (rule.noProductivity) parts.push('no-prod');
+  if (rule.unrestrictedCallEntry) parts.push('user-hours');
+  return parts.length ? '<span style="color:var(--text-dim);">' + parts.join(' &middot; ') + '</span>' : '<span style="color:var(--text-dim);">(empty rule)</span>';
+}
+
+function _adminRulesRenderVisibleList() {
+  const out = document.getElementById('adminRulesVisibleList');
+  if (!out) return;
+  const visible = adminRulesDraft.visibleShiftTypes || [];
+  const ids = _adminRulesKnownTypeIds();
+  let html = '';
+  for (const id of ids) {
+    const checked = visible.indexOf(id) !== -1 ? ' checked' : '';
+    const label = _adminRulesLabelFor(id);
+    html += '<label style="font-size:0.78rem;display:flex;align-items:center;gap:4px;background:var(--surface);padding:4px 8px;border-radius:6px;cursor:pointer;">';
+    html += '<input type="checkbox" onchange="adminRulesToggleVisible(\'' + id + '\')"' + checked + '>';
+    html += escapeHtml(label) + ' <span style="color:var(--text-dim);font-size:0.7rem;">(' + escapeHtml(id) + ')</span>';
+    html += '</label>';
+  }
+  out.innerHTML = html;
+}
+
+function adminRulesToggleVisible(typeId) {
+  if (!adminRulesDraft.visibleShiftTypes) adminRulesDraft.visibleShiftTypes = [];
+  const arr = adminRulesDraft.visibleShiftTypes;
+  const i = arr.indexOf(typeId);
+  if (i === -1) arr.push(typeId); else arr.splice(i, 1);
+  _adminRulesUpdateDirtyUI();
+}
+
+function _adminRulesRenderMigrationList() {
+  const out = document.getElementById('adminRulesMigrationList');
+  if (!out) return;
+  const map = adminRulesDraft.otherMigrationMap || {};
+  const keys = Object.keys(map).sort();
+  if (keys.length === 0) {
+    out.innerHTML = '<p style="color:var(--text-dim);font-size:0.74rem;">No migration entries.</p>';
+    return;
+  }
+  const targetIds = _adminRulesKnownTypeIds();
+  let html = '';
+  for (const k of keys) {
+    let opts = '<option value="">(none)</option>';
+    for (const t of targetIds) {
+      const sel = t === map[k] ? ' selected' : '';
+      opts += '<option value="' + escapeHtml(t) + '"' + sel + '>' + escapeHtml(_adminRulesLabelFor(t)) + ' (' + escapeHtml(t) + ')</option>';
+    }
+    const jsKey = k.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">';
+    html += '<input type="text" value="' + escapeHtml(k) + '" onchange="adminRulesRenameMigrationKey(\'' + jsKey + '\', this.value)" style="flex:1;min-width:120px;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.8rem;">';
+    html += '<span style="color:var(--text-dim);font-size:0.78rem;">&rarr;</span>';
+    html += '<select onchange="adminRulesUpdateMigrationTarget(\'' + jsKey + '\', this.value)" style="flex:2;min-width:160px;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.8rem;">' + opts + '</select>';
+    html += '<button class="btn btn-sm" onclick="adminRulesRemoveMigrationEntry(\'' + jsKey + '\')" style="background:var(--surface2);color:var(--accent2);">&times;</button>';
+    html += '</div>';
+  }
+  out.innerHTML = html;
+}
+
+function adminRulesRenameMigrationKey(oldKey, newKeyRaw) {
+  const newKey = (newKeyRaw || '').trim();
+  if (!newKey || newKey === oldKey) return;
+  const map = adminRulesDraft.otherMigrationMap || {};
+  if (map[newKey] != null) {
+    alert('A migration entry for "' + newKey + '" already exists.');
+    adminRulesRender();
+    return;
+  }
+  map[newKey] = map[oldKey];
+  delete map[oldKey];
+  adminRulesRender();
+}
+
+function adminRulesAddMigrationEntry() {
+  const key = (prompt('Legacy shift type key to remap from:') || '').trim();
+  if (!key) return;
+  if (!adminRulesDraft.otherMigrationMap) adminRulesDraft.otherMigrationMap = {};
+  if (adminRulesDraft.otherMigrationMap[key] != null) {
+    alert('That key already exists.');
+    return;
+  }
+  adminRulesDraft.otherMigrationMap[key] = '';
+  adminRulesRender();
+}
+
+function adminRulesRemoveMigrationEntry(key) {
+  if (!adminRulesDraft.otherMigrationMap) return;
+  delete adminRulesDraft.otherMigrationMap[key];
+  adminRulesRender();
+}
+
+function adminRulesUpdateMigrationTarget(key, target) {
+  if (!adminRulesDraft.otherMigrationMap) adminRulesDraft.otherMigrationMap = {};
+  adminRulesDraft.otherMigrationMap[key] = target;
+  _adminRulesUpdateDirtyUI();
+}
+
+function adminRulesDeleteType(typeId) {
+  if (!confirm('Delete shift type "' + typeId + '" from this site?')) return;
+  delete adminRulesDraft.shiftRulesOverride[typeId];
+  // Also remove from visibleShiftTypes if present.
+  if (adminRulesDraft.visibleShiftTypes) {
+    adminRulesDraft.visibleShiftTypes = adminRulesDraft.visibleShiftTypes.filter(t => t !== typeId);
+  }
+  adminRulesRender();
+}
+
+// ----- Edit modal -----
+
+function adminRulesOpenModal(typeId) {
+  adminRulesEditingId = typeId; // null for new
+  const idEl = document.getElementById('adminRulesModalId');
+  const idHint = document.getElementById('adminRulesModalIdHint');
+  const labelEl = document.getElementById('adminRulesModalLabel');
+  const titleEl = document.getElementById('adminRulesModalTitle');
+  const errEl = document.getElementById('adminRulesModalError');
+  errEl.textContent = '';
+
+  // Populate base-rule dropdown with UVH defaults + this site's overrides.
+  const inheritSel = document.getElementById('adminRulesModalInheritFrom');
+  let opts = '';
+  for (const k of Object.keys(DEFAULT_SHIFT_RULES).sort()) {
+    opts += '<option value="' + k + '">' + escapeHtml(DEFAULT_SHIFT_RULES[k].label || k) + ' (' + k + ')</option>';
+  }
+  inheritSel.innerHTML = opts;
+
+  const rule = typeId ? (adminRulesDraft.shiftRulesOverride[typeId] || {}) : {};
+  const isInherit = !!rule.inherit_uvh;
+  const isNew = !typeId;
+
+  titleEl.textContent = isNew ? 'Add shift type' : 'Edit shift type';
+  idEl.value = typeId || '';
+  idEl.disabled = !isNew;
+  idHint.textContent = isNew ? '(prefix with site code, e.g. ' + adminRulesSiteId + '_my_shift)' : '';
+  labelEl.value = rule.label || '';
+
+  // Mode radios
+  const mode = isInherit ? 'inherit' : 'custom';
+  document.querySelectorAll('input[name="adminRulesModalMode"]').forEach(r => { r.checked = (r.value === mode); });
+  adminRulesModalSetMode(mode);
+  if (isInherit) inheritSel.value = rule.inherit_uvh;
+
+  // Custom fields
+  document.getElementById('adminRulesModalArMode').value = (rule.arRate && rule.arRate.mode) || 'general';
+
+  const pw = rule.pagerWindow || {};
+  const wd = pw.weekday, we = pw.weekend;
+  document.getElementById('adminRulesModalPagerWeekday').checked = !!wd;
+  document.getElementById('adminRulesModalPagerWeekdayStart').value = wd ? _minToHHMM(wd.start) : '';
+  document.getElementById('adminRulesModalPagerWeekdayEnd').value   = wd ? _minToHHMM(wd.end)   : '';
+  document.getElementById('adminRulesModalPagerWeekend').checked = !!we;
+  document.getElementById('adminRulesModalPagerWeekendStart').value = we ? _minToHHMM(we.start) : '';
+  document.getElementById('adminRulesModalPagerWeekendEnd').value   = we ? _minToHHMM(we.end)   : '';
+
+  const ur = rule.unrestrictedCall || {};
+  _adminRulesURSet('Weekday', ur.weekday);
+  _adminRulesURSet('Weekend', ur.weekend);
+
+  document.getElementById('adminRulesModalProdMult').value      = rule.productionMultiplier || '';
+  document.getElementById('adminRulesModalFlatPoints').value    = rule.flatPoints || '';
+  document.getElementById('adminRulesModalFloatBonus').value    = rule.floatBonus || '';
+  document.getElementById('adminRulesModalCardiacBonus').checked     = !!rule.cardiacBonus;
+  document.getElementById('adminRulesModalLiverBonus').checked       = !!rule.liverBonus;
+  document.getElementById('adminRulesModalNoProd').checked           = !!rule.noProductivity;
+  document.getElementById('adminRulesModalUnrestrictedEntry').checked = !!rule.unrestrictedCallEntry;
+
+  document.getElementById('adminRulesModal').classList.remove('hidden');
+}
+
+function _adminRulesURSet(suffix, val) {
+  const sel = document.getElementById('adminRulesModalUR' + suffix);
+  const after = document.getElementById('adminRulesModalUR' + suffix + 'After');
+  if (val == null) { sel.value = 'none'; after.value = ''; return; }
+  if (val === 'all') { sel.value = 'all'; after.value = ''; return; }
+  if (val && typeof val === 'object' && val.afterMin != null) {
+    sel.value = 'after';
+    after.value = _minToHHMM(val.afterMin);
+    return;
+  }
+  sel.value = 'none';
+  after.value = '';
+}
+
+function adminRulesModalSetMode(mode) {
+  const inh = document.getElementById('adminRulesModalInheritBox');
+  const cus = document.getElementById('adminRulesModalCustomBox');
+  if (mode === 'inherit') { inh.classList.remove('hidden'); cus.classList.add('hidden'); }
+  else                    { inh.classList.add('hidden');    cus.classList.remove('hidden'); }
+}
+
+function adminRulesModalToggleField() { /* placeholder for future enable/disable wiring */ }
+
+function adminRulesCloseModal() {
+  document.getElementById('adminRulesModal').classList.add('hidden');
+  adminRulesEditingId = null;
+}
+
+function adminRulesSaveModal() {
+  const errEl = document.getElementById('adminRulesModalError');
+  errEl.textContent = '';
+  const idEl = document.getElementById('adminRulesModalId');
+  const labelEl = document.getElementById('adminRulesModalLabel');
+  const id = (idEl.value || '').trim();
+  const label = (labelEl.value || '').trim();
+  if (!id) { errEl.textContent = 'Type ID is required.'; return; }
+  if (!/^[A-Za-z0-9_]+$/.test(id)) { errEl.textContent = 'Type ID may only contain letters, numbers, and underscores.'; return; }
+  if (!label) { errEl.textContent = 'Display label is required.'; return; }
+  // Disallow rename collisions.
+  if (adminRulesEditingId == null && adminRulesDraft.shiftRulesOverride[id]) {
+    errEl.textContent = 'A rule with that ID already exists.';
+    return;
+  }
+
+  const modeRadio = document.querySelector('input[name="adminRulesModalMode"]:checked');
+  const mode = modeRadio ? modeRadio.value : 'custom';
+  let rule = { label: label };
+  if (mode === 'inherit') {
+    rule.inherit_uvh = document.getElementById('adminRulesModalInheritFrom').value;
+  } else {
+    rule.arRate = { mode: document.getElementById('adminRulesModalArMode').value };
+
+    const pwd = document.getElementById('adminRulesModalPagerWeekday').checked;
+    const pwe = document.getElementById('adminRulesModalPagerWeekend').checked;
+    if (pwd || pwe) {
+      rule.pagerWindow = {
+        weekday: pwd ? { start: _HHMMtoMin(document.getElementById('adminRulesModalPagerWeekdayStart').value), end: _HHMMtoMin(document.getElementById('adminRulesModalPagerWeekdayEnd').value) } : null,
+        weekend: pwe ? { start: _HHMMtoMin(document.getElementById('adminRulesModalPagerWeekendStart').value), end: _HHMMtoMin(document.getElementById('adminRulesModalPagerWeekendEnd').value) } : null
+      };
+    } else {
+      rule.pagerWindow = null;
+    }
+
+    const urd = _adminRulesReadUR('Weekday');
+    const ure = _adminRulesReadUR('Weekend');
+    if (urd != null || ure != null) {
+      rule.unrestrictedCall = { weekday: urd, weekend: ure };
+    } else {
+      rule.unrestrictedCall = null;
+    }
+
+    const prod = parseFloat(document.getElementById('adminRulesModalProdMult').value);
+    if (!isNaN(prod) && prod > 1) rule.productionMultiplier = prod;
+    const flat = parseInt(document.getElementById('adminRulesModalFlatPoints').value, 10);
+    if (!isNaN(flat) && flat > 0) rule.flatPoints = flat;
+    const fb = parseInt(document.getElementById('adminRulesModalFloatBonus').value, 10);
+    if (!isNaN(fb) && fb > 0) rule.floatBonus = fb;
+    if (document.getElementById('adminRulesModalCardiacBonus').checked)     rule.cardiacBonus = true;
+    if (document.getElementById('adminRulesModalLiverBonus').checked)       rule.liverBonus = true;
+    if (document.getElementById('adminRulesModalNoProd').checked)           rule.noProductivity = true;
+    if (document.getElementById('adminRulesModalUnrestrictedEntry').checked) rule.unrestrictedCallEntry = true;
+  }
+
+  adminRulesDraft.shiftRulesOverride[id] = rule;
+  adminRulesCloseModal();
+  adminRulesRender();
+}
+
+function _adminRulesReadUR(suffix) {
+  const sel = document.getElementById('adminRulesModalUR' + suffix);
+  const after = document.getElementById('adminRulesModalUR' + suffix + 'After');
+  const v = sel.value;
+  if (v === 'none') return null;
+  if (v === 'all')  return 'all';
+  if (v === 'after') {
+    const m = _HHMMtoMin(after.value);
+    if (m == null) return null;
+    return { afterMin: m };
+  }
+  return null;
+}
+
+function _minToHHMM(min) {
+  if (min == null || isNaN(min)) return '';
+  const h = Math.floor(min / 60), m = min % 60;
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+function _HHMMtoMin(s) {
+  if (!s) return null;
+  const m = String(s).match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+}
+
+// ----- Save flow + audit log -----
+
+async function adminRulesSaveAll() {
+  if (!adminRulesSiteId || !_adminRulesIsDirty()) return;
+  if (!isSiteAdmin(adminRulesSiteId)) {
+    _adminRulesSetStatus('Not authorized for this site.', true);
+    return;
+  }
+  // Strip empty-string targets from migration map and dedupe visibleShiftTypes.
+  const cleanMig = {};
+  for (const [k, v] of Object.entries(adminRulesDraft.otherMigrationMap || {})) {
+    if (k && v) cleanMig[k] = v;
+  }
+  adminRulesDraft.otherMigrationMap = cleanMig;
+  adminRulesDraft.visibleShiftTypes = Array.from(new Set(adminRulesDraft.visibleShiftTypes || []));
+
+  _adminRulesSetStatus('Saving...', false);
+  try {
+    const now = new Date().toISOString();
+    const payload = {
+      shiftRulesOverride: adminRulesDraft.shiftRulesOverride,
+      visibleShiftTypes:  adminRulesDraft.visibleShiftTypes,
+      otherMigrationMap:  adminRulesDraft.otherMigrationMap,
+      updatedAt:          now,
+      updatedBy:          currentUser.uid
+    };
+    await db.collection('sites').doc(adminRulesSiteId).set(payload, { merge: true });
+
+    // Audit log entry. Best-effort: if it fails, the rules write still happened
+    // — surface the error but don't roll back.
+    try {
+      await db.collection('siteRulesAudit').doc(adminRulesSiteId)
+        .collection('changes').add({
+          siteId: adminRulesSiteId,
+          uid: currentUser.uid,
+          email: (currentUser.email || ''),
+          displayName: (currentUser.displayName || ''),
+          ts: now,
+          before: adminRulesOriginal,
+          after: {
+            shiftRulesOverride: adminRulesDraft.shiftRulesOverride,
+            visibleShiftTypes:  adminRulesDraft.visibleShiftTypes,
+            otherMigrationMap:  adminRulesDraft.otherMigrationMap
+          }
+        });
+    } catch (auditErr) {
+      console.error('Audit write failed:', auditErr);
+      _adminRulesSetStatus('Saved, but audit log write failed: ' + (auditErr.message || auditErr), true);
+    }
+
+    // Refresh the local cache so the rest of the app sees the edits.
+    if (sitesCache[adminRulesSiteId]) {
+      sitesCache[adminRulesSiteId].shiftRulesOverride = _adminRulesDeepClone(adminRulesDraft.shiftRulesOverride);
+      sitesCache[adminRulesSiteId].visibleShiftTypes  = _adminRulesDeepClone(adminRulesDraft.visibleShiftTypes);
+      sitesCache[adminRulesSiteId].otherMigrationMap  = _adminRulesDeepClone(adminRulesDraft.otherMigrationMap);
+      sitesCache[adminRulesSiteId].updatedAt = now;
+      sitesCache[adminRulesSiteId].updatedBy = currentUser.uid;
+    }
+    invalidateResolvedRulesCache();
+
+    adminRulesOriginal = _adminRulesDeepClone(adminRulesDraft);
+    _adminRulesUpdateDirtyUI();
+    _adminRulesSetStatus('Saved.', false);
+  } catch (err) {
+    console.error('Rules save failed:', err);
+    _adminRulesSetStatus('Failed: ' + (err.message || err), true);
   }
 }
 
