@@ -5996,7 +5996,11 @@ async function adminRulesSaveAll() {
       updatedAt:          now,
       updatedBy:          currentUser.uid
     };
-    await db.collection('sites').doc(adminRulesSiteId).set(payload, { merge: true });
+    // update() (not set+merge) so deleted keys inside shiftRulesOverride /
+    // visibleShiftTypes / otherMigrationMap are actually removed. set+merge
+    // does a *deep* merge of map fields, which would silently re-add any
+    // shift type the admin just deleted.
+    await db.collection('sites').doc(adminRulesSiteId).update(payload);
 
     // Audit log entry. Best-effort: if it fails, the rules write still happened
     // — surface the error but don't roll back.
