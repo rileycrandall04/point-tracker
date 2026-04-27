@@ -3813,13 +3813,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <p style="font-size:0.72rem;color:var(--accent2);margin-bottom:8px;">
       &#9888; Your API key is stored in your device settings and synced with your account data. Each AI analysis costs ~$0.01-0.05. You are responsible for your own usage.
     </p>
-    <div class="monetary-hide" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-      <div class="settings-field">
-        <label style="font-size:0.8rem;color:var(--text-dim);">Personal Time Value ($/hr)</label>
-        <input type="number" id="settingsPersonalTimeValue" min="0" step="1" placeholder="100"
-          style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
-      </div>
-    </div>
     <details style="margin-top:8px;">
       <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">How to get an API key</summary>
       <ol style="font-size:0.75rem;color:var(--text-dim);margin:8px 0 0 0;padding-left:20px;line-height:1.6;">
@@ -20820,13 +20813,6 @@ claudeKeyInput.addEventListener('change', () => {
   saveSettings(settings);
   showToast('Claude API key saved');
 });
-const ptValInput = document.getElementById('settingsPersonalTimeValue');
-ptValInput.value = settings.personalTimeValue || '';
-ptValInput.addEventListener('change', () => {
-  settings.personalTimeValue = parseFloat(ptValInput.value) || 100;
-  saveSettings(settings);
-  showToast('Personal time value saved');
-});
 
 document.getElementById('pipelineProjectToggle').addEventListener('change', () => {
   renderPipelineChart();
@@ -24427,13 +24413,11 @@ auth.onAuthStateChanged(async (user) => {
     initApp();
 
     // Admin cards live on the dedicated Admin page (renderAdminPage()).
-    // Pre-fill the Claude API key + personal time value inputs so when
-    // the app_owner opens the Admin page, the saved values are there.
+    // Pre-fill the Claude API key so when the app_owner opens the Admin
+    // page, the saved value is there.
     if (isAppOwner()) {
       const claudeKey = document.getElementById('settingsClaudeKey');
-      const personalTime = document.getElementById('settingsPersonalTimeValue');
       if (claudeKey) claudeKey.value = settings.claudeApiKey || '';
-      if (personalTime) personalTime.value = settings.personalTimeValue || '';
     }
     // Show the Admin drawer entry once we know the user has any admin role.
     const drawerAdmin = document.getElementById('drawerAdminItem');
