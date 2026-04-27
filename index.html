@@ -4748,6 +4748,15 @@ function isSiteAdmin(siteId) {
   if (!siteId) return getAdminSites().length > 0;
   return getAdminSites().indexOf(siteId) !== -1;
 }
+// Toggle the Admin drawer entry based on the current user's role. Safe to
+// call repeatedly — used both at auth-complete and after the late
+// loadSites() promise resolves, so a race against profile/site loading
+// doesn't leave the link permanently hidden.
+function refreshAdminDrawerVisibility() {
+  const drawerAdmin = document.getElementById('drawerAdminItem');
+  if (drawerAdmin) drawerAdmin.classList.toggle('hidden', !isSiteAdmin());
+}
+
 let _isAdminWarned = false;
 function isAdmin() {
   if (!_isAdminWarned) {
@@ -25381,8 +25390,7 @@ auth.onAuthStateChanged(async (user) => {
       if (claudeKey) claudeKey.value = settings.claudeApiKey || '';
     }
     // Show the Admin drawer entry once we know the user has any admin role.
-    const drawerAdmin = document.getElementById('drawerAdminItem');
-    if (drawerAdmin) drawerAdmin.classList.toggle('hidden', !isSiteAdmin());
+    refreshAdminDrawerVisibility();
 
     if (result === 'migrated') {
       showToast('Local data synced to cloud');
@@ -25460,6 +25468,17 @@ auth.onAuthStateChanged(async (user) => {
       }
       if (typeof renderShiftLogTable === 'function') {
         try { renderShiftLogTable(); } catch (e) { console.warn('renderShiftLogTable post-loadSites failed:', e); }
+      }
+      // Admin drawer toggle was first evaluated immediately after auth.
+      // Re-evaluate now that profile + site list have both finished loading
+      // — covers the case where the initial check raced ahead of the data.
+      refreshAdminDrawerVisibility();
+      // Community Stats picker reads sitesCache synchronously; if the user
+      // navigated to that page before sites loaded the dropdown only got
+      // the 'All sites' option. Re-init now that the cache is ready.
+      const csPage = document.getElementById('page-communitystats');
+      if (csPage && csPage.classList.contains('active') && typeof initCommunityStats === 'function') {
+        try { initCommunityStats(); } catch (e) { console.warn('initCommunityStats post-loadSites failed:', e); }
       }
     }).catch(() => {});
     loadAsaMasterCodes().catch(() => {});
