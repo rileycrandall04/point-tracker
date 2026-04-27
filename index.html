@@ -3228,9 +3228,11 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <label>Name</label>
       <input type="text" id="settingsName" placeholder="Your name (labels exports)">
     </div>
-    <div class="settings-field monetary-hide" style="margin-top:12px;">
-      <label>Point Value Estimate ($/pt)</label>
-      <input type="number" id="settingsPointValue" min="0" step="0.01" style="max-width:140px;">
+    <div class="monetary-hide" style="margin-top:12px;padding:8px 12px;background:rgba(59,130,246,0.08);border-radius:8px;">
+      <div style="font-size:0.82rem;font-weight:600;">Point Value ($/pt)</div>
+      <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
+        Set on the <strong>Compensation</strong> page (Paycheck Projection card). Saved per month and used for every monetary estimate across the app.
+      </p>
     </div>
     <div style="margin-top:12px;padding:8px 12px;background:rgba(59,130,246,0.08);border-radius:8px;">
       <div style="font-size:0.82rem;font-weight:600;">December Bonus Paycheck</div>
@@ -15438,6 +15440,11 @@ document.addEventListener('click', function(e) {
       }
     });
     prunePointValues();
+    // Keep the global settings.pointValue in sync as a fallback for any
+    // code path that reads it directly (Earnings Estimator, etc.). Use
+    // the most recent month's value so older monthly overrides don't win.
+    const pvKeys = Object.keys(settings.pointValues || {}).sort();
+    if (pvKeys.length > 0) settings.pointValue = settings.pointValues[pvKeys[pvKeys.length - 1]];
     saveSettings(settings);
     // Sync other inputs with the current month's value
     const currentMk = stabMonthKey();
@@ -22044,10 +22051,15 @@ nameInput.addEventListener('change', () => {
   showToast('Name saved');
 });
 
-const pointValueInput = document.getElementById('settingsPointValue');
+// $/point input lives on the Compensation page (Paycheck Projection card).
+// The Settings page used to host a duplicate input but kept getting out
+// of sync — settings.pointValue stayed empty when users only entered
+// values in the per-month history table, so estimators showed nothing.
+// Single source of truth now: dashPointValueInput. The legacy
+// settings.pointValue field is still maintained as a "most recent /
+// fallback" cache so any code path that reads it directly keeps working.
 const dashPointValueInput = document.getElementById('dashPointValue');
-pointValueInput.value = settings.pointValue || '';
-dashPointValueInput.value = settings.pointValue || '';
+if (dashPointValueInput) dashPointValueInput.value = settings.pointValue || '';
 
 function syncPointValue(source) {
   const val = parseFloat(source.value) || 0;
@@ -22073,27 +22085,23 @@ function syncPointValue(source) {
   renderPaycheckEntryIfOpen();
 }
 
-// Keep all $/pt inputs in sync across Settings, Dashboard, History table, and Paycheck Entry
+// Keep all $/pt inputs in sync across Dashboard, History table, and
+// Paycheck Entry. (Settings used to have its own input; removed.)
 function syncAllPointValueInputs(monthKey) {
   const val = getPointValueForMonth(monthKey);
-  const pvi = document.getElementById('settingsPointValue');
   const dvi = document.getElementById('dashPointValue');
-  if (pvi) pvi.value = val || '';
   if (dvi) dvi.value = val || '';
   // Sync history table input for this month if visible
   const histInput = document.querySelector('[data-pvmonth="' + monthKey + '"]');
   if (histInput) histInput.value = val > 0 ? val : '';
 }
 
-pointValueInput.addEventListener('change', () => {
-  syncPointValue(pointValueInput);
-  showToast('Point value saved');
-});
-
-dashPointValueInput.addEventListener('change', () => {
-  syncPointValue(dashPointValueInput);
-  showToast('Point value saved');
-});
+if (dashPointValueInput) {
+  dashPointValueInput.addEventListener('change', () => {
+    syncPointValue(dashPointValueInput);
+    showToast('Point value saved');
+  });
+}
 
 // December bonus paycheck is always enabled (replaced December advance toggle)
 
