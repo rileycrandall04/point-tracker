@@ -9826,6 +9826,10 @@ document.querySelectorAll('.bottom-nav button[data-page]').forEach(btn => {
 // MORE DRAWER
 // ================================================================
 function openDrawer() {
+  // Re-evaluate the Admin drawer entry every time the drawer opens —
+  // covers any case where the initial auth-time and post-loadSites
+  // toggles raced ahead of profile/site loading.
+  if (typeof refreshAdminDrawerVisibility === 'function') refreshAdminDrawerVisibility();
   const backdrop = document.getElementById('drawerBackdrop');
   const panel = document.getElementById('drawerPanel');
   backdrop.style.display = 'block';
