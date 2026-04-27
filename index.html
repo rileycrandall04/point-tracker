@@ -3883,9 +3883,9 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
       <!-- UVH base rule reference -->
       <details style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:10px;">
-        <summary style="cursor:pointer;font-size:0.85rem;font-weight:600;">Base rule reference (UVH defaults)</summary>
+        <summary style="cursor:pointer;font-size:0.85rem;font-weight:600;">Base rule reference (MWA defaults)</summary>
         <p style="font-size:0.72rem;color:var(--text-dim);margin:8px 0;">
-          These are the UVH base rules a site shift can inherit from. Each shows what the rule pays out of the box; an inheriting site shift starts with these rules and only changes the label, unless you switch to Custom mode.
+          These are the MWA base rules a site shift can inherit from. Each shows what the rule pays out of the box; an inheriting site shift starts with these rules and only changes the label, unless you switch to Custom mode.
         </p>
         <div id="adminRulesBaseRefList" style="font-size:0.8rem;"></div>
       </details>
@@ -5656,7 +5656,9 @@ function _adminRulesDescribe(rule, key) {
   if (rule.floatBonus)  lines.push('Float bonus: <strong>+' + rule.floatBonus + '</strong> pts.');
   if (rule.cardiacBonus) lines.push('Exposes a <strong>cardiac subspecialty</strong> toggle on shift entry (+45 pts/day when checked).');
   if (rule.liverBonus)   lines.push('Exposes a <strong>liver subspecialty</strong> toggle on shift entry (+45 pts/day when checked).');
-  if (rule.noProductivity) lines.push('<strong>No productivity</strong> — pay is flat points only; no AR or case points.');
+  // "No productivity" is implied by unrestricted-call-entry shifts (the
+  // user-entered hours ARE the pay), so don't list it twice.
+  if (rule.noProductivity && !rule.unrestrictedCallEntry) lines.push('<strong>No productivity</strong> — pay is flat points only; no AR or case points.');
   if (rule.unrestrictedCallEntry) lines.push('User enters <strong>unrestricted call hours</strong> manually on the shift form (paid 3.5 pts/hr).');
 
   // Per-base-rule call-outs that reflect engine behavior beyond the schema.
