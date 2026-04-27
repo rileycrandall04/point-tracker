@@ -5253,6 +5253,12 @@ function _adminMSSiteOptionsHTML(currentSiteId) {
     const sel = id === currentSiteId ? ' selected' : '';
     html += '<option value="' + id + '"' + sel + '>' + name + ' (' + id + ')</option>';
   }
+  // Defensive: if there are no options (sitesCache hadn't loaded or the
+  // user is a siteAdmin with no scope), surface a disabled placeholder
+  // so the dropdown doesn't open empty with nothing to pick.
+  if (!html) {
+    html = '<option value="" disabled selected>No sites available — try refreshing</option>';
+  }
   return html;
 }
 
@@ -5363,6 +5369,13 @@ async function adminMSOpenUser(uid) {
   const out = document.getElementById('adminMSUserCard');
   out.innerHTML = '<p>Loading...</p>';
   try {
+    // If sitesCache is somehow empty (initial load failed, or this card is
+    // being opened before loadSites resolved on a slow connection), the
+    // Invite/Change-site dropdowns would render with zero options. Force a
+    // re-fetch up front so they're never empty.
+    if (Object.keys(sitesCache || {}).length === 0 && typeof loadSites === 'function') {
+      await loadSites();
+    }
     const profileSnap = await db.collection('userProfiles').doc(uid).get();
     const profile = profileSnap.exists ? (profileSnap.data() || {}) : {};
     const settingsDoc = await db.collection('users').doc(uid).collection('data').doc('settings').get();
