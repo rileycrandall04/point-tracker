@@ -2749,6 +2749,37 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div id="dailyCalendarContainer" style="margin-top:12px;"></div>
     <div id="dailyMonthSummary" style="margin-top:12px;font-size:0.85rem;color:var(--text-dim);text-align:center;"></div>
 
+    <!-- Calendar Sync (collapsible) -->
+    <div class="card" id="calendarSyncCard" style="margin-top:12px;">
+      <details id="calendarSyncDetails">
+        <summary style="cursor:pointer;font-weight:600;font-size:1rem;color:var(--text);list-style:revert;">Calendar Sync</summary>
+        <p style="font-size:0.8rem;color:var(--text-dim);margin:10px 0;">
+          Sync your Google Calendar assignments to auto-fill shift types and label the weekly chart.
+        </p>
+        <div id="calendarConnectedInfo" class="hidden" style="margin-bottom:8px;padding:6px 10px;background:var(--surface);border-radius:6px;font-size:0.8rem;">
+          <span style="color:var(--accent);">Connected:</span>
+          <span id="calendarConnectedName" style="color:var(--text);"></span>
+          <button class="btn btn-outline btn-sm" style="margin-left:8px;padding:2px 8px;font-size:0.7rem;" onclick="clearCalendarChoice()">Change</button>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" id="syncCalendarBtn">Sync Calendar</button>
+          <span id="calendarLastSync" style="font-size:0.75rem;color:var(--text-dim);"></span>
+        </div>
+        <div id="calMappingCount" class="hidden" style="margin-top:8px;font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;gap:8px;">
+        </div>
+        <button class="btn btn-outline btn-sm hidden" id="clearMappingsBtn" onclick="clearCalendarMappings()" style="margin-top:6px;font-size:0.7rem;padding:2px 8px;">Clear Mappings</button>
+        <details style="margin-top:10px;">
+          <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">Setup instructions</summary>
+          <ol style="font-size:0.75rem;color:var(--text-dim);margin:8px 0 0 0;padding-left:20px;line-height:1.6;">
+            <li>Set up calendar sync in Qgenda to push your assignments to your Google Calendar</li>
+            <li>Tap <strong>Sync Calendar</strong> above and sign in with your Google account</li>
+            <li>Select your Qgenda calendar from the list</li>
+            <li>Tap <strong>Sync Calendar</strong> periodically to refresh your assignments</li>
+          </ol>
+        </details>
+      </details>
+    </div>
+
     <button class="edit-assignments-btn" id="editAssignmentsBtn" onclick="toggleAssignmentEditor()">&#9998; Edit Assignments</button>
     <div id="assignEditorContainer" class="hidden"></div>
 
@@ -3250,35 +3281,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
     <button class="btn btn-outline btn-sm" id="signOutBtn">Sign Out</button>
     <button class="btn btn-outline btn-sm" onclick="showTutorial()" style="margin-top:8px;">Run Tutorial</button>
-  </div>
-
-  <!-- Calendar Sync -->
-  <div class="card" id="calendarSyncCard" style="margin-top:12px;">
-    <h2>Calendar Sync</h2>
-    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:10px;">
-      Sync your Google Calendar assignments to auto-fill shift types and label the weekly chart.
-    </p>
-    <div id="calendarConnectedInfo" class="hidden" style="margin-bottom:8px;padding:6px 10px;background:var(--surface);border-radius:6px;font-size:0.8rem;">
-      <span style="color:var(--accent);">Connected:</span>
-      <span id="calendarConnectedName" style="color:var(--text);"></span>
-      <button class="btn btn-outline btn-sm" style="margin-left:8px;padding:2px 8px;font-size:0.7rem;" onclick="clearCalendarChoice()">Change</button>
-    </div>
-    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-      <button class="btn btn-outline btn-sm" id="syncCalendarBtn">Sync Calendar</button>
-      <span id="calendarLastSync" style="font-size:0.75rem;color:var(--text-dim);"></span>
-    </div>
-    <div id="calMappingCount" class="hidden" style="margin-top:8px;font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;gap:8px;">
-    </div>
-    <button class="btn btn-outline btn-sm hidden" id="clearMappingsBtn" onclick="clearCalendarMappings()" style="margin-top:6px;font-size:0.7rem;padding:2px 8px;">Clear Mappings</button>
-    <details style="margin-top:10px;">
-      <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">Setup instructions</summary>
-      <ol style="font-size:0.75rem;color:var(--text-dim);margin:8px 0 0 0;padding-left:20px;line-height:1.6;">
-        <li>Set up calendar sync in Qgenda to push your assignments to your Google Calendar</li>
-        <li>Tap <strong>Sync Calendar</strong> above and sign in with your Google account</li>
-        <li>Select your Qgenda calendar from the list</li>
-        <li>Tap <strong>Sync Calendar</strong> periodically to refresh your assignments</li>
-      </ol>
-    </details>
   </div>
 
   <!-- Shared Data -->
@@ -14884,12 +14886,19 @@ function tutorialMonthlyChoice(choice) {
 function tutorialOpenCalendarSync() {
   closeTutorial();
   closeDrawer();
+  // Calendar Sync now lives on the Stats > Daily tab. Activate that page,
+  // mark the bottom-nav button, switch to the Daily sub-tab, then open the
+  // collapsible card and scroll it into view.
   document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  const settingsPage = document.getElementById('page-settings');
-  if (settingsPage) settingsPage.classList.add('active');
-  // Scroll the Calendar Sync card into view so the user lands on it.
+  const dashPage = document.getElementById('page-dashboard');
+  if (dashPage) dashPage.classList.add('active');
+  const dashNavBtn = document.querySelector('.bottom-nav button[data-page="dashboard"]');
+  if (dashNavBtn) dashNavBtn.classList.add('active');
+  if (typeof switchDashboardTab === 'function') switchDashboardTab('daily');
   setTimeout(() => {
+    const det = document.getElementById('calendarSyncDetails');
+    if (det) det.open = true;
     const card = document.getElementById('calendarSyncCard');
     if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 100);
