@@ -8629,14 +8629,15 @@ function calcCasePoints(caseData, shift, ignoreManual) {
   if (ct === 'epidural_blood_patch') return 5;
   if (ct === 'emergency_intubation') return 4;
   if (ct === '01996') return 3;
-  // Pain Rounding: after April 1 2026, add 10 min AR if not clocked in
+  // Pain Rounding: after April 1 2026, add 10 min AR if the shift has no
+  // clocked-in time logged at all (any entry with a non-empty start).
   if (ct === '99231') {
     let pts = 2;
     const caseDate = caseData.shiftDate || (shift && shift.date);
     if (caseDate && caseDate >= '2026-04-01') {
       const shiftEntries = shift ? (shift.timeEntries || []) : [];
-      const isClockedIn = shiftEntries.length > 0 && shiftEntries[0].start;
-      if (!isClockedIn) {
+      const hasClockedTime = shiftEntries.some(e => e && e.start);
+      if (!hasClockedTime) {
         const isHol = shift ? shift.isHoliday : false;
         const isWknd = shift ? isWeekend(shift.date) : false;
         const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720, shift.siteId) : 20;
@@ -10165,11 +10166,11 @@ function applyCaseTypeVisibility(ct) {
     } else if (ct === '99231') {
       const shift = data.shifts[workingDate];
       const entries = shift ? (shift.timeEntries || []) : [];
-      const isClockedIn = entries.length > 0 && entries[0].start;
-      if (isClockedIn) {
-        hint = '<strong>Pain Rounding:</strong> You are clocked in — points will accrue at your normal AR rate. 2 pts per entry.';
+      const hasClockedTime = entries.some(e => e && e.start);
+      if (hasClockedTime) {
+        hint = '<strong>Pain Rounding:</strong> This shift has clocked-in time logged, so AR rate already covers your time. Each entry is worth 2 pts at the standard AR rate; no extra bonus applies.';
       } else {
-        hint = '<strong>Pain Rounding:</strong> Not clocked in — each entry adds 10 minutes of AR points at your shift rate in addition to the 2 pts per entry.';
+        hint = '<strong>Pain Rounding:</strong> No clocked-in time on this shift &mdash; each entry adds 2 pts plus 10 minutes of AR points at your shift rate.';
       }
     }
     hintEl.innerHTML = hint;
