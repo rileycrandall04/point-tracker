@@ -20166,33 +20166,8 @@ let calSyncBannerDismissed = false;
 let dailyEditMode = false;
 let assignPickerDate = '';
 
-const ASSIGNMENT_OPTIONS = [
-  { type: 'OR', label: 'OR' },
-  { type: 'mole', label: 'Mole' },
-  { type: 'endo', label: 'Endo' },
-  { type: 'OB_restricted', label: 'OB' },
-  { type: 'SF1', label: 'SF1' },
-  { type: 'SF2', label: 'SF2' },
-  { type: 'ACS', label: 'ACS' },
-  { type: 'NORA', label: 'NORA' },
-  { type: 'cardiac_liver', label: 'Cardiac' },
-  { type: 'cardiac_liver', label: 'Liver' },
-  { type: 'CRNA_supervision', label: 'CRNA Supervision' },
-  { type: '1st_call', label: '1st Call' },
-  { type: '2nd_call', label: '2nd Call' },
-  { type: '3rd_call', label: '3rd Call' },
-  { type: '4th_call', label: '4th Call' },
-  { type: 'pre_call', label: 'Pre-Call' },
-  { type: 'OR', label: 'Pre-Mole' },
-  { type: 'OB_restricted', label: 'Pre-OB' },
-  { type: 'OR', label: 'Post Mole' },
-  { type: 'OB_restricted', label: 'Post OB' },
-  { type: 'OR', label: 'Post Call' },
-  { type: 'OR', label: 'Post SF1' },
-  { type: 'OR', label: 'Post SF2' },
-  { type: 'vacation', label: 'Vacation' },
-  { type: 'forced_off', label: 'Forced Off' },
-];
+// (Legacy hardcoded UVH-flavor list removed — the assignment picker now
+// reads from the active site's visible shift types via openAssignPicker.)
 
 function updateDailyMonthLabel() {
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -20546,12 +20521,17 @@ function openAssignPicker(dateStr) {
     wbInput.value = '';
   }
 
-  // Build assignment list
+  // Build assignment list from the user's CURRENT site's visible shift types
+  // (was hardcoded UVH-flavor — wrong for IMC/MD/etc users).
+  const _siteId = getCurrentSiteId();
+  const _visibleTypes = getVisibleShiftTypesForSite(_siteId);
   const currentLabel = cal ? cal.label : '';
   let listHtml = '';
-  ASSIGNMENT_OPTIONS.forEach(opt => {
-    const isCurrent = currentLabel === opt.label;
-    listHtml += `<div class="assign-item${isCurrent ? ' current' : ''}" onclick="applyAssignment('${opt.type}','${opt.label}')">${escHtml(opt.label)}${isCurrent ? ' &#10003;' : ''}</div>`;
+  _visibleTypes.forEach(t => {
+    const label = getShiftTypeLabel(t, _siteId);
+    const isCurrent = currentLabel === label;
+    const safeLabel = label.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    listHtml += `<div class="assign-item${isCurrent ? ' current' : ''}" onclick="applyAssignment('${t}','${safeLabel}')">${escHtml(label)}${isCurrent ? ' &#10003;' : ''}</div>`;
   });
   listHtml += `<div class="assign-item clear-item" onclick="clearAssignment()">Off / Clear</div>`;
   document.getElementById('assignList').innerHTML = listHtml;
