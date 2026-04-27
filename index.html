@@ -2767,7 +2767,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
         </div>
         <div id="calMappingCount" class="hidden" style="margin-top:8px;font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;gap:8px;">
         </div>
-        <button class="btn btn-outline btn-sm hidden" id="clearMappingsBtn" onclick="clearCalendarMappings()" style="margin-top:6px;font-size:0.7rem;padding:2px 8px;">Clear Mappings</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+          <button class="btn btn-outline btn-sm" onclick="openCalendarMappingsEditor()" style="font-size:0.7rem;padding:2px 8px;">Edit Mappings</button>
+          <button class="btn btn-outline btn-sm hidden" id="clearMappingsBtn" onclick="clearCalendarMappings()" style="font-size:0.7rem;padding:2px 8px;">Clear Mine</button>
+        </div>
         <details style="margin-top:10px;">
           <summary style="cursor:pointer;font-size:0.8rem;color:var(--primary);">Setup instructions</summary>
           <ol style="font-size:0.75rem;color:var(--text-dim);margin:8px 0 0 0;padding-left:20px;line-height:1.6;">
@@ -4454,6 +4457,19 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="cancelCalReviewModal()">Cancel</button>
       <button class="btn btn-primary btn-sm" onclick="saveCalReviewModal()">Confirm &amp; Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Calendar Mappings Editor -->
+<div class="modal-overlay hidden" id="calMappingsEditorModal">
+  <div class="modal" style="max-height:85vh;overflow-y:auto;max-width:560px;">
+    <h2>Calendar Mappings</h2>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:10px;" id="calMappingsEditorHeaderNote"></p>
+    <div id="calMappingsEditorContent"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeCalendarMappingsEditor()">Close</button>
+      <button class="btn btn-primary btn-sm" id="calMappingsEditorSaveBtn" onclick="saveCalendarMappingsEditor()">Save Changes</button>
     </div>
   </div>
 </div>
@@ -7494,12 +7510,13 @@ async function syncCalendarEvents(silent) {
       const title = (ev.summary || '').trim();
       if (!title) return;
 
-      if (title in settings.calendarMappings) {
-        const mapped = settings.calendarMappings[title];
-        if (mapped === null) return;
+      // Lookup priority: personal override → site shared map → parser.
+      const eff = getEffectiveCalendarMapping(title, siteIdForRemap);
+      if (eff !== undefined) {
+        if (eff === null) return; // explicit skip
         proposedByDate.set(dateStr, {
-          type: remapAssignmentTypeForSite(mapped.type, siteIdForRemap),
-          label: mapped.label, source: 'calendar', title
+          type: remapAssignmentTypeForSite(eff.type, siteIdForRemap),
+          label: eff.label, source: 'calendar', title
         });
         return;
       }
@@ -7521,9 +7538,9 @@ async function syncCalendarEvents(silent) {
     if (unmappedTitles.size > 0 && !silent) {
       const mappings = await showMappingModal(Array.from(unmappedTitles));
       if (mappings) {
-        Object.assign(settings.calendarMappings, mappings);
-        saveSettings(settings);
-        updateMappingCountUI();
+        // Persist via the shared helper — admins write to site map; non-admins
+        // to personal. Saves the rest of the group from re-mapping next time.
+        await persistCalendarMappings(mappings, siteIdForRemap);
         unmappedEvents.forEach(({ title, dateStr }) => {
           if (manualDates.has(dateStr)) return;
           const mapped = mappings[title];
@@ -7568,9 +7585,13 @@ async function syncCalendarEvents(silent) {
       confirmedRows = result;
     }
 
-    // Apply confirmed rows to data.calendarAssignments
+    // Apply confirmed rows to data.calendarAssignments. Also collect a
+    // title→mapping map so we can persist the user's choices once at the
+    // end (first row wins per title, since one title can repeat across
+    // multiple dates).
     let count = 0;
     const finalAssignedDates = new Set(manualDates);
+    const titleMappingsToPersist = {};
     confirmedRows.forEach(row => {
       const finalType = row.finalType !== undefined ? row.finalType : row.proposedType;
       const finalLabel = row.finalLabel !== undefined ? row.finalLabel : row.proposedLabel;
@@ -7587,6 +7608,12 @@ async function syncCalendarEvents(silent) {
         }
         return;
       }
+      // Record the user's title→type choice for persistence below.
+      if (row.title && !(row.title in titleMappingsToPersist)) {
+        titleMappingsToPersist[row.title] = finalType
+          ? { type: finalType, label: finalLabel || finalType }
+          : null; // explicit skip
+      }
       if (!finalType) {
         // User picked Skip — drop this date
         delete data.calendarAssignments[row.dateStr];
@@ -7601,6 +7628,18 @@ async function syncCalendarEvents(silent) {
       finalAssignedDates.add(row.dateStr);
       if (row.action !== 'unchanged') count++;
     });
+
+    // Persist the title→mapping decisions so future syncs can pre-fill the
+    // review modal without re-running the parser. Admin → site shared map;
+    // non-admin → personal override. Awaited so the cached state is up to
+    // date before we kick off any post-sync re-renders.
+    if (Object.keys(titleMappingsToPersist).length > 0) {
+      try {
+        await persistCalendarMappings(titleMappingsToPersist, siteIdForRemap);
+      } catch (err) {
+        console.warn('Persist calendar mappings failed:', err);
+      }
+    }
 
     // Sync pager-only shifts for every date that ends up assigned
     finalAssignedDates.forEach(dateStr => {
@@ -7970,7 +8009,178 @@ function clearCalendarMappings() {
   settings.calendarMappings = {};
   saveSettings(settings);
   updateMappingCountUI();
-  showToast('Calendar mappings cleared');
+  showToast('Personal calendar mappings cleared');
+}
+
+// Editor state — pending changes the user has made in the modal but
+// hasn't saved yet. Format: { siteEdits: {title -> mapping|undefined},
+// personalEdits: {title -> mapping|undefined} }. `undefined` = delete;
+// a {type,label} object = set/update; `null` = explicit skip.
+let _calMappingsEditorPending = null;
+
+function openCalendarMappingsEditor() {
+  const siteId = getCurrentSiteId();
+  const isAdmin = isSiteAdmin(siteId);
+  _calMappingsEditorPending = { siteEdits: {}, personalEdits: {} };
+  const note = isAdmin
+    ? 'Site mappings are shared across everyone at this site. Personal overrides apply just to you and beat the site map.'
+    : 'Site mappings are shared across everyone at this site (read-only — ask an admin to change). Personal overrides apply just to you and beat the site map.';
+  document.getElementById('calMappingsEditorHeaderNote').textContent = note;
+  renderCalendarMappingsEditor();
+  document.getElementById('calMappingsEditorModal').classList.remove('hidden');
+}
+
+function closeCalendarMappingsEditor() {
+  _calMappingsEditorPending = null;
+  document.getElementById('calMappingsEditorModal').classList.add('hidden');
+}
+
+function renderCalendarMappingsEditor() {
+  const out = document.getElementById('calMappingsEditorContent');
+  if (!out || !_calMappingsEditorPending) return;
+  const siteId = getCurrentSiteId();
+  const isAdmin = isSiteAdmin(siteId);
+  const types = getVisibleShiftTypesForSite(siteId);
+  const optionsHtml = '<option value="">— Skip —</option>' +
+    types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(getShiftTypeLabel(t, siteId))}</option>`).join('');
+
+  const buildRow = (kind, title, mapping, readonly) => {
+    const idSafe = kind + '_' + btoa(unescape(encodeURIComponent(title))).replace(/=+$/, '');
+    const value = (mapping && mapping.type) || '';
+    const isSkip = mapping === null;
+    const labelHint = (mapping && mapping.label) || '';
+    const skipBadge = isSkip ? ' <span style="color:var(--text-dim);font-size:0.7rem;">(skip)</span>' : '';
+    return `<div data-kind="${kind}" data-title="${escapeHtml(title)}" style="margin-bottom:8px;padding:8px 10px;background:var(--surface);border-radius:6px;">
+      <div style="font-size:0.78rem;color:var(--text);margin-bottom:4px;word-break:break-word;"><strong>${escapeHtml(title)}</strong>${skipBadge}</div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <select class="cal-mappings-editor-type" data-id="${idSafe}" ${readonly ? 'disabled' : ''} style="flex:1;padding:5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:0.78rem;">${optionsHtml}</select>
+        <button class="btn btn-outline btn-sm cal-mappings-editor-delete" data-id="${idSafe}" ${readonly ? 'disabled' : ''} style="font-size:0.7rem;padding:2px 8px;">Remove</button>
+      </div>
+      ${labelHint ? `<div style="font-size:0.7rem;color:var(--text-dim);margin-top:3px;">Label: ${escapeHtml(labelHint)}</div>` : ''}
+    </div>`;
+  };
+
+  // Compose effective state for each kind: source ∪ pending edits
+  const siteSrc = getSiteCalendarMappings(siteId);
+  const personalSrc = (settings && settings.calendarMappings) || {};
+  const composeEffective = (src, edits) => {
+    const out = { ...src };
+    for (const t of Object.keys(edits || {})) {
+      if (edits[t] === undefined) delete out[t]; // delete
+      else out[t] = edits[t];
+    }
+    return out;
+  };
+  const siteEffective = composeEffective(siteSrc, _calMappingsEditorPending.siteEdits);
+  const personalEffective = composeEffective(personalSrc, _calMappingsEditorPending.personalEdits);
+
+  let html = '';
+  // Site section
+  html += `<div style="margin-top:6px;margin-bottom:4px;font-size:0.85rem;font-weight:600;color:var(--text);">Site mappings ${isAdmin ? '' : '(read-only)'}</div>`;
+  const siteTitles = Object.keys(siteEffective).sort();
+  if (siteTitles.length === 0) {
+    html += '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:8px;">No site mappings yet. Confirm a sync to add some.</div>';
+  } else {
+    siteTitles.forEach(t => { html += buildRow('site', t, siteEffective[t], !isAdmin); });
+  }
+  // Personal section
+  html += `<div style="margin-top:14px;margin-bottom:4px;font-size:0.85rem;font-weight:600;color:var(--text);">Your overrides</div>`;
+  const personalTitles = Object.keys(personalEffective).sort();
+  if (personalTitles.length === 0) {
+    html += '<div style="font-size:0.78rem;color:var(--text-dim);">None — sync results that match the site default don\'t need an override.</div>';
+  } else {
+    personalTitles.forEach(t => { html += buildRow('personal', t, personalEffective[t], false); });
+  }
+
+  out.innerHTML = html;
+
+  // Pre-select dropdowns
+  out.querySelectorAll('[data-kind][data-title]').forEach(rowEl => {
+    const kind = rowEl.dataset.kind;
+    const title = rowEl.dataset.title;
+    const sel = rowEl.querySelector('.cal-mappings-editor-type');
+    const src = kind === 'site' ? siteEffective : personalEffective;
+    const m = src[title];
+    if (sel) sel.value = (m && m.type) ? m.type : '';
+  });
+
+  // Wire change/delete handlers
+  out.querySelectorAll('.cal-mappings-editor-type').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const rowEl = sel.closest('[data-kind][data-title]');
+      if (!rowEl) return;
+      const kind = rowEl.dataset.kind;
+      const title = rowEl.dataset.title;
+      const targetEdits = kind === 'site' ? _calMappingsEditorPending.siteEdits : _calMappingsEditorPending.personalEdits;
+      const newType = sel.value;
+      if (!newType) {
+        targetEdits[title] = null; // explicit skip
+      } else {
+        targetEdits[title] = { type: newType, label: getShiftTypeLabel(newType, siteId) };
+      }
+    });
+  });
+  out.querySelectorAll('.cal-mappings-editor-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rowEl = btn.closest('[data-kind][data-title]');
+      if (!rowEl) return;
+      const kind = rowEl.dataset.kind;
+      const title = rowEl.dataset.title;
+      const targetEdits = kind === 'site' ? _calMappingsEditorPending.siteEdits : _calMappingsEditorPending.personalEdits;
+      targetEdits[title] = undefined; // delete
+      renderCalendarMappingsEditor();
+    });
+  });
+}
+
+async function saveCalendarMappingsEditor() {
+  if (!_calMappingsEditorPending) return;
+  const siteId = getCurrentSiteId();
+  const siteEdits = _calMappingsEditorPending.siteEdits || {};
+  const personalEdits = _calMappingsEditorPending.personalEdits || {};
+  const hasSiteEdits = Object.keys(siteEdits).length > 0;
+  const hasPersonalEdits = Object.keys(personalEdits).length > 0;
+  if (!hasSiteEdits && !hasPersonalEdits) {
+    closeCalendarMappingsEditor();
+    return;
+  }
+  const btn = document.getElementById('calMappingsEditorSaveBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    if (hasSiteEdits) {
+      if (!isSiteAdmin(siteId)) {
+        showToast('Only site admins can edit site mappings');
+      } else if (firestoreSyncEnabled && db) {
+        const ref = db.collection('sites').doc(siteId);
+        const snap = await ref.get();
+        const cur = (snap.exists && snap.data().calendarMappings) || {};
+        for (const t of Object.keys(siteEdits)) {
+          const v = siteEdits[t];
+          if (v === undefined) delete cur[t];
+          else cur[t] = v;
+        }
+        await ref.update({ calendarMappings: cur });
+        if (!sitesCache[siteId]) sitesCache[siteId] = {};
+        sitesCache[siteId].calendarMappings = cur;
+      }
+    }
+    if (hasPersonalEdits) {
+      if (!settings.calendarMappings) settings.calendarMappings = {};
+      for (const t of Object.keys(personalEdits)) {
+        const v = personalEdits[t];
+        if (v === undefined) delete settings.calendarMappings[t];
+        else settings.calendarMappings[t] = v;
+      }
+      saveSettings(settings);
+      updateMappingCountUI();
+    }
+    showToast('Calendar mappings updated');
+    closeCalendarMappingsEditor();
+  } catch (err) {
+    console.error('saveCalendarMappingsEditor failed:', err);
+    showToast('Save failed: ' + (err.message || String(err)));
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Changes'; }
+  }
 }
 
 // ================================================================
@@ -8031,6 +8241,76 @@ function getVisibleShiftTypesForSite(siteId) {
   const list = sitesCache[siteId] && sitesCache[siteId].visibleShiftTypes;
   if (Array.isArray(list) && list.length > 0) return list.slice();
   return ASSIGNMENT_TYPE_OPTIONS.map(o => o.value);
+}
+
+// Site-shared calendar title mappings: a per-site map title → {type, label}
+// (or null = "skip this title"). Curated by site admins so first-mapper-wins
+// and the rest of the group benefits without re-mapping the same titles.
+// Reads from sitesCache (loaded by loadSites). Personal overrides remain in
+// settings.calendarMappings and beat the site map in lookup priority.
+function getSiteCalendarMappings(siteId) {
+  if (!siteId) siteId = getCurrentSiteId();
+  const m = sitesCache[siteId] && sitesCache[siteId].calendarMappings;
+  return (m && typeof m === 'object') ? m : {};
+}
+
+// Resolved calendar mapping for a title, honoring personal-then-site priority.
+// Returns { type, label } | null (= explicit skip) | undefined (= no mapping).
+function getEffectiveCalendarMapping(title, siteId) {
+  if (!title) return undefined;
+  const personal = (settings && settings.calendarMappings) || {};
+  if (title in personal) return personal[title];
+  const siteMap = getSiteCalendarMappings(siteId);
+  if (title in siteMap) return siteMap[title];
+  return undefined;
+}
+
+// Persist a batch of title → mapping choices. Admin users write to the
+// site-shared map (sites/{siteId}.calendarMappings); non-admins fall back
+// to their personal override (settings.calendarMappings). Pass mapping=null
+// to record an explicit skip; pass mapping=undefined to delete the entry.
+async function persistCalendarMappings(mappings, siteId) {
+  if (!mappings || typeof mappings !== 'object') return;
+  if (!siteId) siteId = getCurrentSiteId();
+  const titles = Object.keys(mappings);
+  if (titles.length === 0) return;
+  const writeToSite = isSiteAdmin(siteId);
+  if (writeToSite && firestoreSyncEnabled && db) {
+    // Read-modify-write the whole calendarMappings field. Field-path syntax
+    // would let us update specific keys atomically, but titles can contain
+    // dots which break dotted paths.
+    try {
+      const ref = db.collection('sites').doc(siteId);
+      const snap = await ref.get();
+      const cur = (snap.exists && snap.data().calendarMappings) || {};
+      let touched = false;
+      for (const t of titles) {
+        const m = mappings[t];
+        if (m === undefined) {
+          if (t in cur) { delete cur[t]; touched = true; }
+        } else {
+          if (JSON.stringify(cur[t]) !== JSON.stringify(m)) { cur[t] = m; touched = true; }
+        }
+      }
+      if (!touched) return;
+      await ref.update({ calendarMappings: cur });
+      // Mirror into local cache so subsequent reads see the new state.
+      if (!sitesCache[siteId]) sitesCache[siteId] = {};
+      sitesCache[siteId].calendarMappings = cur;
+    } catch (err) {
+      console.warn('persistCalendarMappings (site) failed; falling back to personal:', err);
+      // Fall through to personal write so the user's choice still sticks.
+    }
+  }
+  // Personal write (non-admin OR site write failed)
+  if (!settings.calendarMappings) settings.calendarMappings = {};
+  for (const t of titles) {
+    const m = mappings[t];
+    if (m === undefined) delete settings.calendarMappings[t];
+    else settings.calendarMappings[t] = m;
+  }
+  saveSettings(settings);
+  if (typeof updateMappingCountUI === 'function') updateMappingCountUI();
 }
 
 function getShiftTypeLabel(typeId, siteId) {
