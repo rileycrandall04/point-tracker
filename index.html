@@ -2152,6 +2152,29 @@ body.hide-monetary .monetary-hide { display: none !important; }
         </div>
       </div>
 
+      <!-- Pre-call (morning OR) — UVH OB and Mole only -->
+      <div id="preCallOverlaySection" class="hidden">
+        <div class="divider"></div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="hasPreCallCheck">
+          <label for="hasPreCallCheck">Pre-call (morning OR)</label>
+        </div>
+        <div id="preCallOverlayBody" class="hidden" style="margin-top:8px;">
+          <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px 0;line-height:1.4;">
+            Track the morning OR clock-ins separately from this shift. Earns 20 pts/hr at minimum 80 pts on a weekday non-holiday. Forced off in the morning (no times entered) pays 56.
+          </p>
+          <div class="form-group">
+            <label>Pre-call time entries</label>
+            <div id="preCallEntriesContainer"></div>
+            <button type="button" class="btn btn-sm" id="addPreCallEntryBtn" style="margin-top:6px;background:var(--surface2);color:var(--text);">+ Add interval</button>
+          </div>
+          <div class="checkbox-group">
+            <input type="checkbox" id="preCallForcedOff">
+            <label for="preCallForcedOff">Forced off in the morning (only counts if no times entered)</label>
+          </div>
+        </div>
+      </div>
+
       <div id="supervisionOverlaySection" class="hidden">
         <div class="divider"></div>
         <h3>CRNA Supervision</h3>
@@ -8253,6 +8276,93 @@ function populateTimeEntries(entries) {
 
 document.getElementById('addTimeEntryBtn').addEventListener('click', addTimeEntry);
 
+// ----- Pre-call (morning OR) overlay for UVH OB / Mole shifts -----
+
+function createPreCallEntryRow(start, end) {
+  const row = document.createElement('div');
+  row.className = 'time-entry-row';
+  row.innerHTML = `
+    <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time pc-start" value="${start || ''}">
+    <span class="te-label">to</span>
+    <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time pc-end" value="${end || ''}">
+    <span class="pc-next-day" style="display:none;color:var(--accent2);font-size:0.7rem;font-weight:600;">+1d</span>
+    <button type="button" class="remove-pc-btn">&times;</button>
+  `;
+  row.querySelectorAll('input.mil-time').forEach(input => bindMilTimeInput(input));
+  const startInput = row.querySelector('.pc-start');
+  const endInput = row.querySelector('.pc-end');
+  const nextDayBadge = row.querySelector('.pc-next-day');
+  function updateCrossMidnight() {
+    const s = timeToMinutes(startInput.value);
+    const e = timeToMinutes(endInput.value);
+    nextDayBadge.style.display = (!isNaN(s) && !isNaN(e) && e <= s && endInput.value) ? 'inline' : 'none';
+  }
+  startInput.addEventListener('input', updateCrossMidnight);
+  endInput.addEventListener('input', updateCrossMidnight);
+  updateCrossMidnight();
+  row.querySelector('.remove-pc-btn').addEventListener('click', function() {
+    row.remove();
+    updatePreCallRemoveButtons();
+  });
+  return row;
+}
+
+function updatePreCallRemoveButtons() {
+  const rows = document.querySelectorAll('#preCallEntriesContainer .time-entry-row');
+  rows.forEach(row => {
+    const btn = row.querySelector('.remove-pc-btn');
+    btn.disabled = rows.length <= 1;
+  });
+}
+
+function collectPreCallEntries() {
+  const rows = document.querySelectorAll('#preCallEntriesContainer .time-entry-row');
+  const entries = [];
+  rows.forEach(row => {
+    const start = row.querySelector('.pc-start').value.trim();
+    const end = row.querySelector('.pc-end').value.trim();
+    if (start || end) entries.push({ start, end });
+  });
+  return entries;
+}
+
+function populatePreCallEntries(entries) {
+  const container = document.getElementById('preCallEntriesContainer');
+  container.innerHTML = '';
+  if (!entries || entries.length === 0) entries = [{ start: '07:00', end: '' }];
+  entries.forEach(e => container.appendChild(createPreCallEntryRow(e.start, e.end)));
+  updatePreCallRemoveButtons();
+}
+
+document.getElementById('addPreCallEntryBtn').addEventListener('click', () => {
+  const container = document.getElementById('preCallEntriesContainer');
+  const row = createPreCallEntryRow('', '');
+  container.appendChild(row);
+  updatePreCallRemoveButtons();
+  row.querySelector('.pc-start').focus();
+});
+
+document.getElementById('hasPreCallCheck').addEventListener('change', function() {
+  const body = document.getElementById('preCallOverlayBody');
+  body.classList.toggle('hidden', !this.checked);
+  if (this.checked) {
+    const container = document.getElementById('preCallEntriesContainer');
+    if (container.children.length === 0) populatePreCallEntries(null);
+  }
+});
+
+// Show/hide the pre-call overlay section based on assignment type — only
+// UVH OB and Mole get the morning-OR add-on.
+function updatePreCallOverlayVisibility() {
+  const type = document.getElementById('shiftAssignmentType').value;
+  const eligible = (type === 'OB_restricted' || type === 'mole');
+  document.getElementById('preCallOverlaySection').classList.toggle('hidden', !eligible);
+  if (!eligible) {
+    document.getElementById('hasPreCallCheck').checked = false;
+    document.getElementById('preCallOverlayBody').classList.add('hidden');
+  }
+}
+
 // ================================================================
 // POINT CALCULATION ENGINE (preserved from v1)
 // ================================================================
@@ -8297,9 +8407,44 @@ function getARRate(assignmentType, isHol, isWknd, timeMinutes, siteId) {
   }
 }
 
+// Pre-call (morning OR) overlay points for UVH OB / Mole shifts that opt
+// into a separate morning interval. Returns:
+//   - actual AR (OR rate, 20/hr) raised to 80 on weekday non-holidays when
+//     any pre-call times are entered
+//   - 56 flat on weekday non-holidays when no times are entered AND the
+//     "forced off morning" flag is checked
+//   - 0 otherwise
+function calcPreCallOverlayPts(shift) {
+  if (!shift || !shift.hasPreCall) return 0;
+  if (shift.assignmentType !== 'OB_restricted' && shift.assignmentType !== 'mole') return 0;
+  const isHol = !!shift.isHoliday;
+  const isWknd = isWeekend(shift.date);
+  const weekdayNonHoliday = !isHol && !isWknd;
+  const entries = (shift.preCallTimeEntries || []).filter(e => e && e.start && e.end);
+  if (entries.length > 0) {
+    let arPts = 0;
+    for (const e of entries) {
+      let s = timeToMinutes(e.start);
+      let en = timeToMinutes(e.end);
+      if (isNaN(s) || isNaN(en)) continue;
+      if (en <= s) en += 1440;
+      for (let m = s; m < en; m++) {
+        // Pre-call always pays at the OR rate regardless of parent shift type.
+        arPts += getARRate('OR', isHol, isWknd, m % 1440, shift.siteId) / 60;
+      }
+    }
+    if (weekdayNonHoliday) arPts = Math.max(arPts, 80);
+    return round2(arPts);
+  }
+  // No times entered. Forced-off morning bonus only on weekday non-holidays.
+  if (shift.preCallForcedOff && weekdayNonHoliday) return 56;
+  return 0;
+}
+
 function calcARPoints(shift) {
   if (shift.assignmentType === 'vacation') return 0;
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return 56;
+  const preCallPts = calcPreCallOverlayPts(shift);
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
@@ -8334,7 +8479,7 @@ function calcARPoints(shift) {
 
   // No time entries: return pager pay only (rule window or per-shift override)
   if (!hasEntries || !hasEnd) {
-    return round2(effectivePagerPts(shift, pagerWindow));
+    return round2(effectivePagerPts(shift, pagerWindow) + preCallPts);
   }
 
   const isSF = ['SF1','SF2'].includes(shift.assignmentType);
@@ -8371,7 +8516,7 @@ function calcARPoints(shift) {
   }
 
   if (clockedRanges.length === 0) {
-    return round2(effectivePagerPts(shift, pagerWindow));
+    return round2(effectivePagerPts(shift, pagerWindow) + preCallPts);
   }
 
   // Full span: first entry start → last entry end
@@ -8381,7 +8526,7 @@ function calcARPoints(shift) {
   const nextShiftMin = getNextShiftStartMin(shift.date);
   if (nextShiftMin != null && spanEnd > nextShiftMin) spanEnd = nextShiftMin;
   if (spanEnd <= spanStart) {
-    return round2(effectivePagerPts(shift, pagerWindow));
+    return round2(effectivePagerPts(shift, pagerWindow) + preCallPts);
   }
 
   // Build pre-call range (OR rates during pre-call period)
@@ -8481,7 +8626,7 @@ function calcARPoints(shift) {
     arPoints = Math.max(arPoints, minPoints);
   }
 
-  return round2(arPoints + callPoints);
+  return round2(arPoints + callPoints + preCallPts);
 }
 
 // Get earliest clock-in minute of next calendar day's shift (+1440 offset from current day)
@@ -8503,8 +8648,9 @@ function getNextShiftStartMin(shiftDate) {
 
 // Separate getter for breakdown display purposes
 function calcARBreakdown(shift) {
-  if (shift.assignmentType === 'vacation') return { ar: 0, call: 0 };
-  if (shift.forcedOff || shift.assignmentType === 'forced_off') return { ar: 56, call: 0 };
+  if (shift.assignmentType === 'vacation') return { ar: 0, call: 0, preCall: 0 };
+  if (shift.forcedOff || shift.assignmentType === 'forced_off') return { ar: 56, call: 0, preCall: 0 };
+  const _preCallOverlay = calcPreCallOverlayPts(shift);
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   const isWkndOrHol = isHol || isWknd;
@@ -8513,7 +8659,7 @@ function calcARBreakdown(shift) {
   // Temp coverage (covering): pager + AR scoped entirely to coverage interval
   if (shift.tempCoverage && shift.tempCoverage.length > 0 && shift.tempCoverage[0].type === 'covering') {
     const tc = shift.tempCoverage[0];
-    if (!tc.start || !tc.end) return { ar: 0, call: 0 };
+    if (!tc.start || !tc.end) return { ar: 0, call: 0, preCall: _preCallOverlay };
     let tcStart = timeToMinutes(tc.start);
     let tcEnd = timeToMinutes(tc.end);
     if (tcEnd <= tcStart) tcEnd += 1440;
@@ -8529,7 +8675,7 @@ function calcARBreakdown(shift) {
         arPts += getARRate(shift.assignmentType, ctx.isHol, ctx.isWknd, m % 1440, shift.siteId) / 60;
       }
     });
-    return { ar: round2(arPts), call: round2(pagerPts) };
+    return { ar: round2(arPts), call: round2(pagerPts), preCall: _preCallOverlay };
   }
 
   const entries = shift.timeEntries || [];
@@ -8542,7 +8688,7 @@ function calcARBreakdown(shift) {
     let callPts = effectivePagerPts(shift, pagerWindow);
     const tcAdj = calcTempCoveragePoints(shift);
     callPts += tcAdj.pagerAdj;
-    return { ar: round2(tcAdj.ar), call: round2(callPts) };
+    return { ar: round2(tcAdj.ar), call: round2(callPts), preCall: _preCallOverlay };
   }
 
   const isSF = ['SF1','SF2'].includes(shift.assignmentType);
@@ -8588,7 +8734,7 @@ function calcARBreakdown(shift) {
     let callPts = effectivePagerPts(shift, pagerWindow);
     const tcAdj = calcTempCoveragePoints(shift);
     callPts += tcAdj.pagerAdj;
-    return { ar: round2(tcAdj.ar), call: round2(callPts) };
+    return { ar: round2(tcAdj.ar), call: round2(callPts), preCall: _preCallOverlay };
   }
 
   const spanStart = clockedRanges[0].start;
@@ -8600,7 +8746,7 @@ function calcARBreakdown(shift) {
     let callPts = effectivePagerPts(shift, pagerWindow);
     const tcAdj = calcTempCoveragePoints(shift);
     callPts += tcAdj.pagerAdj;
-    return { ar: round2(tcAdj.ar), call: round2(callPts) };
+    return { ar: round2(tcAdj.ar), call: round2(callPts), preCall: _preCallOverlay };
   }
 
   // Build pre-call range (OR rates during pre-call period)
@@ -8654,7 +8800,7 @@ function calcARBreakdown(shift) {
     const tcPtsBd = calcTempCoveragePoints(shift);
     callPoints += tcPtsBd.pagerAdj;
     arPoints += tcPtsBd.ar;
-    return { ar: round2(arPoints), call: round2(callPoints), preCallAR: round2(preCallAR), eveningAR: round2(eveningAR) };
+    return { ar: round2(arPoints), call: round2(callPoints), preCall: _preCallOverlay, preCallAR: round2(preCallAR), eveningAR: round2(eveningAR) };
   }
 
   // Non-pre-call: single-shift logic
@@ -8694,7 +8840,7 @@ function calcARBreakdown(shift) {
     arPoints = Math.max(arPoints, minPoints);
   }
 
-  return { ar: round2(arPoints), call: round2(callPoints) };
+  return { ar: round2(arPoints), call: round2(callPoints), preCall: _preCallOverlay };
 }
 
 function getTimeMultiplier(physicalStatus, isHol, isWknd, caseStartMin, isHighRiskPeds) {
@@ -9129,6 +9275,7 @@ function calcShiftTotal(shift) {
   const breakdown = calcARBreakdown(shift);
   const arPts = breakdown.ar;
   const callPts = breakdown.call;
+  const preCallPts = breakdown.preCall || 0;
   let prodPts = 0;
   shiftCases.forEach(c => { if (!c.unbilled) prodPts += calcCasePoints(c, shift); });
   const subspecPts = (shift.assignmentType === 'cardiac_liver') ? calcSubspecPoints(shift) : 0;
@@ -9137,7 +9284,7 @@ function calcShiftTotal(shift) {
   // inheriting OR_float) automatically pick it up.
   const _ftRule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
   const floatBonus = (_ftRule && typeof _ftRule.floatBonus === 'number') ? _ftRule.floatBonus : 0;
-  const calcTotal = round2(arPts + prodPts + callPts + subspecPts + supervisionPts + floatBonus);
+  const calcTotal = round2(arPts + prodPts + callPts + subspecPts + supervisionPts + floatBonus + preCallPts);
   // Per-row overrides: adjust total by difference between overridden and calculated row amounts
   const hasRowOverrides = shift.manualAmounts && Object.keys(shift.manualAmounts).length > 0;
   let total = calcTotal;
@@ -9599,6 +9746,7 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
   document.getElementById('vacationRangeSection').classList.toggle('hidden', type !== 'vacation');
   document.getElementById('eveningAssignmentSection').classList.toggle('hidden', type !== 'pre_call');
   document.getElementById('timeEntriesLabel').textContent = type === 'pre_call' ? 'Pre-Call Times' : 'Time Entries';
+  updatePreCallOverlayVisibility();
   if (type !== 'pre_call') {
     document.getElementById('eveningAssignmentType').value = '';
     document.getElementById('eveningTimeSection').classList.add('hidden');
@@ -9794,6 +9942,17 @@ function loadShiftForDate() {
     document.getElementById('vacationEndDate').value = '';
     document.getElementById('subspecCoverage').checked = shift.subspecCoverage || false;
     document.getElementById('teeCount').value = shift.teeCount || 0;
+    // Pre-call (morning OR) overlay — only meaningful for OB_restricted / mole.
+    updatePreCallOverlayVisibility();
+    {
+      const eligible = (shift.assignmentType === 'OB_restricted' || shift.assignmentType === 'mole');
+      const has = !!(eligible && shift.hasPreCall);
+      document.getElementById('hasPreCallCheck').checked = has;
+      document.getElementById('preCallOverlayBody').classList.toggle('hidden', !has);
+      document.getElementById('preCallForcedOff').checked = !!shift.preCallForcedOff;
+      populatePreCallEntries(has ? (shift.preCallTimeEntries || null) : []);
+      if (!has) document.getElementById('preCallEntriesContainer').innerHTML = '';
+    }
     {
       const ucRule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
       const isUC = !!(ucRule && ucRule.unrestrictedCallEntry);
@@ -10194,6 +10353,11 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       const eveningEntries = collectEveningTimeEntries();
       allTimeEntries = [...timeEntries, ...eveningEntries];
     }
+    // Pre-call (morning OR) overlay — only saved for UVH OB / Mole.
+    const preCallEligible = (effectiveType === 'OB_restricted' || effectiveType === 'mole');
+    const hasPreCall = preCallEligible && document.getElementById('hasPreCallCheck').checked;
+    const preCallEntries = hasPreCall ? collectPreCallEntries() : [];
+    const preCallForcedOffFlag = hasPreCall && document.getElementById('preCallForcedOff').checked;
     data.shifts[dt] = {
       date: dt, assignmentType: effectiveType,
       siteId: data.shifts[dt]?.siteId || getCurrentSiteId(),
@@ -10209,6 +10373,9 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       supervisionEnd: supervisionEnabled ? document.getElementById('supervisionEnd').value : '',
       preCallStart: savePreCallStart,
       preCallEnd: savePreCallEnd,
+      hasPreCall: hasPreCall,
+      preCallTimeEntries: preCallEntries,
+      preCallForcedOff: preCallForcedOffFlag,
       tempCoverage: (() => {
         const tcCheck = document.getElementById('tempCoverageCheck');
         if (!tcCheck || !tcCheck.checked) return [];
@@ -13078,6 +13245,22 @@ function getShiftPayBreakdown(shift) {
       durationMin: 0, payRate: 0, amount: 30,
       isSubRow: false
     });
+  }
+
+  // Pre-call (morning OR) overlay for UVH OB / Mole shifts that opted in.
+  if (shift.hasPreCall && (shift.assignmentType === 'OB_restricted' || shift.assignmentType === 'mole')) {
+    const overlayPts = calcPreCallOverlayPts(shift);
+    if (overlayPts > 0) {
+      const entries = (shift.preCallTimeEntries || []).filter(e => e && e.start && e.end);
+      const hasTimes = entries.length > 0;
+      consolidated.push({
+        clockIn: hasTimes ? entries[0].start : '',
+        clockOut: hasTimes ? entries[entries.length - 1].end : '',
+        payCode: hasTimes ? 'Pre-Call OR (morning)' : 'Pre-Call Forced Off',
+        durationMin: 0, payRate: 0, amount: overlayPts,
+        isSubRow: false
+      });
+    }
   }
 
   return consolidated;
