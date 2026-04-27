@@ -9655,7 +9655,15 @@ function calcShiftTotal(shift) {
   const preCallPts = breakdown.preCall || 0;
   let prodPts = 0;
   shiftCases.forEach(c => { if (!c.unbilled) prodPts += calcCasePoints(c, shift); });
-  const subspecPts = (shift.assignmentType === 'cardiac_liver') ? calcSubspecPoints(shift) : 0;
+  // Subspecialty bonus: triggered by rule.cardiacBonus / rule.liverBonus
+  // so per-site cardiac/liver types (IMC CV/Liver, MD CV, SG Heart Call)
+  // automatically earn the +45 pt bonus. Also keep the literal UVH
+  // 'cardiac_liver' check so the legacy default rule (which doesn't
+  // declare the flag) keeps working.
+  const _ssRule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+  const _hasSubspec = (shift.assignmentType === 'cardiac_liver')
+    || !!(_ssRule && (_ssRule.cardiacBonus || _ssRule.liverBonus));
+  const subspecPts = _hasSubspec ? calcSubspecPoints(shift) : 0;
   const supervisionPts = calcSupervisionPoints(shift);
   // Float bonus: rule-driven so per-site float types (e.g. IMC_OR_float
   // inheriting OR_float) automatically pick it up.
@@ -15264,7 +15272,12 @@ function isFuturePagerOnly(shift) {
   const today = effectiveWorkDate();
   if (shift.date <= today) return false;
   const hasRealEntries = shift.timeEntries && shift.timeEntries.some(e => e.start);
-  return !hasRealEntries;
+  if (hasRealEntries) return false;
+  // Flat-payment shifts (e.g. IMC AOD = 235) have their full point value
+  // determined at scheduling — not earned hour-by-hour. Show them on
+  // future dates instead of hiding behind the pager-only guard.
+  if (getFlatPaymentRule(shift)) return false;
+  return true;
 }
 
 function getMonthlyTotals() {
