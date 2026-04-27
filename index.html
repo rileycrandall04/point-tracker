@@ -3796,6 +3796,25 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 </div>
 
+<!-- COMMUNITY STATS PAGE -->
+<div class="page" id="page-communitystats">
+  <div class="card">
+    <h2>Community Stats</h2>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
+      Pooled shift efficiency from everyone at this site who has data sharing enabled. Rows hide until at least 3 contributors have logged a shift of that type.
+    </p>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+      <label style="font-size:0.82rem;color:var(--text-dim);">Site:</label>
+      <select id="communityStatsSiteSelect" onchange="renderCommunityStats()"
+        style="flex:1;min-width:160px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;"></select>
+      <button class="btn btn-sm" onclick="loadCommunityStats(true)" style="background:var(--surface2);color:var(--text);">Refresh</button>
+    </div>
+    <div id="communityStatsContent">
+      <p style="font-size:0.85rem;color:var(--text-dim);">Loading…</p>
+    </div>
+  </div>
+</div>
+
 <!-- ADMIN PAGE -->
 <div class="page" id="page-admin">
   <div class="card" id="adminPageHeaderCard" style="margin-bottom:12px;">
@@ -4604,6 +4623,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="drawer-item" data-page="comprules">
     <span class="drawer-icon">&#128214;</span>
     <span>Compensation Rules</span>
+  </div>
+  <div class="drawer-item" data-page="communitystats">
+    <span class="drawer-icon">&#128101;</span>
+    <span>Community Stats</span>
   </div>
   <div class="drawer-item hidden" id="drawerAdminItem" data-page="admin">
     <span class="drawer-icon">&#128272;</span>
@@ -6569,6 +6592,44 @@ function loadData() {
 function saveData(d) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
   syncToFirestore('data', d);
+  // Debounce a community-pool shift sync so any change to data.shifts
+  // (form save, picker save, delete, bulk import) eventually replicates
+  // to the sharedShifts collection. Settings/cases-only saves are cheap
+  // since the timer is reset, not the work itself.
+  scheduleSharedShiftsSync();
+}
+
+let _sharedShiftsSyncTimer = null;
+function scheduleSharedShiftsSync() {
+  if (_sharedShiftsSyncTimer) clearTimeout(_sharedShiftsSyncTimer);
+  _sharedShiftsSyncTimer = setTimeout(() => {
+    _sharedShiftsSyncTimer = null;
+    syncAllSharedShifts();
+    syncDeletedSharedShifts();
+  }, 5000);
+}
+
+// Removes sharedShifts docs whose corresponding shift no longer exists
+// locally. Runs alongside syncAllSharedShifts so deletes propagate.
+function syncDeletedSharedShifts() {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (settings.shareData === false) return;
+  db.collection('sharedShifts').where('uid', '==', currentUser.uid).get()
+    .then(snap => {
+      const localDates = new Set(Object.keys(data.shifts || {}));
+      const stale = [];
+      snap.forEach(doc => {
+        const d = doc.data() || {};
+        if (!localDates.has(d.shiftDate)) stale.push(doc.ref);
+      });
+      const batchSize = 500;
+      for (let i = 0; i < stale.length; i += batchSize) {
+        const batch = db.batch();
+        stale.slice(i, i + batchSize).forEach(ref => batch.delete(ref));
+        batch.commit().catch(err => console.error('Shared shifts cleanup error:', err));
+      }
+    })
+    .catch(err => console.error('Shared shifts cleanup query error:', err));
 }
 
 function loadSettings() {
@@ -6678,6 +6739,85 @@ function deleteAllUserSharedCases() {
       }
     })
     .catch(err => console.error('Shared case query error:', err));
+}
+
+// ---- Shared shift summaries (community pool, anonymized at the row level) ----
+//
+// One doc per (uid, shiftDate). Carries only what the Community Stats page
+// needs to compute pooled efficiency / totals — no time entries, no notes,
+// no cases. Doc id is `${uid}_${date}` so writes are idempotent.
+function buildSharedShift(shift) {
+  if (!shift || !shift.date) return null;
+  const hrs = calcShiftHours(shift);
+  const total = calcShiftTotal(shift).total;
+  return {
+    uid: currentUser ? currentUser.uid : '',
+    siteId: shift.siteId || getCurrentSiteId(),
+    assignmentType: shift.assignmentType || '',
+    shiftDate: shift.date,
+    monthBucket: shift.date.slice(0, 7), // YYYY-MM, handy for future filters
+    points: round2(total),
+    hours: round2(hrs),
+    isHoliday: !!shift.isHoliday,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function writeSharedShift(shift) {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (settings.shareData === false) return;
+  if (!shift || !shift.date) return;
+  const docId = currentUser.uid + '_' + shift.date;
+  const payload = buildSharedShift(shift);
+  if (!payload) return;
+  db.collection('sharedShifts').doc(docId).set(payload).catch(err => {
+    console.error('Shared shift write error:', err);
+  });
+}
+
+function deleteSharedShift(shiftDate) {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (!shiftDate) return;
+  const docId = currentUser.uid + '_' + shiftDate;
+  db.collection('sharedShifts').doc(docId).delete().catch(err => {
+    console.error('Shared shift delete error:', err);
+  });
+}
+
+function syncAllSharedShifts() {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (settings.shareData === false) return;
+  const dates = Object.keys(data.shifts || {});
+  const batchSize = 500;
+  for (let i = 0; i < dates.length; i += batchSize) {
+    const batch = db.batch();
+    dates.slice(i, i + batchSize).forEach(d => {
+      const shift = data.shifts[d];
+      const payload = buildSharedShift(shift);
+      if (!payload) return;
+      const docId = currentUser.uid + '_' + d;
+      batch.set(db.collection('sharedShifts').doc(docId), payload);
+    });
+    batch.commit().catch(err => console.error('Shared shifts batch write error:', err));
+  }
+}
+
+function deleteAllUserSharedShifts() {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  db.collection('sharedShifts')
+    .where('uid', '==', currentUser.uid)
+    .get()
+    .then(snapshot => {
+      if (snapshot.empty) return;
+      const batchSize = 500;
+      const docs = snapshot.docs;
+      for (let i = 0; i < docs.length; i += batchSize) {
+        const batch = db.batch();
+        docs.slice(i, i + batchSize).forEach(doc => batch.delete(doc.ref));
+        batch.commit().catch(err => console.error('Shared shifts batch delete error:', err));
+      }
+    })
+    .catch(err => console.error('Shared shifts query error:', err));
 }
 
 let sharedCasesCache = [];
@@ -9188,6 +9328,7 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     if (page === 'comprules') { /* static content, no init needed */ }
     if (page === 'asacodes') { renderAsaCodesPage(); }
     if (page === 'admin') { renderAdminPage(); }
+    if (page === 'communitystats') { initCommunityStats(); }
   });
 });
 
@@ -17996,6 +18137,138 @@ function buildShiftEfficiency() {
   return html || '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet.</p>';
 }
 
+// ---------- Community Stats (pooled shift efficiency from sharedShifts) ----------
+
+let _communityStatsCache = null;       // { ts, byUid: { uid: [ {siteId, assignmentType, points, hours, shiftDate} ] } }
+let _communityStatsCurrentSite = null; // currently-displayed siteId
+const COMMUNITY_STATS_MIN_CONTRIBUTORS = 3;
+
+function initCommunityStats() {
+  // Populate the site dropdown from sitesCache and default to the user's site.
+  const sel = document.getElementById('communityStatsSiteSelect');
+  if (!sel) return;
+  const ids = Object.keys(sitesCache || {}).slice().sort();
+  let html = '';
+  for (const id of ids) {
+    const name = (sitesCache[id] && sitesCache[id].name) || id;
+    html += '<option value="' + id + '">' + escapeHtml(name) + '</option>';
+  }
+  sel.innerHTML = html;
+  const mySite = getCurrentSiteId();
+  if (mySite && ids.indexOf(mySite) !== -1) sel.value = mySite;
+  loadCommunityStats(false);
+}
+
+function loadCommunityStats(force) {
+  const out = document.getElementById('communityStatsContent');
+  if (!out) return;
+  // 5-minute cache so repeated tab switches don't re-fetch.
+  const fresh = _communityStatsCache && (Date.now() - _communityStatsCache.ts) < 5 * 60 * 1000;
+  if (!force && fresh) {
+    renderCommunityStats();
+    return;
+  }
+  out.innerHTML = '<p style="font-size:0.85rem;color:var(--text-dim);">Loading…</p>';
+  if (!firestoreSyncEnabled || !currentUser) {
+    out.innerHTML = '<p style="font-size:0.85rem;color:var(--accent2);">Sign in to load community data.</p>';
+    return;
+  }
+  db.collection('sharedShifts').get()
+    .then(snap => {
+      const byUid = {};
+      snap.forEach(doc => {
+        const d = doc.data() || {};
+        if (!d.uid || !d.siteId || !d.assignmentType) return;
+        if (!(d.hours > 0)) return;
+        if (!byUid[d.uid]) byUid[d.uid] = [];
+        byUid[d.uid].push({
+          siteId: d.siteId,
+          assignmentType: d.assignmentType,
+          points: Number(d.points) || 0,
+          hours: Number(d.hours) || 0,
+          shiftDate: d.shiftDate || ''
+        });
+      });
+      _communityStatsCache = { ts: Date.now(), byUid };
+      renderCommunityStats();
+    })
+    .catch(err => {
+      console.error('Community stats load error:', err);
+      out.innerHTML = '<p style="font-size:0.85rem;color:var(--accent2);">Failed to load: ' + escapeHtml(err.message || String(err)) + '</p>';
+    });
+}
+
+function renderCommunityStats() {
+  const out = document.getElementById('communityStatsContent');
+  if (!out) return;
+  const sel = document.getElementById('communityStatsSiteSelect');
+  const siteId = sel && sel.value;
+  _communityStatsCurrentSite = siteId;
+  if (!_communityStatsCache) {
+    out.innerHTML = '<p style="font-size:0.85rem;color:var(--text-dim);">Click Refresh to load.</p>';
+    return;
+  }
+  // Group: assignmentType -> { uids: Set, vals: [ptsPerHr, ...], totalPts: sum, totalHrs: sum, shiftCount }
+  const groups = {};
+  for (const uid of Object.keys(_communityStatsCache.byUid)) {
+    const rows = _communityStatsCache.byUid[uid];
+    for (const r of rows) {
+      if (siteId && r.siteId !== siteId) continue;
+      const t = r.assignmentType;
+      if (!groups[t]) groups[t] = { uids: new Set(), vals: [], totalPts: 0, totalHrs: 0, shiftCount: 0 };
+      groups[t].uids.add(uid);
+      groups[t].vals.push(r.points / r.hours);
+      groups[t].totalPts += r.points;
+      groups[t].totalHrs += r.hours;
+      groups[t].shiftCount++;
+    }
+  }
+  // Filter to groups with enough distinct contributors to anonymize.
+  const ranked = Object.entries(groups)
+    .filter(([, g]) => g.uids.size >= COMMUNITY_STATS_MIN_CONTRIBUTORS)
+    .map(([type, g]) => {
+      const n = g.vals.length;
+      const mean = g.vals.reduce((a, b) => a + b, 0) / n;
+      let std = null;
+      if (n >= 2) {
+        const variance = g.vals.reduce((acc, v) => acc + (v - mean) * (v - mean), 0) / (n - 1);
+        std = Math.sqrt(variance);
+      }
+      return {
+        name: getAssignmentTypeName(type, siteId),
+        type: type,
+        mean: round2(mean),
+        std: std == null ? null : round2(std),
+        avgTotal: round2(g.totalPts / g.shiftCount),
+        avgHours: round2(g.totalHrs / g.shiftCount),
+        contributors: g.uids.size,
+        shifts: g.shiftCount
+      };
+    })
+    .sort((a, b) => b.mean - a.mean);
+
+  if (ranked.length === 0) {
+    out.innerHTML = '<p style="font-size:0.85rem;color:var(--text-dim);">No pooled data yet for this site (need at least ' + COMMUNITY_STATS_MIN_CONTRIBUTORS + ' contributors per shift type).</p>';
+    return;
+  }
+
+  let html = '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Pooled across ' + Object.keys(_communityStatsCache.byUid).length + ' contributors total. Rows show mean pts/hr ± sample stddev, plus average shift total.</div>';
+  ranked.forEach(r => {
+    const stdStr = r.std == null
+      ? '<span style="color:var(--text-dim);font-size:0.75rem;">&plusmn; n/a</span>'
+      : '<span style="color:var(--text-dim);font-size:0.75rem;">&plusmn; ' + r.std.toFixed(1) + '</span>';
+    html += '<div class="efficiency-item" style="flex-wrap:wrap;gap:2px;">';
+    html += '<span class="eff-label">' + escHtml(r.name);
+    html += ' <span style="color:var(--text-dim);font-size:0.72rem;">(' + r.shifts + ' shift' + (r.shifts !== 1 ? 's' : '') + ' · ' + r.contributors + ' people)</span></span>';
+    html += '<span style="font-size:0.85rem;">';
+    html += '<span class="eff-value" style="color:var(--primary);">' + r.mean.toFixed(1) + ' ' + stdStr + '</span>';
+    html += ' <span style="color:var(--text-dim);font-size:0.75rem;">&middot; avg ' + r.avgTotal.toFixed(1) + ' pts / ' + r.avgHours.toFixed(1) + ' hrs</span>';
+    html += '</span>';
+    html += '</div>';
+  });
+  out.innerHTML = html;
+}
+
 function buildWorkerBeeAvg() {
   const groups = {};
   Object.values(data.shifts).forEach(shift => {
@@ -20774,10 +21047,12 @@ shareToggle.addEventListener('change', () => {
   saveSettings(settings);
   if (settings.shareData) {
     syncAllSharedCases();
-    showToast('Data sharing enabled — syncing cases');
+    syncAllSharedShifts();
+    showToast('Data sharing enabled — syncing cases & shifts');
   } else {
     deleteAllUserSharedCases();
-    showToast('Data sharing disabled — shared cases removed');
+    deleteAllUserSharedShifts();
+    showToast('Data sharing disabled — shared cases & shifts removed');
   }
 });
 
@@ -24471,6 +24746,13 @@ auth.onAuthStateChanged(async (user) => {
       settings.sharedDataSynced = true;
       settings.sharedSchemaV2 = true;
       settings.sharedSyncV3 = true;
+      saveSettings(settings);
+    }
+
+    // Backfill shared shifts on first run after this feature shipped.
+    if (settings.shareData !== false && Object.keys(data.shifts || {}).length > 0 && !settings.sharedShiftsBackfilled) {
+      syncAllSharedShifts();
+      settings.sharedShiftsBackfilled = true;
       saveSettings(settings);
     }
 
