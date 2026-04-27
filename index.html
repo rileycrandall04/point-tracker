@@ -3908,7 +3908,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px 0;">
           Controls which shift types this site's users see when adding a shift. Leave all unchecked to fall back to every UVH default.
         </p>
-        <div id="adminRulesVisibleList" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        <div id="adminRulesVisibleList"></div>
       </div>
 
       <!-- otherMigrationMap -->
@@ -5685,15 +5685,19 @@ function _adminRulesRenderVisibleList() {
   if (!out) return;
   const visible = adminRulesDraft.visibleShiftTypes || [];
   const ids = _adminRulesKnownTypeIds();
-  let html = '';
-  for (const id of ids) {
+  let html = '<div style="background:var(--surface);border-radius:6px;border:1px solid var(--border);overflow:hidden;">';
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i];
     const checked = visible.indexOf(id) !== -1 ? ' checked' : '';
     const label = _adminRulesLabelFor(id);
-    html += '<label style="font-size:0.78rem;display:flex;align-items:center;gap:4px;background:var(--surface);padding:4px 8px;border-radius:6px;cursor:pointer;">';
-    html += '<input type="checkbox" onchange="adminRulesToggleVisible(\'' + id + '\')"' + checked + '>';
-    html += escapeHtml(label) + ' <span style="color:var(--text-dim);font-size:0.7rem;">(' + escapeHtml(id) + ')</span>';
+    const border = i < ids.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:0.78rem;cursor:pointer;' + border + '">';
+    html += '<input type="checkbox" onchange="adminRulesToggleVisible(\'' + id + '\')"' + checked + ' style="flex:none;">';
+    html += '<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(label) + '</span>';
+    html += '<span style="color:var(--text-dim);font-size:0.7rem;flex:none;white-space:nowrap;">' + escapeHtml(id) + '</span>';
     html += '</label>';
   }
+  html += '</div>';
   out.innerHTML = html;
 }
 
