@@ -7210,6 +7210,14 @@ function parseCalendarEventTitle(title, dateStr) {
   // follows the actual assignment.
   let working = t;
   while (true) {
+    // IMC tier titles ("Tier 5 IMC", "Tier 7 IMC (CV 2)", ...) — only
+    // applied when the user's site is IMC. Per the IMC seed, tier
+    // positions are General OR by default; the named exceptions are
+    // APS, CV 1/2, Liver 1/2.
+    if (siteId === 'IMC') {
+      const tierMatch = matchIMCTierTitle(working);
+      if (tierMatch) return tierMatch;
+    }
     // 1. UVH-flavor regex parser first. Returns null for bare skip words
     //    ("Vacation", "Off", "Holiday", ...) so those continue to be
     //    intentionally skipped no matter which site is active.
@@ -7225,6 +7233,24 @@ function parseCalendarEventTitle(title, dateStr) {
     if (!working) break;
   }
   return false;
+}
+
+// IMC-only: "Tier N IMC" with optional parenthetical specialty. Returns
+// { type, label } or null if the title doesn't match the Tier shape.
+function matchIMCTierTitle(title) {
+  if (!title) return null;
+  const m = title.match(/^Tier\s*\d+\s*IMC(?:\s*\(\s*([^)]+?)\s*\))?\s*$/i);
+  if (!m) return null;
+  const inside = (m[1] || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const named = {
+    'cv 1':    { type: 'IMC_cv_1st_call',     label: 'IMC CV 1st Call' },
+    'cv 2':    { type: 'IMC_cv_2nd_call',     label: 'IMC CV 2nd Call' },
+    'liver 1': { type: 'IMC_liver_1st_call',  label: 'IMC Liver 1st Call' },
+    'liver 2': { type: 'IMC_liver_2nd_call',  label: 'IMC Liver 2nd Call' },
+    'aps':     { type: 'IMC_acute_pain_call', label: 'IMC Acute Pain Call (APS)' }
+  };
+  if (inside && named[inside]) return named[inside];
+  return { type: 'IMC_OR', label: 'IMC General OR' };
 }
 
 // Compare a calendar event title against every visible shift type's label
