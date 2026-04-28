@@ -8410,11 +8410,15 @@ async function saveCalendarMappingsEditor() {
       updateMappingCountUI();
     }
     showToast('Calendar mappings updated');
-    closeCalendarMappingsEditor();
   } catch (err) {
     console.error('saveCalendarMappingsEditor failed:', err);
     showToast('Save failed: ' + (err.message || String(err)));
+  } finally {
+    // Always close after Save — toast surfaces success/failure either
+    // way, and leaving a half-edited modal open after a click of the
+    // Save button is more confusing than helpful.
     if (btn) { btn.disabled = false; btn.textContent = 'Save Changes'; }
+    closeCalendarMappingsEditor();
   }
 }
 
