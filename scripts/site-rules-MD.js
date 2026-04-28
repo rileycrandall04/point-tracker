@@ -90,8 +90,8 @@ module.exports = {
     // OB call (McKay Dee) — exactly like UVH OB.
     'MDH_OB_call': { label: 'MD OB', inherit_uvh: 'OB_restricted' },
 
-    // Layton OB — "Unrestricted OB". Treated like UVH SF1.
-    'LH_OB': { label: 'Unrestricted OB', inherit_uvh: 'SF1' },
+    // Layton OB — same rules as UVH OB.
+    'LH_OB': { label: 'LH OB', inherit_uvh: 'OB_restricted' },
 
     // ============================================================
     // PLACEMENT — single General OR + General OR Float (rev 3 collapses
