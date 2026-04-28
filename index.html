@@ -10745,26 +10745,31 @@ function populateTCTimeEntries(entries) {
 function checkEndTimeNotification() {
   const now = new Date();
   if (now.getHours() < 7) return;
-  const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
-  const missing = Object.values(data.shifts).filter(s => {
-    if (s.forcedOff || s.assignmentType === 'forced_off') return false;
-    // Check if last entry has an end time
-    const entries = s.timeEntries || [];
-    const lastEnd = entries.length > 0 ? entries[entries.length - 1].end : s.endTime;
-    if (lastEnd) return false;
-    const sd = new Date(s.date + 'T12:00:00');
-    return sd >= twoDaysAgo && sd <= now;
-  });
-  if (missing.length === 0) return;
+  // Only nag about yesterday's shift — today might still be in progress,
+  // and older days are too late to reasonably remember the clock-out time.
+  const yest = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const yestStr = yest.getFullYear() + '-' + String(yest.getMonth() + 1).padStart(2, '0') + '-' + String(yest.getDate()).padStart(2, '0');
+  const s = data.shifts[yestStr];
+  if (!s) return;
+  if (s.forcedOff || s.assignmentType === 'forced_off') return;
+  const entries = s.timeEntries || [];
+  const lastEnd = entries.length > 0 ? entries[entries.length - 1].end : s.endTime;
+  if (lastEnd) return;
+  // Dedup so multiple inits on the same calendar day don't re-fire.
+  const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+  if (settings && settings.lastEndTimeAlertDate === todayStr) return;
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
   }
   if ('Notification' in window && Notification.permission === 'granted') {
-    const dates = missing.map(s => formatDateShort(s.date)).join(', ');
     new Notification('MWA Point Tracker', {
-      body: `Missing end time for: ${dates}`,
+      body: 'Missing end time for: ' + formatDateShort(yestStr),
       icon: 'icons/icon-192.png'
     });
+    if (settings) {
+      settings.lastEndTimeAlertDate = todayStr;
+      saveSettings(settings);
+    }
   }
 }
 
