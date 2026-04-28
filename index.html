@@ -3895,6 +3895,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0;flex-wrap:wrap;">
       <button class="btn btn-sm" id="adminMSTabUsers" onclick="adminMSSetTab('users')"
         style="border-radius:6px 6px 0 0;background:var(--primary);color:#fff;">Users</button>
+      <button class="btn btn-sm" id="adminMSTabActivity" onclick="adminMSSetTab('activity')"
+        style="border-radius:6px 6px 0 0;background:var(--surface2);">Activity</button>
       <button class="btn btn-sm" id="adminMSTabSites" onclick="adminMSSetTab('sites')"
         style="border-radius:6px 6px 0 0;background:var(--surface2);">Sites</button>
       <button class="btn btn-sm" id="adminMSTabRules" onclick="adminMSSetTab('rules')"
@@ -3921,6 +3923,21 @@ body.hide-monetary .monetary-hide { display: none !important; }
       </div>
       <div id="adminMSUsersList" style="font-size:0.85rem;"></div>
       <div id="adminMSUserCard" style="font-size:0.85rem;margin-top:12px;"></div>
+    </div>
+
+    <!-- Activity tab -->
+    <div id="adminMSActivityPane" class="hidden">
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">
+        Per-user case totals and recent activity. Green dot = the user entered a case in the past 7 days.
+      </p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+        <label style="font-size:0.78rem;color:var(--text-dim);">Scope:</label>
+        <select id="adminMSActivityScope" onchange="adminMSLoadActivity()"
+          style="flex:1;min-width:180px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;"></select>
+        <button class="btn btn-primary btn-sm" onclick="adminMSLoadActivity()">Refresh</button>
+      </div>
+      <div id="adminMSActivitySummary" style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;"></div>
+      <div id="adminMSActivityList" style="font-size:0.85rem;"></div>
     </div>
 
     <!-- Sites tab -->
@@ -5213,10 +5230,11 @@ function escapeHtml(s) {
 
 function adminMSSetTab(tab) {
   const tabs = [
-    { id: 'users', btn: 'adminMSTabUsers', pane: 'adminMSUsersPane' },
-    { id: 'sites', btn: 'adminMSTabSites', pane: 'adminMSSitesPane' },
-    { id: 'rules', btn: 'adminMSTabRules', pane: 'adminMSRulesPane' },
-    { id: 'test',  btn: 'adminMSTabTest',  pane: 'adminMSTestPane'  }
+    { id: 'users',    btn: 'adminMSTabUsers',    pane: 'adminMSUsersPane'    },
+    { id: 'activity', btn: 'adminMSTabActivity', pane: 'adminMSActivityPane' },
+    { id: 'sites',    btn: 'adminMSTabSites',    pane: 'adminMSSitesPane'    },
+    { id: 'rules',    btn: 'adminMSTabRules',    pane: 'adminMSRulesPane'    },
+    { id: 'test',     btn: 'adminMSTabTest',     pane: 'adminMSTestPane'     }
   ];
   for (const t of tabs) {
     const btn = document.getElementById(t.btn);
@@ -5234,6 +5252,7 @@ function adminMSSetTab(tab) {
   }
   if (tab === 'sites') renderAdminMSSitesList();
   if (tab === 'rules') adminRulesInit();
+  if (tab === 'activity') adminMSInitActivity();
 }
 
 function _adminMSSiteOptionsHTML(currentSiteId) {
@@ -5391,6 +5410,265 @@ async function adminMSOpenUser(uid) {
 // Backward-compat alias for any internal callers (post-action refreshes).
 async function adminMSFindUser() {
   return adminMSListUsers();
+}
+
+// ---- Admin: User Activity (case totals + recent activity) ----
+//
+// Shows, per user in the admin's scope, total cases entered and whether any
+// were entered in the past 7 days. Site admins see only users at their
+// adminSites; app owner can scope to any single site, group across all sites,
+// or view a flat "Combined" roll-up for the entire user base.
+//
+// Data source: `users/{uid}/data/data.cases[]` (canonical) — same path the
+// owner-only User Data Lookup uses. Each fetch is wrapped so a permission
+// failure just shows that user with zero cases rather than blowing up the
+// whole list.
+
+const ADMIN_MS_ACTIVITY_WEEK_DAYS = 7;
+
+function _adminMSFmtYMD(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
+
+function adminMSInitActivity() {
+  const scopeSel = document.getElementById('adminMSActivityScope');
+  if (!scopeSel) return;
+  const owner = isAppOwner() || isLegacyAdmin();
+  const sortedSiteIds = Object.keys(sitesCache || {}).slice().sort((a, b) => {
+    const an = (sitesCache[a] && sitesCache[a].name) || a;
+    const bn = (sitesCache[b] && sitesCache[b].name) || b;
+    return an.localeCompare(bn);
+  });
+  let html = '';
+  if (owner) {
+    html += '<option value="__all_grouped__" selected>All sites (grouped by site)</option>';
+    for (const id of sortedSiteIds) {
+      const name = (sitesCache[id] && sitesCache[id].name) || id;
+      html += '<option value="' + id + '">' + escapeHtml(name) + '</option>';
+    }
+    html += '<option value="__combined__">Combined (entire user base)</option>';
+  } else {
+    const adminSites = getAdminSites().slice().sort((a, b) => {
+      const an = (sitesCache[a] && sitesCache[a].name) || a;
+      const bn = (sitesCache[b] && sitesCache[b].name) || b;
+      return an.localeCompare(bn);
+    });
+    if (adminSites.length === 0) {
+      html = '<option value="" disabled selected>No admin scope</option>';
+    } else if (adminSites.length === 1) {
+      const id = adminSites[0];
+      const name = (sitesCache[id] && sitesCache[id].name) || id;
+      html = '<option value="' + id + '" selected>' + escapeHtml(name) + '</option>';
+    } else {
+      html += '<option value="__all_grouped__" selected>All my sites (grouped)</option>';
+      for (const id of adminSites) {
+        const name = (sitesCache[id] && sitesCache[id].name) || id;
+        html += '<option value="' + id + '">' + escapeHtml(name) + '</option>';
+      }
+    }
+  }
+  scopeSel.innerHTML = html;
+  adminMSLoadActivity();
+}
+
+async function adminMSLoadActivity() {
+  if (!isSiteAdmin()) return;
+  const listOut = document.getElementById('adminMSActivityList');
+  const sumOut = document.getElementById('adminMSActivitySummary');
+  const scopeSel = document.getElementById('adminMSActivityScope');
+  if (!listOut || !sumOut || !scopeSel) return;
+  const scope = scopeSel.value || '__all_grouped__';
+  const owner = isAppOwner() || isLegacyAdmin();
+  const adminSites = owner ? null : getAdminSites();
+  if (!owner && (!adminSites || adminSites.length === 0)) {
+    sumOut.textContent = '';
+    listOut.innerHTML = '<p style="color:var(--text-dim);">No admin scope.</p>';
+    return;
+  }
+
+  // Resolve scope into:
+  //   allowedSet  — { siteId: true } limiting which cases count, or null = no cap
+  //   visibleSet  — same shape, limiting which users are listed (by current site)
+  //                 null = list every user in the profiles collection
+  //   groupBySite — show site headers (only for the "grouped" scopes)
+  let allowedSet = null;
+  let visibleSet = null;
+  let groupBySite = false;
+  if (scope === '__combined__' && owner) {
+    allowedSet = null;
+    visibleSet = null;
+    groupBySite = false;
+  } else if (scope === '__all_grouped__') {
+    if (owner) {
+      allowedSet = null;
+      visibleSet = null;
+    } else {
+      allowedSet = {};
+      visibleSet = {};
+      for (const s of adminSites) { allowedSet[s] = true; visibleSet[s] = true; }
+    }
+    groupBySite = true;
+  } else {
+    if (!owner && adminSites.indexOf(scope) === -1) {
+      sumOut.textContent = '';
+      listOut.innerHTML = '<p style="color:var(--accent2);">Not authorized for this site.</p>';
+      return;
+    }
+    allowedSet = {}; allowedSet[scope] = true;
+    visibleSet = {}; visibleSet[scope] = true;
+    groupBySite = false;
+  }
+
+  sumOut.textContent = '';
+  listOut.innerHTML = '<p>Loading users…</p>';
+  try {
+    const snap = await db.collection('userProfiles').get();
+    if (snap.empty) {
+      listOut.innerHTML = '<p style="color:var(--text-dim);">No user profiles yet.</p>';
+      return;
+    }
+    const rows = [];
+    snap.forEach(doc => { rows.push({ uid: doc.id, profile: doc.data() || {} }); });
+
+    listOut.innerHTML = '<p>Loading activity for ' + rows.length + ' user' + (rows.length !== 1 ? 's' : '') + '…</p>';
+
+    // Pull each user's current site (settings) and case list (data) in parallel.
+    // Failures (e.g. missing data doc, permission edge cases) silently degrade
+    // to userSiteId=DEFAULT and cases=[] so a single bad user doesn't sink the list.
+    const fetches = rows.map(r => Promise.all([
+      db.collection('users').doc(r.uid).collection('data').doc('settings').get()
+        .then(d => { r.userSiteId = (d.exists && d.data().siteId) || DEFAULT_SITE_ID; })
+        .catch(() => { r.userSiteId = DEFAULT_SITE_ID; }),
+      db.collection('users').doc(r.uid).collection('data').doc('data').get()
+        .then(d => { r.cases = (d.exists && Array.isArray(d.data().cases)) ? d.data().cases : []; r.casesError = false; })
+        .catch(() => { r.cases = []; r.casesError = true; })
+    ]));
+    await Promise.all(fetches);
+
+    // Past-week threshold: today and the prior 6 days are "in the past 7 days".
+    const today = new Date();
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - (ADMIN_MS_ACTIVITY_WEEK_DAYS - 1));
+    const weekAgoStr = _adminMSFmtYMD(weekAgo);
+
+    let anyCasesError = false;
+    for (const r of rows) {
+      let total = 0, recent = 0, lastDate = '';
+      for (const c of (r.cases || [])) {
+        if (!c) continue;
+        const sid = c.siteId || r.userSiteId || DEFAULT_SITE_ID;
+        if (allowedSet && !allowedSet[sid]) continue;
+        const dt = c.shiftDate || c.date || '';
+        total++;
+        if (dt && dt >= weekAgoStr) recent++;
+        if (dt > lastDate) lastDate = dt;
+      }
+      r.total = total;
+      r.recent = recent;
+      r.lastDate = lastDate;
+      if (r.casesError) anyCasesError = true;
+    }
+
+    // Filter the visible roster. visibleSet=null means show everyone in the
+    // user base. Otherwise: include the user if their current site is in scope
+    // OR they have any in-scope case (catches users who moved between sites).
+    let visible = rows;
+    if (visibleSet) {
+      visible = rows.filter(r => visibleSet[r.userSiteId] || r.total > 0);
+    }
+
+    if (visible.length === 0) {
+      listOut.innerHTML = '<p style="color:var(--text-dim);">No users in this scope yet.</p>';
+      return;
+    }
+
+    visible.sort((a, b) => (a.profile.email || '').localeCompare(b.profile.email || ''));
+
+    const totalCases = visible.reduce((acc, r) => acc + r.total, 0);
+    const activeUsers = visible.filter(r => r.recent > 0).length;
+    let summary = visible.length + ' user' + (visible.length !== 1 ? 's' : '')
+      + ' • ' + totalCases + ' case' + (totalCases !== 1 ? 's' : '')
+      + ' • ' + activeUsers + ' active in past 7 days';
+    if (anyCasesError) summary += ' • some users could not be read';
+    sumOut.textContent = summary;
+
+    let html = '';
+    if (groupBySite) {
+      const buckets = {};
+      for (const r of visible) {
+        const sid = r.userSiteId || DEFAULT_SITE_ID;
+        if (!buckets[sid]) buckets[sid] = [];
+        buckets[sid].push(r);
+      }
+      const orderedSiteIds = Object.keys(buckets).sort((a, b) => {
+        const an = (sitesCache[a] && sitesCache[a].name) || a;
+        const bn = (sitesCache[b] && sitesCache[b].name) || b;
+        return an.localeCompare(bn);
+      });
+      for (const sid of orderedSiteIds) {
+        const sname = (sitesCache[sid] && sitesCache[sid].name) || sid;
+        const bucket = buckets[sid];
+        const bcases = bucket.reduce((a, r) => a + r.total, 0);
+        const bactive = bucket.filter(r => r.recent > 0).length;
+        html += '<div style="margin:10px 0 4px 0;font-size:0.85rem;font-weight:600;color:var(--text);">'
+          + escapeHtml(sname)
+          + ' <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400;">('
+          + bucket.length + ' user' + (bucket.length !== 1 ? 's' : '')
+          + ' • ' + bcases + ' case' + (bcases !== 1 ? 's' : '')
+          + ' • ' + bactive + ' active)</span></div>';
+        for (const r of bucket) html += _adminMSRenderActivityRow(r);
+      }
+    } else {
+      for (const r of visible) html += _adminMSRenderActivityRow(r);
+    }
+    listOut.innerHTML = html;
+  } catch (err) {
+    console.error('Admin user activity error:', err);
+    listOut.innerHTML = '<p style="color:var(--accent2);">Error: ' + (err.message || err) + '</p>';
+  }
+}
+
+function _adminMSRenderActivityRow(r) {
+  const name = r.profile.displayName || '(no name)';
+  const email = r.profile.email || '(no email)';
+  const isActive = r.recent > 0;
+  const dotColor = isActive ? 'var(--accent)' : 'var(--text-dim)';
+  const tooltip = isActive
+    ? (r.recent + ' case' + (r.recent !== 1 ? 's' : '') + ' in past 7 days')
+    : (r.lastDate ? ('Last case: ' + r.lastDate) : 'No cases recorded');
+  let html = '';
+  html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;" onclick="adminMSActivityOpenUser(\'' + r.uid + '\')" title="' + escapeHtml(tooltip) + '">';
+  html += '<div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">';
+  html += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0;"></span>';
+  html += '<div style="min-width:0;flex:1;"><strong>' + escapeHtml(name) + '</strong>';
+  html += '<br><span style="font-size:0.72rem;color:var(--text-dim);">' + escapeHtml(email) + '</span>';
+  if (r.lastDate) {
+    html += '<br><span style="font-size:0.68rem;color:var(--text-dim);">Last case: ' + escapeHtml(r.lastDate) + '</span>';
+  } else if (r.casesError) {
+    html += '<br><span style="font-size:0.68rem;color:var(--accent2);">could not read data</span>';
+  }
+  html += '</div>';
+  html += '</div>';
+  html += '<div style="text-align:right;font-size:0.78rem;flex-shrink:0;">';
+  html += '<div><strong>' + r.total + '</strong> <span style="color:var(--text-dim);font-size:0.7rem;">case' + (r.total !== 1 ? 's' : '') + '</span></div>';
+  if (isActive) {
+    html += '<div style="color:var(--accent);font-size:0.7rem;">' + r.recent + ' this week</div>';
+  } else {
+    html += '<div style="color:var(--text-dim);font-size:0.7rem;">no recent</div>';
+  }
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+// Clicking a row in the Activity list jumps to the same user in the Users
+// management tab, so the admin can act (invite, change site, etc.) right away.
+function adminMSActivityOpenUser(uid) {
+  adminMSSetTab('users');
+  adminMSOpenUser(uid);
 }
 
 function renderAdminMSUserCard(uid, profile, userSiteId) {
@@ -10482,6 +10760,10 @@ function renderAdminPrivilegesList(isOwner, isSAdmin) {
       action: () => { _adminPrivScrollTo('adminMultiSiteCard'); typeof adminMSSetTab === 'function' && adminMSSetTab('users'); }
     });
     items.push({
+      label: 'See <strong>user activity</strong> at your site(s) &mdash; case totals and who has logged a case in the past week.',
+      action: () => { _adminPrivScrollTo('adminMultiSiteCard'); typeof adminMSSetTab === 'function' && adminMSSetTab('activity'); }
+    });
+    items.push({
       label: 'Edit <strong>shift rules</strong> for your site(s) &mdash; pager windows, AR base, subspec bonuses, flat-points shifts.',
       action: () => { _adminPrivScrollTo('adminMultiSiteCard'); typeof adminMSSetTab === 'function' && adminMSSetTab('rules'); }
     });
@@ -10502,6 +10784,10 @@ function renderAdminPrivilegesList(isOwner, isSAdmin) {
     items.push({ ownerOnly: true,
       label: '<strong>Promote / demote site admins</strong> and set their site scope.',
       action: () => { _adminPrivScrollTo('adminMultiSiteCard'); typeof adminMSSetTab === 'function' && adminMSSetTab('users'); }
+    });
+    items.push({ ownerOnly: true,
+      label: 'View <strong>user activity across all sites</strong> &mdash; per-site or combined for the entire user base.',
+      action: () => { _adminPrivScrollTo('adminMultiSiteCard'); typeof adminMSSetTab === 'function' && adminMSSetTab('activity'); }
     });
     items.push({ ownerOnly: true,
       label: '<strong>Look up any user&rsquo;s data</strong> directly (read-only debug).',
