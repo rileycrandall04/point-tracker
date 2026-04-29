@@ -10144,7 +10144,11 @@ function calcCasePoints(caseData, shift, ignoreManual) {
         return 0;
       }
     }
-    if (ce <= cs) ce += 1440;
+    // Strict < (was <=) so an epidural with ce equal to cs reads as 0
+    // elapsed, not a 24-hour cross-midnight wrap. The downstream tier math
+    // already caps at 24h, but the same-minute live estimate would otherwise
+    // jump straight to the longest tier.
+    if (ce < cs) ce += 1440;
 
     if (caseData.isSharedLabor && caseData.laborInitialStart) {
       // Shared/handoff epidural: tier based on total time since original placement
@@ -10180,13 +10184,19 @@ function calcCasePoints(caseData, shift, ignoreManual) {
     if (caseEndMin <= caseStartMin) caseEndMin += 1440;
     caseHours = (caseEndMin - caseStartMin) / 60;
   } else if (caseData.startTime) {
-    // No end time but has start: estimate with current time if case is today
+    // No end time but has start: estimate with current time if case is today.
+    // Strict < (was <=) so a case saved at the same minute it was started
+    // reads as 0 elapsed, not a 24-hour cross-midnight wrap — that wrap was
+    // flipping caseHours to 24 and producing ~146 pts on a 0-min colonoscopy.
+    // A legit post-midnight estimate (e.g. now=00:05, start=23:55) still wraps
+    // because nowMin < caseStartMin. Cap at 24h as a defensive ceiling against
+    // any future bug producing a runaway elapsed value.
     const caseDate = caseData.shiftDate || (shift && shift.date);
     if (caseDate === effectiveWorkDate()) {
       const now = new Date();
       let nowMin = now.getHours() * 60 + now.getMinutes();
-      if (nowMin <= caseStartMin) nowMin += 1440;
-      caseHours = (nowMin - caseStartMin) / 60;
+      if (nowMin < caseStartMin) nowMin += 1440;
+      caseHours = Math.min((nowMin - caseStartMin) / 60, 24);
     }
   }
   const isHol = shift ? shift.isHoliday : false;
