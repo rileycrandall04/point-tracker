@@ -18933,39 +18933,42 @@ function renderStabilization() {
 // PROJECTED ANNUAL INCOME
 // ================================================================
 
-// "True gross" for a given work month = production/comp total + positive
-// stipends + |negative stipends/deductions| + retirement contributions.
-// Adds back retirement and deductions so projections aren't dragged down by
-// personal-choice withholdings that vary year over year.
+// "Gross" for a given work month = production/comp total + positive stipends
+// + retirement contributions. Negative stipend rows are ignored entirely:
+// they're a mix of practice overhead (MWA Overhead, malpractice, chargebacks,
+// surgery-center investments) and personal deductions (dental, vision), and
+// the app has no way to tell them apart from a single signed amount field.
+// Including them either way distorts the baseline year-over-year, so we drop
+// them. Matches the Annual Tax Breakdown's "AR+Production + positive stipends
+// + retirement contributions" formula.
 function _ppGrossBreakdown(workKey) {
   const stipEntries = (data.stipends && data.stipends[workKey]) || [];
-  let posStip = 0, absDeductions = 0;
+  let posStip = 0;
   for (const e of stipEntries) {
     const a = e.amount || 0;
     if (a > 0) posStip += a;
-    else absDeductions += -a;
   }
   const ret = (typeof getRetirementForMonth === 'function') ? (getRetirementForMonth(workKey) || 0) : 0;
-  return { posStip, absDeductions, ret };
+  return { posStip, ret };
 }
 
-// Returns the "true gross" actual for a work month (compTotal-based) or null
-// if no comp summary has been entered for that month.
+// Returns the "gross" actual for a work month (compTotal-based) or null if no
+// comp summary has been entered for that month.
 function _ppGrossActualFromOverride(workKey) {
   const ov = data.overrides && data.overrides[workKey];
   if (!ov || ov.compTotal == null) return null;
   const b = _ppGrossBreakdown(workKey);
-  return round2(ov.compTotal + b.posStip + b.absDeductions + b.ret);
+  return round2(ov.compTotal + b.posStip + b.ret);
 }
 
-// Returns the "true gross" estimate from tracked points + $/pt + carried-over
-// stipends/retirement, or null when we don't have enough signal.
+// Returns the "gross" estimate from tracked points + $/pt + carried-over
+// positive stipends + retirement, or null when we don't have enough signal.
 function _ppGrossEstimateFromPoints(workKey, monthlyTotalsMap) {
   const pts = (monthlyTotalsMap && monthlyTotalsMap[workKey]) || 0;
   const pv = (typeof getPointValueForMonth === 'function') ? (getPointValueForMonth(workKey) || 0) : 0;
   if (pts <= 0 || pv <= 0) return null;
   const b = _ppGrossBreakdown(workKey);
-  return round2(pts * pv + b.posStip + b.absDeductions + b.ret);
+  return round2(pts * pv + b.posStip + b.ret);
 }
 
 function renderProjectedAnnual() {
@@ -18978,9 +18981,10 @@ function renderProjectedAnnual() {
   // Walk every paycheck month (Jan\u2013Dec) of thisYear.
   // - "Past" once we are past the 23rd of the paycheck month:
   //     - Jan: deposit if entered, else $0 (no comp summary report for Jan).
-  //     - Other months: true gross from the compensation summary report
-  //       (compTotal + positive stipends + |deductions| + retirement) if
-  //       entered, else deposit, else $0.
+  //     - Other months: gross from the compensation summary report
+  //       (compTotal + positive stipends + retirement) if entered, else
+  //       deposit, else $0. Negative stipend rows are ignored \u2014 see
+  //       _ppGrossBreakdown for why.
   // - "Future" months:
   //     - Jan: forced to $0 (no predicted calculation).
   //     - Dec: 2 \u00d7 avg to include the annual bonus paid alongside.
@@ -19102,7 +19106,7 @@ function renderProjectedAnnual() {
     }
     breakdownLines.push('');
     if (avgComp > 0) {
-      breakdownLines.push('Avg gross: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo (' + grossAmounts.length + ' month' + (grossAmounts.length !== 1 ? 's' : '') + ', Feb\u2013Nov, pre-retirement & pre-deduction)');
+      breakdownLines.push('Avg gross: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo (' + grossAmounts.length + ' month' + (grossAmounts.length !== 1 ? 's' : '') + ', Feb\u2013Nov; production + positive stipends + retirement, deductions ignored)');
     }
     breakdownLines.push('Total: $' + annual.toLocaleString('en-US', {maximumFractionDigits:0}));
     document.getElementById('projAnnualTip').setAttribute('data-tip', breakdownLines.join('\n'));
