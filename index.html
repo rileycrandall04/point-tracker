@@ -624,6 +624,46 @@ textarea { resize: vertical; min-height: 60px; }
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
+.install-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface2);
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  z-index: 380;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.install-banner .install-banner-text { flex: 1; min-width: 0; }
+.install-banner .install-banner-cta {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.install-banner .install-banner-dismiss {
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  cursor: pointer;
+  font-size: 1.3rem;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 /* ===== MODAL ===== */
 .modal-overlay {
   position: fixed;
@@ -4618,6 +4658,25 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
 <!-- Site Invite Banner -->
 <div class="invite-banner hidden" id="inviteBanner" onclick="openInviteModal()">&#9993; You've been invited to <span id="inviteBannerSite">a new site</span> &mdash; tap to review</div>
+
+<!-- Install-to-home-screen banner — only shown when running in a browser tab -->
+<div class="install-banner hidden" id="installBanner">
+  <span class="install-banner-text">Install MWA Points to your home screen for offline access &amp; the full app feel.</span>
+  <button class="install-banner-cta" onclick="openInstallModal()">Install</button>
+  <button class="install-banner-dismiss" onclick="dismissInstallBanner()" aria-label="Dismiss">&times;</button>
+</div>
+
+<!-- Install instructions modal -->
+<div class="modal-overlay hidden" id="installModal">
+  <div class="modal" style="max-width:440px;">
+    <h2 style="margin-top:0;">Install MWA Points</h2>
+    <div id="installInstructions" style="font-size:0.85rem;line-height:1.5;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeInstallModal()">Close</button>
+      <button class="btn btn-primary btn-sm hidden" id="installModalActionBtn" onclick="triggerInstallPrompt()">Install now</button>
+    </div>
+  </div>
+</div>
 
 <!-- New-user site selector modal (first login, no data yet) -->
 <div class="modal-overlay hidden" id="newUserSiteModal">
@@ -26394,6 +26453,139 @@ document.getElementById('scanImportBtn').addEventListener('click', () => {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+// ================================================================
+// PWA INSTALL PROMPT
+// ================================================================
+// Detects browser-tab usage (not yet installed to the home screen) and offers
+// a top banner pointing the user at the right install flow for their platform.
+// Chromium-based browsers expose beforeinstallprompt; iOS Safari requires
+// manual Share → Add to Home Screen, so we surface inline instructions.
+let _deferredInstallPrompt = null;
+const INSTALL_DISMISS_KEY = 'mwa_install_dismissed_at';
+const INSTALL_DISMISS_DAYS = 30;
+
+window.addEventListener('beforeinstallprompt', e => {
+  // Stash the event so the user can fire it from the modal's "Install now"
+  // button. We also surface the banner in case it was hidden waiting for
+  // platform support.
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  maybeShowInstallBanner();
+});
+
+window.addEventListener('appinstalled', () => {
+  _deferredInstallPrompt = null;
+  hideInstallBanner();
+  try { localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now())); } catch (e) {}
+});
+
+function isInstalledPWA() {
+  if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+  if (window.navigator && window.navigator.standalone === true) return true; // iOS Safari
+  return false;
+}
+
+function detectInstallPlatform() {
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/.test(ua);
+  const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua);
+  return { isIOS, isAndroid, isSafari };
+}
+
+function maybeShowInstallBanner() {
+  if (isInstalledPWA()) return;
+  try {
+    const last = parseInt(localStorage.getItem(INSTALL_DISMISS_KEY) || '', 10);
+    if (last && Date.now() - last < INSTALL_DISMISS_DAYS * 86400 * 1000) return;
+  } catch (e) {}
+  const banner = document.getElementById('installBanner');
+  if (banner) banner.classList.remove('hidden');
+}
+
+function hideInstallBanner() {
+  const banner = document.getElementById('installBanner');
+  if (banner) banner.classList.add('hidden');
+}
+
+function dismissInstallBanner() {
+  try { localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now())); } catch (e) {}
+  hideInstallBanner();
+}
+
+function openInstallModal() {
+  const out = document.getElementById('installInstructions');
+  const actionBtn = document.getElementById('installModalActionBtn');
+  if (!out || !actionBtn) return;
+  const p = detectInstallPlatform();
+  let html = '';
+  if (_deferredInstallPrompt) {
+    html += '<p style="margin:0 0 10px;">Tap <strong>Install now</strong> below to add MWA Points to your home screen. It will open like a native app — full screen, offline-capable, and faster.</p>';
+    actionBtn.classList.remove('hidden');
+  } else if (p.isIOS && p.isSafari) {
+    html += '<p style="margin:0 0 10px;font-weight:600;">In Safari:</p>';
+    html += '<ol style="margin:0 0 10px;padding-left:20px;line-height:1.7;">';
+    html += '<li>Tap the <strong>Share</strong> button (square with the up-arrow) at the bottom of the screen.</li>';
+    html += '<li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>';
+    html += '<li>Tap <strong>Add</strong> in the upper right.</li>';
+    html += '</ol>';
+    html += '<p style="margin:0;color:var(--text-dim);font-size:0.78rem;">The app icon will appear on your home screen and open without any browser UI.</p>';
+    actionBtn.classList.add('hidden');
+  } else if (p.isIOS) {
+    html += '<p style="margin:0 0 10px;color:var(--accent2);">On iOS the home-screen install only works in <strong>Safari</strong>. Copy this page\'s URL, open it in Safari, then use Share &rarr; Add to Home Screen.</p>';
+    actionBtn.classList.add('hidden');
+  } else if (p.isAndroid) {
+    html += '<p style="margin:0 0 10px;font-weight:600;">In Chrome (Android):</p>';
+    html += '<ol style="margin:0 0 10px;padding-left:20px;line-height:1.7;">';
+    html += '<li>Tap the <strong>⋮</strong> menu (three dots, top right).</li>';
+    html += '<li>Tap <strong>Add to Home screen</strong> or <strong>Install app</strong>.</li>';
+    html += '<li>Confirm.</li>';
+    html += '</ol>';
+    html += '<p style="margin:0;color:var(--text-dim);font-size:0.78rem;">If you don\'t see those options, refresh the page once and try again.</p>';
+    actionBtn.classList.add('hidden');
+  } else {
+    html += '<p style="margin:0 0 10px;font-weight:600;">In Chrome / Edge (desktop):</p>';
+    html += '<ol style="margin:0 0 10px;padding-left:20px;line-height:1.7;">';
+    html += '<li>Look for the <strong>install icon</strong> on the right side of the address bar.</li>';
+    html += '<li>Click it, then click <strong>Install</strong>.</li>';
+    html += '</ol>';
+    html += '<p style="margin:0;color:var(--text-dim);font-size:0.78rem;">If the icon isn\'t visible, refresh once and try again.</p>';
+    actionBtn.classList.add('hidden');
+  }
+  out.innerHTML = html;
+  document.getElementById('installModal').classList.remove('hidden');
+}
+
+function closeInstallModal() {
+  document.getElementById('installModal').classList.add('hidden');
+}
+
+async function triggerInstallPrompt() {
+  if (!_deferredInstallPrompt) {
+    closeInstallModal();
+    return;
+  }
+  closeInstallModal();
+  try {
+    _deferredInstallPrompt.prompt();
+    const choice = await _deferredInstallPrompt.userChoice;
+    if (choice && choice.outcome === 'accepted') {
+      hideInstallBanner();
+      try { localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now())); } catch (e) {}
+    }
+  } catch (e) {
+    console.warn('Install prompt error:', e);
+  }
+  _deferredInstallPrompt = null;
+}
+
+// On Chromium browsers we wait for beforeinstallprompt before showing the
+// banner so the CTA can offer one-click install. On iOS Safari (and other
+// non-Chromium browsers) the event never fires, so show the banner anyway
+// after a short delay — the modal will fall back to manual instructions.
+maybeShowInstallBanner();
+setTimeout(maybeShowInstallBanner, 1500);
 
 // ================================================================
 // AUTH — SIGN IN / SIGN OUT
