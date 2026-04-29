@@ -3874,7 +3874,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="card">
     <h2>Community Stats</h2>
     <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
-      Pooled shift efficiency from everyone at this site who has data sharing enabled. Rows hide until at least 3 contributors have logged a shift of that type.
+      Pooled shift efficiency from everyone at this site who has data sharing enabled. Rows hide until at least 3 shared shifts of that type are in the pool.
     </p>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
       <span style="font-size:0.82rem;color:var(--text-dim);">Site:</span>
@@ -19833,7 +19833,7 @@ function buildShiftEfficiency() {
 
 let _communityStatsCache = null;       // { ts, byUid: { uid: [ {siteId, assignmentType, points, hours, shiftDate} ] } }
 let _communityStatsCurrentSite = null; // currently-displayed siteId
-const COMMUNITY_STATS_MIN_CONTRIBUTORS = 1;
+const COMMUNITY_STATS_MIN_SAMPLE = 3;
 
 function initCommunityStats() {
   // Community Stats is now scoped to the user's own site. Render a static
@@ -19960,7 +19960,7 @@ function renderCommunityStats() {
   }
   // Filter to groups with enough distinct contributors to anonymize.
   const ranked = Object.entries(groups)
-    .filter(([, g]) => g.uids.size >= COMMUNITY_STATS_MIN_CONTRIBUTORS)
+    .filter(([, g]) => g.vals.length >= COMMUNITY_STATS_MIN_SAMPLE)
     .map(([, g]) => {
       const n = g.vals.length;
       const mean = g.vals.reduce((a, b) => a + b, 0) / n;
@@ -19982,7 +19982,7 @@ function renderCommunityStats() {
     .sort((a, b) => b.mean - a.mean);
 
   if (ranked.length === 0) {
-    out.innerHTML = '<p style="font-size:0.85rem;color:var(--text-dim);">No pooled data yet for this site (need at least ' + COMMUNITY_STATS_MIN_CONTRIBUTORS + ' contributors per shift type).</p>';
+    out.innerHTML = '<p style="font-size:0.85rem;color:var(--text-dim);">No pooled data yet for this site (need at least ' + COMMUNITY_STATS_MIN_SAMPLE + ' shared shifts of a given type).</p>';
     return;
   }
 
