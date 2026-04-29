@@ -3843,7 +3843,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
     <div style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;">
       <button class="btn btn-sm" id="communityStatsModeClockedBtn" onclick="setCommunityStatsMode('clocked')">Per clocked hour</button>
-      <button class="btn btn-sm" id="communityStatsMode24Btn" onclick="setCommunityStatsMode('24hr')">Per 24 hr</button>
+      <button class="btn btn-sm" id="communityStatsModeShiftBtn" onclick="setCommunityStatsMode('shift')">Per shift</button>
     </div>
     <div id="communityStatsContent">
       <p style="font-size:0.85rem;color:var(--text-dim);">Loading…</p>
@@ -19847,14 +19847,14 @@ function setCommunityStatsMode(mode) {
 
 function _updateCommunityStatsModeButtons() {
   const a = document.getElementById('communityStatsModeClockedBtn');
-  const b = document.getElementById('communityStatsMode24Btn');
+  const b = document.getElementById('communityStatsModeShiftBtn');
   if (a) {
     a.style.background = (communityStatsMode === 'clocked') ? 'var(--primary)' : 'var(--surface2)';
     a.style.color      = (communityStatsMode === 'clocked') ? '#fff' : 'var(--text)';
   }
   if (b) {
-    b.style.background = (communityStatsMode === '24hr') ? 'var(--primary)' : 'var(--surface2)';
-    b.style.color      = (communityStatsMode === '24hr') ? '#fff' : 'var(--text)';
+    b.style.background = (communityStatsMode === 'shift') ? 'var(--primary)' : 'var(--surface2)';
+    b.style.color      = (communityStatsMode === 'shift') ? '#fff' : 'var(--text)';
   }
 }
 
@@ -19871,38 +19871,38 @@ function renderCommunityStats() {
     return;
   }
   const mode = communityStatsMode;
-  const allSites = !siteId; // empty value = "All sites"
-  // Group key: when scoped to one site, group by assignmentType. When showing
-  // all sites, group by `siteId|assignmentType` so different sites' shift
-  // types stay separate and the row can label which site they came from.
+  // Aggregate by assignmentType. Each shared shift contributes one value to
+  // `vals[]` — pts/hr in clocked mode, total pts in shift mode — plus running
+  // totals so we can show the alternate denominator as the secondary line.
   const groups = {};
   for (const uid of Object.keys(_communityStatsCache.byUid)) {
     const rows = _communityStatsCache.byUid[uid];
     for (const r of rows) {
-      if (siteId && r.siteId !== siteId) continue;
-      let denom;
-      if (mode === '24hr') {
-        denom = 24;
-      } else {
+      if (r.siteId !== siteId) continue;
+      let val;
+      if (mode === 'clocked') {
         if (!(r.hours > 0)) continue;
-        denom = r.hours;
+        val = r.points / r.hours;
+      } else {
+        // 'shift': points per shift
+        val = r.points;
       }
-      const groupKey = allSites ? (r.siteId + '|' + r.assignmentType) : r.assignmentType;
-      if (!groups[groupKey]) groups[groupKey] = {
+      const key = r.assignmentType;
+      if (!groups[key]) groups[key] = {
         siteId: r.siteId, assignmentType: r.assignmentType,
         uids: new Set(), vals: [], totalPts: 0, totalHrs: 0, shiftCount: 0
       };
-      groups[groupKey].uids.add(uid);
-      groups[groupKey].vals.push(r.points / denom);
-      groups[groupKey].totalPts += r.points;
-      groups[groupKey].totalHrs += r.hours;
-      groups[groupKey].shiftCount++;
+      groups[key].uids.add(uid);
+      groups[key].vals.push(val);
+      groups[key].totalPts += r.points;
+      groups[key].totalHrs += r.hours;
+      groups[key].shiftCount++;
     }
   }
   // Filter to groups with enough distinct contributors to anonymize.
   const ranked = Object.entries(groups)
     .filter(([, g]) => g.uids.size >= COMMUNITY_STATS_MIN_CONTRIBUTORS)
-    .map(([_, g]) => {
+    .map(([, g]) => {
       const n = g.vals.length;
       const mean = g.vals.reduce((a, b) => a + b, 0) / n;
       let std = null;
@@ -19912,9 +19912,6 @@ function renderCommunityStats() {
       }
       return {
         name: getAssignmentTypeName(g.assignmentType, g.siteId),
-        siteId: g.siteId,
-        siteName: (sitesCache[g.siteId] && sitesCache[g.siteId].name) || g.siteId,
-        type: g.assignmentType,
         mean: round2(mean),
         std: std == null ? null : round2(std),
         avgTotal: round2(g.totalPts / g.shiftCount),
@@ -19926,29 +19923,50 @@ function renderCommunityStats() {
     .sort((a, b) => b.mean - a.mean);
 
   if (ranked.length === 0) {
-    const scopeMsg = allSites
-      ? 'No pooled data yet (need at least ' + COMMUNITY_STATS_MIN_CONTRIBUTORS + ' contributors per shift type).'
-      : 'No pooled data yet for this site (need at least ' + COMMUNITY_STATS_MIN_CONTRIBUTORS + ' contributors per shift type).';
-    out.innerHTML = '<p style="font-size:0.85rem;color:var(--text-dim);">' + scopeMsg + '</p>';
+    out.innerHTML = '<p style="font-size:0.85rem;color:var(--text-dim);">No pooled data yet for this site (need at least ' + COMMUNITY_STATS_MIN_CONTRIBUTORS + ' contributors per shift type).</p>';
     return;
   }
 
-  const denomText = mode === 'clocked' ? 'clocked-in hour' : '24-hour day';
-  let html = '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Pooled across ' + Object.keys(_communityStatsCache.byUid).length + ' contributors total. Rows show mean pts per ' + denomText + ' ± sample stddev, plus average shift total.</div>';
+  const totalContributors = Object.keys(_communityStatsCache.byUid).length;
+  const unitLabel = mode === 'clocked' ? 'pts/hr' : 'pts/shift';
+  const introLabel = mode === 'clocked'
+    ? 'Average points per clocked-in hour, with sample standard deviation across shifts.'
+    : 'Average points per shift, with sample standard deviation across shifts.';
+
+  let html = '';
+  html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:10px;line-height:1.45;">';
+  html +=   'Pooled across ' + totalContributors + ' contributor' + (totalContributors !== 1 ? 's' : '') + '. ';
+  html +=   introLabel;
+  html += '</div>';
+
+  // Column header strip — keeps the value column anchored the same way each row does.
+  html += '<div style="display:flex;justify-content:space-between;gap:8px;padding:0 4px 4px;font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">';
+  html +=   '<span>Shift type</span><span>' + unitLabel + ' &plusmn; sd</span>';
+  html += '</div>';
+
   ranked.forEach(r => {
-    const stdStr = r.std == null
-      ? '<span style="color:var(--text-dim);font-size:0.75rem;">&plusmn; n/a</span>'
-      : '<span style="color:var(--text-dim);font-size:0.75rem;">&plusmn; ' + r.std.toFixed(1) + '</span>';
-    const sitePrefix = allSites
-      ? '<span style="color:var(--text-dim);font-size:0.72rem;">[' + escHtml(r.siteName) + ']</span> '
-      : '';
-    html += '<div class="efficiency-item" style="flex-wrap:wrap;gap:2px;">';
-    html += '<span class="eff-label">' + sitePrefix + escHtml(r.name);
-    html += ' <span style="color:var(--text-dim);font-size:0.72rem;">(' + r.shifts + ' shift' + (r.shifts !== 1 ? 's' : '') + ' · ' + r.contributors + ' people)</span></span>';
-    html += '<span style="font-size:0.85rem;">';
-    html += '<span class="eff-value" style="color:var(--primary);">' + r.mean.toFixed(1) + ' ' + stdStr + '</span>';
-    html += ' <span style="color:var(--text-dim);font-size:0.75rem;">&middot; avg ' + r.avgTotal.toFixed(1) + ' pts / ' + r.avgHours.toFixed(1) + ' hrs</span>';
-    html += '</span>';
+    const meanStr = r.mean.toFixed(1);
+    const stdStr = r.std == null ? '&plusmn; n/a' : '&plusmn; ' + r.std.toFixed(1);
+    // Secondary line shows the "other" perspective so the table is informative
+    // regardless of which mode is active.
+    const meta = r.shifts + ' shift' + (r.shifts !== 1 ? 's' : '') + ' · ' + r.contributors + ' people';
+    let secondary;
+    if (mode === 'clocked') {
+      secondary = 'avg ' + r.avgTotal.toFixed(1) + ' pts/shift · ' + r.avgHours.toFixed(1) + ' hrs/shift';
+    } else {
+      const ptsPerHr = r.avgHours > 0 ? (r.avgTotal / r.avgHours).toFixed(1) : '—';
+      secondary = ptsPerHr + ' pts/hr · ' + r.avgHours.toFixed(1) + ' hrs/shift';
+    }
+
+    html += '<div style="padding:8px 4px;border-bottom:1px solid rgba(71,85,105,0.3);">';
+    html +=   '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">';
+    html +=     '<span style="font-weight:600;color:var(--text);font-size:0.88rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(r.name) + '</span>';
+    html +=     '<span style="font-size:0.92rem;font-weight:700;color:var(--primary);white-space:nowrap;">' + meanStr + ' <span style="color:var(--text-dim);font-weight:400;font-size:0.72rem;">' + stdStr + '</span></span>';
+    html +=   '</div>';
+    html +=   '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:2px;font-size:0.7rem;color:var(--text-dim);">';
+    html +=     '<span>' + meta + '</span>';
+    html +=     '<span>' + secondary + '</span>';
+    html +=   '</div>';
     html += '</div>';
   });
   out.innerHTML = html;
