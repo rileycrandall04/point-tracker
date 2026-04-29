@@ -10144,7 +10144,11 @@ function calcCasePoints(caseData, shift, ignoreManual) {
         return 0;
       }
     }
-    if (ce <= cs) ce += 1440;
+    // Strict < (was <=) so an epidural with ce equal to cs reads as 0
+    // elapsed, not a 24-hour cross-midnight wrap. The downstream tier math
+    // already caps at 24h, but the same-minute live estimate would otherwise
+    // jump straight to the longest tier.
+    if (ce < cs) ce += 1440;
 
     if (caseData.isSharedLabor && caseData.laborInitialStart) {
       // Shared/handoff epidural: tier based on total time since original placement
@@ -10180,13 +10184,22 @@ function calcCasePoints(caseData, shift, ignoreManual) {
     if (caseEndMin <= caseStartMin) caseEndMin += 1440;
     caseHours = (caseEndMin - caseStartMin) / 60;
   } else if (caseData.startTime) {
-    // No end time but has start: estimate with current time if case is today
+    // No end time but has start: estimate with current time if case is today.
+    // Cross-midnight wrap is only legitimate when the case started late
+    // last "day" and we're now in the early hours after midnight (gap > 12h).
+    // A small "future" gap (e.g. user typed 09:31 a moment before JS's clock
+    // ticked from 09:30) is a data-entry artifact, not a real wrap — used to
+    // jump caseHours to ~24 and produce ~146 pts on a colonoscopy. Cap at
+    // 24h as a defensive ceiling.
     const caseDate = caseData.shiftDate || (shift && shift.date);
     if (caseDate === effectiveWorkDate()) {
       const now = new Date();
       let nowMin = now.getHours() * 60 + now.getMinutes();
-      if (nowMin <= caseStartMin) nowMin += 1440;
-      caseHours = (nowMin - caseStartMin) / 60;
+      if (nowMin < caseStartMin) {
+        if (caseStartMin - nowMin > 720) nowMin += 1440; // genuine cross-midnight
+        else nowMin = caseStartMin;                       // future-typed → 0 elapsed
+      }
+      caseHours = Math.min((nowMin - caseStartMin) / 60, 24);
     }
   }
   const isHol = shift ? shift.isHoliday : false;
