@@ -18932,27 +18932,66 @@ function renderStabilization() {
 // ================================================================
 // PROJECTED ANNUAL INCOME
 // ================================================================
+
+// "True gross" for a given work month = production/comp total + positive
+// stipends + |negative stipends/deductions| + retirement contributions.
+// Adds back retirement and deductions so projections aren't dragged down by
+// personal-choice withholdings that vary year over year.
+function _ppGrossBreakdown(workKey) {
+  const stipEntries = (data.stipends && data.stipends[workKey]) || [];
+  let posStip = 0, absDeductions = 0;
+  for (const e of stipEntries) {
+    const a = e.amount || 0;
+    if (a > 0) posStip += a;
+    else absDeductions += -a;
+  }
+  const ret = (typeof getRetirementForMonth === 'function') ? (getRetirementForMonth(workKey) || 0) : 0;
+  return { posStip, absDeductions, ret };
+}
+
+// Returns the "true gross" actual for a work month (compTotal-based) or null
+// if no comp summary has been entered for that month.
+function _ppGrossActualFromOverride(workKey) {
+  const ov = data.overrides && data.overrides[workKey];
+  if (!ov || ov.compTotal == null) return null;
+  const b = _ppGrossBreakdown(workKey);
+  return round2(ov.compTotal + b.posStip + b.absDeductions + b.ret);
+}
+
+// Returns the "true gross" estimate from tracked points + $/pt + carried-over
+// stipends/retirement, or null when we don't have enough signal.
+function _ppGrossEstimateFromPoints(workKey, monthlyTotalsMap) {
+  const pts = (monthlyTotalsMap && monthlyTotalsMap[workKey]) || 0;
+  const pv = (typeof getPointValueForMonth === 'function') ? (getPointValueForMonth(workKey) || 0) : 0;
+  if (pts <= 0 || pv <= 0) return null;
+  const b = _ppGrossBreakdown(workKey);
+  return round2(pts * pv + b.posStip + b.absDeductions + b.ret);
+}
+
 function renderProjectedAnnual() {
   const mt = getMonthlyTotals();
   const now = new Date();
   const thisYear = now.getFullYear();
+  const thisMonthIdx = now.getMonth();
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   // Walk every paycheck month (Jan\u2013Dec) of thisYear.
   // - "Past" once we are past the 23rd of the paycheck month:
   //     - Jan: deposit if entered, else $0 (no comp summary report for Jan).
-  //     - Other months: gross from the compensation summary report
-  //       (compTotal + stipends) if entered, else deposit, else $0.
-  // - "Future" months use a rolling average of past gross income
-  //   (compTotal + stipends \u2014 pre-deduction, pre-retirement):
+  //     - Other months: true gross from the compensation summary report
+  //       (compTotal + positive stipends + |deductions| + retirement) if
+  //       entered, else deposit, else $0.
+  // - "Future" months:
   //     - Jan: forced to $0 (no predicted calculation).
   //     - Dec: 2 \u00d7 avg to include the annual bonus paid alongside.
-  //     - Other months: the rolling avg.
-  // The avg itself excludes Jan (no comp report) and Dec (bonus skews).
+  //     - Other months: estimated gross from the just-ended work month if its
+  //       calendar month has rolled over and we have tracked points; otherwise
+  //       the rolling avg of past gross income.
+  // The rolling avg itself excludes Jan (no comp report) and Dec (bonus skews).
   let ytdRevenue = 0;
   let ytdMonths = 0;
   const receivedMonths = [];
-  const grossAmounts = []; // past gross (compTotal + stip) for projection avg, Feb\u2013Nov only
+  const grossAmounts = []; // past true-gross (Feb\u2013Nov, compTotal-based) for projection avg
   const futurePayMonths = [];
   for (let pm = 0; pm < 12; pm++) {
     const cutoff = new Date(thisYear, pm, 23, 23, 59, 59);
@@ -18961,7 +19000,6 @@ function renderProjectedAnnual() {
     const workKey = wYear + '-' + String(wMonth + 1).padStart(2, '0');
     const payKey = thisYear + '-' + String(pm + 1).padStart(2, '0');
     const ov = data.overrides && data.overrides[workKey];
-    const stip = getMonthlyStipendTotal(workKey);
     const deposit = data.paychecks && data.paychecks[payKey];
     const isPast = now > cutoff;
 
@@ -18970,38 +19008,55 @@ function renderProjectedAnnual() {
       if (pm === 0) {
         if (deposit != null) { amt = deposit; source = 'actual'; }
         else { amt = 0; source = 'no value'; }
-      } else if (ov && ov.compTotal != null) {
-        amt = ov.compTotal + stip; source = 'actual';
-      } else if (deposit != null) {
-        amt = deposit; source = 'actual';
       } else {
-        amt = 0; source = 'no value';
+        const grossActual = _ppGrossActualFromOverride(workKey);
+        if (grossActual != null) {
+          amt = grossActual; source = 'actual gross';
+        } else if (deposit != null) {
+          amt = deposit; source = 'actual (deposit)';
+        } else {
+          amt = 0; source = 'no value';
+        }
       }
       ytdRevenue += amt;
       ytdMonths++;
       receivedMonths.push({ payMonth: pm, amt, source });
       // Feed the projection avg from gross comp summary only (Feb\u2013Nov).
-      if (pm !== 0 && pm !== 11 && ov && ov.compTotal != null) {
-        grossAmounts.push(ov.compTotal + stip);
+      if (pm !== 0 && pm !== 11) {
+        const ga = _ppGrossActualFromOverride(workKey);
+        if (ga != null) grossAmounts.push(ga);
       }
     } else {
-      futurePayMonths.push(pm);
+      futurePayMonths.push({ pm, workKey, wYear, wMonth });
     }
   }
 
-  // Rolling avg of gross income before deductions and retirement
+  // Rolling avg of past true-gross income (pre-deduction, pre-retirement)
   const avgComp = grossAmounts.length > 0 ? round2(grossAmounts.reduce((a, v) => a + v, 0) / grossAmounts.length) : 0;
 
-  // Project each future month from the rolling avg, with Jan/Dec rules
+  // Project each future month from the rolling avg, with three special cases:
+  //   - Jan: forced $0 (no comp report)
+  //   - Dec: avg \u00d7 2 to bake in the annual bonus
+  //   - Otherwise: if the work month has already ended (its calendar month
+  //     is in the past relative to thisMonthIdx) and we have tracked points,
+  //     use the estimated gross from that just-ended month instead of the
+  //     rolling avg. Falls back to avg when the estimate isn't computable.
   const projectedMonths = [];
-  futurePayMonths.forEach(pm => {
+  futurePayMonths.forEach(f => {
+    const pm = f.pm;
     let amt, source;
     if (pm === 0) {
       amt = 0; source = 'no value';
     } else if (pm === 11) {
       amt = round2(avgComp * 2); source = 'avg \u00d7 2 (incl. bonus)';
     } else {
-      amt = avgComp; source = 'avg';
+      const workMonthEnded = (f.wYear < thisYear) || (f.wYear === thisYear && f.wMonth < thisMonthIdx);
+      const est = workMonthEnded ? _ppGrossEstimateFromPoints(f.workKey, mt) : null;
+      if (est != null && est > 0) {
+        amt = est; source = 'est. gross (' + monthNames[f.wMonth] + ')';
+      } else {
+        amt = avgComp; source = 'avg';
+      }
     }
     projectedMonths.push({ payMonth: pm, amt, source });
   });
@@ -19047,7 +19102,7 @@ function renderProjectedAnnual() {
     }
     breakdownLines.push('');
     if (avgComp > 0) {
-      breakdownLines.push('Avg: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo gross (' + grossAmounts.length + ' month' + (grossAmounts.length !== 1 ? 's' : '') + ', Feb\u2013Nov)');
+      breakdownLines.push('Avg gross: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo (' + grossAmounts.length + ' month' + (grossAmounts.length !== 1 ? 's' : '') + ', Feb\u2013Nov, pre-retirement & pre-deduction)');
     }
     breakdownLines.push('Total: $' + annual.toLocaleString('en-US', {maximumFractionDigits:0}));
     document.getElementById('projAnnualTip').setAttribute('data-tip', breakdownLines.join('\n'));
