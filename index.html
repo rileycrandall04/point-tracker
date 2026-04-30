@@ -4105,10 +4105,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </p>
     <div style="background:var(--surface);padding:10px;border-radius:8px;margin-bottom:12px;">
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-        <input type="text" id="adminProcMapVariant" placeholder="Variant (e.g. TKA)" list="knownProceduresList" autocomplete="off"
+        <input type="text" id="adminProcMapVariant" placeholder="Variant (e.g. TKA)" list="knownProceduresList" onfocus="refreshProcedureDatalist()"
           style="flex:1;min-width:140px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
         <span style="color:var(--text-dim);">&rarr;</span>
-        <input type="text" id="adminProcMapCanonical" placeholder="Canonical (e.g. Total Knee)" list="knownProceduresList" autocomplete="off"
+        <input type="text" id="adminProcMapCanonical" placeholder="Canonical (e.g. Total Knee)" list="knownProceduresList" onfocus="refreshProcedureDatalist()"
           style="flex:1;min-width:160px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
         <button class="btn btn-primary btn-sm" onclick="addAdminProcedureMapping()">Add</button>
       </div>
