@@ -2666,7 +2666,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 
   <div style="display:flex;gap:8px;margin-bottom:4px;">
-    <button class="btn btn-sm hidden" id="todayStopCaseBtn" onclick="todayStopOrAddCaseClick()" style="flex:1;">&#9209; Stop Case</button>
+    <button class="btn btn-danger btn-sm hidden" id="todayStopCaseBtn" onclick="todayStopRunningCase()" style="flex:1;">&#9209; Stop Case</button>
     <button class="btn btn-danger btn-sm hidden" id="todaySignOutBtn" onclick="todaySignOutClick()" style="flex:1;">Sign Out of Shift</button>
   </div>
   <div id="todayShiftIntervals" style="font-size:0.7rem;color:var(--text-dim);text-align:center;margin-bottom:8px;line-height:1.5;"></div>
@@ -13014,29 +13014,12 @@ function renderToday() {
   });
   document.getElementById('todayCaseList').innerHTML = listHtml;
 
-  // Top action button: dual purpose. Becomes "Stop Case" (red) when a
-  // standard case is currently open on the active work date, "+ Add Case"
-  // (primary) otherwise. Hidden on past dates, vacation, forced-off, or
-  // when there is no shift saved.
+  // Stop Case button — visible when there is at least one standard case with
+  // an open start time on the active work date.
   const stopBtn = document.getElementById('todayStopCaseBtn');
   if (stopBtn) {
-    const isToday = date === effectiveWorkDate();
-    const validShift = shift && shift.assignmentType !== 'vacation' && shift.assignmentType !== 'forced_off' && !shift.forcedOff;
-    if (!isToday || !validShift) {
-      stopBtn.classList.add('hidden');
-    } else {
-      stopBtn.classList.remove('hidden');
-      const hasRunningCase = _todayRunningStandardCases(date).length > 0;
-      if (hasRunningCase) {
-        stopBtn.classList.remove('btn-primary');
-        stopBtn.classList.add('btn-danger');
-        stopBtn.innerHTML = '&#9209; Stop Case';
-      } else {
-        stopBtn.classList.remove('btn-danger');
-        stopBtn.classList.add('btn-primary');
-        stopBtn.innerHTML = '+ Add Case';
-      }
-    }
+    const hasRunningCase = date === effectiveWorkDate() && _todayRunningStandardCases(date).length > 0;
+    stopBtn.classList.toggle('hidden', !hasRunningCase);
   }
 
   // Sign Out / Sign Back In — same button toggles based on whether the most
@@ -13158,16 +13141,6 @@ function todayStopRunningCase() {
   if (typeof renderDECaseList === 'function') renderDECaseList();
   if (typeof updateDETally === 'function') updateDETally();
   showToast('Case stopped at ' + c.endTime);
-}
-
-// Dispatch click for the dual-purpose button: stops the running case if one
-// exists, otherwise navigates to the case-entry page so the user can add one.
-function todayStopOrAddCaseClick() {
-  if (_todayRunningStandardCases(workingDate).length > 0) {
-    todayStopRunningCase();
-  } else if (typeof navigateToDataEntry === 'function') {
-    navigateToDataEntry();
-  }
 }
 
 // Click handler for the dual-purpose Sign Out / Sign Back In button. Picks
