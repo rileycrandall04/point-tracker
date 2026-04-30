@@ -4105,10 +4105,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </p>
     <div style="background:var(--surface);padding:10px;border-radius:8px;margin-bottom:12px;">
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-        <input type="text" id="adminProcMapVariant" placeholder="Variant (e.g. TKA)"
+        <input type="text" id="adminProcMapVariant" placeholder="Variant (e.g. TKA)" list="knownProceduresList" autocomplete="off"
           style="flex:1;min-width:140px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
         <span style="color:var(--text-dim);">&rarr;</span>
-        <input type="text" id="adminProcMapCanonical" placeholder="Canonical (e.g. Total Knee)"
+        <input type="text" id="adminProcMapCanonical" placeholder="Canonical (e.g. Total Knee)" list="knownProceduresList" autocomplete="off"
           style="flex:1;min-width:160px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
         <button class="btn btn-primary btn-sm" onclick="addAdminProcedureMapping()">Add</button>
       </div>
@@ -4705,6 +4705,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
   </div>
 </div>
+
+<!-- Shared procedure-name datalist. Populated by refreshProcedureDatalist()
+     from asaCodeProcedures + procedureMappingsCache + local cases + shared
+     cases. Referenced by the case-entry, case-edit, and admin
+     procedure-mapping inputs via list="knownProceduresList". -->
+<datalist id="knownProceduresList"></datalist>
 
 <!-- New-user site selector modal (first login, no data yet) -->
 <div class="modal-overlay hidden" id="newUserSiteModal">
@@ -7091,10 +7097,67 @@ async function adminLookupUser() {
 // deletes go through _persistProcedureMappings which Firestore rules gate to
 // the app owner.
 
+// Pull every known procedure name from any cache we have at hand so the
+// admin mapping form can suggest exact matches via the shared
+// #knownProceduresList datalist. Deduped case-insensitively, preserving the
+// first-seen capitalization. Sources are walked in priority order so the
+// canonical/DB-backed forms win when capitalizations differ.
+function _buildKnownProcedureList() {
+  const seen = {}; // lowercase → display
+  function add(raw) {
+    if (!raw) return;
+    const trimmed = String(raw).trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (!seen[key]) seen[key] = trimmed;
+  }
+  // 1. ASA-code procedure pool (DB-backed, considered canonical-ish).
+  if (typeof asaCodeProcedures === 'object' && asaCodeProcedures) {
+    for (const code in asaCodeProcedures) {
+      const list = asaCodeProcedures[code] || [];
+      for (const n of list) add(n);
+    }
+  }
+  // 2. Procedure-mapping variants and canonicals (admin-curated).
+  if (procedureMappingsCache) {
+    for (const [variant, canonical] of Object.entries(procedureMappingsCache)) {
+      add(canonical);
+      add(variant);
+    }
+  }
+  // 3. Local cases (whatever the user has entered).
+  if (data && Array.isArray(data.cases)) {
+    for (const c of data.cases) {
+      if (c && c.caseType === 'standard') add(c.procedure);
+    }
+  }
+  // 4. Current-site shared cases.
+  if (Array.isArray(sharedCasesCache)) {
+    for (const sc of sharedCasesCache) {
+      if (sc && sc.caseType === 'standard') add(sc.procedure);
+    }
+  }
+  return Object.values(seen).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+
+function refreshProcedureDatalist() {
+  const dl = document.getElementById('knownProceduresList');
+  if (!dl) return;
+  const names = _buildKnownProcedureList();
+  let html = '';
+  for (const n of names) {
+    html += '<option value="' + n.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"></option>';
+  }
+  dl.innerHTML = html;
+}
+
 function renderAdminProcedureMappings() {
   const out = document.getElementById('adminProcMapList');
   if (!out) return;
   if (!isAppOwner()) { out.innerHTML = ''; return; }
+  // Refresh the shared datalist so the variant/canonical inputs predict
+  // against the latest known procedure names from every cache.
+  refreshProcedureDatalist();
   const entries = Object.entries(procedureMappingsCache || {}).sort((a, b) =>
     a[0].toLowerCase().localeCompare(b[0].toLowerCase())
   );
