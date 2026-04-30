@@ -13448,10 +13448,20 @@ function _caseDurationStr(startTime, endTime) {
 // 'in_progress' | 'signed_out' | 'none' — drives the Sign Out / Sign Back In
 // button state. Only meaningful for today (the active work date) on a real
 // worked shift type.
+// Shift types the Sign Out / Sign Back In button + intervals list are
+// allowed to operate on. Restricted on purpose to general OR shifts that
+// don't cross midnight — call shifts, OB, SF, mole, etc. live in a single
+// timeEntries pair like {17:00, 07:00+1d} that downstream code (pager pay,
+// AR rate, etc.) reasons about as one continuous span. Letting the user
+// fragment those into multiple intervals would risk corrupting the
+// existing recording flow.
+const SHIFT_INTERVAL_BUTTON_TYPES = new Set(['OR', 'OR_float']);
+
 function todayShiftIntervalState(date) {
   const shift = data.shifts[date];
   if (!shift) return 'none';
   if (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off' || shift.forcedOff) return 'none';
+  if (!SHIFT_INTERVAL_BUTTON_TYPES.has(shift.assignmentType)) return 'none';
   if (date !== effectiveWorkDate()) return 'none';
   const entries = shift.timeEntries || [];
   const last = entries.length > 0 ? entries[entries.length - 1] : null;
