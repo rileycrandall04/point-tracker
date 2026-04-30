@@ -13213,6 +13213,15 @@ function renderToday() {
     document.getElementById('todayBreakdown').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No shift saved for this date.</p>';
     document.getElementById('todayCaseList').innerHTML = '<div class="empty-state"><p>No cases logged yet.</p></div>';
     document.getElementById('todayCaseCount').textContent = '';
+    // Defensively clear the Stop Case + Sign Out buttons and intervals list
+    // — without this, navigating from a date with a shift to one without
+    // leaves the prior date's button and intervals visible in the DOM.
+    const stopBtnEmpty = document.getElementById('todayStopCaseBtn');
+    if (stopBtnEmpty) stopBtnEmpty.classList.add('hidden');
+    const signOutBtnEmpty = document.getElementById('todaySignOutBtn');
+    if (signOutBtnEmpty) signOutBtnEmpty.classList.add('hidden');
+    const intervalsElEmpty = document.getElementById('todayShiftIntervals');
+    if (intervalsElEmpty) intervalsElEmpty.innerHTML = '';
     return;
   }
 
