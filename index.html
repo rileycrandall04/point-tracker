@@ -13192,6 +13192,18 @@ function renderToday() {
   const shiftCases = data.cases.filter(c => c.shiftDate === date);
   document.getElementById('todayTitle').textContent = date === effectiveWorkDate() ? "Today" : formatDate(date);
 
+  // Belt-and-suspenders reset: zero out the Sign Out button, intervals list,
+  // and Stop Case button before doing anything else. The per-state logic
+  // farther down restores them where appropriate. Without this, any code
+  // path that doesn't reach the state-based branches (or any browser quirk
+  // that defers the per-state class/style writes) leaves the prior date's
+  // green button + intervals visibly leaking onto the new date.
+  _resetTodaySignOutBtn();
+  const _intervalsResetEl = document.getElementById('todayShiftIntervals');
+  if (_intervalsResetEl) _intervalsResetEl.innerHTML = '';
+  const _stopBtnResetEl = document.getElementById('todayStopCaseBtn');
+  if (_stopBtnResetEl) _stopBtnResetEl.classList.add('hidden');
+
   // Back bar and edit shift button
   const backBar = document.getElementById('todayBackBar');
   const editShiftBtn = document.getElementById('todayEditShiftBtn');
