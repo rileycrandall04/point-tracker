@@ -7175,21 +7175,39 @@ function renderAdminProcedureMappings() {
     byCanonical[canonical].push(variant);
   }
   const canonicals = Object.keys(byCanonical).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-  let html = '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:6px;">'
-    + entries.length + ' mapping' + (entries.length !== 1 ? 's' : '')
-    + ' across ' + canonicals.length + ' canonical name' + (canonicals.length !== 1 ? 's' : '')
-    + '</div>';
+
+  // Outer collapsible wraps the whole list; each canonical group nests its
+  // own collapsible so the user can fold individual groups too. Both default
+  // open. Native <details>/<summary> keeps this zero-JS and accessible.
+  let html = '<details open style="background:var(--surface);border-radius:8px;padding:8px 10px;">';
+  html += '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;outline:none;">';
+  html +=   'Saved mappings <span style="color:var(--text-dim);font-weight:400;font-size:0.72rem;">';
+  html +=     '(' + entries.length + ' mapping' + (entries.length !== 1 ? 's' : '');
+  html +=     ' across ' + canonicals.length + ' canonical name' + (canonicals.length !== 1 ? 's' : '') + ')';
+  html +=   '</span>';
+  html += '</summary>';
+  html += '<div style="margin-top:8px;">';
+
   for (const canonical of canonicals) {
-    html += '<div style="margin-bottom:10px;">';
-    html += '<div style="font-weight:600;font-size:0.82rem;margin-bottom:3px;">' + escHtml(canonical) + '</div>';
-    for (const variant of byCanonical[canonical].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))) {
-      html += '<div style="display:flex;align-items:center;gap:8px;background:var(--surface);padding:6px 10px;border-radius:6px;margin-bottom:4px;">';
+    const variants = byCanonical[canonical].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    html += '<details open style="margin-bottom:6px;">';
+    html += '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;outline:none;padding:4px 0;">';
+    html +=   escHtml(canonical);
+    html +=   ' <span style="color:var(--text-dim);font-weight:400;font-size:0.7rem;">(' + variants.length + ')</span>';
+    html += '</summary>';
+    html += '<div style="margin-top:4px;">';
+    for (const variant of variants) {
+      html += '<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);padding:6px 10px;border-radius:6px;margin-bottom:4px;">';
       html += '<span style="flex:1;font-size:0.8rem;">' + escHtml(variant) + '</span>';
-      html += '<button class="btn btn-sm" onclick="deleteAdminProcedureMapping(' + JSON.stringify(variant).replace(/"/g, '&quot;') + ')" style="background:var(--surface2);color:var(--accent2);font-size:0.7rem;padding:3px 9px;">Remove</button>';
+      html += '<button class="btn btn-sm" onclick="deleteAdminProcedureMapping(' + JSON.stringify(variant).replace(/"/g, '&quot;') + ')" style="background:var(--surface);color:var(--accent2);font-size:0.7rem;padding:3px 9px;">Remove</button>';
       html += '</div>';
     }
     html += '</div>';
+    html += '</details>';
   }
+
+  html += '</div>';
+  html += '</details>';
   out.innerHTML = html;
 }
 
