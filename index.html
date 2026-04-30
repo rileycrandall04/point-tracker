@@ -7659,6 +7659,63 @@ function normalizeProcedureName(rawName) {
   return trimmed;
 }
 
+// Cross-site procedure-duration samples — keyed by normalized lowercase
+// procedure name. Built once per session by querying each known site's
+// sharedCases and pooling completed standard-case durations. Powers the
+// procedure-level fallback in estimateCaseFinish when surgeon-specific
+// data is sparse or the surgeon field is empty.
+let _allSiteProcedureSamplesCache = null;
+let _allSiteProcedureSamplesPromise = null;
+
+function _addToProcedureSamples(samples, casesArr) {
+  for (const sc of casesArr) {
+    if (!sc || sc.caseType !== 'standard') continue;
+    if (!sc.startTime || !sc.endTime) continue;
+    const proc = (sc.procedure || '').trim();
+    if (!proc) continue;
+    const key = normalizeProcedureName(proc).toLowerCase();
+    let s = timeToMinutes(sc.startTime);
+    let e = timeToMinutes(sc.endTime);
+    if (!isFinite(s) || !isFinite(e)) continue;
+    if (e <= s) e += 1440;
+    const dur = e - s;
+    if (dur <= 0 || dur > 1440) continue;
+    if (!samples[key]) samples[key] = [];
+    samples[key].push(dur);
+  }
+}
+
+async function loadAllSiteProcedureSamples() {
+  if (_allSiteProcedureSamplesCache) return _allSiteProcedureSamplesCache;
+  if (_allSiteProcedureSamplesPromise) return _allSiteProcedureSamplesPromise;
+  _allSiteProcedureSamplesPromise = (async () => {
+    const samples = {};
+    const siteIds = Object.keys(sitesCache || {});
+    if (siteIds.length === 0) {
+      // sitesCache hasn't loaded yet — fall back to whatever current-site
+      // sharedCases we already have so the fallback can still kick in.
+      _addToProcedureSamples(samples, sharedCasesCache || []);
+    } else {
+      // Per-site queries (one per siteId) instead of an unfiltered collection
+      // read — matches the existing rules pattern that requires a siteId
+      // filter on sharedCases. Tolerates per-site failures.
+      const queries = siteIds.map(sid =>
+        db.collection('sharedCases').where('siteId', '==', sid).get()
+          .then(snap => {
+            const arr = [];
+            snap.forEach(doc => arr.push(doc.data()));
+            _addToProcedureSamples(samples, arr);
+          })
+          .catch(err => console.warn('Procedure samples load failed for site ' + sid + ':', err))
+      );
+      await Promise.all(queries);
+    }
+    _allSiteProcedureSamplesCache = samples;
+    return samples;
+  })();
+  return _allSiteProcedureSamplesPromise;
+}
+
 function getCurrentSiteName() {
   const sid = getCurrentSiteId();
   return (sitesCache[sid] && sitesCache[sid].name) || sid;
@@ -13305,41 +13362,60 @@ function _todayRunningStandardCases(date) {
 // help the user — better to show nothing than guess.
 const CASE_FINISH_MIN_SAMPLES = 3;
 
-// Returns an "HH:MM" estimated finish time for an in-progress case based on
-// the median duration of completed prior cases that match on:
-//   - same caseType, AND
-//   - same surgeon (normalized via the per-site surgeon-mapping cache), AND
-//   - for standard cases, the same procedure name (normalized via the
-//     global procedure-mapping cache so "TKA" and "Total Knee" pool).
-// Returns null when fewer than CASE_FINISH_MIN_SAMPLES matches exist or any
-// required field is missing — intentionally conservative so the estimate
-// only shows when it's grounded in real history.
+// Returns an "HH:MM" estimated finish time for an in-progress case. Two-tier
+// strategy, preferring the surgeon-specific signal when it's strong enough:
+//
+//   1. Surgeon-specific (preferred): completed prior cases in the user's
+//      local data that match on same caseType, same surgeon (normalized via
+//      the per-site surgeon-mapping cache), and for standard cases the same
+//      procedure (normalized via the global procedure-mapping cache).
+//      Used when ≥ CASE_FINISH_MIN_SAMPLES matches exist.
+//
+//   2. Procedure-only (fallback): when surgeon data is sparse OR the case
+//      has no surgeon listed, pool durations across all sites for the same
+//      procedure (standard cases only). Backed by
+//      _allSiteProcedureSamplesCache, populated from per-site sharedCases
+//      queries. Used when ≥ CASE_FINISH_MIN_SAMPLES matches exist.
+//
+// Returns null when neither tier has enough samples — intentionally
+// conservative so the estimate only shows when it's grounded in real data.
 function estimateCaseFinish(caseData) {
   if (!caseData || !caseData.startTime) return null;
-  const surgeon = normalizeSurgeonName((caseData.notes || '').trim()).toLowerCase();
-  if (!surgeon) return null;
   const caseType = caseData.caseType;
   if (!caseType) return null;
   const isStandard = caseType === 'standard';
   const procedure = isStandard ? normalizeProcedureName((caseData.procedure || '').trim()).toLowerCase() : null;
   if (isStandard && !procedure) return null;
+  const surgeon = normalizeSurgeonName((caseData.notes || '').trim()).toLowerCase();
 
-  const durations = [];
-  for (const c of (data.cases || [])) {
-    if (!c || c.id === caseData.id) continue;
-    if (!c.startTime || !c.endTime) continue;
-    if (c.caseType !== caseType) continue;
-    if (isStandard && normalizeProcedureName((c.procedure || '').trim()).toLowerCase() !== procedure) continue;
-    const cSurgeon = normalizeSurgeonName((c.notes || '').trim()).toLowerCase();
-    if (cSurgeon !== surgeon) continue;
-    let s = timeToMinutes(c.startTime);
-    let e = timeToMinutes(c.endTime);
-    if (!isFinite(s) || !isFinite(e)) continue;
-    if (e <= s) e += 1440;
-    const dur = e - s;
-    if (dur <= 0 || dur > 1440) continue;
-    durations.push(dur);
+  let durations = [];
+
+  // Tier 1: surgeon-specific local matches.
+  if (surgeon) {
+    for (const c of (data.cases || [])) {
+      if (!c || c.id === caseData.id) continue;
+      if (!c.startTime || !c.endTime) continue;
+      if (c.caseType !== caseType) continue;
+      if (isStandard && normalizeProcedureName((c.procedure || '').trim()).toLowerCase() !== procedure) continue;
+      const cSurgeon = normalizeSurgeonName((c.notes || '').trim()).toLowerCase();
+      if (cSurgeon !== surgeon) continue;
+      let s = timeToMinutes(c.startTime);
+      let e = timeToMinutes(c.endTime);
+      if (!isFinite(s) || !isFinite(e)) continue;
+      if (e <= s) e += 1440;
+      const dur = e - s;
+      if (dur <= 0 || dur > 1440) continue;
+      durations.push(dur);
+    }
+    if (durations.length < CASE_FINISH_MIN_SAMPLES) durations = [];
   }
+
+  // Tier 2: procedure-level fallback across all sites (standard cases only).
+  if (durations.length === 0 && isStandard && _allSiteProcedureSamplesCache) {
+    const samples = _allSiteProcedureSamplesCache[procedure] || [];
+    if (samples.length >= CASE_FINISH_MIN_SAMPLES) durations = samples.slice();
+  }
+
   if (durations.length < CASE_FINISH_MIN_SAMPLES) return null;
 
   durations.sort((a, b) => a - b);
@@ -27235,6 +27311,15 @@ auth.onAuthStateChanged(async (user) => {
       if (csPage && csPage.classList.contains('active') && typeof initCommunityStats === 'function') {
         try { initCommunityStats(); } catch (e) { console.warn('initCommunityStats post-loadSites failed:', e); }
       }
+      // Now that sitesCache is populated, fan out per-site sharedCases
+      // queries to build the cross-site procedure-duration cache. Re-render
+      // today on completion so any in-progress case picks up the
+      // procedure-level finish-time fallback estimate.
+      loadAllSiteProcedureSamples().then(() => {
+        if (typeof renderToday === 'function') {
+          try { renderToday(); } catch (e) {}
+        }
+      }).catch(() => {});
     }).catch(() => {});
     loadAsaMasterCodes().catch(() => {});
     loadAsaCodeProcedures().catch(() => {});
