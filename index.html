@@ -2665,11 +2665,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div id="weeklySummary" style="text-align:center;font-size:0.8rem;color:var(--text-dim);"></div>
   </div>
 
-  <div style="display:flex;gap:8px;margin-bottom:4px;">
+  <div style="display:flex;gap:8px;margin-bottom:8px;">
     <button class="btn btn-danger btn-sm hidden" id="todayStopCaseBtn" onclick="todayStopRunningCase()" style="flex:1;">&#9209; Stop Case</button>
-    <button class="btn btn-danger btn-sm hidden" id="todaySignOutBtn" onclick="todaySignOutClick()" style="flex:1;">Sign Out of Shift</button>
+    <button class="btn btn-danger btn-sm hidden" id="todaySignOutBtn" onclick="shiftSignOut()" style="flex:1;">Sign Out of Shift</button>
   </div>
-  <div id="todayShiftIntervals" style="font-size:0.7rem;color:var(--text-dim);text-align:center;margin-bottom:8px;line-height:1.5;"></div>
 
   <div class="card" id="todayBreakdownCard" style="padding:12px 16px;">
     <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -13213,14 +13212,12 @@ function renderToday() {
     document.getElementById('todayBreakdown').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No shift saved for this date.</p>';
     document.getElementById('todayCaseList').innerHTML = '<div class="empty-state"><p>No cases logged yet.</p></div>';
     document.getElementById('todayCaseCount').textContent = '';
-    // Defensively clear the Stop Case + Sign Out buttons and intervals list
-    // — without this, navigating from a date with a shift to one without
-    // leaves the prior date's button and intervals visible in the DOM.
+    // Defensively hide the Stop Case + Sign Out buttons so prior-day state
+    // doesn't leak when navigating to a date with no shift saved.
     const stopBtnEmpty = document.getElementById('todayStopCaseBtn');
     if (stopBtnEmpty) stopBtnEmpty.classList.add('hidden');
-    _resetTodaySignOutBtn();
-    const intervalsElEmpty = document.getElementById('todayShiftIntervals');
-    if (intervalsElEmpty) intervalsElEmpty.innerHTML = '';
+    const signOutBtnEmpty = document.getElementById('todaySignOutBtn');
+    if (signOutBtnEmpty) signOutBtnEmpty.classList.add('hidden');
     return;
   }
 
@@ -13364,45 +13361,12 @@ function renderToday() {
     stopBtn.classList.toggle('hidden', !hasRunningCase);
   }
 
-  // Sign Out / Sign Back In — same button toggles based on whether the most
-  // recent shift interval is open or closed.
+  // Sign Out button — legacy behavior: red, visible only while the shift is
+  // in progress on the active work date. Click opens the shift-edit form.
   const signOutBtn = document.getElementById('todaySignOutBtn');
-  const intervalsEl = document.getElementById('todayShiftIntervals');
-  const intervalState = todayShiftIntervalState(date);
   if (signOutBtn) {
-    if (intervalState === 'in_progress') {
-      signOutBtn.classList.remove('hidden', 'btn-success');
-      signOutBtn.classList.add('btn-danger');
-      signOutBtn.style.background = '';
-      signOutBtn.style.color = '';
-      signOutBtn.textContent = 'Sign Out of Shift';
-    } else if (intervalState === 'signed_out') {
-      signOutBtn.classList.remove('hidden', 'btn-danger');
-      // No .btn-success in CSS — set inline so it overrides .btn-danger if classlist races.
-      signOutBtn.style.background = 'var(--accent)';
-      signOutBtn.style.color = '#fff';
-      signOutBtn.textContent = 'Sign Back In';
-    } else {
-      _resetTodaySignOutBtn();
-    }
-  }
-
-  // Render the list of all intervals beneath the button (start / end /
-  // duration). Open intervals show "now" as the end and the live elapsed.
-  if (intervalsEl) {
-    if (intervalState === 'none' || !shift || !shift.timeEntries || shift.timeEntries.length === 0) {
-      intervalsEl.innerHTML = '';
-    } else {
-      const lines = [];
-      shift.timeEntries.forEach(e => {
-        if (!e.start) return;
-        const isOpen = !e.end;
-        const dur = _caseDurationStr(e.start, e.end || '');
-        const endLabel = isOpen ? 'now' : e.end;
-        lines.push(escHtml(e.start + ' – ' + endLabel) + (dur ? ' <span style="opacity:0.8;">(' + dur + ')</span>' : ''));
-      });
-      intervalsEl.innerHTML = lines.length > 0 ? lines.join('<br>') : '';
-    }
+    if (shift && result.isInProgress) signOutBtn.classList.remove('hidden');
+    else signOutBtn.classList.add('hidden');
   }
 }
 
@@ -13443,72 +13407,6 @@ function _caseDurationStr(startTime, endTime) {
   if (diff > 1440) diff = 1440;
   return _fmtDuration(diff);
 }
-
-// 'in_progress' | 'signed_out' | 'none' — drives the Sign Out / Sign Back In
-// button state. Only meaningful for today (the active work date) on a real
-// worked shift type.
-// Shift types the Sign Out / Sign Back In button + intervals list are
-// allowed to operate on. Restricted on purpose to general OR shifts that
-// don't cross midnight — call shifts, OB, SF, mole, etc. live in a single
-// timeEntries pair like {17:00, 07:00+1d} that downstream code (pager pay,
-// AR rate, etc.) reasons about as one continuous span. Letting the user
-// fragment those into multiple intervals would risk corrupting the
-// existing recording flow.
-const SHIFT_INTERVAL_BUTTON_TYPES = new Set(['OR', 'OR_float']);
-
-// Wall-clock calendar today (YYYY-MM-DD) — distinct from effectiveWorkDate(),
-// which has a 7am rollover so a call shift can keep "today" pointing at
-// yesterday until morning. The Sign Out button is restricted to OR shifts
-// that don't cross midnight, so the calendar-day match is what we want:
-// the moment midnight passes, the button hides regardless of arrow-nav.
-function _calendarTodayKey() {
-  const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-}
-
-// Single point of truth for hiding the Sign Out button. Wipes inline styles
-// and resets the text/class to defaults so the next render that wants to
-// show it starts from a clean slate. Without this, navigating from a green
-// "Sign Back In" state to a hidden state left the inline background:green
-// + text "Sign Back In" stuck on the element, and on some renders (forward
-// nav with a saved future shift) the button was visibly leaking through
-// rather than getting cleanly hidden.
-function _resetTodaySignOutBtn() {
-  const btn = document.getElementById('todaySignOutBtn');
-  if (!btn) return;
-  btn.classList.add('hidden');
-  btn.classList.remove('btn-success');
-  if (!btn.classList.contains('btn-danger')) btn.classList.add('btn-danger');
-  btn.style.background = '';
-  btn.style.color = '';
-  btn.textContent = 'Sign Out of Shift';
-}
-
-function todayShiftIntervalState(date) {
-  const shift = data.shifts[date];
-  if (!shift) return 'none';
-  if (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off' || shift.forcedOff) return 'none';
-  if (!SHIFT_INTERVAL_BUTTON_TYPES.has(shift.assignmentType)) return 'none';
-  if (date !== _calendarTodayKey()) return 'none';
-  const entries = shift.timeEntries || [];
-  const last = entries.length > 0 ? entries[entries.length - 1] : null;
-  if (!last || !last.start) return 'none';
-  return last.end ? 'signed_out' : 'in_progress';
-}
-
-// Watcher that re-renders the today page on calendar-day rollover, so a user
-// who leaves the app open across midnight sees the Sign Out button hide
-// without having to interact. Cheap: one timestamp comparison per minute.
-let _calendarDayWatcherToken = _calendarTodayKey();
-setInterval(function () {
-  const cur = _calendarTodayKey();
-  if (cur !== _calendarDayWatcherToken) {
-    _calendarDayWatcherToken = cur;
-    if (typeof renderToday === 'function') {
-      try { renderToday(); } catch (e) {}
-    }
-  }
-}, 60 * 1000);
 
 // Cases of caseType "standard" with a start but no end — the OR cases the
 // big red Stop Case button targets. Labor epidurals are intentionally
@@ -13627,55 +13525,12 @@ function todayStopRunningCase() {
   showToast('Case stopped at ' + c.endTime);
 }
 
-// Click handler for the dual-purpose Sign Out / Sign Back In button. Picks
-// behavior based on the current interval state.
-function todaySignOutClick() {
-  const state = todayShiftIntervalState(workingDate);
-  if (state === 'signed_out') return shiftSignBackIn();
-  return shiftSignOut();
-}
-
-// Close the most recent open interval at the current time. Also bumps the
-// shift's top-level endTime (some downstream renders read it directly).
-function _shiftSignOutNow(date) {
-  const shift = data.shifts[date];
-  if (!shift) return;
-  const nowStr = _nowHHMM();
-  if (!shift.timeEntries || shift.timeEntries.length === 0) {
-    shift.timeEntries = [{ start: '', end: nowStr }];
-  } else {
-    const last = shift.timeEntries[shift.timeEntries.length - 1];
-    if (last.start && !last.end) last.end = nowStr;
-  }
-  shift.endTime = nowStr;
-  saveData(data);
-  if (date === effectiveWorkDate() && typeof checkShiftEndEpiduralAutoFill === 'function') {
-    checkShiftEndEpiduralAutoFill(date, nowStr);
-  }
-  renderToday();
-  showToast('Signed out at ' + nowStr);
-}
-
-// Push a new interval starting at now, leaving the end open. The shift goes
-// back to in-progress; downstream renders pick that up via getShiftPointsForDate.
-function shiftSignBackIn() {
-  const date = workingDate;
-  const shift = data.shifts[date];
-  if (!shift) return;
-  const nowStr = _nowHHMM();
-  if (!Array.isArray(shift.timeEntries)) shift.timeEntries = [];
-  shift.timeEntries.push({ start: nowStr, end: '' });
-  shift.endTime = '';
-  saveData(data);
-  renderToday();
-  showToast('Signed back in at ' + nowStr);
-}
-
 function shiftSignOut() {
   const date = workingDate;
   const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
   if (openCases.length === 0) {
-    _shiftSignOutNow(date);
+    returnToToday = true;
+    openShiftEdit(date);
     return;
   }
   // Show warning modal with open case details
@@ -13739,14 +13594,17 @@ function checkShiftEndEpiduralAutoFill(date, shiftEndTime) {
 
 function forceShiftSignOut() {
   const date = workingDate;
-  const nowStr = _nowHHMM();
+  const now = new Date();
+  const nowStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
   const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
   openCases.forEach(c => {
     c.endTime = nowStr;
     writeSharedCase(c, data.shifts[c.shiftDate]);
   });
+  saveData(data);
   closeSignOutWarning();
-  _shiftSignOutNow(date);
+  returnToToday = true;
+  openShiftEdit(date);
 }
 
 async function performSignOut() {
