@@ -14703,8 +14703,10 @@ function renderShiftLogTable() {
     const curMonthName = mn[slMonth] + ' ' + slYear;
     slWatchHtml += '<div class="watching-box"><h4>&#x1f4b2; Watching for Billing (' + watchShifts.length + ')</h4>';
     watchShifts.sort((a,b) => a.date.localeCompare(b.date)).forEach(s => {
-      const wCalLabel = data.calendarAssignments[s.date];
-      const typeName = wCalLabel ? wCalLabel.label : getAssignmentTypeName(s.assignmentType, s.siteId);
+      // Use the saved assignmentType, not the calendar label — the user may
+      // have corrected the type after a mismatched import and we want the log
+      // to reflect what they actually worked.
+      const typeName = getAssignmentTypeName(s.assignmentType, s.siteId);
       const entries = s.timeEntries || [];
       const timeStr = entries.length > 0 && entries[0].start
         ? entries.map(e => e.start + (e.end ? '-' + e.end : '')).join(', ')
@@ -14779,8 +14781,10 @@ function renderShiftLogTable() {
     const month = d.getMonth() + 1;
     const day = d.getDate();
     const dateLabel = `${dayName} ${month}/${day}`;
-    const calLabel = data.calendarAssignments[shift.date];
-    const typeName = calLabel ? calLabel.label : getAssignmentTypeName(shift.assignmentType, shift.siteId);
+    // Use the saved assignmentType so a corrected type from the today page
+    // reflects in the log immediately. Calendar label can be stale if the
+    // user re-typed the shift; the actual type drives compensation anyway.
+    const typeName = getAssignmentTypeName(shift.assignmentType, shift.siteId);
     const badgeClass = getShiftBadgeClass(shift.assignmentType);
     const hasPreCall = shift.preCallStart && shift.preCallEnd;
     const totalHrs = calcShiftHours(shift);
