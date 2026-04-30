@@ -2665,7 +2665,9 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div id="weeklySummary" style="text-align:center;font-size:0.8rem;color:var(--text-dim);"></div>
   </div>
 
-  <button class="btn btn-danger btn-sm hidden" id="todaySignOutBtn" onclick="shiftSignOut()" style="width:100%;margin-bottom:8px;">Sign Out of Shift</button>
+  <button class="btn btn-danger btn-sm hidden" id="todayStopCaseBtn" onclick="todayStopRunningCase()" style="width:100%;margin-bottom:8px;">&#9209; Stop Case</button>
+  <button class="btn btn-danger btn-sm hidden" id="todaySignOutBtn" onclick="todaySignOutClick()" style="width:100%;margin-bottom:4px;">Sign Out of Shift</button>
+  <div id="todayShiftIntervals" style="font-size:0.7rem;color:var(--text-dim);text-align:center;margin-bottom:8px;line-height:1.5;"></div>
 
   <div class="card" id="todayBreakdownCard" style="padding:12px 16px;">
     <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -11582,8 +11584,15 @@ function renderDECaseList() {
     otherTotal += shift ? calcOtherPartyPoints(c, shift) : 0;
     const name = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType, c);
     const isOpenLabor = c.caseType === 'labor_epidural' && c.startTime && !c.endTime;
-    const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` :
-                    (isOpenLabor ? `${c.startTime} - now` : '');
+    const isRunningStandard = c.caseType === 'standard' && c.startTime && !c.endTime && c.shiftDate === effectiveWorkDate();
+    let timeStr = '';
+    if (c.startTime && c.endTime) {
+      const dur = _caseDurationStr(c.startTime, c.endTime);
+      timeStr = `${c.startTime} - ${c.endTime}${dur ? ' (' + dur + ')' : ''}`;
+    } else if (isOpenLabor || isRunningStandard) {
+      const dur = _caseDurationStr(c.startTime, '');
+      timeStr = `${c.startTime} - now${dur ? ' (' + dur + ')' : ''}`;
+    }
     const estTag = isOpenLabor ? ' <span style="font-size:0.65rem;color:var(--accent2);">(est.)</span>' : '';
     html += `<div class="de-case-list-item" onclick="openCaseEdit('${c.id}')" style="cursor:pointer;">
       <div class="de-info">
@@ -12966,8 +12975,15 @@ function renderToday() {
     const orTag = c.isORCase ? ' <span style="color:var(--accent2);font-size:0.75rem;">[OR]</span>' : '';
     const sharedTag = c.isSharedCase ? ` <span style="color:var(--purple);font-size:0.75rem;">[Shared ${c.sharedStartupPct || 50}%]</span>` : '';
     const isOpenLabor = c.caseType === 'labor_epidural' && c.startTime && !c.endTime;
-    const timeStr = c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` :
-                    (isOpenLabor ? `${c.startTime} - now` : '');
+    const isRunningStandard = c.caseType === 'standard' && c.startTime && !c.endTime && c.shiftDate === effectiveWorkDate();
+    let timeStr = '';
+    if (c.startTime && c.endTime) {
+      const dur = _caseDurationStr(c.startTime, c.endTime);
+      timeStr = `${c.startTime} - ${c.endTime}${dur ? ' (' + dur + ')' : ''}`;
+    } else if (isOpenLabor || isRunningStandard) {
+      const dur = _caseDurationStr(c.startTime, '');
+      timeStr = `${c.startTime} - now${dur ? ' (' + dur + ')' : ''}`;
+    }
     const openLaborTag = isOpenLabor ? ' <span style="color:var(--accent2);font-size:0.75rem;">(est.)</span>' : '';
     const details = [];
     if (c.physicalStatus && c.caseType === 'standard') details.push(c.physicalStatus);
@@ -12996,20 +13012,184 @@ function renderToday() {
   });
   document.getElementById('todayCaseList').innerHTML = listHtml;
 
-  // Show shift sign-out button only when clocked in (shift in progress)
-  const signOutBtn = document.getElementById('todaySignOutBtn');
-  if (signOutBtn) {
-    if (shift && result.isInProgress) signOutBtn.classList.remove('hidden');
-    else signOutBtn.classList.add('hidden');
+  // Stop Case button — visible when there is at least one standard case with
+  // an open start time on the active work date.
+  const stopBtn = document.getElementById('todayStopCaseBtn');
+  if (stopBtn) {
+    const hasRunningCase = date === effectiveWorkDate() && _todayRunningStandardCases(date).length > 0;
+    stopBtn.classList.toggle('hidden', !hasRunningCase);
   }
+
+  // Sign Out / Sign Back In — same button toggles based on whether the most
+  // recent shift interval is open or closed.
+  const signOutBtn = document.getElementById('todaySignOutBtn');
+  const intervalsEl = document.getElementById('todayShiftIntervals');
+  const intervalState = todayShiftIntervalState(date);
+  if (signOutBtn) {
+    if (intervalState === 'in_progress') {
+      signOutBtn.classList.remove('hidden', 'btn-success');
+      signOutBtn.classList.add('btn-danger');
+      signOutBtn.style.background = '';
+      signOutBtn.style.color = '';
+      signOutBtn.textContent = 'Sign Out of Shift';
+    } else if (intervalState === 'signed_out') {
+      signOutBtn.classList.remove('hidden', 'btn-danger');
+      // No .btn-success in CSS — set inline so it overrides .btn-danger if classlist races.
+      signOutBtn.style.background = 'var(--accent)';
+      signOutBtn.style.color = '#fff';
+      signOutBtn.textContent = 'Sign Back In';
+    } else {
+      signOutBtn.classList.add('hidden');
+    }
+  }
+
+  // Render the list of all intervals beneath the button (start / end /
+  // duration). Open intervals show "now" as the end and the live elapsed.
+  if (intervalsEl) {
+    if (intervalState === 'none' || !shift || !shift.timeEntries || shift.timeEntries.length === 0) {
+      intervalsEl.innerHTML = '';
+    } else {
+      const lines = [];
+      shift.timeEntries.forEach(e => {
+        if (!e.start) return;
+        const isOpen = !e.end;
+        const dur = _caseDurationStr(e.start, e.end || '');
+        const endLabel = isOpen ? 'now' : e.end;
+        lines.push(escHtml(e.start + ' – ' + endLabel) + (dur ? ' <span style="opacity:0.8;">(' + dur + ')</span>' : ''));
+      });
+      intervalsEl.innerHTML = lines.length > 0 ? lines.join('<br>') : '';
+    }
+  }
+}
+
+// ---- Today page: shift interval + running-case helpers ----
+
+// "HH:MM" for the current local time.
+function _nowHHMM() {
+  const now = new Date();
+  return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+}
+
+// Format a duration in minutes as "Xh Ym" / "Xm".
+function _fmtDuration(mins) {
+  if (!isFinite(mins) || mins < 0) return '';
+  const m = Math.round(mins);
+  if (m < 60) return m + 'm';
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem > 0 ? (h + 'h ' + rem + 'm') : (h + 'h');
+}
+
+// Compute case duration string from start/end (or start/now for live), or '' if
+// we don't have enough to render. Cross-midnight aware (cap at 24h).
+function _caseDurationStr(startTime, endTime) {
+  if (!startTime) return '';
+  const sMin = timeToMinutes(startTime);
+  if (!isFinite(sMin)) return '';
+  let eMin;
+  if (endTime) {
+    eMin = timeToMinutes(endTime);
+    if (!isFinite(eMin)) return '';
+  } else {
+    const now = new Date();
+    eMin = now.getHours() * 60 + now.getMinutes();
+  }
+  let diff = eMin - sMin;
+  if (diff < 0) diff += 1440;
+  if (diff > 1440) diff = 1440;
+  return _fmtDuration(diff);
+}
+
+// 'in_progress' | 'signed_out' | 'none' — drives the Sign Out / Sign Back In
+// button state. Only meaningful for today (the active work date) on a real
+// worked shift type.
+function todayShiftIntervalState(date) {
+  const shift = data.shifts[date];
+  if (!shift) return 'none';
+  if (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off' || shift.forcedOff) return 'none';
+  if (date !== effectiveWorkDate()) return 'none';
+  const entries = shift.timeEntries || [];
+  const last = entries.length > 0 ? entries[entries.length - 1] : null;
+  if (!last || !last.start) return 'none';
+  return last.end ? 'signed_out' : 'in_progress';
+}
+
+// Cases of caseType "standard" with a start but no end — the OR cases the
+// big red Stop Case button targets. Labor epidurals are intentionally
+// excluded; they're long-running by design.
+function _todayRunningStandardCases(date) {
+  return (data.cases || []).filter(c =>
+    c.shiftDate === date &&
+    c.caseType === 'standard' &&
+    c.startTime && !c.endTime
+  );
+}
+
+// Set the most recently started running standard case's end time to now.
+function todayStopRunningCase() {
+  const date = workingDate;
+  const running = _todayRunningStandardCases(date)
+    .sort((a, b) => timeToMinutes(b.startTime) - timeToMinutes(a.startTime));
+  if (running.length === 0) return;
+  const c = running[0];
+  c.endTime = _nowHHMM();
+  if (typeof writeSharedCase === 'function') writeSharedCase(c, data.shifts[date]);
+  saveData(data);
+  if (typeof renderToday === 'function') renderToday();
+  if (typeof renderDECaseList === 'function') renderDECaseList();
+  if (typeof updateDETally === 'function') updateDETally();
+  showToast('Case stopped at ' + c.endTime);
+}
+
+// Click handler for the dual-purpose Sign Out / Sign Back In button. Picks
+// behavior based on the current interval state.
+function todaySignOutClick() {
+  const state = todayShiftIntervalState(workingDate);
+  if (state === 'signed_out') return shiftSignBackIn();
+  return shiftSignOut();
+}
+
+// Close the most recent open interval at the current time. Also bumps the
+// shift's top-level endTime (some downstream renders read it directly).
+function _shiftSignOutNow(date) {
+  const shift = data.shifts[date];
+  if (!shift) return;
+  const nowStr = _nowHHMM();
+  if (!shift.timeEntries || shift.timeEntries.length === 0) {
+    shift.timeEntries = [{ start: '', end: nowStr }];
+  } else {
+    const last = shift.timeEntries[shift.timeEntries.length - 1];
+    if (last.start && !last.end) last.end = nowStr;
+  }
+  shift.endTime = nowStr;
+  saveData(data);
+  if (date === effectiveWorkDate() && typeof checkShiftEndEpiduralAutoFill === 'function') {
+    checkShiftEndEpiduralAutoFill(date, nowStr);
+  }
+  renderToday();
+  showToast('Signed out at ' + nowStr);
+}
+
+// Push a new interval starting at now, leaving the end open. The shift goes
+// back to in-progress; downstream renders pick that up via getShiftPointsForDate.
+function shiftSignBackIn() {
+  const date = workingDate;
+  const shift = data.shifts[date];
+  if (!shift) return;
+  const nowStr = _nowHHMM();
+  if (!Array.isArray(shift.timeEntries)) shift.timeEntries = [];
+  shift.timeEntries.push({ start: nowStr, end: '' });
+  shift.endTime = '';
+  saveData(data);
+  renderToday();
+  showToast('Signed back in at ' + nowStr);
 }
 
 function shiftSignOut() {
   const date = workingDate;
   const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
   if (openCases.length === 0) {
-    returnToToday = true;
-    openShiftEdit(date);
+    _shiftSignOutNow(date);
     return;
   }
   // Show warning modal with open case details
@@ -13073,17 +13253,14 @@ function checkShiftEndEpiduralAutoFill(date, shiftEndTime) {
 
 function forceShiftSignOut() {
   const date = workingDate;
-  const now = new Date();
-  const nowStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  const nowStr = _nowHHMM();
   const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
   openCases.forEach(c => {
     c.endTime = nowStr;
     writeSharedCase(c, data.shifts[c.shiftDate]);
   });
-  saveData(data);
   closeSignOutWarning();
-  returnToToday = true;
-  openShiftEdit(date);
+  _shiftSignOutNow(date);
 }
 
 async function performSignOut() {
