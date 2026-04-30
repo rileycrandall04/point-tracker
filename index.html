@@ -13457,17 +13457,41 @@ function _caseDurationStr(startTime, endTime) {
 // existing recording flow.
 const SHIFT_INTERVAL_BUTTON_TYPES = new Set(['OR', 'OR_float']);
 
+// Wall-clock calendar today (YYYY-MM-DD) — distinct from effectiveWorkDate(),
+// which has a 7am rollover so a call shift can keep "today" pointing at
+// yesterday until morning. The Sign Out button is restricted to OR shifts
+// that don't cross midnight, so the calendar-day match is what we want:
+// the moment midnight passes, the button hides regardless of arrow-nav.
+function _calendarTodayKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 function todayShiftIntervalState(date) {
   const shift = data.shifts[date];
   if (!shift) return 'none';
   if (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off' || shift.forcedOff) return 'none';
   if (!SHIFT_INTERVAL_BUTTON_TYPES.has(shift.assignmentType)) return 'none';
-  if (date !== effectiveWorkDate()) return 'none';
+  if (date !== _calendarTodayKey()) return 'none';
   const entries = shift.timeEntries || [];
   const last = entries.length > 0 ? entries[entries.length - 1] : null;
   if (!last || !last.start) return 'none';
   return last.end ? 'signed_out' : 'in_progress';
 }
+
+// Watcher that re-renders the today page on calendar-day rollover, so a user
+// who leaves the app open across midnight sees the Sign Out button hide
+// without having to interact. Cheap: one timestamp comparison per minute.
+let _calendarDayWatcherToken = _calendarTodayKey();
+setInterval(function () {
+  const cur = _calendarTodayKey();
+  if (cur !== _calendarDayWatcherToken) {
+    _calendarDayWatcherToken = cur;
+    if (typeof renderToday === 'function') {
+      try { renderToday(); } catch (e) {}
+    }
+  }
+}, 60 * 1000);
 
 // Cases of caseType "standard" with a start but no end — the OR cases the
 // big red Stop Case button targets. Labor epidurals are intentionally
