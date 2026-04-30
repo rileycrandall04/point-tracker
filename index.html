@@ -13218,8 +13218,7 @@ function renderToday() {
     // leaves the prior date's button and intervals visible in the DOM.
     const stopBtnEmpty = document.getElementById('todayStopCaseBtn');
     if (stopBtnEmpty) stopBtnEmpty.classList.add('hidden');
-    const signOutBtnEmpty = document.getElementById('todaySignOutBtn');
-    if (signOutBtnEmpty) signOutBtnEmpty.classList.add('hidden');
+    _resetTodaySignOutBtn();
     const intervalsElEmpty = document.getElementById('todayShiftIntervals');
     if (intervalsElEmpty) intervalsElEmpty.innerHTML = '';
     return;
@@ -13384,7 +13383,7 @@ function renderToday() {
       signOutBtn.style.color = '#fff';
       signOutBtn.textContent = 'Sign Back In';
     } else {
-      signOutBtn.classList.add('hidden');
+      _resetTodaySignOutBtn();
     }
   }
 
@@ -13465,6 +13464,24 @@ const SHIFT_INTERVAL_BUTTON_TYPES = new Set(['OR', 'OR_float']);
 function _calendarTodayKey() {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// Single point of truth for hiding the Sign Out button. Wipes inline styles
+// and resets the text/class to defaults so the next render that wants to
+// show it starts from a clean slate. Without this, navigating from a green
+// "Sign Back In" state to a hidden state left the inline background:green
+// + text "Sign Back In" stuck on the element, and on some renders (forward
+// nav with a saved future shift) the button was visibly leaking through
+// rather than getting cleanly hidden.
+function _resetTodaySignOutBtn() {
+  const btn = document.getElementById('todaySignOutBtn');
+  if (!btn) return;
+  btn.classList.add('hidden');
+  btn.classList.remove('btn-success');
+  if (!btn.classList.contains('btn-danger')) btn.classList.add('btn-danger');
+  btn.style.background = '';
+  btn.style.color = '';
+  btn.textContent = 'Sign Out of Shift';
 }
 
 function todayShiftIntervalState(date) {
