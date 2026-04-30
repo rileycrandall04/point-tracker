@@ -11594,6 +11594,10 @@ function renderDECaseList() {
     } else if (isOpenLabor || isRunningStandard) {
       const dur = _caseDurationStr(c.startTime, '');
       timeStr = `${c.startTime} - now${dur ? ' (' + dur + ')' : ''}`;
+      if (isRunningStandard) {
+        const est = estimateCaseFinish(c);
+        if (est) timeStr += ` · est. finish ${est}`;
+      }
     }
     const estTag = isOpenLabor ? ' <span style="font-size:0.65rem;color:var(--accent2);">(est.)</span>' : '';
     html += `<div class="de-case-list-item" onclick="openCaseEdit('${c.id}')" style="cursor:pointer;">
@@ -12985,6 +12989,10 @@ function renderToday() {
     } else if (isOpenLabor || isRunningStandard) {
       const dur = _caseDurationStr(c.startTime, '');
       timeStr = `${c.startTime} - now${dur ? ' (' + dur + ')' : ''}`;
+      if (isRunningStandard) {
+        const est = estimateCaseFinish(c);
+        if (est) timeStr += ` · est. finish ${est}`;
+      }
     }
     const openLaborTag = isOpenLabor ? ' <span style="color:var(--accent2);font-size:0.75rem;">(est.)</span>' : '';
     const details = [];
@@ -13125,6 +13133,62 @@ function _todayRunningStandardCases(date) {
     c.caseType === 'standard' &&
     c.startTime && !c.endTime
   );
+}
+
+// Minimum number of prior matched cases required before we surface an
+// estimated finish time. Below this threshold the median is too noisy to
+// help the user — better to show nothing than guess.
+const CASE_FINISH_MIN_SAMPLES = 3;
+
+// Returns an "HH:MM" estimated finish time for an in-progress case based on
+// the median duration of completed prior cases that match on:
+//   - same caseType, AND
+//   - same surgeon (normalized via surgeon-mapping cache), AND
+//   - for standard cases, same procedure name.
+// Returns null when fewer than CASE_FINISH_MIN_SAMPLES matches exist or any
+// required field is missing — this is intentionally conservative so the
+// estimate only shows when it's grounded in real history.
+function estimateCaseFinish(caseData) {
+  if (!caseData || !caseData.startTime) return null;
+  const surgeon = normalizeSurgeonName((caseData.notes || '').trim()).toLowerCase();
+  if (!surgeon) return null;
+  const caseType = caseData.caseType;
+  if (!caseType) return null;
+  const isStandard = caseType === 'standard';
+  const procedure = isStandard ? (caseData.procedure || '').trim().toLowerCase() : null;
+  if (isStandard && !procedure) return null;
+
+  const durations = [];
+  for (const c of (data.cases || [])) {
+    if (!c || c.id === caseData.id) continue;
+    if (!c.startTime || !c.endTime) continue;
+    if (c.caseType !== caseType) continue;
+    if (isStandard && (c.procedure || '').trim().toLowerCase() !== procedure) continue;
+    const cSurgeon = normalizeSurgeonName((c.notes || '').trim()).toLowerCase();
+    if (cSurgeon !== surgeon) continue;
+    let s = timeToMinutes(c.startTime);
+    let e = timeToMinutes(c.endTime);
+    if (!isFinite(s) || !isFinite(e)) continue;
+    if (e <= s) e += 1440;
+    const dur = e - s;
+    if (dur <= 0 || dur > 1440) continue;
+    durations.push(dur);
+  }
+  if (durations.length < CASE_FINISH_MIN_SAMPLES) return null;
+
+  durations.sort((a, b) => a - b);
+  const m = durations.length;
+  const median = m % 2 === 1
+    ? durations[(m - 1) / 2]
+    : (durations[m / 2 - 1] + durations[m / 2]) / 2;
+
+  const startMin = timeToMinutes(caseData.startTime);
+  if (!isFinite(startMin)) return null;
+  let finishMin = Math.round(startMin + median);
+  finishMin = ((finishMin % 1440) + 1440) % 1440;
+  const hh = Math.floor(finishMin / 60);
+  const mm = finishMin % 60;
+  return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
 }
 
 // Set the most recently started running standard case's end time to now.
