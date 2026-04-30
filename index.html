@@ -2665,8 +2665,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div id="weeklySummary" style="text-align:center;font-size:0.8rem;color:var(--text-dim);"></div>
   </div>
 
-  <button class="btn btn-danger btn-sm hidden" id="todayStopCaseBtn" onclick="todayStopRunningCase()" style="width:100%;margin-bottom:8px;">&#9209; Stop Case</button>
-  <button class="btn btn-danger btn-sm hidden" id="todaySignOutBtn" onclick="todaySignOutClick()" style="width:100%;margin-bottom:4px;">Sign Out of Shift</button>
+  <div style="display:flex;gap:8px;margin-bottom:4px;">
+    <button class="btn btn-danger btn-sm hidden" id="todayStopCaseBtn" onclick="todayStopRunningCase()" style="flex:1;">&#9209; Stop Case</button>
+    <button class="btn btn-danger btn-sm hidden" id="todaySignOutBtn" onclick="todaySignOutClick()" style="flex:1;">Sign Out of Shift</button>
+  </div>
   <div id="todayShiftIntervals" style="font-size:0.7rem;color:var(--text-dim);text-align:center;margin-bottom:8px;line-height:1.5;"></div>
 
   <div class="card" id="todayBreakdownCard" style="padding:12px 16px;">
