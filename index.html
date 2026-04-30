@@ -4092,6 +4092,30 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
     <div id="adminLookupResults" style="font-size:0.82rem;"></div>
   </div>
+
+  <!-- Procedure Mappings (app owner only) — single global config doc shared
+       across all sites. Variants like "TKA" map to a canonical name like
+       "Total Knee" so analytics and the case-finish estimator pool them. -->
+  <div class="card hidden" id="adminProcedureMappingsCard" style="margin-top:12px;">
+    <h2>Procedure Mappings</h2>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;line-height:1.5;">
+      Map procedure-name variants to a canonical name, shared across all sites.
+      Used by the case-finish estimator and any future per-procedure analytics
+      to recognize "TKA" and "Total Knee" as the same case type.
+    </p>
+    <div style="background:var(--surface);padding:10px;border-radius:8px;margin-bottom:12px;">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <input type="text" id="adminProcMapVariant" placeholder="Variant (e.g. TKA)"
+          style="flex:1;min-width:140px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
+        <span style="color:var(--text-dim);">&rarr;</span>
+        <input type="text" id="adminProcMapCanonical" placeholder="Canonical (e.g. Total Knee)"
+          style="flex:1;min-width:160px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
+        <button class="btn btn-primary btn-sm" onclick="addAdminProcedureMapping()">Add</button>
+      </div>
+      <div id="adminProcMapStatus" style="font-size:0.72rem;margin-top:6px;"></div>
+    </div>
+    <div id="adminProcMapList" style="font-size:0.85rem;"></div>
+  </div>
 </div>
 
 
@@ -7061,6 +7085,110 @@ async function adminLookupUser() {
   }
 }
 
+// ---- Procedure Mappings admin (app owner only) ----
+//
+// Variants → canonical names, stored as a single global config doc. Adds and
+// deletes go through _persistProcedureMappings which Firestore rules gate to
+// the app owner.
+
+function renderAdminProcedureMappings() {
+  const out = document.getElementById('adminProcMapList');
+  if (!out) return;
+  if (!isAppOwner()) { out.innerHTML = ''; return; }
+  const entries = Object.entries(procedureMappingsCache || {}).sort((a, b) =>
+    a[0].toLowerCase().localeCompare(b[0].toLowerCase())
+  );
+  if (entries.length === 0) {
+    out.innerHTML = '<p style="color:var(--text-dim);font-size:0.78rem;margin:0;">No mappings yet. Add one above &mdash; e.g. <em>TKA &rarr; Total Knee</em>.</p>';
+    return;
+  }
+  // Group rows by canonical so it's easy to see which variants feed each
+  // canonical name. Ordered by canonical name for predictability.
+  const byCanonical = {};
+  for (const [variant, canonical] of entries) {
+    if (!byCanonical[canonical]) byCanonical[canonical] = [];
+    byCanonical[canonical].push(variant);
+  }
+  const canonicals = Object.keys(byCanonical).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  let html = '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:6px;">'
+    + entries.length + ' mapping' + (entries.length !== 1 ? 's' : '')
+    + ' across ' + canonicals.length + ' canonical name' + (canonicals.length !== 1 ? 's' : '')
+    + '</div>';
+  for (const canonical of canonicals) {
+    html += '<div style="margin-bottom:10px;">';
+    html += '<div style="font-weight:600;font-size:0.82rem;margin-bottom:3px;">' + escHtml(canonical) + '</div>';
+    for (const variant of byCanonical[canonical].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))) {
+      html += '<div style="display:flex;align-items:center;gap:8px;background:var(--surface);padding:6px 10px;border-radius:6px;margin-bottom:4px;">';
+      html += '<span style="flex:1;font-size:0.8rem;">' + escHtml(variant) + '</span>';
+      html += '<button class="btn btn-sm" onclick="deleteAdminProcedureMapping(' + JSON.stringify(variant).replace(/"/g, '&quot;') + ')" style="background:var(--surface2);color:var(--accent2);font-size:0.7rem;padding:3px 9px;">Remove</button>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  out.innerHTML = html;
+}
+
+async function addAdminProcedureMapping() {
+  if (!isAppOwner()) return;
+  const vEl = document.getElementById('adminProcMapVariant');
+  const cEl = document.getElementById('adminProcMapCanonical');
+  const status = document.getElementById('adminProcMapStatus');
+  const variant = (vEl?.value || '').trim();
+  const canonical = (cEl?.value || '').trim();
+  if (!variant || !canonical) {
+    status.textContent = 'Both variant and canonical name are required.';
+    status.style.color = 'var(--accent2)';
+    return;
+  }
+  if (variant.toLowerCase() === canonical.toLowerCase()) {
+    status.textContent = 'Variant and canonical name match — nothing to map.';
+    status.style.color = 'var(--accent2)';
+    return;
+  }
+  procedureMappingsCache[variant] = canonical;
+  // Re-point any existing variants that had the old variant as their canonical
+  // (chain: A → variant, variant → canonical → make A → canonical too).
+  for (const [k, v] of Object.entries(procedureMappingsCache)) {
+    if (v === variant) procedureMappingsCache[k] = canonical;
+  }
+  // If canonical was itself an entry, drop it (canonical-of-canonical noise).
+  if (procedureMappingsCache[canonical] === canonical) delete procedureMappingsCache[canonical];
+  try {
+    await _persistProcedureMappings();
+    vEl.value = '';
+    cEl.value = '';
+    status.textContent = 'Saved.';
+    status.style.color = 'var(--accent)';
+    renderAdminProcedureMappings();
+  } catch (err) {
+    console.error('Procedure mapping save error:', err);
+    status.textContent = 'Save failed: ' + (err.message || err);
+    status.style.color = 'var(--accent2)';
+  }
+}
+
+async function deleteAdminProcedureMapping(variant) {
+  if (!isAppOwner()) return;
+  if (!variant || !procedureMappingsCache[variant]) return;
+  if (!confirm('Remove mapping "' + variant + '" → "' + procedureMappingsCache[variant] + '"?')) return;
+  delete procedureMappingsCache[variant];
+  try {
+    await _persistProcedureMappings();
+    renderAdminProcedureMappings();
+  } catch (err) {
+    console.error('Procedure mapping delete error:', err);
+    alert('Delete failed: ' + (err.message || err));
+  }
+}
+
+async function _persistProcedureMappings() {
+  await db.collection('procedureMappings').doc('config').set({
+    mappings: procedureMappingsCache,
+    updatedAt: new Date().toISOString(),
+    updatedBy: currentUser ? currentUser.uid : null
+  });
+}
+
 // ================================================================
 // DATA STORE
 // ================================================================
@@ -7354,6 +7482,10 @@ let sharedCasesLoaded = false;
 let sharedCaseOverridesCache = {}; // { docId: { surgeon, procedure, updatedAt } }
 let surgeonMappingsCache = {};
 let surgeonMappingsLoaded = false;
+// Global procedure name aliases. Single Firestore doc shared across all sites
+// (intentional — procedures are universal, surgeons are not). Variant → canonical.
+let procedureMappingsCache = {};
+let procedureMappingsLoaded = false;
 let userProfilesCache = {}; // { uid: { email, displayName } }
 let sitesCache = {};       // { siteId: { id, name, members[], owner, ... } }
 let sitesLoaded = false;
@@ -7494,6 +7626,37 @@ async function loadSites() {
     sitesLoaded = true;
     invalidateResolvedRulesCache();
   }
+}
+
+// Procedure-name aliases live in a single global Firestore document (mirrors
+// asaCodeProcedures' "config" doc). Read by any signed-in user; writes are
+// gated by Firestore rules to the app owner. App startup calls this once.
+async function loadProcedureMappings() {
+  if (!db) return;
+  try {
+    const doc = await db.collection('procedureMappings').doc('config').get();
+    procedureMappingsCache = (doc.exists && doc.data().mappings) || {};
+  } catch (err) {
+    console.warn('Failed to load procedure mappings:', err);
+    procedureMappingsCache = {};
+  }
+  procedureMappingsLoaded = true;
+}
+
+// Map "TKA" → "Total Knee" (or wherever the admin pointed the variant). Falls
+// back to the trimmed input if the name isn't in the mappings table. Match is
+// case-insensitive against keys, but the canonical value is returned exactly
+// as the admin stored it so display capitalization is preserved.
+function normalizeProcedureName(rawName) {
+  if (!rawName) return rawName;
+  const trimmed = String(rawName).trim();
+  if (!trimmed) return trimmed;
+  if (procedureMappingsCache[trimmed]) return procedureMappingsCache[trimmed];
+  const lower = trimmed.toLowerCase();
+  for (const [variant, canonical] of Object.entries(procedureMappingsCache)) {
+    if (variant.toLowerCase() === lower) return canonical;
+  }
+  return trimmed;
 }
 
 function getCurrentSiteName() {
@@ -10794,6 +10957,8 @@ function renderAdminPage() {
   showOwnerOnly('claudeAISettingsCard');
   showAnyAdmin('adminMultiSiteCard');
   showOwnerOnly('adminUserLookupCard');
+  showOwnerOnly('adminProcedureMappingsCard');
+  if (isOwner) renderAdminProcedureMappings();
 
   // Within the Multi-Site Admin card, default tab + which tabs are visible:
   if (isSAdmin && !isOwner) {
@@ -13143,11 +13308,12 @@ const CASE_FINISH_MIN_SAMPLES = 3;
 // Returns an "HH:MM" estimated finish time for an in-progress case based on
 // the median duration of completed prior cases that match on:
 //   - same caseType, AND
-//   - same surgeon (normalized via surgeon-mapping cache), AND
-//   - for standard cases, same procedure name.
+//   - same surgeon (normalized via the per-site surgeon-mapping cache), AND
+//   - for standard cases, the same procedure name (normalized via the
+//     global procedure-mapping cache so "TKA" and "Total Knee" pool).
 // Returns null when fewer than CASE_FINISH_MIN_SAMPLES matches exist or any
-// required field is missing — this is intentionally conservative so the
-// estimate only shows when it's grounded in real history.
+// required field is missing — intentionally conservative so the estimate
+// only shows when it's grounded in real history.
 function estimateCaseFinish(caseData) {
   if (!caseData || !caseData.startTime) return null;
   const surgeon = normalizeSurgeonName((caseData.notes || '').trim()).toLowerCase();
@@ -13155,7 +13321,7 @@ function estimateCaseFinish(caseData) {
   const caseType = caseData.caseType;
   if (!caseType) return null;
   const isStandard = caseType === 'standard';
-  const procedure = isStandard ? (caseData.procedure || '').trim().toLowerCase() : null;
+  const procedure = isStandard ? normalizeProcedureName((caseData.procedure || '').trim()).toLowerCase() : null;
   if (isStandard && !procedure) return null;
 
   const durations = [];
@@ -13163,7 +13329,7 @@ function estimateCaseFinish(caseData) {
     if (!c || c.id === caseData.id) continue;
     if (!c.startTime || !c.endTime) continue;
     if (c.caseType !== caseType) continue;
-    if (isStandard && (c.procedure || '').trim().toLowerCase() !== procedure) continue;
+    if (isStandard && normalizeProcedureName((c.procedure || '').trim()).toLowerCase() !== procedure) continue;
     const cSurgeon = normalizeSurgeonName((c.notes || '').trim()).toLowerCase();
     if (cSurgeon !== surgeon) continue;
     let s = timeToMinutes(c.startTime);
@@ -27072,6 +27238,7 @@ auth.onAuthStateChanged(async (user) => {
     }).catch(() => {});
     loadAsaMasterCodes().catch(() => {});
     loadAsaCodeProcedures().catch(() => {});
+    loadProcedureMappings().catch(() => {});
 
     // Auto-retry community data if the initial load didn't get results.
     // On startup, Firestore's connection may not be ready yet — the same
