@@ -11879,13 +11879,20 @@ function renderDECaseList() {
     } else if (isOpenLabor || isRunningStandard) {
       const dur = _caseDurationStr(c.startTime, '');
       timeStr = `${c.startTime} - now${dur ? ' (' + dur + ')' : ''}`;
-      if (isRunningStandard) {
-        const est = estimateCaseFinish(c);
-        if (est) timeStr += ` · est. finish ${est}`;
-      }
     }
     const estTag = isOpenLabor ? ' <span style="font-size:0.65rem;color:var(--accent2);">(est.)</span>' : '';
-    html += `<div class="de-case-list-item" onclick="openCaseEdit('${c.id}')" style="cursor:pointer;">
+    let estFinishHtml = '';
+    if (isRunningStandard) {
+      const est = estimateCaseFinish(c);
+      if (est) {
+        const procLabel = escHtml(est.procedure || 'this procedure');
+        const label = est.source === 'surgeon'
+          ? '(based on median duration for ' + procLabel + ' with ' + escHtml(est.surgeon) + ')'
+          : '(based on median duration for all surgeons for ' + procLabel + ')';
+        estFinishHtml = '<div style="flex-basis:100%;text-align:center;font-size:0.7rem;color:var(--text-dim);margin-top:6px;line-height:1.4;">est. finish <strong style="color:var(--text);">' + escHtml(est.finish) + '</strong> <span style="opacity:0.85;">' + label + '</span></div>';
+      }
+    }
+    html += `<div class="de-case-list-item" onclick="openCaseEdit('${c.id}')" style="cursor:pointer;${estFinishHtml ? 'flex-wrap:wrap;' : ''}">
       <div class="de-info">
         <div class="de-name">${escHtml(name)}${c.asaCode ? ' <span style="color:var(--text-dim);font-size:0.75rem;">(' + escHtml(c.asaCode) + ')</span>' : ''}${estTag}</div>
         ${timeStr ? `<div class="de-detail">${escHtml(timeStr)}</div>` : ''}
@@ -11894,6 +11901,7 @@ function renderDECaseList() {
         <span class="de-pts">${pts.toFixed(1)}</span>
         <span onclick="event.stopPropagation();deleteCaseDE('${c.id}')" style="color:var(--danger);cursor:pointer;font-size:1rem;padding:4px;line-height:1;">&times;</span>
       </div>
+      ${estFinishHtml}
     </div>`;
   });
 
@@ -13274,10 +13282,6 @@ function renderToday() {
     } else if (isOpenLabor || isRunningStandard) {
       const dur = _caseDurationStr(c.startTime, '');
       timeStr = `${c.startTime} - now${dur ? ' (' + dur + ')' : ''}`;
-      if (isRunningStandard) {
-        const est = estimateCaseFinish(c);
-        if (est) timeStr += ` · est. finish ${est}`;
-      }
     }
     const openLaborTag = isOpenLabor ? ' <span style="color:var(--accent2);font-size:0.75rem;">(est.)</span>' : '';
     const details = [];
@@ -13290,8 +13294,21 @@ function renderToday() {
       if (epi > 0) details.push(`${epi} epi`);
       if (pain > 0) details.push(`${pain} pain`);
     }
+    // Estimated finish row: appears at the bottom of the entry, centered,
+    // with a label naming the surgeon+procedure (or all-surgeons fallback).
+    let estFinishHtml = '';
+    if (isRunningStandard) {
+      const est = estimateCaseFinish(c);
+      if (est) {
+        const procLabel = escHtml(est.procedure || 'this procedure');
+        const label = est.source === 'surgeon'
+          ? '(based on median duration for ' + procLabel + ' with ' + escHtml(est.surgeon) + ')'
+          : '(based on median duration for all surgeons for ' + procLabel + ')';
+        estFinishHtml = '<div style="flex-basis:100%;text-align:center;font-size:0.72rem;color:var(--text-dim);margin-top:8px;line-height:1.4;">est. finish <strong style="color:var(--text);">' + escHtml(est.finish) + '</strong> <span style="opacity:0.85;">' + label + '</span></div>';
+      }
+    }
     listHtml += `
-      <div class="case-list-item">
+      <div class="case-list-item"${estFinishHtml ? ' style="flex-wrap:wrap;"' : ''}>
         <div class="info">
           <h4>${escHtml(name)}${orTag}${sharedTag}${openLaborTag}</h4>
           <p>${escHtml(details.join(' | '))}</p>
@@ -13303,6 +13320,7 @@ function renderToday() {
           <button class="btn btn-outline btn-sm" onclick="openCaseEdit('${c.id}')" style="padding:2px 8px;font-size:0.68rem;">Edit</button>
           <button class="btn btn-danger btn-sm" onclick="deleteCase('${c.id}')">Del</button>
         </div>
+        ${estFinishHtml}
       </div>`;
   });
   document.getElementById('todayCaseList').innerHTML = listHtml;
@@ -13447,21 +13465,26 @@ function estimateCaseFinish(caseData) {
   const caseType = caseData.caseType;
   if (!caseType) return null;
   const isStandard = caseType === 'standard';
-  const procedure = isStandard ? normalizeProcedureName((caseData.procedure || '').trim()).toLowerCase() : null;
-  if (isStandard && !procedure) return null;
-  const surgeon = normalizeSurgeonName((caseData.notes || '').trim()).toLowerCase();
+  const procedureKey = isStandard ? normalizeProcedureName((caseData.procedure || '').trim()).toLowerCase() : null;
+  if (isStandard && !procedureKey) return null;
+  // Display strings preserve canonical casing (so the label reads
+  // "Total Knee" even when the user typed "TKA").
+  const procedureDisplay = isStandard ? normalizeProcedureName((caseData.procedure || '').trim()) : '';
+  const surgeonKey = normalizeSurgeonName((caseData.notes || '').trim()).toLowerCase();
+  const surgeonDisplay = normalizeSurgeonName((caseData.notes || '').trim());
 
   let durations = [];
+  let source = null;
 
   // Tier 1: surgeon-specific local matches.
-  if (surgeon) {
+  if (surgeonKey) {
     for (const c of (data.cases || [])) {
       if (!c || c.id === caseData.id) continue;
       if (!c.startTime || !c.endTime) continue;
       if (c.caseType !== caseType) continue;
-      if (isStandard && normalizeProcedureName((c.procedure || '').trim()).toLowerCase() !== procedure) continue;
+      if (isStandard && normalizeProcedureName((c.procedure || '').trim()).toLowerCase() !== procedureKey) continue;
       const cSurgeon = normalizeSurgeonName((c.notes || '').trim()).toLowerCase();
-      if (cSurgeon !== surgeon) continue;
+      if (cSurgeon !== surgeonKey) continue;
       let s = timeToMinutes(c.startTime);
       let e = timeToMinutes(c.endTime);
       if (!isFinite(s) || !isFinite(e)) continue;
@@ -13470,13 +13493,20 @@ function estimateCaseFinish(caseData) {
       if (dur <= 0 || dur > 1440) continue;
       durations.push(dur);
     }
-    if (durations.length < CASE_FINISH_MIN_SAMPLES) durations = [];
+    if (durations.length >= CASE_FINISH_MIN_SAMPLES) {
+      source = 'surgeon';
+    } else {
+      durations = [];
+    }
   }
 
   // Tier 2: procedure-level fallback across all sites (standard cases only).
   if (durations.length === 0 && isStandard && _allSiteProcedureSamplesCache) {
-    const samples = _allSiteProcedureSamplesCache[procedure] || [];
-    if (samples.length >= CASE_FINISH_MIN_SAMPLES) durations = samples.slice();
+    const samples = _allSiteProcedureSamplesCache[procedureKey] || [];
+    if (samples.length >= CASE_FINISH_MIN_SAMPLES) {
+      durations = samples.slice();
+      source = 'procedure';
+    }
   }
 
   if (durations.length < CASE_FINISH_MIN_SAMPLES) return null;
@@ -13493,7 +13523,9 @@ function estimateCaseFinish(caseData) {
   finishMin = ((finishMin % 1440) + 1440) % 1440;
   const hh = Math.floor(finishMin / 60);
   const mm = finishMin % 60;
-  return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+  const finish = String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+
+  return { finish, source, procedure: procedureDisplay, surgeon: surgeonDisplay };
 }
 
 // Set the most recently started running standard case's end time to now.
