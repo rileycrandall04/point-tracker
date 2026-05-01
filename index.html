@@ -11994,9 +11994,14 @@ function renderDECaseList() {
       if (est) {
         const procLabel = escHtml(est.procedure || 'this procedure');
         const countTag = est.sampleCount ? ' &middot; n=' + est.sampleCount : '';
-        const label = est.source === 'surgeon'
-          ? '(based on median duration for ' + procLabel + ' with ' + escHtml(est.surgeon) + countTag + ')'
-          : '(based on median duration for all surgeons for ' + procLabel + countTag + ')';
+        let label;
+        if (est.source === 'surgeon') {
+          label = '(based on median duration for ' + procLabel + ' with ' + escHtml(est.surgeon) + countTag + ')';
+        } else if (est.source === 'site') {
+          label = '(based on median duration for ' + procLabel + ' across all surgeons at this site' + countTag + ')';
+        } else {
+          label = '(based on median duration for ' + procLabel + ' across all surgeons, all sites' + countTag + ')';
+        }
         estFinishHtml = '<div style="flex-basis:100%;text-align:center;font-size:0.7rem;color:var(--text-dim);margin-top:6px;line-height:1.4;">est. finish <strong style="color:var(--text);">' + escHtml(est.finish) + '</strong> <span style="opacity:0.85;">' + label + '</span></div>';
       }
     }
@@ -13417,9 +13422,14 @@ function renderToday() {
       if (est) {
         const procLabel = escHtml(est.procedure || 'this procedure');
         const countTag = est.sampleCount ? ' &middot; n=' + est.sampleCount : '';
-        const label = est.source === 'surgeon'
-          ? '(based on median duration for ' + procLabel + ' with ' + escHtml(est.surgeon) + countTag + ')'
-          : '(based on median duration for all surgeons for ' + procLabel + countTag + ')';
+        let label;
+        if (est.source === 'surgeon') {
+          label = '(based on median duration for ' + procLabel + ' with ' + escHtml(est.surgeon) + countTag + ')';
+        } else if (est.source === 'site') {
+          label = '(based on median duration for ' + procLabel + ' across all surgeons at this site' + countTag + ')';
+        } else {
+          label = '(based on median duration for ' + procLabel + ' across all surgeons, all sites' + countTag + ')';
+        }
         estFinishHtml = '<div style="flex-basis:100%;text-align:center;font-size:0.72rem;color:var(--text-dim);margin-top:8px;line-height:1.4;">est. finish <strong style="color:var(--text);">' + escHtml(est.finish) + '</strong> <span style="opacity:0.85;">' + label + '</span></div>';
       }
     }
@@ -13598,7 +13608,51 @@ function estimateCaseFinish(caseData) {
     }
   }
 
-  // Tier 2: procedure-level fallback across all sites (standard cases only).
+  // Tier 2: same-site, any-surgeon pool. Pulls every case at the user's
+  // current site that matches the canonical procedure, regardless of surgeon.
+  // Source: data.cases (own) + sharedCasesCache (other users at this site).
+  // Useful when the surgeon-tier sample is sparse but the site overall has
+  // enough history on the procedure to ground a median.
+  if (durations.length === 0 && isStandard) {
+    const siteDurations = [];
+    const myUid = currentUser ? currentUser.uid : '';
+    for (const c of (data.cases || [])) {
+      if (!c || c.id === caseData.id) continue;
+      if (!c.startTime || !c.endTime) continue;
+      if (c.caseType !== caseType) continue;
+      if (normalizeProcedureName((c.procedure || '').trim()).toLowerCase() !== procedureKey) continue;
+      let s = timeToMinutes(c.startTime);
+      let e = timeToMinutes(c.endTime);
+      if (!isFinite(s) || !isFinite(e)) continue;
+      if (e <= s) e += 1440;
+      const dur = e - s;
+      if (dur <= 0 || dur > 1440) continue;
+      siteDurations.push(dur);
+    }
+    if (Array.isArray(sharedCasesCache)) {
+      for (const sc of sharedCasesCache) {
+        if (!sc || sc.uid === myUid) continue;
+        if (!sc.startTime || !sc.endTime) continue;
+        if (sc.caseType !== caseType) continue;
+        if (normalizeProcedureName((sc.procedure || '').trim()).toLowerCase() !== procedureKey) continue;
+        let s = timeToMinutes(sc.startTime);
+        let e = timeToMinutes(sc.endTime);
+        if (!isFinite(s) || !isFinite(e)) continue;
+        if (e <= s) e += 1440;
+        const dur = e - s;
+        if (dur <= 0 || dur > 1440) continue;
+        siteDurations.push(dur);
+      }
+    }
+    if (siteDurations.length >= CASE_FINISH_MIN_SAMPLES) {
+      durations = siteDurations;
+      source = 'site';
+    }
+  }
+
+  // Tier 3: cross-site procedure-level fallback (standard cases only). Last
+  // resort when neither this surgeon nor this site has enough history on
+  // the procedure.
   if (durations.length === 0 && isStandard && _allSiteProcedureSamplesCache) {
     const samples = _allSiteProcedureSamplesCache[procedureKey] || [];
     if (samples.length >= CASE_FINISH_MIN_SAMPLES) {
