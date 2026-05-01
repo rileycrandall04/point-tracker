@@ -11057,6 +11057,7 @@ document.querySelectorAll('.bottom-nav button[data-page]').forEach(btn => {
     if (!sharedCasesLoaded || sharedCasesCache.length === 0) {
       reloadCommunityData();
     }
+    if (typeof maybeShowContextualTip === 'function') maybeShowContextualTip(btn.dataset.page);
   });
 });
 
@@ -11120,6 +11121,7 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     if (page === 'asacodes') { renderAsaCodesPage(); }
     if (page === 'admin') { renderAdminPage(); }
     if (page === 'communitystats') { initCommunityStats(); }
+    if (typeof maybeShowContextualTip === 'function') maybeShowContextualTip(page);
   });
 });
 
@@ -16560,26 +16562,52 @@ function showTutorial() {
 //   deepLink  — optional () => void; wires the "Show me" button. The link
 //               handler should both navigate AND dismiss the banner so the
 //               next render is on the target page.
+// Catalog order matters: the daily-tip selector takes the first un-seen tip
+// in this list, so promotions = move toward the top. The first three are
+// "first-time" priority tips that also fire contextually (see contextualPage
+// + isNewUser) when a new user navigates to the relevant page before
+// they've completed the matching first-time action.
 const FEATURE_TIPS = [
+  { id: 'shift-entry', title: 'Log your first shift',
+    body: 'Open More → Work, pick your assignment type (OR, OB, call, etc.), enter your start and end times, then tap Save. The shift powers all the per-day point calculations.',
+    deepLink: () => { dismissTipBanner(); navigateToDataEntry(); },
+    contextualPage: 'dataentry',
+    isNewUser: () => !data || !data.shifts || Object.keys(data.shifts).length === 0 },
+
+  { id: 'case-entry', title: 'Log your first case',
+    body: 'On Today, tap + Add Case after your shift is saved. Pick the case type, enter the procedure name and a start time, then save — points calculate automatically. When the case is running, the red Stop Case button fills in the end time.',
+    deepLink: () => { dismissTipBanner(); navigateToTodayPage(); },
+    contextualPage: 'today',
+    isNewUser: () => !data || !Array.isArray(data.cases) || data.cases.length === 0 },
+
+  { id: 'monthly-pv', title: 'Update $/pt monthly',
+    body: 'Comp tab → Paycheck Entry Step 1 sets your $/pt for the month. Refreshing this each month drives every projection card — Production Pipeline, paycheck previews, annual forecast.',
+    deepLink: () => { dismissTipBanner(); navigateToCompPage(); },
+    contextualPage: 'compensation',
+    isNewUser: () => {
+      const pv = (typeof getPointValueForMonth === 'function') ? getPointValueForMonth(stabMonthKey ? stabMonthKey() : '') : 0;
+      return !pv || pv <= 0;
+    } },
+
   { id: 'stop-case', title: 'Stop Case button',
     body: 'When a case is running, tap the red Stop Case button on Today to fill in the end time at the current minute.',
+    deepLink: () => { dismissTipBanner(); navigateToTodayPage(); } },
+
+  { id: 'case-finish-estimate', title: 'Estimated finish time',
+    body: 'Running case rows show an estimated finish based on prior cases of the same surgeon + procedure. Falls back to the cross-site median when surgeon data is sparse.',
     deepLink: () => { dismissTipBanner(); navigateToTodayPage(); } },
 
   { id: 'proc-lookup-surgeon', title: 'Search by surgeon',
     body: "In Procedure Time Lookup, type a surgeon's name to see their per-procedure averages and stddev.",
     deepLink: () => { dismissTipBanner(); navigateToProcLookup(); } },
 
-  { id: 'community-stats', title: 'Community Stats',
-    body: 'Pooled OR efficiency for your site (3+ samples min) — toggle Per clocked hour or Per shift to compare.',
-    deepLink: () => { dismissTipBanner(); navigateToCommunityStatsPage(); } },
-
   { id: 'pipeline-tooltip', title: 'Annual projection breakdown',
     body: 'On Comp, hover the i icon next to "Annual Proj" in the Production Pipeline for the month-by-month breakdown.',
     deepLink: () => { dismissTipBanner(); navigateToCompPage(); } },
 
-  { id: 'monthly-pv', title: 'Update $/pt monthly',
-    body: 'Comp tab → Paycheck Entry Step 1 sets $/pt for the month. Refreshing it monthly drives all projection cards.',
-    deepLink: () => { dismissTipBanner(); navigateToCompPage(); } },
+  { id: 'community-stats', title: 'Community Stats',
+    body: 'Pooled OR efficiency for your site (3+ samples min) — toggle Per clocked hour or Per shift to compare.',
+    deepLink: () => { dismissTipBanner(); navigateToCommunityStatsPage(); } },
 
   { id: 'calendar-sync', title: 'Calendar Sync',
     body: 'In QGenda, push your assignments to a Google Calendar (Settings → Calendar Sync inside QGenda). Then in this app, More → Settings → Calendar Sync — connect to the SAME Google account and pick that calendar. Shifts auto-fill.',
@@ -16587,10 +16615,6 @@ const FEATURE_TIPS = [
 
   { id: 'shift-log-types', title: 'Mistyped a shift?',
     body: 'Change the assignment type on Today (or via Edit Shift). The Shift Log + pay totals re-render with the corrected type.',
-    deepLink: () => { dismissTipBanner(); navigateToTodayPage(); } },
-
-  { id: 'case-finish-estimate', title: 'Estimated finish time',
-    body: 'Running case rows show an estimated finish based on prior cases of the same surgeon + procedure. Falls back to the cross-site median when surgeon data is sparse.',
     deepLink: () => { dismissTipBanner(); navigateToTodayPage(); } },
 
   { id: 'case-log-page', title: 'Case Log + reconcile',
@@ -16658,13 +16682,33 @@ function maybeShowDailyTip() {
   // Skip overnight call-shift sessions — wait until 08:30 local.
   const now = new Date();
   if (now.getHours() * 60 + now.getMinutes() < 510) return;
-  // Pick a random un-seen tip. Once all are seen, stop showing — we don't
-  // recycle the catalog (per the user's request: don't reset the pool).
+  // Take the first un-seen tip in catalog order. Priority tips
+  // (shift-entry / case-entry / monthly-pv) are at the top of the list so
+  // they surface first. Once everything in FEATURE_TIPS has been seen,
+  // stop — no recycling.
   const seen = new Set(settings.tipSeenIds || []);
-  const candidates = FEATURE_TIPS.filter(t => !seen.has(t.id));
-  if (candidates.length === 0) return;
-  const tip = candidates[Math.floor(Math.random() * candidates.length)];
+  const tip = FEATURE_TIPS.find(t => !seen.has(t.id));
+  if (!tip) return;
   showTipBanner(tip);
+}
+
+// Contextual trigger: when a new user navigates to the page that matches
+// a priority tip's contextualPage AND they haven't completed the
+// first-time action that tip is teaching, show it immediately. Independent
+// of the once-per-day rule. Only fires for users who've opted in.
+function maybeShowContextualTip(pageName) {
+  if (!settings || settings.tipsEnabled !== true) return;
+  if (_tipBannerSnoozedThisSession) return;
+  const banner = document.getElementById('tipBanner');
+  if (banner && !banner.classList.contains('hidden')) return; // already showing
+  const seen = new Set(settings.tipSeenIds || []);
+  const tip = FEATURE_TIPS.find(t =>
+    t.contextualPage === pageName &&
+    !seen.has(t.id) &&
+    typeof t.isNewUser === 'function' &&
+    t.isNewUser()
+  );
+  if (tip) showTipBanner(tip);
 }
 
 function showTipBanner(tip) {
