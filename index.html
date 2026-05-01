@@ -4124,6 +4124,18 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
     <div id="adminProcMapList" style="font-size:0.85rem;"></div>
   </div>
+
+  <!-- Daily Tips viewer (app owner only) — read-only listing of every tip
+       in the catalog so the owner can review wording and send suggestions
+       back without touching code. No editor; tip changes ship via code
+       updates. -->
+  <div class="card hidden" id="adminTipViewerCard" style="margin-top:12px;">
+    <h2>Daily Tips</h2>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;line-height:1.5;">
+      Every tip in the catalog. Read-only here &mdash; share suggested wording back through the dev workflow and they'll be deployed in code.
+    </p>
+    <div id="adminTipViewerList" style="font-size:0.85rem;"></div>
+  </div>
 </div>
 
 
@@ -7329,6 +7341,41 @@ async function _persistProcedureMappings() {
     updatedAt: new Date().toISOString(),
     updatedBy: currentUser ? currentUser.uid : null
   });
+}
+
+// ---- Tip Viewer (app owner only) ----
+//
+// Read-only listing of every tip in the static FEATURE_TIPS catalog. Lets
+// the owner skim the wording in one place and send suggested changes back
+// for a code update. Each tip's contextual trigger surface is also shown
+// so it's clear when each one fires.
+function renderAdminTipViewer() {
+  const out = document.getElementById('adminTipViewerList');
+  if (!out) return;
+  if (!isAppOwner()) { out.innerHTML = ''; return; }
+  if (typeof FEATURE_TIPS === 'undefined' || !Array.isArray(FEATURE_TIPS)) {
+    out.innerHTML = '<p style="color:var(--text-dim);font-size:0.78rem;margin:0;">Tip catalog not loaded yet.</p>';
+    return;
+  }
+  let html = '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:8px;">' + FEATURE_TIPS.length + ' tip' + (FEATURE_TIPS.length !== 1 ? 's' : '') + ' in catalog order (priority tips first)</div>';
+  for (let i = 0; i < FEATURE_TIPS.length; i++) {
+    const tip = FEATURE_TIPS[i];
+    html += '<div style="background:var(--surface);border-radius:8px;padding:10px 12px;margin-bottom:8px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:4px;">';
+    html +=   '<strong style="font-size:0.85rem;">' + (i + 1) + '. ' + escHtml(tip.title) + '</strong>';
+    html +=   '<span style="font-size:0.65rem;color:var(--text-dim);">id: <code>' + escHtml(tip.id) + '</code></span>';
+    html += '</div>';
+    html += '<div style="font-size:0.78rem;color:var(--text);line-height:1.45;">' + escHtml(tip.body) + '</div>';
+    const meta = [];
+    if (tip.contextualPage) meta.push('contextual on <code>' + escHtml(tip.contextualPage) + '</code>');
+    if (typeof tip.deepLink === 'function') meta.push('has Show me link');
+    if (typeof tip.isNewUser === 'function') meta.push('new-user trigger');
+    if (meta.length > 0) {
+      html += '<div style="font-size:0.65rem;color:var(--text-dim);margin-top:6px;">' + meta.join(' &middot; ') + '</div>';
+    }
+    html += '</div>';
+  }
+  out.innerHTML = html;
 }
 
 // ================================================================
@@ -11186,6 +11233,8 @@ function renderAdminPage() {
   showOwnerOnly('adminUserLookupCard');
   showOwnerOnly('adminProcedureMappingsCard');
   if (isOwner) renderAdminProcedureMappings();
+  showOwnerOnly('adminTipViewerCard');
+  if (isOwner) renderAdminTipViewer();
 
   // Within the Multi-Site Admin card, default tab + which tabs are visible:
   if (isSAdmin && !isOwner) {
