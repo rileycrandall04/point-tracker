@@ -11993,9 +11993,10 @@ function renderDECaseList() {
       const est = estimateCaseFinish(c);
       if (est) {
         const procLabel = escHtml(est.procedure || 'this procedure');
+        const countTag = est.sampleCount ? ' &middot; n=' + est.sampleCount : '';
         const label = est.source === 'surgeon'
-          ? '(based on median duration for ' + procLabel + ' with ' + escHtml(est.surgeon) + ')'
-          : '(based on median duration for all surgeons for ' + procLabel + ')';
+          ? '(based on median duration for ' + procLabel + ' with ' + escHtml(est.surgeon) + countTag + ')'
+          : '(based on median duration for all surgeons for ' + procLabel + countTag + ')';
         estFinishHtml = '<div style="flex-basis:100%;text-align:center;font-size:0.7rem;color:var(--text-dim);margin-top:6px;line-height:1.4;">est. finish <strong style="color:var(--text);">' + escHtml(est.finish) + '</strong> <span style="opacity:0.85;">' + label + '</span></div>';
       }
     }
@@ -13415,9 +13416,10 @@ function renderToday() {
       const est = estimateCaseFinish(c);
       if (est) {
         const procLabel = escHtml(est.procedure || 'this procedure');
+        const countTag = est.sampleCount ? ' &middot; n=' + est.sampleCount : '';
         const label = est.source === 'surgeon'
-          ? '(based on median duration for ' + procLabel + ' with ' + escHtml(est.surgeon) + ')'
-          : '(based on median duration for all surgeons for ' + procLabel + ')';
+          ? '(based on median duration for ' + procLabel + ' with ' + escHtml(est.surgeon) + countTag + ')'
+          : '(based on median duration for all surgeons for ' + procLabel + countTag + ')';
         estFinishHtml = '<div style="flex-basis:100%;text-align:center;font-size:0.72rem;color:var(--text-dim);margin-top:8px;line-height:1.4;">est. finish <strong style="color:var(--text);">' + escHtml(est.finish) + '</strong> <span style="opacity:0.85;">' + label + '</span></div>';
       }
     }
@@ -13543,8 +13545,15 @@ function estimateCaseFinish(caseData) {
   let durations = [];
   let source = null;
 
-  // Tier 1: surgeon-specific local matches.
+  // Tier 1: surgeon-specific matches, pooled from BOTH the user's local
+  // data.cases AND the current-site sharedCasesCache (other anesthesiologists
+  // at the same site). Both sources canonicalize the procedure via
+  // normalizeProcedureName so variants like "Vit" and "Vitrectomy" land in
+  // the same bucket. Skips own shared cases — they're already in data.cases
+  // and would double-count.
   if (surgeonKey) {
+    const myUid = currentUser ? currentUser.uid : '';
+    const seenIds = new Set(); // only used for sharedCases; data.cases ids already unique
     for (const c of (data.cases || [])) {
       if (!c || c.id === caseData.id) continue;
       if (!c.startTime || !c.endTime) continue;
@@ -13559,6 +13568,28 @@ function estimateCaseFinish(caseData) {
       const dur = e - s;
       if (dur <= 0 || dur > 1440) continue;
       durations.push(dur);
+      if (c.id) seenIds.add(c.id);
+    }
+    // Pull other users' shared cases at this site that match the same
+    // surgeon + canonical procedure. sharedCases store the surgeon name on
+    // sc.surgeon (mirrored from notes). Note: sharedCasesCache is filtered to
+    // the current site by loadSharedCases.
+    if (Array.isArray(sharedCasesCache)) {
+      for (const sc of sharedCasesCache) {
+        if (!sc || sc.uid === myUid) continue;
+        if (!sc.startTime || !sc.endTime) continue;
+        if (sc.caseType !== caseType) continue;
+        if (isStandard && normalizeProcedureName((sc.procedure || '').trim()).toLowerCase() !== procedureKey) continue;
+        const cSurgeon = normalizeSurgeonName((sc.surgeon || '').trim()).toLowerCase();
+        if (cSurgeon !== surgeonKey) continue;
+        let s = timeToMinutes(sc.startTime);
+        let e = timeToMinutes(sc.endTime);
+        if (!isFinite(s) || !isFinite(e)) continue;
+        if (e <= s) e += 1440;
+        const dur = e - s;
+        if (dur <= 0 || dur > 1440) continue;
+        durations.push(dur);
+      }
     }
     if (durations.length >= CASE_FINISH_MIN_SAMPLES) {
       source = 'surgeon';
@@ -13592,7 +13623,7 @@ function estimateCaseFinish(caseData) {
   const mm = finishMin % 60;
   const finish = String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
 
-  return { finish, source, procedure: procedureDisplay, surgeon: surgeonDisplay };
+  return { finish, source, procedure: procedureDisplay, surgeon: surgeonDisplay, sampleCount: m };
 }
 
 // Debug helper — call from the browser console to see why a running case's
