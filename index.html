@@ -10915,7 +10915,12 @@ function getCaseBreakdown(caseData, shift) {
 function calcSupervisionPoints(shift) {
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
-  // Standalone CRNA_supervision type: AR rate + 7 per hour, minute-by-minute
+  // Standalone CRNA_supervision type: +7/hr supervision bonus on clocked time.
+  // Base AR is already produced by calcARPoints / calcARBreakdown
+  // (CRNA_supervision uses general mode = 20/hr base with the usual
+  // time-of-day/weekend modifiers); contributing the AR rate again here
+  // would double-count, putting the shift at 47/hr (= 20 + 27) at weekday
+  // daytime instead of the intended 27/hr (= 20 + 7).
   if (shift.assignmentType === 'CRNA_supervision') {
     const entries = shift.timeEntries || [];
     let clockedRanges = [];
@@ -10932,14 +10937,9 @@ function calcSupervisionPoints(shift) {
       if (endMin <= startMin) endMin += 1440;
       clockedRanges.push({ start: startMin, end: endMin });
     }
-    let pts = 0;
-    clockedRanges.forEach(r => {
-      for (let m = r.start; m < r.end; m++) {
-        const ctx = getMomentContext(shift, m);
-        pts += (getARRate('OR', ctx.isHol, ctx.isWknd, m % 1440, shift.siteId) + 7) / 60;
-      }
-    });
-    return round2(pts);
+    let totalMin = 0;
+    clockedRanges.forEach(r => { totalMin += (r.end - r.start); });
+    return round2(totalMin / 60 * 7);
   }
   // Overlay on OR/SF1/SF2: +7/hr only (base AR already counted in calcARPoints)
   if (shift.supervisionStart) {
