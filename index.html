@@ -16315,9 +16315,8 @@ function _renderAnnualBreakdownRow(row, monthNames) {
     detailHtml = '<div class="abr-formula">' +
       (c.pts || 0).toFixed(1) + ' pts &times; $' + pvStr + '/pt = ' + _fmtMoney(c.prodEst) +
       ' &nbsp;+&nbsp; ' + _fmtMoney(c.posStip) + ' positive stipends' +
-      ' &nbsp;+&nbsp; ' + _fmtMoney(c.ret) + ' retirement' +
       ' &nbsp;=&nbsp; <strong>' + _fmtMoney(row.amt) + '</strong></div>' +
-      '<div class="abr-source">Estimate from tracked ' + workLabel + ' points (no comp summary yet)</div>';
+      '<div class="abr-source">Estimate from tracked ' + workLabel + ' points. Pre-deduction, so retirement is not added back here.</div>';
   } else if (c.mode === 'avg') {
     detailHtml = '<div class="abr-formula">Rolling avg of past actual gross months</div>' +
       '<div class="abr-source">No tracked points / point-value yet for ' + workLabel + '</div>';
@@ -20350,14 +20349,20 @@ function _ppGrossActualFromOverride(workKey) {
   return round2(ov.compTotal + b.posStip + b.ret);
 }
 
-// Returns the "gross" estimate from tracked points + $/pt + carried-over
-// positive stipends + retirement, or null when we don't have enough signal.
+// Returns the "gross" estimate from tracked points + $/pt + positive stipends,
+// or null when we don't have enough signal.
+//
+// Retirement is intentionally NOT added here. _ppGrossActualFromOverride adds
+// it because the comp summary's compTotal is the deposit-relevant
+// (post-retirement-deduction) figure, so retirement needs to be reconstructed.
+// The estimate path uses pts × $/pt directly, which is already the
+// pre-deduction production figure — adding retirement would double-count.
 function _ppGrossEstimateFromPoints(workKey, monthlyTotalsMap) {
   const pts = (monthlyTotalsMap && monthlyTotalsMap[workKey]) || 0;
   const pv = (typeof getPointValueForMonth === 'function') ? (getPointValueForMonth(workKey) || 0) : 0;
   if (pts <= 0 || pv <= 0) return null;
   const b = _ppGrossBreakdown(workKey);
-  return round2(pts * pv + b.posStip + b.ret);
+  return round2(pts * pv + b.posStip);
 }
 
 // Pure data builder for the Annual Projection. Walks every paycheck month
@@ -20448,7 +20453,9 @@ function _computeAnnualProjection() {
         const b = _ppGrossBreakdown(f.workKey);
         amt = est;
         source = 'est. gross (' + monthNames[f.wMonth] + ')';
-        components = { mode: 'estimate', pts, pv, prodEst: round2(pts * pv), posStip: b.posStip, ret: b.ret };
+        // Retirement deliberately omitted — the estimate is pre-deduction.
+        // See _ppGrossEstimateFromPoints for the rationale.
+        components = { mode: 'estimate', pts, pv, prodEst: round2(pts * pv), posStip: b.posStip };
       } else {
         amt = avgComp; source = 'avg';
         components = { mode: 'avg', avgComp };
