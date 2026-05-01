@@ -7785,6 +7785,18 @@ async function loadProcedureMappings() {
   }
   procedureMappingsLoaded = true;
   if (typeof refreshProcedureDatalist === 'function') refreshProcedureDatalist();
+  // Re-render running-case views so estimateCaseFinish picks up the
+  // canonical mapping table. Without this, the surgeon-tier match was
+  // splitting variants (e.g. "Vit" cases vs. "Vitrectomy" cases) when
+  // the initial render fired before the mappings doc resolved — which
+  // dropped the sample count below the threshold and bumped the
+  // estimate to the cross-site pool.
+  if (typeof renderToday === 'function') {
+    try { renderToday(); } catch (e) {}
+  }
+  if (typeof renderDECaseList === 'function') {
+    try { renderDECaseList(); } catch (e) {}
+  }
 }
 
 // Map "TKA" → "Total Knee" (or wherever the admin pointed the variant). Falls
@@ -7833,6 +7845,14 @@ async function loadAllSiteProcedureSamples() {
   if (_allSiteProcedureSamplesCache) return _allSiteProcedureSamplesCache;
   if (_allSiteProcedureSamplesPromise) return _allSiteProcedureSamplesPromise;
   _allSiteProcedureSamplesPromise = (async () => {
+    // Wait for procedure-name mappings before building the cache so the
+    // keys are canonical (TKA + Total Knee → same bucket). Without this
+    // the cache splits variants and a surgeon-specific match that should
+    // pool four cases under the canonical name only sees two — the
+    // estimator falls through to the cross-site pool unnecessarily.
+    if (!procedureMappingsLoaded && typeof loadProcedureMappings === 'function') {
+      try { await loadProcedureMappings(); } catch (e) {}
+    }
     const samples = {};
     const siteIds = Object.keys(sitesCache || {});
     if (siteIds.length === 0) {
