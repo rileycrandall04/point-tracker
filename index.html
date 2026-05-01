@@ -13595,6 +13595,73 @@ function estimateCaseFinish(caseData) {
   return { finish, source, procedure: procedureDisplay, surgeon: surgeonDisplay };
 }
 
+// Debug helper — call from the browser console to see why a running case's
+// estimate is or isn't using the surgeon-tier:
+//   window.debugEstimateCaseFinish()         — analyze every running case
+//   window.debugEstimateCaseFinish('caseId') — analyze a specific case by id
+// Logs each candidate case in data.cases with its match status (matched /
+// skipped + reason). Useful for diagnosing variant mismatches that didn't
+// fold under the procedure-mappings table.
+window.debugEstimateCaseFinish = function (caseId) {
+  if (!data || !Array.isArray(data.cases)) {
+    console.log('[debugEstimateCaseFinish] data.cases not available yet');
+    return;
+  }
+  const targets = caseId
+    ? data.cases.filter(c => c && c.id === caseId)
+    : data.cases.filter(c => c && c.startTime && !c.endTime);
+  if (targets.length === 0) {
+    console.log('[debugEstimateCaseFinish] No matching cases. Pass a case id, or run while a case is in progress.');
+    return;
+  }
+  console.log('[debugEstimateCaseFinish] procedureMappingsLoaded=', procedureMappingsLoaded);
+  console.log('[debugEstimateCaseFinish] procedureMappingsCache=', JSON.parse(JSON.stringify(procedureMappingsCache || {})));
+  console.log('[debugEstimateCaseFinish] surgeonMappingsCache=', JSON.parse(JSON.stringify(surgeonMappingsCache || {})));
+  for (const target of targets) {
+    const isStandard = target.caseType === 'standard';
+    const procRaw = (target.procedure || '').trim();
+    const procCanon = isStandard ? normalizeProcedureName(procRaw) : procRaw;
+    const procKey = isStandard ? procCanon.toLowerCase() : null;
+    const surgRaw = (target.notes || '').trim();
+    const surgCanon = normalizeSurgeonName(surgRaw);
+    const surgKey = (surgCanon || '').toLowerCase();
+    console.groupCollapsed('[debugEstimateCaseFinish] case', target.id, '—', procRaw || '(no procedure)');
+    console.log('caseType:', target.caseType);
+    console.log('procedure raw:', JSON.stringify(procRaw), '| canonical:', JSON.stringify(procCanon), '| key:', JSON.stringify(procKey));
+    console.log('surgeon  raw:', JSON.stringify(surgRaw), '| canonical:', JSON.stringify(surgCanon), '| key:', JSON.stringify(surgKey));
+    let matched = 0;
+    const skipped = [];
+    for (const c of data.cases) {
+      if (!c || c.id === target.id) continue;
+      if (!c.startTime || !c.endTime) {
+        skipped.push({ id: c.id, reason: 'no end time', proc: c.procedure, notes: c.notes });
+        continue;
+      }
+      if (c.caseType !== target.caseType) {
+        skipped.push({ id: c.id, reason: 'caseType mismatch', got: c.caseType });
+        continue;
+      }
+      if (isStandard) {
+        const cKey = normalizeProcedureName((c.procedure || '').trim()).toLowerCase();
+        if (cKey !== procKey) {
+          skipped.push({ id: c.id, reason: 'procedure mismatch', proc: c.procedure, normalized: cKey, expected: procKey });
+          continue;
+        }
+      }
+      const cSurg = normalizeSurgeonName((c.notes || '').trim()).toLowerCase();
+      if (cSurg !== surgKey) {
+        skipped.push({ id: c.id, reason: 'surgeon mismatch', notes: c.notes, normalized: cSurg, expected: surgKey });
+        continue;
+      }
+      matched++;
+      console.log('MATCH', c.id, '| proc:', JSON.stringify(c.procedure), '| notes:', JSON.stringify(c.notes), '| dur:', c.startTime, '→', c.endTime);
+    }
+    console.log('Total matched (surgeon-tier):', matched, '— need', CASE_FINISH_MIN_SAMPLES, 'or more');
+    if (skipped.length > 0) console.log('Skipped (' + skipped.length + '):', skipped);
+    console.groupEnd();
+  }
+};
+
 // Set the most recently started running standard case's end time to now.
 function todayStopRunningCase() {
   const date = workingDate;
