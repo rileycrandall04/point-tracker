@@ -515,6 +515,8 @@ textarea { resize: vertical; min-height: 60px; }
 .watching-box .watch-item:last-child { border-bottom:none; }
 .watching-box .bill-btn { background:#f0b429; color:#000; border:none; border-radius:4px; padding:4px 10px; font-size:0.75rem; font-weight:600; cursor:pointer; }
 .watching-box .bill-btn:hover { background:#d4a020; }
+.watching-box .watch-del-btn { background:transparent; color:var(--danger); border:1px solid rgba(231,76,60,0.4); border-radius:4px; padding:2px 8px; font-size:1rem; line-height:1; font-weight:700; cursor:pointer; }
+.watching-box .watch-del-btn:hover { background:rgba(231,76,60,0.15); }
 .claimed-tag { color:#f0b429; font-size:0.7rem; margin-left:4px; }
 
 /* Manual points override */
@@ -1986,6 +1988,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <h3>Welcome to MWA Point Tracker</h3>
       <p>Track your shifts, cases, and production points. Setup takes about a minute.</p>
       <p style="font-size:0.78rem;color:var(--text-dim);margin-top:6px;">You can re-open this tutorial anytime from <strong>More &rarr; Tutorial</strong>.</p>
+      <button class="btn btn-outline btn-sm" onclick="showTipsLibrary()" style="margin-top:12px;">Browse all feature tips</button>
     </div>
 
     <!-- Step 2: How to fill in shifts -->
@@ -3509,11 +3512,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <h2>Flagged Cases &amp; Shifts</h2>
     <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
       Items flagged for missing time punches or follow-up. Tap the flag icon to unflag.
+      Copy List exports a tab-separated list (date, type, times, procedure/assignment, surgeon) you can paste into a sheet or message.
     </p>
     <div id="flaggedCount" style="font-size:0.85rem;font-weight:600;margin-bottom:12px;"></div>
     <div id="flaggedList"></div>
     <div style="margin-top:12px;display:flex;gap:8px;">
-      <button class="btn btn-primary btn-sm" id="copyFlaggedEmailBtn">Copy to Clipboard</button>
+      <button class="btn btn-primary btn-sm" id="copyFlaggedEmailBtn">Copy List</button>
       <button class="btn btn-outline btn-sm" id="clearAllFlagsBtn">Clear All Flags</button>
     </div>
     <div id="flaggedCopyStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;"></div>
@@ -4754,6 +4758,20 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 </div>
 
+<!-- Tips Library overlay — browse every feature tip, expand each to read the
+     body, and re-show any tip as the in-app banner. Reachable from the
+     tutorial overlay's welcome step and from the More drawer. -->
+<div class="modal-overlay hidden" id="tipsLibraryOverlay" onclick="if(event.target===this)closeTipsLibrary()">
+  <div class="modal" style="max-width:520px;max-height:80vh;display:flex;flex-direction:column;">
+    <h2 style="margin-top:0;">Feature Tips</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin:0 0 12px;">Tap any tip to expand it. The "Show as banner" button re-opens it as the daily-tip banner so you can use the deep link.</p>
+    <div id="tipsLibraryList" style="overflow-y:auto;flex:1;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeTipsLibrary()">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Install-to-home-screen banner — only shown when running in a browser tab -->
 <div class="install-banner hidden" id="installBanner">
   <span class="install-banner-text">Install MWA Points to your home screen for offline access &amp; the full app feel.</span>
@@ -4879,6 +4897,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="drawer-item" onclick="closeDrawer();showTutorial();">
     <span class="drawer-icon">&#127891;</span>
     <span>Tutorial</span>
+  </div>
+  <div class="drawer-item" onclick="closeDrawer();showTipsLibrary();">
+    <span class="drawer-icon">&#128161;</span>
+    <span>Feature Tips</span>
   </div>
   <div class="drawer-item" data-page="comprules">
     <span class="drawer-icon">&#128214;</span>
@@ -14925,7 +14947,10 @@ function renderCaseLogTable() {
       const shift = data.shifts[c.shiftDate];
       const pts = calcCasePoints(c, shift);
       watchHtml += '<div class="watch-item"><span>' + formatDateShort(c.shiftDate) + ' &mdash; ' + escHtml(name) + ' (' + pts.toFixed(1) + ' pts)</span>';
-      watchHtml += '<button class="bill-btn" onclick="claimUnbilledCase(\'' + c.id + '\',\'' + prefix + '\')">Bill to ' + curMonthName + '</button></div>';
+      watchHtml += '<span style="display:flex;gap:6px;align-items:center;">';
+      watchHtml += '<button class="bill-btn" onclick="claimUnbilledCase(\'' + c.id + '\',\'' + prefix + '\')">Bill to ' + curMonthName + '</button>';
+      watchHtml += '<button class="watch-del-btn" title="Delete case" onclick="deleteCase(\'' + c.id + '\')">&times;</button>';
+      watchHtml += '</span></div>';
     });
     watchHtml += '</div>';
   }
@@ -15525,7 +15550,10 @@ function renderShiftLogTable() {
         ? entries.map(e => e.start + (e.end ? '-' + e.end : '')).join(', ')
         : 'no times';
       slWatchHtml += '<div class="watch-item"><span>' + formatDateShort(s.date) + ' &mdash; ' + escHtml(typeName) + ' (' + timeStr + ')</span>';
-      slWatchHtml += '<button class="bill-btn" onclick="claimUnbilledShift(\'' + s.date + '\',\'' + prefix + '\')">Bill to ' + curMonthName + '</button></div>';
+      slWatchHtml += '<span style="display:flex;gap:6px;align-items:center;">';
+      slWatchHtml += '<button class="bill-btn" onclick="claimUnbilledShift(\'' + s.date + '\',\'' + prefix + '\')">Bill to ' + curMonthName + '</button>';
+      slWatchHtml += '<button class="watch-del-btn" title="Delete shift" onclick="deleteShiftFromLog(\'' + s.date + '\')">&times;</button>';
+      slWatchHtml += '</span></div>';
     });
     slWatchHtml += '</div>';
   }
@@ -16111,11 +16139,12 @@ function renderFlaggedPage() {
 
   if (total === 0) {
     listEl.innerHTML = '<div class="empty-state"><p>No flagged items.</p></div>';
-    listEl.dataset.emailText = '';
+    listEl.dataset.copyText = '';
     return;
   }
 
-  // Build combined list sorted by date
+  // Build combined list sorted by date. Cases carry surgeon + procedure (and
+  // ASA when present); shifts carry the assignment label and pay-time string.
   const items = [];
   flaggedShifts.forEach(s => {
     const d = new Date(s.date + 'T12:00:00');
@@ -16126,14 +16155,16 @@ function renderFlaggedPage() {
     const times = entries.length > 0 && entries[0].start
       ? entries.map(e => e.start + (e.end ? '\u2013' + e.end : '')).join(', ')
       : 'no times recorded';
-    items.push({ date: s.date, dateStr, type: 'shift', label: typeName, detail: times, id: s.date });
+    items.push({ date: s.date, dateStr, type: 'shift', label: typeName, times, surgeon: '', id: s.date });
   });
   flaggedCases.forEach(c => {
     const d = new Date(c.shiftDate + 'T12:00:00');
     const dateStr = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
-    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType, c);
+    const baseName = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType, c);
+    const label = c.asaCode ? `${baseName} (${c.asaCode})` : baseName;
     const times = (c.startTime || '?') + ' \u2013 ' + (c.endTime || '?');
-    items.push({ date: c.shiftDate, dateStr, type: 'case', label: name, detail: times, id: c.id });
+    const surgeon = ((c.surgeon || c.notes || '') + '').trim();
+    items.push({ date: c.shiftDate, dateStr, type: 'case', label, times, surgeon, id: c.id });
   });
   items.sort((a, b) => a.date.localeCompare(b.date));
 
@@ -16142,8 +16173,9 @@ function renderFlaggedPage() {
     const badge = item.type === 'shift'
       ? '<span style="background:var(--primary);color:#fff;font-size:0.65rem;padding:1px 6px;border-radius:4px;margin-right:6px;">SHIFT</span>'
       : '<span style="background:var(--accent2);color:#000;font-size:0.65rem;padding:1px 6px;border-radius:4px;margin-right:6px;">CASE</span>';
+    const surgeonHtml = item.surgeon ? ` &mdash; ${escHtml(item.surgeon)}` : '';
     html += `<li style="display:flex;align-items:center;justify-content:space-between;">`;
-    html += `<div>${badge}<strong>${item.dateStr}</strong> &mdash; ${escHtml(item.label)} <span style="color:var(--text-dim);font-size:0.75rem;">(${item.detail})</span></div>`;
+    html += `<div>${badge}<strong>${item.dateStr}</strong> &mdash; ${escHtml(item.label)}${surgeonHtml} <span style="color:var(--text-dim);font-size:0.75rem;">(${item.times})</span></div>`;
     if (item.type === 'shift') {
       html += `<button class="flag-btn flagged" onclick="toggleShiftFlag('${item.id}');renderFlaggedPage()" style="font-size:1.1rem;">&#9873;</button>`;
     } else {
@@ -16154,15 +16186,15 @@ function renderFlaggedPage() {
   html += '</ul>';
   listEl.innerHTML = html;
 
-  // Build email text for clipboard
-  const userName = data.settings?.name || settings.name || 'Provider';
-  let emailText = `Subject: Missing Time Punches \u2014 ${userName}\n\nHi,\n\nThe following items are missing time punches on the compensation sheet:\n\n`;
-  items.forEach((item, i) => {
-    const prefix = item.type === 'case' ? 'Case: ' : '';
-    emailText += `${i+1}. ${item.dateStr} \u2014 ${prefix}${item.label} (${item.detail})\n`;
+  // Build a tab-separated copy text \u2014 pastes cleanly into Excel/Sheets and
+  // is still readable as plain text. Columns: Date, Type, Times, Procedure
+  // or Assignment, Surgeon (cases only). No email framing.
+  const lines = items.map(item => {
+    const cols = [item.dateStr, item.type === 'case' ? 'Case' : 'Shift', item.times, item.label];
+    if (item.surgeon) cols.push(item.surgeon);
+    return cols.join('\t');
   });
-  emailText += `\nPlease update accordingly.\n\nThanks,\n${userName}`;
-  listEl.dataset.emailText = emailText;
+  listEl.dataset.copyText = lines.join('\n');
 }
 
 // ================================================================
@@ -16795,7 +16827,7 @@ function showTutorial() {
 // they've completed the matching first-time action.
 const FEATURE_TIPS = [
   { id: 'shift-entry', title: 'Log your first shift',
-    body: 'Open the Today page (star icon at the bottom) to log shifts — no need to dig into More → Work. Pick the assignment type (OR, OB, call, etc.), enter start and end times, and save. The shift powers every per-day point calculation.',
+    body: 'Open the Today page (star icon at the bottom) to log shifts. Pick the assignment type (OR, OB, call, etc.), enter start and end times, and save. The shift powers every per-day point calculation.',
     deepLink: () => { dismissTipBanner(); navigateToTodayPage(); },
     contextualPage: 'today',
     chainAfterDismiss: 'case-entry',
@@ -17017,6 +17049,47 @@ function _markTipSeen(tip) {
   if (!settings.tipSeenIds.includes(tip.id)) settings.tipSeenIds.push(tip.id);
   settings.tipLastShownDate = _todayLocalKey();
   saveSettings(settings);
+}
+
+// ---- Tips Library (all users) ----
+//
+// User-facing read-only catalog of every tip. Renders each title + body and
+// a "Show as banner" button that re-opens the tip as the daily-tip banner so
+// the deep-link CTA stays usable. Triggered from the tutorial welcome step
+// and the More drawer.
+function showTipsLibrary() {
+  const overlay = document.getElementById('tipsLibraryOverlay');
+  const list = document.getElementById('tipsLibraryList');
+  if (!overlay || !list) return;
+  if (typeof FEATURE_TIPS === 'undefined' || !Array.isArray(FEATURE_TIPS)) {
+    list.innerHTML = '<p style="color:var(--text-dim);font-size:0.78rem;margin:0;">Tip catalog not loaded yet.</p>';
+  } else {
+    let html = '';
+    for (let i = 0; i < FEATURE_TIPS.length; i++) {
+      const tip = FEATURE_TIPS[i];
+      html += '<details style="background:var(--surface);border-radius:8px;padding:8px 12px;margin-bottom:6px;">';
+      html += '<summary style="cursor:pointer;outline:none;font-size:0.85rem;font-weight:600;">' + (i + 1) + '. ' + escHtml(tip.title) + '</summary>';
+      html += '<div style="font-size:0.78rem;color:var(--text);line-height:1.45;margin-top:8px;">' + escHtml(tip.body) + '</div>';
+      html += '<div style="margin-top:8px;"><button class="btn btn-outline btn-sm" onclick="showTipFromLibrary(\'' + tip.id + '\')">Show as banner</button></div>';
+      html += '</details>';
+    }
+    list.innerHTML = html;
+  }
+  overlay.classList.remove('hidden');
+}
+
+function closeTipsLibrary() {
+  const overlay = document.getElementById('tipsLibraryOverlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
+function showTipFromLibrary(tipId) {
+  const tip = FEATURE_TIPS.find(t => t.id === tipId);
+  if (!tip) return;
+  closeTipsLibrary();
+  // Brief delay so the modal close animation/layout settles before the
+  // banner slides in.
+  setTimeout(() => showTipBanner(tip), 200);
 }
 
 function closeTutorial() {
@@ -23914,7 +23987,7 @@ updateCalendarConnectedUI();
 updateMappingCountUI();
 
 document.getElementById('copyFlaggedEmailBtn').addEventListener('click', () => {
-  const text = document.getElementById('flaggedList').dataset.emailText || '';
+  const text = document.getElementById('flaggedList').dataset.copyText || '';
   if (!text) { document.getElementById('flaggedCopyStatus').textContent = 'Nothing to copy'; setTimeout(() => document.getElementById('flaggedCopyStatus').textContent = '', 2000); return; }
   navigator.clipboard.writeText(text).then(() => {
     document.getElementById('flaggedCopyStatus').textContent = 'Copied!';
