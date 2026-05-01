@@ -20886,8 +20886,16 @@ function renderProcLookup() {
   // Pass 1: Local cases
   data.cases.forEach(c => {
     if (!c.startTime || !c.endTime || c.isSharedCase) return;
-    const name = c.caseType === 'standard' ? (c.procedure || '') : getCaseTypeName(c.caseType, c);
-    if (!name) return;
+    const originalName = c.caseType === 'standard' ? (c.procedure || '') : getCaseTypeName(c.caseType, c);
+    if (!originalName) return;
+    // Use the canonical name (per the global procedure-mappings table) for
+    // grouping and display. Keep the original variant string so a search for
+    // "TKA" still matches a case stored as "TKA" even when its row shows
+    // "Total Knee" after normalization. Non-standard caseTypes don't go
+    // through the mapping table — those labels are app-defined.
+    const canonical = c.caseType === 'standard'
+      ? normalizeProcedureName(originalName.trim())
+      : originalName;
     const surgeon = normalizeSurgeonName((c.notes || '').trim());
     let s = timeToMinutes(c.startTime);
     let e = timeToMinutes(c.endTime);
@@ -20896,7 +20904,7 @@ function renderProcLookup() {
     if (mins <= 0) return;
     const dedupKey = (myUid || 'local') + '|' + c.shiftDate + '|' + c.startTime;
     seen.add(dedupKey);
-    allCases.push({ name, surgeon, mins, id: c.id, date: c.shiftDate, startTime: c.startTime, endTime: c.endTime, isFromShared: false });
+    allCases.push({ name: canonical, originalName, surgeon, mins, id: c.id, date: c.shiftDate, startTime: c.startTime, endTime: c.endTime, isFromShared: false });
   });
 
   // Pass 2: Shared cases from other users
@@ -20904,8 +20912,11 @@ function renderProcLookup() {
     sharedCasesCache.forEach(sc => {
       if (sc.uid === myUid) return;
       if (!sc.startTime || !sc.endTime) return;
-      const name = sc.caseType === 'standard' ? (sc.procedure || '') : getCaseTypeName(sc.caseType);
-      if (!name) return;
+      const originalName = sc.caseType === 'standard' ? (sc.procedure || '') : getCaseTypeName(sc.caseType);
+      if (!originalName) return;
+      const canonical = sc.caseType === 'standard'
+        ? normalizeProcedureName(originalName.trim())
+        : originalName;
       const dedupKey = sc.uid + '|' + sc.shiftDate + '|' + sc.startTime;
       if (seen.has(dedupKey)) return;
       seen.add(dedupKey);
@@ -20914,17 +20925,24 @@ function renderProcLookup() {
       if (e <= s) e += 1440;
       const mins = e - s;
       if (mins <= 0) return;
-      allCases.push({ name, surgeon: normalizeSurgeonName(sc.surgeon || '') || 'Unknown', mins, id: null, date: sc.shiftDate, startTime: sc.startTime, endTime: sc.endTime, isFromShared: true });
+      allCases.push({ name: canonical, originalName, surgeon: normalizeSurgeonName(sc.surgeon || '') || 'Unknown', mins, id: null, date: sc.shiftDate, startTime: sc.startTime, endTime: sc.endTime, isFromShared: true });
     });
   }
 
   // Check if query matches any surgeon names
   const surgeonMatch = allCases.some(c => c.surgeon && c.surgeon.toLowerCase().includes(query));
-  const procMatch = allCases.some(c => c.name.toLowerCase().includes(query));
+  // Procedure match against either the canonical display name or the original
+  // variant — so typing "TKA" still finds rows that display as "Total Knee".
+  const procMatch = allCases.some(c =>
+    c.name.toLowerCase().includes(query) ||
+    (c.originalName && c.originalName.toLowerCase().includes(query))
+  );
 
-  // Filter: match procedure name OR surgeon name
+  // Filter: canonical-or-original procedure match OR surgeon name match.
   const filtered = allCases.filter(c =>
-    c.name.toLowerCase().includes(query) || (c.surgeon && c.surgeon.toLowerCase().includes(query))
+    c.name.toLowerCase().includes(query) ||
+    (c.originalName && c.originalName.toLowerCase().includes(query)) ||
+    (c.surgeon && c.surgeon.toLowerCase().includes(query))
   );
 
   // Group by procedure
@@ -21079,7 +21097,16 @@ function toggleProcCaseList(row) {
 
 function renameProcedure(oldName) {
   const decoded = document.createElement('span'); decoded.innerHTML = oldName; const proc = decoded.textContent;
-  const matching = data.cases.filter(c => c.caseType === 'standard' && c.procedure === proc);
+  // The lookup row displays the canonical name, so a click on "Total Knee"
+  // should rename every case whose normalized procedure resolves to "Total
+  // Knee" — including ones stored as "TKA". Match by canonical, not by
+  // exact-string equality of the underlying procedure field.
+  const procCanonicalLower = proc.trim().toLowerCase();
+  const matching = data.cases.filter(c =>
+    c.caseType === 'standard' &&
+    c.procedure &&
+    normalizeProcedureName(c.procedure.trim()).toLowerCase() === procCanonicalLower
+  );
   if (matching.length === 0) { showToast('No standard cases to rename'); return; }
   const newName = prompt(`Rename "${proc}" (${matching.length} case${matching.length !== 1 ? 's' : ''}).\n\nNew procedure name:`, proc);
   if (!newName || newName.trim() === '' || newName.trim() === proc) return;
