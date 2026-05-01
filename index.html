@@ -286,6 +286,11 @@ textarea { resize: vertical; min-height: 60px; }
 .hist-range-btn { padding: 4px 10px; font-size: 0.72rem; border-radius: 14px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; transition: all 0.15s; }
 .hist-range-btn:hover, .hist-range-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 .info-icon { display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:var(--border);color:var(--text-dim);font-size:0.55rem;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:3px;flex-shrink:0; }
+.info-link { display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:var(--primary);color:#fff;font-size:0.55rem;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:3px;flex-shrink:0; }
+.info-link:hover { background:#3b82f6; }
+.abr-row { font-size:0.85rem; }
+.abr-formula { font-size:0.78rem; color:var(--text); padding:4px 8px; background:var(--surface2); border-radius:6px; line-height:1.6; }
+.abr-source { font-size:0.7rem; color:var(--text-dim); margin-top:6px; }
 
 /* ===== BADGES ===== */
 .point-badge {
@@ -3083,7 +3088,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
       </div>
       <div style="text-align:center;">
         <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Annual Proj</div>
-        <div style="font-size:0.95rem;font-weight:600;color:var(--accent2);"><span id="projAnnualIncome">&mdash;</span> <span class="info-icon" id="projAnnualTip" data-tip="" style="vertical-align:middle;">i</span></div>
+        <div style="font-size:0.95rem;font-weight:600;color:var(--accent2);"><span id="projAnnualIncome">&mdash;</span> <span class="info-link" onclick="navigateToAnnualBreakdown()" style="vertical-align:middle;" aria-label="Open breakdown">i</span></div>
       </div>
     </div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -3503,6 +3508,18 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <button class="btn btn-primary" onclick="navigateToWorkScan()" style="width:100%;">Open Scanner on Work Page</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ANNUAL PROJECTION BREAKDOWN PAGE -->
+<div class="page" id="page-annualbreakdown">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <button class="btn btn-outline btn-sm" onclick="navigateToCompPage()" aria-label="Back">&larr; Back</button>
+      <h2 style="margin:0;">Annual Projection</h2>
+    </div>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px;">Per-paycheck-month breakdown — actual gross where comp summary reports are entered, point-based estimates for the just-ended work month, and the rolling Feb–Nov average for the rest.</p>
+    <div id="annualBreakdownContent"></div>
   </div>
 </div>
 
@@ -16267,6 +16284,115 @@ function navigateToCompPage() {
   if (compPage) compPage.classList.add('active');
 }
 
+function navigateToAnnualBreakdown() {
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const compBtn = document.querySelector('.bottom-nav button[data-page="compensation"]');
+  if (compBtn) compBtn.classList.add('active');
+  const page = document.getElementById('page-annualbreakdown');
+  if (page) page.classList.add('active');
+  renderAnnualBreakdownPage();
+}
+
+function _fmtMoney(n) {
+  return '$' + (n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function _renderAnnualBreakdownRow(row, monthNames) {
+  const c = row.components || {};
+  const monthLabel = monthNames[row.payMonth];
+  const workLabel = monthNames[row.wMonth] + ' ' + row.wYear;
+  let detailHtml = '';
+  if (c.mode === 'actual') {
+    detailHtml = '<div class="abr-formula">' +
+      _fmtMoney(c.compTotal) + ' compTotal' +
+      ' &nbsp;+&nbsp; ' + _fmtMoney(c.posStip) + ' positive stipends' +
+      ' &nbsp;+&nbsp; ' + _fmtMoney(c.ret) + ' retirement' +
+      ' &nbsp;=&nbsp; <strong>' + _fmtMoney(row.amt) + '</strong></div>' +
+      '<div class="abr-source">From comp summary report entered for ' + workLabel + '</div>';
+  } else if (c.mode === 'estimate') {
+    const pvStr = (c.pv || 0).toFixed(2);
+    detailHtml = '<div class="abr-formula">' +
+      (c.pts || 0).toFixed(1) + ' pts &times; $' + pvStr + '/pt = ' + _fmtMoney(c.prodEst) +
+      ' &nbsp;+&nbsp; ' + _fmtMoney(c.posStip) + ' positive stipends' +
+      ' &nbsp;+&nbsp; ' + _fmtMoney(c.ret) + ' retirement' +
+      ' &nbsp;=&nbsp; <strong>' + _fmtMoney(row.amt) + '</strong></div>' +
+      '<div class="abr-source">Estimate from tracked ' + workLabel + ' points (no comp summary yet)</div>';
+  } else if (c.mode === 'avg') {
+    detailHtml = '<div class="abr-formula">Rolling avg of past actual gross months</div>' +
+      '<div class="abr-source">No tracked points / point-value yet for ' + workLabel + '</div>';
+  } else if (c.mode === 'dec') {
+    detailHtml = '<div class="abr-formula">Avg ' + _fmtMoney(c.avgComp) + ' &times; 2 = <strong>' + _fmtMoney(row.amt) + '</strong></div>' +
+      '<div class="abr-source">Doubled to bake in the December bonus paid alongside the regular paycheck</div>';
+  } else if (c.mode === 'deposit') {
+    detailHtml = '<div class="abr-formula">Entered paycheck deposit: <strong>' + _fmtMoney(c.deposit) + '</strong></div>' +
+      '<div class="abr-source">No comp summary report on file — using the deposit as a stand-in</div>';
+  } else if (c.mode === 'none') {
+    detailHtml = '<div class="abr-source">No value entered for this paycheck month yet.</div>';
+  }
+  return '<details class="abr-row" style="background:var(--surface);border-radius:8px;padding:10px 12px;margin-bottom:6px;">' +
+    '<summary style="cursor:pointer;outline:none;display:flex;justify-content:space-between;align-items:center;gap:12px;">' +
+      '<strong style="font-size:0.95rem;">' + monthLabel + '</strong>' +
+      '<span style="display:flex;align-items:baseline;gap:8px;">' +
+        '<span style="font-size:0.95rem;font-weight:600;color:var(--accent2);">' + _fmtMoney(row.amt) + '</span>' +
+        '<span style="font-size:0.7rem;color:var(--text-dim);">' + escHtml(row.source) + '</span>' +
+      '</span>' +
+    '</summary>' +
+    '<div style="margin-top:8px;font-size:0.78rem;color:var(--text);line-height:1.55;">' + detailHtml + '</div>' +
+    '</details>';
+}
+
+function renderAnnualBreakdownPage() {
+  const container = document.getElementById('annualBreakdownContent');
+  if (!container) return;
+  const r = _computeAnnualProjection();
+
+  const allMonths = {};
+  r.receivedMonths.forEach(row => { allMonths[row.payMonth] = row; });
+  r.projectedMonths.forEach(row => { allMonths[row.payMonth] = row; });
+
+  let html = '';
+
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:0 0 14px;padding:10px 12px;background:var(--surface2);border-radius:8px;">' +
+    '<div style="text-align:center;">' +
+      '<div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">YTD Earnings</div>' +
+      '<div style="font-size:1.05rem;font-weight:700;color:#facc15;">' + (r.ytdMonths > 0 ? _fmtMoney(r.ytdRevenue) : '&mdash;') + '</div>' +
+    '</div>' +
+    '<div style="text-align:center;">' +
+      '<div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">Annual Proj</div>' +
+      '<div style="font-size:1.05rem;font-weight:700;color:var(--accent2);">' + (r.annual > 0 ? _fmtMoney(r.annual) : '&mdash;') + '</div>' +
+    '</div>' +
+  '</div>';
+
+  for (let pm = 0; pm < 12; pm++) {
+    const row = allMonths[pm];
+    if (!row) continue;
+    html += _renderAnnualBreakdownRow(row, r.monthNames);
+  }
+
+  // December bonus footnote
+  let bonusLine;
+  if (r.bonusIncluded) {
+    bonusLine = 'Dec Bonus: ' + _fmtMoney(r.bonusDeposit) + ' (actual)';
+  } else if (r.projectedMonths.find(row => row.payMonth === 11)) {
+    bonusLine = 'Dec Bonus: included in December estimate (avg &times; 2)';
+  } else {
+    bonusLine = 'Dec Bonus: $0 (no value)';
+  }
+  html += '<div style="font-size:0.78rem;color:var(--text-dim);margin-top:10px;">' + bonusLine + '</div>';
+
+  if (r.avgComp > 0) {
+    html += '<div style="font-size:0.78rem;color:var(--text-dim);margin-top:4px;">' +
+      'Rolling avg gross: ' + _fmtMoney(r.avgComp) + '/mo (' + r.grossAmounts.length + ' month' +
+      (r.grossAmounts.length !== 1 ? 's' : '') + ', Feb–Nov; production + positive stipends + retirement, deductions ignored)' +
+    '</div>';
+  }
+
+  html += '<div style="font-size:0.85rem;font-weight:700;margin-top:10px;">Total: ' + _fmtMoney(r.annual) + '</div>';
+
+  container.innerHTML = html;
+}
+
 function navigateToSettingsPage() {
   closeDrawer();
   document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
@@ -20234,32 +20360,31 @@ function _ppGrossEstimateFromPoints(workKey, monthlyTotalsMap) {
   return round2(pts * pv + b.posStip + b.ret);
 }
 
-function renderProjectedAnnual() {
+// Pure data builder for the Annual Projection. Walks every paycheck month
+// (Jan\u2013Dec) of the current calendar year and tags each with its source +
+// component breakdown so renderProjectedAnnual (the card) and the
+// Annual Breakdown detail page can share one calculation.
+//
+// Row shapes by `components.mode`:
+//   actual:   { compTotal, posStip, ret }                 \u2014 past, comp summary entered
+//   deposit:  { deposit }                                  \u2014 past, fall back to entered paycheck
+//   none:     {}                                           \u2014 past, nothing entered
+//   estimate: { pts, pv, prodEst, posStip, ret }           \u2014 future, work month ended, est from points
+//   avg:      { avgComp }                                  \u2014 future, falls back to rolling avg
+//   dec:      { avgComp, value }                           \u2014 December projection (avg \u00d7 2 incl. bonus)
+function _computeAnnualProjection() {
   const mt = getMonthlyTotals();
   const now = new Date();
   const thisYear = now.getFullYear();
   const thisMonthIdx = now.getMonth();
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  // Walk every paycheck month (Jan\u2013Dec) of thisYear.
-  // - "Past" once we are past the 23rd of the paycheck month:
-  //     - Jan: deposit if entered, else $0 (no comp summary report for Jan).
-  //     - Other months: gross from the compensation summary report
-  //       (compTotal + positive stipends + retirement) if entered, else
-  //       deposit, else $0. Negative stipend rows are ignored \u2014 see
-  //       _ppGrossBreakdown for why.
-  // - "Future" months:
-  //     - Jan: forced to $0 (no predicted calculation).
-  //     - Dec: 2 \u00d7 avg to include the annual bonus paid alongside.
-  //     - Other months: estimated gross from the just-ended work month if its
-  //       calendar month has rolled over and we have tracked points; otherwise
-  //       the rolling avg of past gross income.
-  // The rolling avg itself excludes Jan (no comp report) and Dec (bonus skews).
   let ytdRevenue = 0;
   let ytdMonths = 0;
   const receivedMonths = [];
-  const grossAmounts = []; // past true-gross (Feb\u2013Nov, compTotal-based) for projection avg
+  const grossAmounts = [];
   const futurePayMonths = [];
+
   for (let pm = 0; pm < 12; pm++) {
     const cutoff = new Date(thisYear, pm, 23, 23, 59, 59);
     const wYear = pm === 0 ? thisYear - 1 : thisYear;
@@ -20271,61 +20396,65 @@ function renderProjectedAnnual() {
     const isPast = now > cutoff;
 
     if (isPast) {
-      let amt, source;
+      let amt, source, components;
       if (pm === 0) {
-        if (deposit != null) { amt = deposit; source = 'actual'; }
-        else { amt = 0; source = 'no value'; }
+        if (deposit != null) {
+          amt = deposit; source = 'actual'; components = { mode: 'deposit', deposit };
+        } else {
+          amt = 0; source = 'no value'; components = { mode: 'none' };
+        }
       } else {
         const grossActual = _ppGrossActualFromOverride(workKey);
         if (grossActual != null) {
-          amt = grossActual; source = 'actual gross';
+          const b = _ppGrossBreakdown(workKey);
+          amt = grossActual;
+          source = 'actual gross';
+          components = { mode: 'actual', compTotal: ov.compTotal, posStip: b.posStip, ret: b.ret };
         } else if (deposit != null) {
-          amt = deposit; source = 'actual (deposit)';
+          amt = deposit; source = 'actual (deposit)'; components = { mode: 'deposit', deposit };
         } else {
-          amt = 0; source = 'no value';
+          amt = 0; source = 'no value'; components = { mode: 'none' };
         }
       }
       ytdRevenue += amt;
       ytdMonths++;
-      receivedMonths.push({ payMonth: pm, amt, source });
-      // Feed the projection avg from gross comp summary only (Feb\u2013Nov).
+      receivedMonths.push({ payMonth: pm, payKey, workKey, wYear, wMonth, amt, source, components });
       if (pm !== 0 && pm !== 11) {
         const ga = _ppGrossActualFromOverride(workKey);
         if (ga != null) grossAmounts.push(ga);
       }
     } else {
-      futurePayMonths.push({ pm, workKey, wYear, wMonth });
+      futurePayMonths.push({ pm, payKey, workKey, wYear, wMonth });
     }
   }
 
-  // Rolling avg of past true-gross income (pre-deduction, pre-retirement)
   const avgComp = grossAmounts.length > 0 ? round2(grossAmounts.reduce((a, v) => a + v, 0) / grossAmounts.length) : 0;
 
-  // Project each future month from the rolling avg, with three special cases:
-  //   - Jan: forced $0 (no comp report)
-  //   - Dec: avg \u00d7 2 to bake in the annual bonus
-  //   - Otherwise: if the work month has already ended (its calendar month
-  //     is in the past relative to thisMonthIdx) and we have tracked points,
-  //     use the estimated gross from that just-ended month instead of the
-  //     rolling avg. Falls back to avg when the estimate isn't computable.
   const projectedMonths = [];
   futurePayMonths.forEach(f => {
     const pm = f.pm;
-    let amt, source;
+    let amt, source, components;
     if (pm === 0) {
-      amt = 0; source = 'no value';
+      amt = 0; source = 'no value'; components = { mode: 'none' };
     } else if (pm === 11) {
       amt = round2(avgComp * 2); source = 'avg \u00d7 2 (incl. bonus)';
+      components = { mode: 'dec', avgComp, value: amt };
     } else {
       const workMonthEnded = (f.wYear < thisYear) || (f.wYear === thisYear && f.wMonth < thisMonthIdx);
       const est = workMonthEnded ? _ppGrossEstimateFromPoints(f.workKey, mt) : null;
       if (est != null && est > 0) {
-        amt = est; source = 'est. gross (' + monthNames[f.wMonth] + ')';
+        const pts = mt[f.workKey] || 0;
+        const pv = (typeof getPointValueForMonth === 'function') ? (getPointValueForMonth(f.workKey) || 0) : 0;
+        const b = _ppGrossBreakdown(f.workKey);
+        amt = est;
+        source = 'est. gross (' + monthNames[f.wMonth] + ')';
+        components = { mode: 'estimate', pts, pv, prodEst: round2(pts * pv), posStip: b.posStip, ret: b.ret };
       } else {
         amt = avgComp; source = 'avg';
+        components = { mode: 'avg', avgComp };
       }
     }
-    projectedMonths.push({ payMonth: pm, amt, source });
+    projectedMonths.push({ payMonth: pm, payKey: f.payKey, workKey: f.workKey, wYear: f.wYear, wMonth: f.wMonth, amt, source, components });
   });
 
   // December bonus actual: counted on top of YTD if past cutoff and entered.
@@ -20340,42 +20469,27 @@ function renderProjectedAnnual() {
   }
 
   const projRemaining = projectedMonths.reduce((s, r) => s + r.amt, 0);
+  const annual = round2(ytdRevenue + projRemaining);
 
-  document.getElementById('projYTDRevenue').textContent = ytdMonths > 0
-    ? '$' + ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 })
+  return {
+    ytdRevenue, ytdMonths, receivedMonths, projectedMonths,
+    avgComp, grossAmounts, bonusIncluded, bonusDeposit, projRemaining, annual,
+    monthNames, thisYear
+  };
+}
+
+function renderProjectedAnnual() {
+  const r = _computeAnnualProjection();
+  const monthNames = r.monthNames;
+
+  document.getElementById('projYTDRevenue').textContent = r.ytdMonths > 0
+    ? '$' + r.ytdRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 })
     : '\u2014';
 
-  const annual = round2(ytdRevenue + projRemaining);
-  if (annual > 0) {
-    document.getElementById('projAnnualIncome').textContent = '$' + annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
-
-    // Build month-by-month breakdown tooltip
-    const allMonths = {};
-    receivedMonths.forEach(r => { allMonths[r.payMonth] = r; });
-    projectedMonths.forEach(r => { allMonths[r.payMonth] = r; });
-    const breakdownLines = [];
-    for (let pm = 0; pm < 12; pm++) {
-      const r = allMonths[pm];
-      if (!r) continue;
-      breakdownLines.push(monthNames[pm] + ': $' + r.amt.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (' + r.source + ')');
-    }
-    const projectedDec = projectedMonths.find(r => r.payMonth === 11);
-    if (bonusIncluded) {
-      breakdownLines.push('Dec Bonus: $' + bonusDeposit.toLocaleString('en-US', {maximumFractionDigits:0}) + ' (actual)');
-    } else if (projectedDec) {
-      breakdownLines.push('Dec Bonus: included in December estimate');
-    } else {
-      breakdownLines.push('Dec Bonus: $0 (no value)');
-    }
-    breakdownLines.push('');
-    if (avgComp > 0) {
-      breakdownLines.push('Avg gross: $' + avgComp.toLocaleString('en-US', {maximumFractionDigits:0}) + '/mo (' + grossAmounts.length + ' month' + (grossAmounts.length !== 1 ? 's' : '') + ', Feb\u2013Nov; production + positive stipends + retirement, deductions ignored)');
-    }
-    breakdownLines.push('Total: $' + annual.toLocaleString('en-US', {maximumFractionDigits:0}));
-    document.getElementById('projAnnualTip').setAttribute('data-tip', breakdownLines.join('\n'));
+  if (r.annual > 0) {
+    document.getElementById('projAnnualIncome').textContent = '$' + r.annual.toLocaleString('en-US', { maximumFractionDigits: 0 });
   } else {
     document.getElementById('projAnnualIncome').innerHTML = '&mdash;';
-    document.getElementById('projAnnualTip').setAttribute('data-tip', '');
   }
 }
 
