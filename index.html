@@ -7330,12 +7330,31 @@ function loadData() {
 
 function saveData(d) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
-  syncToFirestore('data', d);
+  syncDataToFirestore(d);
   // Debounce a community-pool shift sync so any change to data.shifts
   // (form save, picker save, delete, bulk import) eventually replicates
   // to the sharedShifts collection. Settings/cases-only saves are cheap
   // since the timer is reset, not the work itself.
   scheduleSharedShiftsSync();
+}
+
+// Fields that should never be readable by anyone other than the user
+// themselves — paycheck-tracker Step 2 (compTotal) and Step 3 (stipends,
+// retirement, non-guaranteed, deposit). Persisted to a separate
+// users/{uid}/data/private doc that Firestore rules gate to the user's own
+// uid. The in-memory `data` object stays identical so callers don't change.
+const PRIVATE_DATA_KEYS = ['paychecks', 'stipends', 'retirement', 'nonGuaranteed', 'overrides', 'peProgress'];
+
+function syncDataToFirestore(d) {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  const publicData = {};
+  const privateData = {};
+  for (const k in d) {
+    if (PRIVATE_DATA_KEYS.indexOf(k) !== -1) privateData[k] = d[k];
+    else publicData[k] = d[k];
+  }
+  syncToFirestore('data', publicData);
+  syncToFirestore('private', privateData);
 }
 
 let _sharedShiftsSyncTimer = null;
@@ -7384,16 +7403,23 @@ function saveSettings(s) {
   syncToFirestore('settings', s);
 }
 
+// Per-doc debounce so writes to "data" and "private" can coexist without
+// stomping on each other. The single shared timer used previously only
+// retained the last-scheduled doc's payload.
+const _syncDocTimers = {};
+const _syncDocPayloads = {};
+
 function syncToFirestore(docName, payload) {
   if (!firestoreSyncEnabled || !currentUser) return;
   updateSyncStatus('syncing');
-  clearTimeout(syncDebounceTimer);
-  syncDebounceTimer = setTimeout(() => {
+  _syncDocPayloads[docName] = payload;
+  if (_syncDocTimers[docName]) clearTimeout(_syncDocTimers[docName]);
+  _syncDocTimers[docName] = setTimeout(() => {
     const docRef = db.collection('users').doc(currentUser.uid).collection('data').doc(docName);
-    docRef.set(JSON.parse(JSON.stringify(payload))).then(() => {
+    docRef.set(JSON.parse(JSON.stringify(_syncDocPayloads[docName]))).then(() => {
       updateSyncStatus('synced');
     }).catch(err => {
-      console.error('Firestore sync error:', err);
+      console.error('Firestore sync error (' + docName + '):', err);
       updateSyncStatus('error');
       if (err.code === 'permission-denied' || err.code === 'unauthenticated') {
         firestoreSyncEnabled = false;
@@ -7837,29 +7863,57 @@ function hideSessionExpiredBanner() {
 
 async function loadFromFirestore(uid) {
   try {
-    const dataDoc = await db.collection('users').doc(uid).collection('data').doc('data').get();
-    const settingsDoc = await db.collection('users').doc(uid).collection('data').doc('settings').get();
+    // Load public + private docs in parallel. The private doc holds
+    // paycheck-tracker fields (Step 2 + Step 3) and is gated by Firestore
+    // rules to the user's own uid.
+    const [dataDoc, privateDoc] = await Promise.all([
+      db.collection('users').doc(uid).collection('data').doc('data').get(),
+      db.collection('users').doc(uid).collection('data').doc('private').get().catch(() => null)
+    ]);
 
     if (dataDoc.exists) {
       const d = dataDoc.data();
+      // Merge private fields on top so callers see a unified `data` object.
+      if (privateDoc && privateDoc.exists) {
+        const priv = privateDoc.data() || {};
+        for (const k of PRIVATE_DATA_KEYS) {
+          if (priv[k] !== undefined) d[k] = priv[k];
+        }
+      }
       if (!d.overrides) d.overrides = {};
       if (!d.stipends) d.stipends = {};
       if (!d.calendarAssignments) d.calendarAssignments = {};
       if (!d.paychecks) d.paychecks = {};
       if (!d.retirement) d.retirement = {};
-      // Ensure cases is an array
       if (!Array.isArray(d.cases)) d.cases = [];
       backfillSiteIds(d);
       data = d;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+      // One-time migration: if the public data doc still carries any
+      // private fields (pre-split data), move them into the private doc
+      // and rewrite the public doc without them. This runs at most once
+      // per user — subsequent loads see a stripped public doc.
+      const publicHasPrivate = PRIVATE_DATA_KEYS.some(k => Object.prototype.hasOwnProperty.call(dataDoc.data(), k));
+      if (publicHasPrivate) {
+        try { await _migratePrivateFieldsToPrivateDoc(uid, d); }
+        catch (e) { console.warn('Private-fields migration failed (will retry on next save):', e); }
+      }
       return 'loaded';
     } else {
-      // No cloud data — check if there's local data to migrate
+      // No cloud data — check if there's local data to migrate.
       const localData = loadData();
       const hasLocalData = localData.cases.length > 0 || Object.keys(localData.shifts).length > 0;
       if (hasLocalData) {
-        // Upload local data to cloud
-        await db.collection('users').doc(uid).collection('data').doc('data').set(JSON.parse(JSON.stringify(localData)));
+        const publicData = {}, privateData = {};
+        for (const k in localData) {
+          if (PRIVATE_DATA_KEYS.indexOf(k) !== -1) privateData[k] = localData[k];
+          else publicData[k] = localData[k];
+        }
+        await Promise.all([
+          db.collection('users').doc(uid).collection('data').doc('data').set(JSON.parse(JSON.stringify(publicData))),
+          db.collection('users').doc(uid).collection('data').doc('private').set(JSON.parse(JSON.stringify(privateData)))
+        ]);
         data = localData;
         return 'migrated';
       }
@@ -7869,6 +7923,24 @@ async function loadFromFirestore(uid) {
     console.error('Firestore load error:', err);
     return 'error';
   }
+}
+
+// Strip the private fields out of the public doc and write them into the
+// private doc. Called at most once per user, when loadFromFirestore detects
+// pre-split data living in users/{uid}/data/data.
+async function _migratePrivateFieldsToPrivateDoc(uid, mergedData) {
+  const privatePayload = {};
+  for (const k of PRIVATE_DATA_KEYS) {
+    if (mergedData[k] !== undefined) privatePayload[k] = mergedData[k];
+  }
+  const publicPayload = {};
+  for (const k in mergedData) {
+    if (PRIVATE_DATA_KEYS.indexOf(k) === -1) publicPayload[k] = mergedData[k];
+  }
+  await Promise.all([
+    db.collection('users').doc(uid).collection('data').doc('private').set(JSON.parse(JSON.stringify(privatePayload))),
+    db.collection('users').doc(uid).collection('data').doc('data').set(JSON.parse(JSON.stringify(publicPayload)))
+  ]);
 }
 
 async function loadSettingsFromFirestore(uid) {
