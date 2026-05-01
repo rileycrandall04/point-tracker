@@ -4124,6 +4124,16 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
     <div id="adminProcMapList" style="font-size:0.85rem;"></div>
   </div>
+
+  <!-- Tip Editor (app owner only) — list every daily-tip in the catalog with
+       its current title/body and let the owner override the wording. -->
+  <div class="card hidden" id="adminTipEditorCard" style="margin-top:12px;">
+    <h2>Daily Tips</h2>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;line-height:1.5;">
+      Every tip in the catalog. Edit the title or body to tune the wording without a deploy &mdash; saves are global and take effect on the next sign-in. Deep-link targets and trigger conditions stay code-bound.
+    </p>
+    <div id="adminTipEditorList" style="font-size:0.85rem;"></div>
+  </div>
 </div>
 
 
@@ -7331,6 +7341,109 @@ async function _persistProcedureMappings() {
   });
 }
 
+// ---- Tip Editor admin (app owner only) ----
+//
+// Lists every tip in the static FEATURE_TIPS catalog with a textarea editor
+// for title + body. Saves each override into featureTips/config (single doc;
+// rules gate writes to the app owner). Empty fields revert to the default.
+
+function renderAdminTipEditor() {
+  const out = document.getElementById('adminTipEditorList');
+  if (!out) return;
+  if (!isAppOwner()) { out.innerHTML = ''; return; }
+  if (typeof FEATURE_TIPS === 'undefined' || !Array.isArray(FEATURE_TIPS)) {
+    out.innerHTML = '<p style="color:var(--text-dim);font-size:0.78rem;margin:0;">Tip catalog not loaded yet.</p>';
+    return;
+  }
+  let html = '';
+  html += '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:8px;">';
+  html += FEATURE_TIPS.length + ' tip' + (FEATURE_TIPS.length !== 1 ? 's' : '');
+  html += ' &middot; ' + Object.keys(featureTipsOverridesCache || {}).length + ' overridden';
+  html += '</div>';
+  for (const tip of FEATURE_TIPS) {
+    const ov = (featureTipsOverridesCache || {})[tip.id] || {};
+    const curTitle = (typeof ov.title === 'string' && ov.title.trim()) ? ov.title : tip.title;
+    const curBody  = (typeof ov.body  === 'string' && ov.body.trim())  ? ov.body  : tip.body;
+    const isOverridden = !!(ov.title || ov.body);
+    const idAttr = escHtml(tip.id);
+    html += '<details' + (isOverridden ? ' open' : '') + ' style="background:var(--surface);border-radius:8px;padding:8px 10px;margin-bottom:8px;">';
+    html += '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;outline:none;display:flex;justify-content:space-between;align-items:center;gap:8px;">';
+    html +=   '<span>' + escHtml(curTitle) + '</span>';
+    html +=   '<span style="font-size:0.65rem;color:var(--text-dim);font-weight:400;">id: ' + idAttr + (isOverridden ? ' &middot; <span style="color:var(--accent);">edited</span>' : '') + '</span>';
+    html += '</summary>';
+    html += '<div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">';
+    html += '<label style="font-size:0.7rem;color:var(--text-dim);">Title';
+    html +=   '<input type="text" id="tipEdTitle_' + idAttr + '" value="' + escHtml(curTitle).replace(/"/g, '&quot;') + '" style="display:block;width:100%;margin-top:4px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;box-sizing:border-box;">';
+    html += '</label>';
+    html += '<label style="font-size:0.7rem;color:var(--text-dim);">Body';
+    html +=   '<textarea id="tipEdBody_' + idAttr + '" rows="3" style="display:block;width:100%;margin-top:4px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.82rem;box-sizing:border-box;line-height:1.4;resize:vertical;">' + escHtml(curBody) + '</textarea>';
+    html += '</label>';
+    html += '<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">';
+    if (isOverridden) {
+      html += '<button class="btn btn-sm" onclick="resetAdminTipOverride(' + JSON.stringify(tip.id).replace(/"/g, '&quot;') + ')" style="background:var(--surface2);color:var(--accent2);font-size:0.72rem;padding:4px 10px;">Reset to default</button>';
+    }
+    html += '<button class="btn btn-primary btn-sm" onclick="saveAdminTipOverride(' + JSON.stringify(tip.id).replace(/"/g, '&quot;') + ')" style="font-size:0.72rem;padding:4px 12px;">Save</button>';
+    html += '</div>';
+    if (tip.contextualPage) {
+      html += '<div style="font-size:0.65rem;color:var(--text-dim);">Contextual trigger: shown when navigating to <code>' + escHtml(tip.contextualPage) + '</code> if the user hasn\'t completed the matching first-time action.</div>';
+    }
+    html += '</div>';
+    html += '</details>';
+  }
+  out.innerHTML = html;
+}
+
+async function saveAdminTipOverride(tipId) {
+  if (!isAppOwner()) return;
+  const tip = FEATURE_TIPS.find(t => t.id === tipId);
+  if (!tip) return;
+  const titleEl = document.getElementById('tipEdTitle_' + tipId);
+  const bodyEl  = document.getElementById('tipEdBody_'  + tipId);
+  if (!titleEl || !bodyEl) return;
+  const title = titleEl.value.trim();
+  const body  = bodyEl.value.trim();
+  if (!featureTipsOverridesCache) featureTipsOverridesCache = {};
+  // Only persist a field that differs from the default. If both fields match
+  // the default, drop the override entirely.
+  const ov = {};
+  if (title && title !== tip.title) ov.title = title;
+  if (body  && body  !== tip.body)  ov.body  = body;
+  if (Object.keys(ov).length === 0) {
+    delete featureTipsOverridesCache[tipId];
+  } else {
+    featureTipsOverridesCache[tipId] = ov;
+  }
+  try {
+    await _persistFeatureTipsOverrides();
+    renderAdminTipEditor();
+  } catch (err) {
+    console.error('Tip override save error:', err);
+    alert('Save failed: ' + (err.message || err));
+  }
+}
+
+async function resetAdminTipOverride(tipId) {
+  if (!isAppOwner()) return;
+  if (!featureTipsOverridesCache || !featureTipsOverridesCache[tipId]) return;
+  if (!confirm('Reset this tip to the default wording?')) return;
+  delete featureTipsOverridesCache[tipId];
+  try {
+    await _persistFeatureTipsOverrides();
+    renderAdminTipEditor();
+  } catch (err) {
+    console.error('Tip override reset error:', err);
+    alert('Reset failed: ' + (err.message || err));
+  }
+}
+
+async function _persistFeatureTipsOverrides() {
+  await db.collection('featureTips').doc('config').set({
+    overrides: featureTipsOverridesCache,
+    updatedAt: new Date().toISOString(),
+    updatedBy: currentUser ? currentUser.uid : null
+  });
+}
+
 // ================================================================
 // DATA STORE
 // ================================================================
@@ -7627,6 +7740,12 @@ let surgeonMappingsLoaded = false;
 // Global procedure name aliases. Single Firestore doc shared across all sites
 // (intentional — procedures are universal, surgeons are not). Variant → canonical.
 let procedureMappingsCache = {};
+// Owner-curated overrides for the daily-tip catalog. Single global Firestore
+// doc featureTips/config with shape { overrides: { tipId: { title, body } } }.
+// Resolved on top of the static FEATURE_TIPS catalog at render time so the
+// app owner can tune wording without a deploy.
+let featureTipsOverridesCache = {};
+let featureTipsOverridesLoaded = false;
 let procedureMappingsLoaded = false;
 let userProfilesCache = {}; // { uid: { email, displayName } }
 let sitesCache = {};       // { siteId: { id, name, members[], owner, ... } }
@@ -7797,6 +7916,31 @@ async function loadProcedureMappings() {
   if (typeof renderDECaseList === 'function') {
     try { renderDECaseList(); } catch (e) {}
   }
+}
+
+// Owner-curated tip-text overrides. Single global Firestore doc; readable by
+// any signed-in user, writable only by the app owner uid (Firestore rules).
+async function loadFeatureTipsOverrides() {
+  if (!db) return;
+  try {
+    const doc = await db.collection('featureTips').doc('config').get();
+    featureTipsOverridesCache = (doc.exists && doc.data().overrides) || {};
+  } catch (err) {
+    console.warn('Failed to load feature-tip overrides:', err);
+    featureTipsOverridesCache = {};
+  }
+  featureTipsOverridesLoaded = true;
+}
+
+// Returns the effective tip object after applying any owner overrides.
+function resolveTipText(tip) {
+  if (!tip) return tip;
+  const ov = featureTipsOverridesCache && featureTipsOverridesCache[tip.id];
+  if (!ov) return tip;
+  return Object.assign({}, tip, {
+    title: typeof ov.title === 'string' && ov.title.trim() ? ov.title : tip.title,
+    body:  typeof ov.body  === 'string' && ov.body.trim()  ? ov.body  : tip.body
+  });
 }
 
 // Map "TKA" → "Total Knee" (or wherever the admin pointed the variant). Falls
@@ -11186,6 +11330,8 @@ function renderAdminPage() {
   showOwnerOnly('adminUserLookupCard');
   showOwnerOnly('adminProcedureMappingsCard');
   if (isOwner) renderAdminProcedureMappings();
+  showOwnerOnly('adminTipEditorCard');
+  if (isOwner) renderAdminTipEditor();
 
   // Within the Multi-Site Admin card, default tab + which tabs are visible:
   if (isSAdmin && !isOwner) {
@@ -16886,11 +17032,14 @@ function maybeShowContextualTip(pageName) {
 function showTipBanner(tip) {
   const banner = document.getElementById('tipBanner');
   if (!banner) return;
-  banner._currentTip = tip;
-  document.getElementById('tipBannerTitle').textContent = tip.title;
-  document.getElementById('tipBannerBody').textContent = tip.body;
+  // Apply owner overrides so the displayed text reflects the latest edits
+  // from the admin Tip Editor card.
+  const resolved = resolveTipText(tip);
+  banner._currentTip = resolved;
+  document.getElementById('tipBannerTitle').textContent = resolved.title;
+  document.getElementById('tipBannerBody').textContent = resolved.body;
   const dl = document.getElementById('tipBannerDeepLinkBtn');
-  if (dl) dl.classList.toggle('hidden', !tip.deepLink);
+  if (dl) dl.classList.toggle('hidden', !resolved.deepLink);
   banner.classList.remove('hidden');
 }
 
@@ -27896,6 +28045,7 @@ auth.onAuthStateChanged(async (user) => {
     loadAsaMasterCodes().catch(() => {});
     loadAsaCodeProcedures().catch(() => {});
     loadProcedureMappings().catch(() => {});
+    loadFeatureTipsOverrides().catch(() => {});
 
     // Auto-retry community data if the initial load didn't get results.
     // On startup, Firestore's connection may not be ready yet — the same
