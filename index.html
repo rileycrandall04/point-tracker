@@ -1916,133 +1916,60 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div class="tutorial-step active" data-step="0">
       <span class="tut-icon">&#128137;</span>
       <h3>Welcome to MWA Point Tracker</h3>
-      <p>Track your anesthesia cases and production points — set up in 60 seconds.</p>
+      <p>Track your shifts, cases, and production points. Setup takes about a minute.</p>
+      <p style="font-size:0.78rem;color:var(--text-dim);margin-top:6px;">You can re-open this tutorial anytime from <strong>More &rarr; Tutorial</strong>.</p>
     </div>
 
-    <!-- Step 2: Log Your Shift -->
+    <!-- Step 2: How to fill in shifts -->
     <div class="tutorial-step" data-step="1">
-      <span class="tut-icon">&#128197;</span>
-      <h3>Log Your Shift</h3>
-      <div class="tut-instructions">
-        <strong>1.</strong> Tap the <strong>Work</strong> tab below<br>
-        <strong>2.</strong> Pick your assignment type (OR, OB, etc.)<br>
-        <strong>3.</strong> Enter your start &amp; end times<br>
-        <strong>4.</strong> Tap <strong>Save Shift</strong>
-      </div>
-    </div>
-
-    <!-- Step 3: Adding monthly shifts — choose Manual or Sync -->
-    <div class="tutorial-step" data-step="2">
       <span class="tut-icon">&#128467;</span>
-      <h3>Adding a Whole Month</h3>
-      <p>How do you want to fill in the rest of your shifts?</p>
+      <h3>How will you fill in shifts?</h3>
+      <p>Pick one — you can switch later in Settings.</p>
       <div class="tutorial-options">
-        <div class="tutorial-option" onclick="tutorialMonthlyChoice('manual')">
-          <span class="to-icon">&#9999;</span>
-          <div class="to-text">
-            <strong>Enter Manually</strong>
-            <span>Tap each day on the Daily tab and pick the assignment</span>
-          </div>
-        </div>
         <div class="tutorial-option" onclick="tutorialMonthlyChoice('sync')">
           <span class="to-icon">&#128197;</span>
           <div class="to-text">
-            <strong>Sync from QGenda</strong>
-            <span>Have QGenda push to Google Calendar, then connect this app</span>
+            <strong>Sync from Google Calendar</strong>
+            <span>If QGenda pushes your assignments to a Google Calendar, this app reads them automatically. We'll open the setup card so you can connect.</span>
           </div>
           <span class="to-badge">Recommended</span>
         </div>
+        <div class="tutorial-option" onclick="tutorialMonthlyChoice('manual')">
+          <span class="to-icon">&#9999;</span>
+          <div class="to-text">
+            <strong>Enter manually</strong>
+            <span>Tap each day from the Today tab and pick the assignment yourself.</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Step 4: QGenda → Google Calendar -->
-    <div class="tutorial-step" data-step="3">
-      <span class="tut-icon">&#128228;</span>
-      <h3>Step 1 of 2 &mdash; QGenda &rarr; Google Calendar</h3>
-      <p style="font-size:0.85rem;">First, get QGenda to push your assignments into a Google Calendar.</p>
-      <div class="tut-instructions">
-        <strong>1.</strong> Open the QGenda app or website<br>
-        <strong>2.</strong> Open <strong>Settings &rarr; Calendar Sync</strong> (label varies)<br>
-        <strong>3.</strong> Sign in with your Google account and pick a calendar<br>
-        <strong>4.</strong> Wait a moment for QGenda to push the next month
-      </div>
-      <p style="font-size:0.72rem;color:var(--text-dim);margin-top:8px;">When the events show up in Google Calendar, hit Next.</p>
-    </div>
-
-    <!-- Step 5: This app → Google Calendar -->
-    <div class="tutorial-step" data-step="4">
-      <span class="tut-icon">&#128279;</span>
-      <h3>Step 2 of 2 &mdash; This App &rarr; Google Calendar</h3>
-      <p style="font-size:0.85rem;">Now connect this app to that same calendar.</p>
-      <div class="tut-instructions">
-        <strong>1.</strong> Tap <strong>More &rarr; Settings</strong><br>
-        <strong>2.</strong> In the <strong>Calendar Sync</strong> card, sign in with the same Google account<br>
-        <strong>3.</strong> Pick the calendar QGenda is pushing to<br>
-        <strong>4.</strong> Tap <strong>Sync Calendar</strong> &mdash; shifts auto-fill from the events
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="tutorialOpenCalendarSync()" style="margin-top:8px;">Open Calendar Sync now</button>
-    </div>
-
-    <!-- Step 6: Log Your Cases -->
-    <div class="tutorial-step" data-step="5">
+    <!-- Step 3: Log cases -->
+    <div class="tutorial-step" data-step="2">
       <span class="tut-icon">&#128203;</span>
       <h3>Log Your Cases</h3>
       <div class="tut-instructions">
-        <strong>1.</strong> After saving a shift, the case form appears<br>
-        <strong>2.</strong> Select the procedure type<br>
-        <strong>3.</strong> Enter units and times<br>
-        <strong>4.</strong> Tap <strong>Save Case</strong> — repeat for each case
+        <strong>1.</strong> On the <strong>Today</strong> page, tap <strong>+ Add Case</strong> for each procedure<br>
+        <strong>2.</strong> Pick the case type, enter ASA code (suggestions auto-fill), and the start time<br>
+        <strong>3.</strong> When the case is running, tap the red <strong>&#9209; Stop Case</strong> button to fill in the end time<br>
+        <strong>4.</strong> Points calculate automatically &mdash; saved cases show duration and an estimated finish time
       </div>
     </div>
 
-    <!-- Step 7: Catch Up on Past Data -->
-    <div class="tutorial-step" data-step="6">
-      <span class="tut-icon">&#128202;</span>
-      <h3>Catch Up on Past Data</h3>
-      <p>How would you like to add your history?</p>
-      <div class="tutorial-options">
-        <div class="tutorial-option" onclick="tutorialHistoryChoice('fresh')">
-          <span class="to-icon">&#10024;</span>
-          <div class="to-text">
-            <strong>Start Fresh</strong>
-            <span>Begin tracking from today</span>
-          </div>
-        </div>
-        <div class="tutorial-option" onclick="tutorialHistoryChoice('import')">
-          <span class="to-icon">&#128229;</span>
-          <div class="to-text">
-            <strong>Import from File</strong>
-            <span>Upload a JSON or spreadsheet</span>
-          </div>
-        </div>
-        <div class="tutorial-option" onclick="tutorialHistoryChoice('override')">
-          <span class="to-icon">&#128221;</span>
-          <div class="to-text">
-            <strong>Enter Total Points</strong>
-            <span>Enter monthly point totals manually</span>
-          </div>
-          <span class="to-badge">Easiest</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Step 8: Revenue Projections -->
-    <div class="tutorial-step" data-step="7">
+    <!-- Step 4: Set $/pt -->
+    <div class="tutorial-step" data-step="3">
       <span class="tut-icon">&#129689;</span>
-      <h3>Revenue Projections</h3>
+      <h3>Set Your Point Value</h3>
       <div class="tut-instructions">
-        <strong>1.</strong> Go to the <strong>Comp</strong> tab<br>
-        <strong>2.</strong> Enter your estimated <strong>$/point</strong> value<br>
-        <strong>3.</strong> This unlocks revenue projections on the Data tab
+        <strong>1.</strong> Open the <strong>Comp</strong> tab<br>
+        <strong>2.</strong> In the Paycheck Entry card, fill in <strong>Step 1: Point Value</strong> ($/pt) for the current month<br>
+        <strong>3.</strong> That unlocks the Production Pipeline projection, paycheck previews, and the annual income forecast
       </div>
+      <p style="font-size:0.72rem;color:var(--text-dim);margin-top:8px;">Update each month when you get the new $/pt &mdash; rolling averages do the rest.</p>
     </div>
 
     <div class="tutorial-dots" id="tutorialDots">
       <span class="dot active"></span>
-      <span class="dot"></span>
-      <span class="dot"></span>
-      <span class="dot"></span>
-      <span class="dot"></span>
       <span class="dot"></span>
       <span class="dot"></span>
       <span class="dot"></span>
@@ -4807,6 +4734,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="drawer-item" data-page="updates">
     <span class="drawer-icon">&#128227;</span>
     <span>Updates</span>
+  </div>
+  <div class="drawer-item" onclick="closeDrawer();showTutorial();">
+    <span class="drawer-icon">&#127891;</span>
+    <span>Tutorial</span>
   </div>
   <div class="drawer-item" data-page="comprules">
     <span class="drawer-icon">&#128214;</span>
@@ -16414,10 +16345,10 @@ function navigateToWorkScan() {
 // TUTORIAL
 // ================================================================
 let tutorialStep = 0;
-const TUTORIAL_TOTAL = 8;
+const TUTORIAL_TOTAL = 4;
 // Step indices that present option cards instead of a Next button
 // (step 2 = Adding a Whole Month; step 6 = Catch Up on Past Data).
-const TUTORIAL_CHOICE_STEPS = new Set([2, 6]);
+const TUTORIAL_CHOICE_STEPS = new Set([1]);
 
 function showTutorial() {
   tutorialStep = 0;
@@ -16471,14 +16402,14 @@ function tutorialPrev() {
 }
 
 function tutorialMonthlyChoice(choice) {
-  // Manual: skip the QGenda + Calendar-sync steps and go straight to
-  // Log Your Cases (step 5). Sync: continue with the next step
-  // (QGenda → Google Calendar walk-through).
-  if (choice === 'manual') {
-    tutorialStep = 5;
-  } else {
-    tutorialStep = 3;
+  // Sync: close the tutorial and jump straight into the Calendar Sync card
+  //   so the user can connect the same Google account QGenda is pushing to.
+  // Manual: advance to the Log Cases step and continue the linear walk-through.
+  if (choice === 'sync') {
+    tutorialOpenCalendarSync();
+    return;
   }
+  tutorialStep = 2;
   updateTutorialStep();
 }
 
@@ -16503,23 +16434,19 @@ function tutorialOpenCalendarSync() {
   }, 100);
 }
 
-function tutorialHistoryChoice(choice) {
-  if (choice === 'fresh') {
-    // Jump to the final step (Revenue Projections).
-    tutorialStep = TUTORIAL_TOTAL - 1;
-    updateTutorialStep();
-  } else if (choice === 'import') {
-    closeTutorial();
-    navigateToImportPage();
-  } else if (choice === 'override') {
-    closeTutorial();
-    navigateToHistoryOverrides();
-  }
-}
-
 function finishTutorial() {
   closeTutorial();
-  navigateToDataEntry();
+  // Land on the Today page rather than data entry — the new flow
+  // pivots the user toward Today as the day-to-day surface.
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const today = document.getElementById('page-today');
+  if (today) today.classList.add('active');
+  const todayNav = document.querySelector('.bottom-nav button[data-page="today"]');
+  if (todayNav) todayNav.classList.add('active');
+  if (typeof renderToday === 'function') {
+    try { renderToday(); } catch (e) {}
+  }
 }
 
 function navigateToImportPage() {
