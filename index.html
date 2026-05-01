@@ -7248,9 +7248,9 @@ function renderAdminProcedureMappings() {
   const canonicals = Object.keys(byCanonical).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 
   // Outer collapsible wraps the whole list; each canonical group nests its
-  // own collapsible so the user can fold individual groups too. Both default
-  // open. Native <details>/<summary> keeps this zero-JS and accessible.
-  let html = '<details open style="background:var(--surface);border-radius:8px;padding:8px 10px;">';
+  // own collapsible. Both default closed so the admin page opens compact —
+  // the owner can expand any group they want to inspect.
+  let html = '<details style="background:var(--surface);border-radius:8px;padding:8px 10px;">';
   html += '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;outline:none;">';
   html +=   'Saved mappings <span style="color:var(--text-dim);font-weight:400;font-size:0.72rem;">';
   html +=     '(' + entries.length + ' mapping' + (entries.length !== 1 ? 's' : '');
@@ -7261,7 +7261,7 @@ function renderAdminProcedureMappings() {
 
   for (const canonical of canonicals) {
     const variants = byCanonical[canonical].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-    html += '<details open style="margin-bottom:6px;">';
+    html += '<details style="margin-bottom:6px;">';
     html += '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;outline:none;padding:4px 0;">';
     html +=   escHtml(canonical);
     html +=   ' <span style="color:var(--text-dim);font-weight:400;font-size:0.7rem;">(' + variants.length + ')</span>';
@@ -7357,23 +7357,28 @@ function renderAdminTipViewer() {
     out.innerHTML = '<p style="color:var(--text-dim);font-size:0.78rem;margin:0;">Tip catalog not loaded yet.</p>';
     return;
   }
+  // Collapsible per-tip rows, default collapsed so the admin page opens
+  // compact. Each summary shows the title; the body + metadata expand on
+  // tap. Native <details>/<summary> handles the toggle for free.
   let html = '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:8px;">' + FEATURE_TIPS.length + ' tip' + (FEATURE_TIPS.length !== 1 ? 's' : '') + ' in catalog order (priority tips first)</div>';
   for (let i = 0; i < FEATURE_TIPS.length; i++) {
     const tip = FEATURE_TIPS[i];
-    html += '<div style="background:var(--surface);border-radius:8px;padding:10px 12px;margin-bottom:8px;">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:4px;">';
+    html += '<details style="background:var(--surface);border-radius:8px;padding:8px 12px;margin-bottom:6px;">';
+    html += '<summary style="cursor:pointer;outline:none;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">';
     html +=   '<strong style="font-size:0.85rem;">' + (i + 1) + '. ' + escHtml(tip.title) + '</strong>';
-    html +=   '<span style="font-size:0.65rem;color:var(--text-dim);">id: <code>' + escHtml(tip.id) + '</code></span>';
-    html += '</div>';
-    html += '<div style="font-size:0.78rem;color:var(--text);line-height:1.45;">' + escHtml(tip.body) + '</div>';
+    html +=   '<span style="font-size:0.65rem;color:var(--text-dim);font-weight:400;">id: <code>' + escHtml(tip.id) + '</code></span>';
+    html += '</summary>';
+    html += '<div style="font-size:0.78rem;color:var(--text);line-height:1.45;margin-top:6px;">' + escHtml(tip.body) + '</div>';
     const meta = [];
     if (tip.contextualPage) meta.push('contextual on <code>' + escHtml(tip.contextualPage) + '</code>');
+    if (typeof tip.dateTrigger === 'function') meta.push('date-triggered');
     if (typeof tip.deepLink === 'function') meta.push('has Show me link');
     if (typeof tip.isNewUser === 'function') meta.push('new-user trigger');
+    if (tip.chainAfterDismiss) meta.push('chains to <code>' + escHtml(tip.chainAfterDismiss) + '</code>');
     if (meta.length > 0) {
       html += '<div style="font-size:0.65rem;color:var(--text-dim);margin-top:6px;">' + meta.join(' &middot; ') + '</div>';
     }
-    html += '</div>';
+    html += '</details>';
   }
   out.innerHTML = html;
 }
@@ -16790,16 +16795,25 @@ function showTutorial() {
 // they've completed the matching first-time action.
 const FEATURE_TIPS = [
   { id: 'shift-entry', title: 'Log your first shift',
-    body: 'Open More → Work, pick your assignment type (OR, OB, call, etc.), enter your start and end times, then tap Save. The shift powers all the per-day point calculations.',
-    deepLink: () => { dismissTipBanner(); navigateToDataEntry(); },
-    contextualPage: 'dataentry',
+    body: 'Open the Today page (star icon at the bottom) to log shifts — no need to dig into More → Work. Pick the assignment type (OR, OB, call, etc.), enter start and end times, and save. The shift powers every per-day point calculation.',
+    deepLink: () => { dismissTipBanner(); navigateToTodayPage(); },
+    contextualPage: 'today',
+    chainAfterDismiss: 'case-entry',
     isNewUser: () => !data || !data.shifts || Object.keys(data.shifts).length === 0 },
 
   { id: 'case-entry', title: 'Log your first case',
-    body: 'On Today, tap + Add Case after your shift is saved. Pick the case type, enter the procedure name and a start time, then save — points calculate automatically. When the case is running, the red Stop Case button fills in the end time.',
+    body: 'On Today, tap + Add Case once your shift is saved. Pick the case type, enter the procedure name and start time, then save — points calculate automatically. While the case is running, the red Stop Case button fills in the end time.',
     deepLink: () => { dismissTipBanner(); navigateToTodayPage(); },
     contextualPage: 'today',
     isNewUser: () => !data || !Array.isArray(data.cases) || data.cases.length === 0 },
+
+  { id: 'naming-conventions', title: 'Naming matters',
+    body: 'Stats pool by procedure name AND surgeon name, so consistency is key. Pick from auto-suggested procedure names while typing whenever they fit; only add a new one if none match. For surgeons, use first-initial + last name (e.g. "T. Cook") so "T. Cook" and "Tim Cook" don\'t split into two surgeons.',
+    deepLink: () => { dismissTipBanner(); navigateToTodayPage(); } },
+
+  { id: 'calendar-sync', title: 'Calendar Sync',
+    body: 'In QGenda, push your assignments to a Google Calendar (Settings → Calendar Sync inside QGenda). Then in this app, More → Settings → Calendar Sync — connect to the SAME Google account and pick that calendar. Shifts auto-fill.',
+    deepLink: () => { dismissTipBanner(); navigateToSettingsPage(); } },
 
   { id: 'monthly-pv', title: 'Update $/pt monthly',
     body: 'Comp tab → Paycheck Entry Step 1 sets your $/pt for the month. Refreshing this each month drives every projection card — Production Pipeline, paycheck previews, annual forecast.',
@@ -16815,7 +16829,7 @@ const FEATURE_TIPS = [
     deepLink: () => { dismissTipBanner(); navigateToTodayPage(); } },
 
   { id: 'case-finish-estimate', title: 'Estimated finish time',
-    body: 'Running case rows show an estimated finish based on prior cases of the same surgeon + procedure. Falls back to the cross-site median when surgeon data is sparse.',
+    body: 'Running case rows show an estimated finish based on prior cases of the same surgeon + procedure. Falls back to the site pool, then the cross-site pool, when surgeon data is sparse.',
     deepLink: () => { dismissTipBanner(); navigateToTodayPage(); } },
 
   { id: 'proc-lookup-surgeon', title: 'Search by surgeon',
@@ -16830,21 +16844,18 @@ const FEATURE_TIPS = [
     body: 'Pooled OR efficiency for your site (3+ samples min) — toggle Per clocked hour or Per shift to compare.',
     deepLink: () => { dismissTipBanner(); navigateToCommunityStatsPage(); } },
 
-  { id: 'calendar-sync', title: 'Calendar Sync',
-    body: 'In QGenda, push your assignments to a Google Calendar (Settings → Calendar Sync inside QGenda). Then in this app, More → Settings → Calendar Sync — connect to the SAME Google account and pick that calendar. Shifts auto-fill.',
-    deepLink: () => { dismissTipBanner(); navigateToSettingsPage(); } },
+  { id: 'case-log-billing-watch', title: 'Watching for Billing + flagging cases',
+    body: 'On the Case Log (Data tab), mark any case missing from a month\'s billing — it goes into a "Watching for Billing" pool. When the case finally appears in a later month, move it onto that month from the same page. You can also flag cases for follow-up; the Flagged page (More → Flagged) collects them all in one list.',
+    deepLink: () => { dismissTipBanner(); navigateToCaseLogs(); },
+    // Show on the user's first sign-in on the 20th-23rd of any month — gives
+    // them a heads-up around when last month's billing report typically arrives.
+    dateTrigger: (now) => { const d = now.getDate(); return d >= 20 && d <= 23; } },
 
-  { id: 'shift-log-types', title: 'Mistyped a shift?',
-    body: 'Change the assignment type on Today (or via Edit Shift). The Shift Log + pay totals re-render with the corrected type.',
-    deepLink: () => { dismissTipBanner(); navigateToTodayPage(); } },
-
-  { id: 'case-log-page', title: 'Case Log + reconcile',
-    body: "Data tab → Case Logs shows every case you've entered, searchable. Use this page to reconcile against QGenda's billing report.",
-    deepLink: () => { dismissTipBanner(); navigateToCaseLogs(); } },
-
-  { id: 'shift-log-page', title: 'Shift Log + reconcile',
-    body: 'Data tab → Shift Logs shows every shift with pay-code totals. Reconcile against QGenda billing on this page too.',
-    deepLink: () => { dismissTipBanner(); navigateToShiftLogs(); } }
+  { id: 'shift-log-qgenda-reconcile', title: 'Reconcile shifts with QGenda',
+    body: 'On the 1st of each month, double-check your shift time intervals against QGenda\'s internal totals. The Shift Log (Data tab) shows pay-code totals per shift so you can reconcile QGenda\'s time records line by line.',
+    deepLink: () => { dismissTipBanner(); navigateToShiftLogs(); },
+    // Show on the user's first sign-in on the 1st of any month.
+    dateTrigger: (now) => now.getDate() === 1 }
 ];
 
 function _todayLocalKey() {
@@ -16903,12 +16914,22 @@ function maybeShowDailyTip() {
   // Skip overnight call-shift sessions — wait until 08:30 local.
   const now = new Date();
   if (now.getHours() * 60 + now.getMinutes() < 510) return;
-  // Take the first un-seen tip in catalog order. Priority tips
-  // (shift-entry / case-entry / monthly-pv) are at the top of the list so
-  // they surface first. Once everything in FEATURE_TIPS has been seen,
-  // stop — no recycling.
   const seen = new Set(settings.tipSeenIds || []);
-  const tip = FEATURE_TIPS.find(t => !seen.has(t.id));
+  // Date-gated tips win when their trigger matches today (e.g. case-log
+  // tip on the 20th-23rd, shift-log tip on the 1st). Sequential rotation
+  // skips date-gated tips entirely the rest of the month so they only
+  // surface on their target dates.
+  for (const tip of FEATURE_TIPS) {
+    if (seen.has(tip.id)) continue;
+    if (typeof tip.dateTrigger === 'function' && tip.dateTrigger(now)) {
+      showTipBanner(tip);
+      return;
+    }
+  }
+  // Otherwise, first un-seen non-date-gated tip in catalog order. Priority
+  // tips at the top of the list surface first; once everything has been
+  // seen, stop — no recycling.
+  const tip = FEATURE_TIPS.find(t => !seen.has(t.id) && typeof t.dateTrigger !== 'function');
   if (!tip) return;
   showTipBanner(tip);
 }
@@ -16952,6 +16973,7 @@ function tipBannerDeepLinkClick() {
     // if the navigation interrupts.
     _markTipSeen(tip);
     tip.deepLink();
+    if (tip.chainAfterDismiss) _maybeFireChainedTip(tip.chainAfterDismiss);
   } else {
     dismissTipBanner();
   }
@@ -16960,7 +16982,7 @@ function tipBannerDeepLinkClick() {
 function snoozeTipBanner() {
   // Hide for this session only. Don't update tipLastShownDate or tipSeenIds
   // — next sign-in re-evaluates and may re-show the same tip or pick another
-  // unseen one.
+  // unseen one. Chain-after-dismiss intentionally doesn't fire on snooze.
   _tipBannerSnoozedThisSession = true;
   const banner = document.getElementById('tipBanner');
   if (banner) banner.classList.add('hidden');
@@ -16971,6 +16993,22 @@ function dismissTipBanner() {
   const tip = banner && banner._currentTip;
   if (tip) _markTipSeen(tip);
   if (banner) banner.classList.add('hidden');
+  if (tip && tip.chainAfterDismiss) _maybeFireChainedTip(tip.chainAfterDismiss);
+}
+
+// If a tip has chainAfterDismiss set, immediately surface the chained tip
+// once the current banner is closed. Used to push case-entry right after
+// shift-entry instead of waiting until tomorrow.
+function _maybeFireChainedTip(nextId) {
+  if (!settings || settings.tipsEnabled !== true) return;
+  if (_tipBannerSnoozedThisSession) return;
+  const seen = new Set(settings.tipSeenIds || []);
+  if (seen.has(nextId)) return;
+  const next = FEATURE_TIPS.find(t => t.id === nextId);
+  if (!next) return;
+  // Tiny delay so the dismiss / navigation has settled before the next
+  // banner pops in.
+  setTimeout(() => showTipBanner(next), 350);
 }
 
 function _markTipSeen(tip) {
