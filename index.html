@@ -624,6 +624,74 @@ textarea { resize: vertical; min-height: 60px; }
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
+/* ===== DAILY FEATURE TIP BANNER ===== */
+.tip-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  z-index: 390;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+.tip-banner-icon { font-size: 1.4rem; flex-shrink: 0; line-height: 1.2; }
+.tip-banner-text { flex: 1; min-width: 0; line-height: 1.4; }
+.tip-banner-text strong { display: block; color: var(--text); font-size: 0.85rem; margin-bottom: 2px; }
+.tip-banner-text span { display: block; color: var(--text-dim); font-size: 0.78rem; }
+.tip-banner-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.tip-banner-cta {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tip-banner-snooze {
+  background: var(--surface2);
+  color: var(--text);
+  border: none;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.tip-banner-dismiss {
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0 4px;
+}
+/* Embedded preview inside the opt-in modal — same layout as the live banner
+   but laid out as a static card so it reads as a screenshot of the feature. */
+.tip-banner-preview {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 10px 0 4px;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.tip-banner-preview .tip-banner-icon { font-size: 1.3rem; }
+.tip-banner-preview .tip-banner-text strong { font-size: 0.82rem; }
+.tip-banner-preview .tip-banner-text span { font-size: 0.74rem; }
+
 .install-banner {
   position: fixed;
   top: 0;
@@ -3213,6 +3281,20 @@ body.hide-monetary .monetary-hide { display: none !important; }
         December includes a 2nd bonus paycheck estimated from the year's average. Enter bonus stipends and non-guaranteed payments in the December Paycheck Projection breakdown.
       </p>
     </div>
+    <div style="margin-top:12px;padding:10px 12px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.82rem;font-weight:600;">Daily feature tips</div>
+        <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
+          One short tip per day after 8:30am local on something the app can do. Skips days you snooze.
+        </p>
+      </div>
+      <label class="toggle-row" style="margin:0;">
+        <span class="toggle-switch">
+          <input type="checkbox" id="settingsTipsEnabled" onchange="onSettingsTipsToggle(this.checked)">
+          <span class="slider"></span>
+        </span>
+      </label>
+    </div>
   </div>
 
   <!-- Scan Settings -->
@@ -4612,6 +4694,53 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
 <!-- Site Invite Banner -->
 <div class="invite-banner hidden" id="inviteBanner" onclick="openInviteModal()">&#9993; You've been invited to <span id="inviteBannerSite">a new site</span> &mdash; tap to review</div>
+
+<!-- Daily Feature Tip banner — sticky top, shown at most once per day after
+     08:30 local for users who opted in. Deep link, snooze, and dismiss
+     buttons. -->
+<div class="tip-banner hidden" id="tipBanner">
+  <div class="tip-banner-icon">&#128161;</div>
+  <div class="tip-banner-text">
+    <strong id="tipBannerTitle"></strong>
+    <span id="tipBannerBody"></span>
+  </div>
+  <div class="tip-banner-actions">
+    <button class="tip-banner-cta hidden" id="tipBannerDeepLinkBtn" onclick="tipBannerDeepLinkClick()">Show me</button>
+    <button class="tip-banner-snooze" onclick="snoozeTipBanner()">Later</button>
+    <button class="tip-banner-dismiss" onclick="dismissTipBanner()" aria-label="Dismiss">&times;</button>
+  </div>
+</div>
+
+<!-- Tips Opt-In modal — preview-style overlay shown once. Demonstrates what a
+     tip looks like and asks the user to opt in or out. After either choice,
+     never re-prompted. -->
+<div class="modal-overlay hidden" id="tipsOptInOverlay" onclick="if(event.target===this)closeTipsOptInModal()">
+  <div class="modal" style="max-width:440px;">
+    <h2 style="margin-top:0;">Daily feature tips?</h2>
+    <p style="margin:8px 0;font-size:0.9rem;">
+      Want one short tip per day on something the app can do? Here's what they look like:
+    </p>
+    <div class="tip-banner-preview">
+      <div class="tip-banner-icon">&#128161;</div>
+      <div class="tip-banner-text">
+        <strong>Search by surgeon</strong>
+        <span>In Procedure Lookup, type a surgeon's name to see their per-procedure averages and stddevs.</span>
+      </div>
+      <div class="tip-banner-actions">
+        <button class="tip-banner-cta">Show me</button>
+        <button class="tip-banner-snooze">Later</button>
+        <button class="tip-banner-dismiss">&times;</button>
+      </div>
+    </div>
+    <p style="font-size:0.75rem;color:var(--text-dim);margin:10px 0 0;">
+      One per day, after 8:30 local. You can turn them on or off anytime in Settings.
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="setTipsEnabled(false)">No thanks</button>
+      <button class="btn btn-primary btn-sm" onclick="setTipsEnabled(true)">Yes, show me tips</button>
+    </div>
+  </div>
+</div>
 
 <!-- Install-to-home-screen banner — only shown when running in a browser tab -->
 <div class="install-banner hidden" id="installBanner">
@@ -10978,7 +11107,11 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     returnToShiftLogs = false;
     returnToToday = false;
     if (page === 'dataentry') loadDataEntryPage();
-    if (page === 'settings') { /* no special init needed */ }
+    if (page === 'settings') {
+      // Reflect current tips opt-in state in the toggle.
+      const cb = document.getElementById('settingsTipsEnabled');
+      if (cb) cb.checked = !!(settings && settings.tipsEnabled);
+    }
     if (page === 'history') { renderHistory(); }
     if (page === 'import') { /* no special init needed */ }
     if (page === 'flagged') { renderFlaggedPage(); }
@@ -15843,9 +15976,70 @@ function navigateToShiftLogs() {
   const dashBtn = document.querySelector('.bottom-nav button[data-page="dashboard"]');
   dashBtn.classList.add('active');
   document.getElementById('page-dashboard').classList.add('active');
-  document.querySelectorAll('.dash-tab').forEach(t => t.classList.remove('active'));
-  const slTab = document.getElementById('dashShiftLogsTab');
-  if (slTab) { slTab.classList.add('active'); slTab.click(); }
+  if (typeof switchDashboardTab === 'function') switchDashboardTab('shiftlogs');
+}
+
+function navigateToCaseLogs() {
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const dashBtn = document.querySelector('.bottom-nav button[data-page="dashboard"]');
+  if (dashBtn) dashBtn.classList.add('active');
+  document.getElementById('page-dashboard').classList.add('active');
+  if (typeof switchDashboardTab === 'function') switchDashboardTab('caselogs');
+}
+
+function navigateToTodayPage() {
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const todayBtn = document.querySelector('.bottom-nav button[data-page="today"]');
+  if (todayBtn) todayBtn.classList.add('active');
+  const todayPage = document.getElementById('page-today');
+  if (todayPage) todayPage.classList.add('active');
+  if (typeof renderToday === 'function') { try { renderToday(); } catch (e) {} }
+}
+
+function navigateToCompPage() {
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const compBtn = document.querySelector('.bottom-nav button[data-page="compensation"]');
+  if (compBtn) compBtn.classList.add('active');
+  const compPage = document.getElementById('page-compensation');
+  if (compPage) compPage.classList.add('active');
+}
+
+function navigateToSettingsPage() {
+  closeDrawer();
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const settingsPage = document.getElementById('page-settings');
+  if (settingsPage) settingsPage.classList.add('active');
+}
+
+function navigateToProcLookup() {
+  closeDrawer();
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const timeBtn = document.querySelector('.bottom-nav button[data-page="time"]');
+  if (timeBtn) timeBtn.classList.add('active');
+  const timePage = document.getElementById('page-time');
+  if (timePage) timePage.classList.add('active');
+  // Scroll the Procedure Time Lookup card into view + focus the input.
+  setTimeout(() => {
+    const search = document.getElementById('procLookupSearch');
+    if (search) {
+      search.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      try { search.focus(); } catch (e) {}
+    }
+  }, 100);
+}
+
+function navigateToCommunityStatsPage() {
+  closeDrawer();
+  document.querySelectorAll('.bottom-nav button[data-page]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const cs = document.getElementById('page-communitystats');
+  if (cs) cs.classList.add('active');
+  if (typeof initCommunityStats === 'function') { try { initCommunityStats(); } catch (e) {} }
 }
 
 function renderEditShiftTimeEntries(entries) {
@@ -16354,6 +16548,172 @@ function showTutorial() {
   tutorialStep = 0;
   updateTutorialStep();
   document.getElementById('tutorialOverlay').classList.remove('hidden');
+}
+
+// =====================================================================
+// DAILY FEATURE TIPS
+// =====================================================================
+// Static catalog. Each tip has:
+//   id        — stable string id stored in settings.tipSeenIds
+//   title     — bold first line
+//   body      — short description
+//   deepLink  — optional () => void; wires the "Show me" button. The link
+//               handler should both navigate AND dismiss the banner so the
+//               next render is on the target page.
+const FEATURE_TIPS = [
+  { id: 'stop-case', title: 'Stop Case button',
+    body: 'When a case is running, tap the red Stop Case button on Today to fill in the end time at the current minute.',
+    deepLink: () => { dismissTipBanner(); navigateToTodayPage(); } },
+
+  { id: 'proc-lookup-surgeon', title: 'Search by surgeon',
+    body: "In Procedure Time Lookup, type a surgeon's name to see their per-procedure averages and stddev.",
+    deepLink: () => { dismissTipBanner(); navigateToProcLookup(); } },
+
+  { id: 'community-stats', title: 'Community Stats',
+    body: 'Pooled OR efficiency for your site (3+ samples min) — toggle Per clocked hour or Per shift to compare.',
+    deepLink: () => { dismissTipBanner(); navigateToCommunityStatsPage(); } },
+
+  { id: 'pipeline-tooltip', title: 'Annual projection breakdown',
+    body: 'On Comp, hover the i icon next to "Annual Proj" in the Production Pipeline for the month-by-month breakdown.',
+    deepLink: () => { dismissTipBanner(); navigateToCompPage(); } },
+
+  { id: 'monthly-pv', title: 'Update $/pt monthly',
+    body: 'Comp tab → Paycheck Entry Step 1 sets $/pt for the month. Refreshing it monthly drives all projection cards.',
+    deepLink: () => { dismissTipBanner(); navigateToCompPage(); } },
+
+  { id: 'calendar-sync', title: 'Calendar Sync',
+    body: 'In QGenda, push your assignments to a Google Calendar (Settings → Calendar Sync inside QGenda). Then in this app, More → Settings → Calendar Sync — connect to the SAME Google account and pick that calendar. Shifts auto-fill.',
+    deepLink: () => { dismissTipBanner(); navigateToSettingsPage(); } },
+
+  { id: 'shift-log-types', title: 'Mistyped a shift?',
+    body: 'Change the assignment type on Today (or via Edit Shift). The Shift Log + pay totals re-render with the corrected type.',
+    deepLink: () => { dismissTipBanner(); navigateToTodayPage(); } },
+
+  { id: 'case-finish-estimate', title: 'Estimated finish time',
+    body: 'Running case rows show an estimated finish based on prior cases of the same surgeon + procedure. Falls back to the cross-site median when surgeon data is sparse.',
+    deepLink: () => { dismissTipBanner(); navigateToTodayPage(); } },
+
+  { id: 'case-log-page', title: 'Case Log + reconcile',
+    body: "Data tab → Case Logs shows every case you've entered, searchable. Use this page to reconcile against QGenda's billing report.",
+    deepLink: () => { dismissTipBanner(); navigateToCaseLogs(); } },
+
+  { id: 'shift-log-page', title: 'Shift Log + reconcile',
+    body: 'Data tab → Shift Logs shows every shift with pay-code totals. Reconcile against QGenda billing on this page too.',
+    deepLink: () => { dismissTipBanner(); navigateToShiftLogs(); } }
+];
+
+function _todayLocalKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// Run once at sign-in. If the user hasn't been asked yet, show the
+// preview-style opt-in modal. Otherwise, evaluate the daily-tip rules.
+function maybeShowFeatureTipsAtStartup() {
+  if (!settings) return;
+  if (settings.tipsOptInPromptShown !== true) {
+    showTipsOptInModal();
+    return;
+  }
+  maybeShowDailyTip();
+}
+
+function showTipsOptInModal() {
+  const overlay = document.getElementById('tipsOptInOverlay');
+  if (overlay) overlay.classList.remove('hidden');
+}
+
+function closeTipsOptInModal() {
+  const overlay = document.getElementById('tipsOptInOverlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
+function setTipsEnabled(enabled) {
+  if (!settings) settings = {};
+  settings.tipsEnabled = !!enabled;
+  settings.tipsOptInPromptShown = true;
+  saveSettings(settings);
+  closeTipsOptInModal();
+  // Reflect in the Settings page toggle if it's already mounted.
+  const cb = document.getElementById('settingsTipsEnabled');
+  if (cb) cb.checked = !!enabled;
+  if (enabled) maybeShowDailyTip();
+}
+
+// Settings page toggle handler — flips opt-in state without re-prompting.
+function onSettingsTipsToggle(checked) {
+  if (!settings) settings = {};
+  settings.tipsEnabled = !!checked;
+  settings.tipsOptInPromptShown = true;
+  saveSettings(settings);
+  if (!checked) dismissTipBanner();
+}
+
+let _tipBannerSnoozedThisSession = false;
+
+function maybeShowDailyTip() {
+  if (!settings || settings.tipsEnabled !== true) return;
+  if (_tipBannerSnoozedThisSession) return;
+  if (settings.tipLastShownDate === _todayLocalKey()) return;
+  // Skip overnight call-shift sessions — wait until 08:30 local.
+  const now = new Date();
+  if (now.getHours() * 60 + now.getMinutes() < 510) return;
+  // Pick a random un-seen tip. Once all are seen, stop showing — we don't
+  // recycle the catalog (per the user's request: don't reset the pool).
+  const seen = new Set(settings.tipSeenIds || []);
+  const candidates = FEATURE_TIPS.filter(t => !seen.has(t.id));
+  if (candidates.length === 0) return;
+  const tip = candidates[Math.floor(Math.random() * candidates.length)];
+  showTipBanner(tip);
+}
+
+function showTipBanner(tip) {
+  const banner = document.getElementById('tipBanner');
+  if (!banner) return;
+  banner._currentTip = tip;
+  document.getElementById('tipBannerTitle').textContent = tip.title;
+  document.getElementById('tipBannerBody').textContent = tip.body;
+  const dl = document.getElementById('tipBannerDeepLinkBtn');
+  if (dl) dl.classList.toggle('hidden', !tip.deepLink);
+  banner.classList.remove('hidden');
+}
+
+function tipBannerDeepLinkClick() {
+  const banner = document.getElementById('tipBanner');
+  const tip = banner && banner._currentTip;
+  if (tip && typeof tip.deepLink === 'function') {
+    // Mark as seen first — the deepLink handler dismisses the banner
+    // after navigating, so this guarantees the seen-state persists even
+    // if the navigation interrupts.
+    _markTipSeen(tip);
+    tip.deepLink();
+  } else {
+    dismissTipBanner();
+  }
+}
+
+function snoozeTipBanner() {
+  // Hide for this session only. Don't update tipLastShownDate or tipSeenIds
+  // — next sign-in re-evaluates and may re-show the same tip or pick another
+  // unseen one.
+  _tipBannerSnoozedThisSession = true;
+  const banner = document.getElementById('tipBanner');
+  if (banner) banner.classList.add('hidden');
+}
+
+function dismissTipBanner() {
+  const banner = document.getElementById('tipBanner');
+  const tip = banner && banner._currentTip;
+  if (tip) _markTipSeen(tip);
+  if (banner) banner.classList.add('hidden');
+}
+
+function _markTipSeen(tip) {
+  if (!settings) settings = {};
+  if (!Array.isArray(settings.tipSeenIds)) settings.tipSeenIds = [];
+  if (!settings.tipSeenIds.includes(tip.id)) settings.tipSeenIds.push(tip.id);
+  settings.tipLastShownDate = _todayLocalKey();
+  saveSettings(settings);
 }
 
 function closeTutorial() {
@@ -27209,6 +27569,12 @@ auth.onAuthStateChanged(async (user) => {
     }
     // Show the Admin drawer entry once we know the user has any admin role.
     refreshAdminDrawerVisibility();
+
+    // Daily feature tips: opt-in modal on first sign-in after deploy, or a
+    // single tip on subsequent days when the user has opted in.
+    if (typeof maybeShowFeatureTipsAtStartup === 'function') {
+      try { maybeShowFeatureTipsAtStartup(); } catch (e) { console.warn('feature tips init:', e); }
+    }
     // One-shot toast for users newly promoted (or whose admin scope changed)
     // since their last sign-in. Deletes the notice from their profile.
     consumeAdminPromotionNotice().catch(err => console.warn('admin notice consume:', err));
