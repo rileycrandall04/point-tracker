@@ -3113,6 +3113,9 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <!-- 4. Historical Trends (with annual income stats above chart) -->
   <div class="card">
     <h2>Historical Trends</h2>
+    <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 4px;text-align:center;line-height:1.45;">
+      Monthly production &times; $/pt &mdash; <strong>actual</strong> gross from the comp summary report when entered, <strong>blended estimate</strong> otherwise. Production-only; does not include stipends or retirement.
+    </p>
     <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin:8px 0 2px;font-size:0.72rem;flex-wrap:wrap;">
       <button class="hist-range-btn" onclick="setHistRange('3m')">3 Mo</button>
       <button class="hist-range-btn" onclick="setHistRange('6m')">6 Mo</button>
@@ -3140,6 +3143,9 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
     <div class="collapse-body" id="histCompBody">
       <div style="padding-top:12px;">
+        <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px;line-height:1.45;">
+          <strong>Calc</strong> = monthly production points &times; $/pt &middot; <strong>Actual</strong> = compTotal from comp summary. Production-only; does not include stipends or retirement (see Annual Projection for gross).
+        </p>
         <details style="margin-bottom:10px;">
           <summary style="cursor:pointer;font-size:0.78rem;color:var(--primary);">How to use this table</summary>
           <div style="font-size:0.75rem;color:var(--text-dim);margin-top:6px;line-height:1.5;">
