@@ -2172,9 +2172,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
            suppresses AR + production for the day. Force Off is hidden /
            disabled on weekends + holidays since it never applies there. -->
       <div id="pagerCallTypeSection" class="hidden" style="margin-top:8px;">
-        <div class="form-group">
-          <label>Pager call types</label>
-          <div id="pagerCallTypeChecks" style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">
+        <details id="pagerCallTypeDetails" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;">
+          <summary style="cursor:pointer;outline:none;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:0.85rem;font-weight:600;">
+            <span>Pager call types</span>
+            <span id="pagerCallTypeSummary" style="font-size:0.72rem;color:var(--text-dim);font-weight:400;"></span>
+          </summary>
+          <div id="pagerCallTypeChecks" style="display:flex;flex-direction:column;gap:4px;margin-top:8px;">
             <label class="pc-row" data-pcvalue="14hr_or" style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;padding:4px 0;"><input type="checkbox" value="14hr_or" style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;"> 14 hr OR Call (49 pts) — General/OR, APS, Other</label>
             <label class="pc-row" data-pcvalue="14hr_spec" style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;padding:4px 0;"><input type="checkbox" value="14hr_spec" style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;"> 14 hr Specialty Call (94 pts) — CV1/2, Liver1/2</label>
             <label class="pc-row" data-pcvalue="24hr_or" style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;padding:4px 0;"><input type="checkbox" value="24hr_or" style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;"> 24 hr OR Call (84 pts)</label>
@@ -2185,7 +2188,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
           <p style="font-size:0.7rem;color:var(--text-dim);margin:6px 0 0;line-height:1.4;">
             Pick any combination. Each box adds its pager pay (+ baked-in subspec for specialty options) to the shift. Selected pager-call types skip the 4-hr AR minimum. Force Off adds +56 on top and zeroes AR + production for the day; only available on weekdays.
           </p>
-        </div>
+        </details>
       </div>
 
       <div class="checkbox-group hidden" id="shiftForcedOffGroup">
@@ -11755,6 +11758,7 @@ function _setPagerCallChecks(keys) {
   const checks = document.querySelectorAll('#pagerCallTypeChecks input[type="checkbox"]');
   const set = new Set(keys || []);
   checks.forEach(cb => { cb.checked = set.has(cb.value); });
+  _updatePagerCallSummary();
 }
 function _getPagerCallChecks() {
   const checks = document.querySelectorAll('#pagerCallTypeChecks input[type="checkbox"]');
@@ -11762,6 +11766,25 @@ function _getPagerCallChecks() {
   checks.forEach(cb => { if (cb.checked) out.push(cb.value); });
   return out;
 }
+// Refresh the <summary> text on the collapsible so the user can see what's
+// selected without expanding. Shows the selected catalog labels (or
+// "Auto / none" when nothing is checked).
+function _updatePagerCallSummary() {
+  const el = document.getElementById('pagerCallTypeSummary');
+  if (!el) return;
+  const keys = _getPagerCallChecks();
+  if (keys.length === 0) { el.textContent = 'Auto / none'; return; }
+  const labels = keys
+    .map(k => PAGER_CALL_TYPES[k])
+    .filter(Boolean)
+    .map(t => t.label.replace(/\s*\([^)]*\)\s*$/, ''));
+  el.textContent = labels.join(' + ');
+}
+document.addEventListener('change', e => {
+  if (e.target && e.target.matches && e.target.matches('#pagerCallTypeChecks input[type="checkbox"]')) {
+    _updatePagerCallSummary();
+  }
+});
 function updatePagerCallTypeVisibility(type, resetToSuggested) {
   const section = document.getElementById('pagerCallTypeSection');
   const checksContainer = document.getElementById('pagerCallTypeChecks');
@@ -12136,6 +12159,10 @@ function loadShiftForDate() {
           keys = suggestPagerCallTypes(shift);
         }
         _setPagerCallChecks(keys);
+        // Start the collapsible closed each time a shift loads — the
+        // summary line still shows the current selection.
+        const _pcDet = document.getElementById('pagerCallTypeDetails');
+        if (_pcDet) _pcDet.open = false;
       } else {
         _setPagerCallChecks([]);
       }
