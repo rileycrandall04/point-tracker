@@ -8842,6 +8842,10 @@ function getPagerCallType(shift) {
     if (!pagerCallTypeApplies(shift)) return null;
     const wknd = shift.date ? isWeekend(shift.date) : false;
     const isHol = !!shift.isHoliday;
+    // Force Off never applies on weekends / holidays — the AR 4-hr floor it
+    // exists to bypass doesn't fire on those days anyway, and the user has
+    // already gotten their full pager + subspec from the standard windows.
+    if (wknd || isHol) return null;
     const baseKey = _basePagerCallType(shift.assignmentType, wknd || isHol);
     const baseType = baseKey ? PAGER_CALL_TYPES[baseKey] : null;
     return {
@@ -11258,12 +11262,12 @@ function calcShiftTotal(shift) {
     total = shift.manualTotal;
     isManual = true;
   }
-  return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, supervision: supervisionPts, floatBonus: floatBonus, total: total, calcTotal: calcTotal, isManual: isManual };
+  return { ar: arPts, prod: round2(prodPts), call: callPts, subspec: subspecPts, supervision: supervisionPts, floatBonus: floatBonus, forceOffBonus: forceOffBonusPts, total: total, calcTotal: calcTotal, isManual: isManual };
 }
 
 function getShiftPointsForDate(dateStr, estimate) {
   const shift = data.shifts[dateStr];
-  if (!shift) return { total: 0, isInProgress: false, ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0, floatBonus: 0 };
+  if (!shift) return { total: 0, isInProgress: false, ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0, floatBonus: 0, forceOffBonus: 0 };
   const entries = shift.timeEntries || [];
   const lastEntry = entries.length > 0 ? entries[entries.length - 1] : null;
   const hasNoEnd = lastEntry && lastEntry.start && !lastEntry.end;
@@ -11278,10 +11282,10 @@ function getShiftPointsForDate(dateStr, estimate) {
     }
     clone.timeEntries = cloneEntries;
     const totals = calcShiftTotal(clone);
-    return { total: totals.total, isInProgress: true, ar: totals.ar, prod: totals.prod, call: totals.call, subspec: totals.subspec, supervision: totals.supervision, floatBonus: totals.floatBonus };
+    return { total: totals.total, isInProgress: true, ar: totals.ar, prod: totals.prod, call: totals.call, subspec: totals.subspec, supervision: totals.supervision, floatBonus: totals.floatBonus, forceOffBonus: totals.forceOffBonus || 0 };
   }
   const totals = calcShiftTotal(shift);
-  return { total: totals.total, isInProgress: isInProgress, ar: totals.ar, prod: totals.prod, call: totals.call, subspec: totals.subspec, supervision: totals.supervision, floatBonus: totals.floatBonus };
+  return { total: totals.total, isInProgress: isInProgress, ar: totals.ar, prod: totals.prod, call: totals.call, subspec: totals.subspec, supervision: totals.supervision, floatBonus: totals.floatBonus, forceOffBonus: totals.forceOffBonus || 0 };
 }
 
 function getCaseTypeName(type, caseData) {
@@ -11723,7 +11727,9 @@ function updateUnrestrictedCallVisibility() {
 
 // Show / hide the IMC pager-call type dropdown based on the current
 // site + shift type. When `resetToSuggested` is true (user changed the
-// assignment type), pre-select the auto-suggested option.
+// assignment type), pre-select the auto-suggested option. Also disables
+// the Force Off option on weekends / holidays since force-off never
+// applies on those days.
 function updatePagerCallTypeVisibility(type, resetToSuggested) {
   const section = document.getElementById('pagerCallTypeSection');
   const select = document.getElementById('shiftPagerCallType');
@@ -11731,6 +11737,18 @@ function updatePagerCallTypeVisibility(type, resetToSuggested) {
   const applies = pagerCallTypeApplies(type, getCurrentSiteId());
   section.classList.toggle('hidden', !applies);
   if (!applies) { select.value = ''; return; }
+  const isHol = !!document.getElementById('shiftHoliday')?.checked;
+  const wknd = isWeekend(workingDate);
+  const wkndOrHol = wknd || isHol;
+  const forceOffOpt = select.querySelector('option[value="force_off"]');
+  if (forceOffOpt) {
+    forceOffOpt.disabled = wkndOrHol;
+    forceOffOpt.hidden = wkndOrHol;
+  }
+  // If the saved value was force_off and we're now on a weekend/holiday,
+  // clear it — the engine ignores force-off on those days anyway, so
+  // showing it stuck in the dropdown would be misleading.
+  if (wkndOrHol && select.value === 'force_off') select.value = '';
   if (resetToSuggested) {
     // Build a transient shift-shape with the form's current state so the
     // suggestion accounts for production + clock-in heuristics, not just
@@ -11739,7 +11757,7 @@ function updatePagerCallTypeVisibility(type, resetToSuggested) {
       assignmentType: type,
       siteId: getCurrentSiteId(),
       date: workingDate,
-      isHoliday: !!document.getElementById('shiftHoliday')?.checked,
+      isHoliday: isHol,
       timeEntries: collectTimeEntries()
     };
     const suggested = suggestPagerCallType(shape);
@@ -11914,20 +11932,11 @@ document.getElementById('supervisionOverlayCheck').addEventListener('change', fu
 });
 
 // Holiday toggle re-suggests the pager-call type since the weekday/weekend
-// variant flips. User can override afterward.
+// variant flips. Also re-runs visibility so the Force Off option's disabled
+// state tracks the holiday flag. User can override afterward.
 document.getElementById('shiftHoliday').addEventListener('change', function() {
   const t = document.getElementById('shiftAssignmentType').value;
-  if (pagerCallTypeApplies(t, getCurrentSiteId())) {
-    const shape = {
-      assignmentType: t,
-      siteId: getCurrentSiteId(),
-      date: workingDate,
-      isHoliday: !!this.checked,
-      timeEntries: collectTimeEntries()
-    };
-    const sug = suggestPagerCallType(shape);
-    document.getElementById('shiftPagerCallType').value = sug || '';
-  }
+  updatePagerCallTypeVisibility(t, /*resetToSuggested*/ true);
 });
 
 document.getElementById('preCallOverlayCheck').addEventListener('change', function() {
@@ -14431,17 +14440,24 @@ function tickLiveUpdate() {
       if (nowAdj >= supStart) supRate = 7;
     }
   }
+  const _tickerPCType = getPagerCallType(shift);
+  // When an IMC pager-call type is active, pager pay is a flat lump from the
+  // type, not a per-minute accrual. Don't tick it. Same for force-off:
+  // suppressAR / suppressProduction zero out those tick rates so the ticker
+  // matches the static total. The flat amounts (pager + subspec + 56 bonus)
+  // are already rolled into result.total via calcShiftTotal.
   const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
   let inPagerWindow = false;
   if (pagerWin) {
     const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
     inPagerWindow = nowMin >= pagerWin.start && nowMin < pagerWin.end;
   }
-  const pagerRate = inPagerWindow ? 3.5 : 0;
+  const pagerRate = (_tickerPCType ? 0 : (inPagerWindow ? 3.5 : 0));
 
   const isOB2 = liveProductionDoublingNow(shift);
+  const _tickerSuppressProd = !!(_tickerPCType && _tickerPCType.suppressProduction);
   let prodRate = 0;
-  const openCases = data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
+  const openCases = _tickerSuppressProd ? [] : data.cases.filter(c => c.shiftDate === date && c.startTime && !c.endTime);
   openCases.forEach(c => {
     const cs = timeToMinutes(c.startTime);
     let elapsed = currentMin - cs;
@@ -14466,8 +14482,10 @@ function tickLiveUpdate() {
   // Determine if in guaranteed minimum period (first 4 hours of shift)
   // SF1/SF2: no minimum enforced on ticker — AR ticks at actual rate from start
   // Others: flat minimum (80 pts) for AR during first 4 hrs, prod/supv still tick
+  // Force-off pager-call suppresses AR entirely so the minimum is moot.
   const isSFShift = shift.assignmentType === 'SF1' || shift.assignmentType === 'SF2';
-  const minApplies = !isSFShift && !isHol && !isWknd && shift.assignmentType !== 'mole';
+  const _tickerSuppressAR = !!(_tickerPCType && _tickerPCType.suppressAR);
+  const minApplies = !isSFShift && !isHol && !isWknd && shift.assignmentType !== 'mole' && !_tickerSuppressAR;
   const minPoints = 80; // 20 pts/hr × 4 hrs (SF1 excluded above)
   let inMinPeriod = false;
   if (minApplies) {
@@ -14479,8 +14497,9 @@ function tickLiveUpdate() {
     }
   }
 
-  // SF1: AR always ticks at actual rate; others: AR paused during minimum
-  const effectiveARRate = inMinPeriod ? 0 : currentRate;
+  // SF1: AR always ticks at actual rate; others: AR paused during minimum.
+  // Force-off pager-call: AR fully suppressed.
+  const effectiveARRate = _tickerSuppressAR ? 0 : (inMinPeriod ? 0 : currentRate);
   const totalRate = effectiveARRate + supRate + pagerRate + prodRate;
 
   // Interpolate: add fractional seconds of accrual on top of minute-level base
@@ -14502,14 +14521,16 @@ function tickLiveUpdate() {
   // Update component breakdown chips
   const compEl = document.getElementById('todayCompChips');
   if (compEl) {
-    const arLive = inMinPeriod ? minPoints : (result.ar + result.supervision + ((effectiveARRate + supRate) * secFraction));
+    const arLive = _tickerSuppressAR ? 0 : (inMinPeriod ? minPoints : (result.ar + result.supervision + ((effectiveARRate + supRate) * secFraction)));
     const callLive = result.call + (pagerRate * secFraction);
-    const prodLive = result.prod + (prodRate * secFraction);
+    const prodLive = _tickerSuppressProd ? 0 : (result.prod + (prodRate * secFraction));
+    const forceOffLive = result.forceOffBonus || 0;
     const comps = [];
     if (arLive > 0) comps.push({ label: 'AR', val: arLive });
     if (prodLive > 0) comps.push({ label: 'Prod', val: prodLive });
     if (callLive > 0) comps.push({ label: 'Pager', val: callLive });
     if (result.subspec > 0) comps.push({ label: 'Sub', val: result.subspec });
+    if (forceOffLive > 0) comps.push({ label: 'Force Off', val: forceOffLive });
     let chipHtml = '';
     comps.forEach(c => {
       const chipColor = c.label === 'Pager' ? 'rgba(245,166,35,0.15)' : 'rgba(255,255,255,0.06)';
