@@ -1003,6 +1003,9 @@ textarea { resize: vertical; min-height: 60px; }
 .modifiers-section { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
 .modifiers-section summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; color: var(--text-dim); list-style: none; display: flex; align-items: center; gap: 8px; }
 .modifiers-section summary::-webkit-details-marker { display: none; }
+#pagerCallTypeDetails > summary::-webkit-details-marker { display: none; }
+#pagerCallTypeDetails > summary::marker { display: none; content: ''; }
+#pagerCallTypeDetails[open] > summary .pc-arrow { transform: rotate(180deg); }
 .modifiers-section summary::before { content: '\25B6'; font-size: 0.65rem; transition: transform 0.2s; }
 .modifiers-section[open] summary::before { transform: rotate(90deg); }
 .modifier-tags { display: inline-flex; gap: 4px; flex-wrap: wrap; }
@@ -2173,9 +2176,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
            disabled on weekends + holidays since it never applies there. -->
       <div id="pagerCallTypeSection" class="hidden" style="margin-top:8px;">
         <details id="pagerCallTypeDetails" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;">
-          <summary style="cursor:pointer;outline:none;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:0.85rem;font-weight:600;">
+          <summary style="cursor:pointer;outline:none;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:0.85rem;font-weight:600;list-style:none;">
             <span>Pager call types</span>
-            <span id="pagerCallTypeSummary" style="font-size:0.72rem;color:var(--text-dim);font-weight:400;"></span>
+            <span style="display:flex;align-items:baseline;gap:6px;">
+              <span id="pagerCallTypeSummary" style="font-size:0.72rem;color:var(--text-dim);font-weight:400;"></span>
+              <span class="pc-arrow" style="font-size:0.7rem;color:var(--text-dim);transition:transform 0.2s;display:inline-block;">&#9660;</span>
+            </span>
           </summary>
           <div id="pagerCallTypeChecks" style="display:flex;flex-direction:column;gap:4px;margin-top:8px;">
             <label class="pc-row" data-pcvalue="14hr_or" style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;padding:4px 0;"><input type="checkbox" value="14hr_or" style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;"> 14 hr OR Call (49 pts) — General/OR, APS, Other</label>
