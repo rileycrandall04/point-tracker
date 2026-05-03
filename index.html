@@ -2166,6 +2166,27 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <label for="shiftHoliday">Holiday</label>
       </div>
 
+      <!-- IMC pager-call type — only shown for IMC pager-bearing shifts.
+           Auto-defaults to the matching weekday/weekend variant; user can
+           override or pick Force Off (56 pts flat). -->
+      <div id="pagerCallTypeSection" class="hidden" style="margin-top:8px;">
+        <div class="form-group">
+          <label for="shiftPagerCallType">Pager call type</label>
+          <select id="shiftPagerCallType">
+            <option value="">— Auto / none —</option>
+            <option value="14hr_or">14 hr OR Call (49 pts) — General/OR, APS, Other</option>
+            <option value="14hr_spec">14 hr Specialty Call (94 pts) — CV1/2, Liver1/2</option>
+            <option value="24hr_or">24 hr OR Call (84 pts)</option>
+            <option value="24hr_spec">24 hr Specialty Call (129 pts)</option>
+            <option value="10hr">10 hr Call (29.75 pts)</option>
+            <option value="force_off">Force Off (56 pts)</option>
+          </select>
+          <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 0;line-height:1.4;">
+            Picks the flat pager pay (and bakes in the +45 cardiac/liver subspec for the specialty options). Skips the 4-hr AR minimum — the flat pager pay is the guaranteed minimum. Force Off pays a flat 56 with no AR / production / pager / subspec.
+          </p>
+        </div>
+      </div>
+
       <div class="checkbox-group hidden" id="shiftForcedOffGroup">
         <input type="checkbox" id="shiftForcedOff">
         <label for="shiftForcedOff">Forced Off (no cases)</label>
@@ -8689,6 +8710,93 @@ function updateCalendarConnectedUI() {
 // Calendar Mapping Modal functions
 let calMappingResolve = null;
 
+// IMC pager-call types — let the user (or auto-suggest) tell the engine
+// "this was a 14-hr OR call worth 49 pts" instead of trying to derive that
+// from the rule's pagerWindow plus a brittle 4-hr AR minimum. Picking one
+// of these on a shift:
+//   - replaces pager pay with pagerPts (no pagerWindow calc)
+//   - bakes the listed subspec bonus in (so the cardiac/liver +45 isn't
+//     re-added separately)
+//   - skips the AR 4-hr floor (the pager flat IS the minimum)
+//   - leaves clocked-in AR + case production untouched (you still earn
+//     extra if you actually worked)
+//   - 'force_off' is special: a flat-payment override (56 pts, no AR / no
+//     production / no pager / no subspec — like IMC AOD).
+//
+// Only surfaces for IMC users on pager-bearing call types (NOT IMC General
+// OR / OR Float / OB 24hr / AOD / Vacation / Forced Off — those have their
+// own logic).
+const PAGER_CALL_TYPES = {
+  '14hr_or':   { label: '14 hr OR Call (49 pts)',          pagerPts: 49,    subspecPts: 0,  isForceOff: false },
+  '14hr_spec': { label: '14 hr Specialty Call (94 pts)',   pagerPts: 49,    subspecPts: 45, isForceOff: false },
+  '24hr_or':   { label: '24 hr OR Call (84 pts)',          pagerPts: 84,    subspecPts: 0,  isForceOff: false },
+  '24hr_spec': { label: '24 hr Specialty Call (129 pts)',  pagerPts: 84,    subspecPts: 45, isForceOff: false },
+  '10hr':      { label: '10 hr Call (29.75 pts)',          pagerPts: 29.75, subspecPts: 0,  isForceOff: false },
+  'force_off': { label: 'Force Off (56 pts)',              pagerPts: 0,     subspecPts: 0,  isForceOff: true, flatPts: 56 }
+};
+
+const IMC_PAGER_CALL_ELIGIBLE_TYPES = new Set([
+  'IMC_1st_call', 'IMC_2nd_call', 'IMC_3rd_call', 'IMC_4th_call',
+  'IMC_night_call',
+  'IMC_cv_1st_call', 'IMC_cv_2nd_call',
+  'IMC_liver_1st_call', 'IMC_liver_2nd_call',
+  'IMC_acute_pain_call', 'IMC_endo_call'
+]);
+
+function pagerCallTypeApplies(assignmentTypeOrShift, siteId) {
+  let type, sid;
+  if (assignmentTypeOrShift && typeof assignmentTypeOrShift === 'object') {
+    type = assignmentTypeOrShift.assignmentType;
+    sid = assignmentTypeOrShift.siteId || siteId;
+  } else {
+    type = assignmentTypeOrShift;
+    sid = siteId;
+  }
+  if (sid !== 'IMC') return false;
+  return IMC_PAGER_CALL_ELIGIBLE_TYPES.has(type);
+}
+
+function suggestPagerCallType(assignmentType, isWeekend, isHoliday) {
+  const wkndOrHol = !!isWeekend || !!isHoliday;
+  switch (assignmentType) {
+    case 'IMC_1st_call':
+    case 'IMC_2nd_call':
+    case 'IMC_3rd_call':
+    case 'IMC_4th_call':
+    case 'IMC_night_call':
+      return wkndOrHol ? '24hr_or' : '14hr_or';
+    case 'IMC_cv_1st_call':
+    case 'IMC_cv_2nd_call':
+    case 'IMC_liver_1st_call':
+    case 'IMC_liver_2nd_call':
+      return wkndOrHol ? '24hr_spec' : '14hr_spec';
+    case 'IMC_acute_pain_call':
+      return wkndOrHol ? null : '14hr_or';
+    case 'IMC_endo_call':
+      return wkndOrHol ? '24hr_or' : null;
+    default:
+      return null;
+  }
+}
+
+function getPagerCallType(shift) {
+  if (!shift) return null;
+  if (shift.pagerCallType && PAGER_CALL_TYPES[shift.pagerCallType]) {
+    return PAGER_CALL_TYPES[shift.pagerCallType];
+  }
+  // Fallback: if the user hasn't explicitly picked a pager-call type yet,
+  // auto-apply the suggested one for IMC pager-bearing shifts so existing /
+  // newly-imported shifts immediately use the corrected behavior (flat
+  // pager pay as the guaranteed minimum) without requiring an open+save
+  // round-trip per shift. The form lets users override.
+  if (pagerCallTypeApplies(shift)) {
+    const wknd = shift.date ? isWeekend(shift.date) : false;
+    const sug = suggestPagerCallType(shift.assignmentType, wknd, !!shift.isHoliday);
+    return sug ? PAGER_CALL_TYPES[sug] : null;
+  }
+  return null;
+}
+
 // Single source of truth for per-shift-type compensation rules.
 // pagerWindow / unrestrictedCall: null means not eligible.
 // arRate.mode: 'general' (20 base), 'ob' (13 base), 'sf1' (13 daytime weekday non-holiday, else 20).
@@ -9448,20 +9556,35 @@ function remapAssignmentTypeForSite(type, siteId) {
 }
 
 // A "flat-payment" shift type pays a fixed point amount with no clock-in
-// (e.g. IMC AOD = 235). Triggered by `flatPoints` + `noProductivity` on the
-// resolved rule. Excludes `unrestricted_call_entry`-style rules, which have
-// `noProductivity` but no `flatPoints` and use their own user-hours flow.
+// (e.g. IMC AOD = 235, IMC Forced Off = 56). Triggered by `flatPoints > 0`
+// on the resolved rule. Excludes `unrestricted_call_entry`-style rules,
+// which have `noProductivity` but no `flatPoints` and use their own
+// user-hours flow.
+//
+// The `noProductivity` flag used to be required alongside `flatPoints` but
+// IMC_forced_off in the live Firestore data omits it, which left forced-off
+// shifts incorrectly running through the AR engine and picking up the 80-pt
+// 4-hr minimum. Treating any non-`unrestrictedCallEntry` rule with
+// `flatPoints > 0` as flat-payment fixes that without requiring a Firestore
+// re-push of the seed.
 function getFlatPaymentRule(typeOrShift, siteId) {
   let type;
+  let shift = null;
   if (typeOrShift && typeof typeOrShift === 'object') {
+    shift = typeOrShift;
     type = typeOrShift.assignmentType;
     siteId = typeOrShift.siteId || siteId;
   } else {
     type = typeOrShift;
   }
+  // IMC "Force Off" pager-call selection — flat 56 pts, suppress everything
+  // else (AR, production, pager, subspec). Treated as a flat-payment shift.
+  if (shift && shift.pagerCallType === 'force_off') {
+    return { label: 'Force Off', flatPoints: 56, noProductivity: true };
+  }
   if (!type) return null;
   const rule = getResolvedShiftRules(siteId)[type];
-  if (rule && rule.noProductivity && rule.flatPoints > 0 && !rule.unrestrictedCallEntry) return rule;
+  if (rule && rule.flatPoints > 0 && !rule.unrestrictedCallEntry) return rule;
   return null;
 }
 
@@ -9631,6 +9754,10 @@ function caseProductionMultiplier(caseData, shift) {
 }
 
 function effectivePagerPts(shift, pagerWindow) {
+  // IMC pager-call selection wins over both the unrestricted-call-hours
+  // override and the rule's pagerWindow. Force Off carries 0 pager pay.
+  const pcType = getPagerCallType(shift);
+  if (pcType) return pcType.pagerPts;
   const overrideH = parseFloat(shift && shift.unrestrictedCallHours);
   if (overrideH > 0) return overrideH * 3.5;
   if (!pagerWindow) return 0;
@@ -10285,12 +10412,15 @@ function calcARPoints(shift) {
         }
       }
     }
-    // Pre-call minimum: weekday non-holiday → 4hr × OR rate (20) = 80 pts
-    if (!isHol && !isWknd) {
+    // Pre-call minimum: weekday non-holiday → 4hr × OR rate (20) = 80 pts.
+    // Skipped when an IMC pager-call type is selected — its flat pager pay is
+    // the guaranteed minimum.
+    if (!isHol && !isWknd && !getPagerCallType(shift)) {
       preCallAR = Math.max(preCallAR, 20 * 4);
     }
-    // Evening minimum: based on evening assignment type (mole/SF1/SF2: no minimum)
-    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
+    // Evening minimum: based on evening assignment type (mole/SF1/SF2: no minimum;
+    // also skipped when an IMC pager-call type is selected).
+    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && !getPagerCallType(shift)) {
       const isOBRate = shiftIsOBStyle(shift);
       const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
       eveningAR = Math.max(eveningAR, eveningMin);
@@ -10340,8 +10470,10 @@ function calcARPoints(shift) {
   callPoints += tcPts.pagerAdj;
   arPoints += tcPts.ar;
 
-  // Guaranteed minimums for clocked-in time (weekday, non-mole, non-SF1, non-SF2)
-  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
+  // Guaranteed minimums for clocked-in time (weekday, non-mole, non-SF1, non-SF2).
+  // Also skipped when an IMC pager-call type is selected — the flat pager pay
+  // is the guaranteed minimum in that case.
+  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && !getPagerCallType(shift)) {
     const isOBRate = shiftIsOBStyle(shift);
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     arPoints = Math.max(arPoints, minPoints);
@@ -10506,12 +10638,14 @@ function calcARBreakdown(shift) {
         }
       }
     }
-    // Pre-call minimum: weekday non-holiday → 4hr × OR rate (20) = 80 pts
-    if (!isHol && !isWknd) {
+    // Pre-call minimum: weekday non-holiday → 4hr × OR rate (20) = 80 pts.
+    // Skipped when an IMC pager-call type is selected.
+    if (!isHol && !isWknd && !getPagerCallType(shift)) {
       preCallAR = Math.max(preCallAR, 20 * 4);
     }
-    // Evening minimum: based on evening assignment type (mole/SF1/SF2: no minimum)
-    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
+    // Evening minimum: based on evening assignment type (mole/SF1/SF2: no minimum;
+    // also skipped when an IMC pager-call type is selected).
+    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && !getPagerCallType(shift)) {
       const isOBRate = shiftIsOBStyle(shift);
       const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
       eveningAR = Math.max(eveningAR, eveningMin);
@@ -10556,8 +10690,10 @@ function calcARBreakdown(shift) {
   callPoints += tcPtsBd.pagerAdj;
   arPoints += tcPtsBd.ar;
 
-  // SF1/SF2: no AR minimum — accrues at actual rate from start. All others get 4-hr minimum.
-  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
+  // SF1/SF2: no AR minimum — accrues at actual rate from start. All others get
+  // a 4-hr minimum, except when an IMC pager-call type is selected (flat pager
+  // pay is the guaranteed minimum).
+  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && !getPagerCallType(shift)) {
     const isOBRate = shiftIsOBStyle(shift);
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     arPoints = Math.max(arPoints, minPoints);
@@ -10998,7 +11134,18 @@ function calcShiftTotal(shift) {
   const _ssRule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
   const _hasSubspec = (shift.assignmentType === 'cardiac_liver')
     || !!(_ssRule && (_ssRule.cardiacBonus || _ssRule.liverBonus));
-  const subspecPts = _hasSubspec ? calcSubspecPoints(shift) : 0;
+  // When an IMC pager-call type is selected, its subspec column is the
+  // authoritative cardiac/liver bonus (already baked into the 94 / 129
+  // total). Don't double-count by also auto-adding the rule's +45.
+  // Force Off short-circuits via getFlatPaymentRule earlier in the call
+  // chain, so it doesn't reach this branch.
+  const _pcType = getPagerCallType(shift);
+  let subspecPts;
+  if (_pcType && !_pcType.isForceOff) {
+    subspecPts = round2((_pcType.subspecPts || 0) + (parseInt(shift.teeCount) || 0) * 22);
+  } else {
+    subspecPts = _hasSubspec ? calcSubspecPoints(shift) : 0;
+  }
   const supervisionPts = calcSupervisionPoints(shift);
   // Float bonus: rule-driven so per-site float types (e.g. IMC_OR_float
   // inheriting OR_float) automatically pick it up.
@@ -11482,6 +11629,24 @@ function updateUnrestrictedCallVisibility() {
   // Unrestricted call is now automatic based on shift type + gaps — no manual UI needed
 }
 
+// Show / hide the IMC pager-call type dropdown based on the current
+// site + shift type. When `resetToSuggested` is true (user changed the
+// assignment type), pre-select the auto-suggested option.
+function updatePagerCallTypeVisibility(type, resetToSuggested) {
+  const section = document.getElementById('pagerCallTypeSection');
+  const select = document.getElementById('shiftPagerCallType');
+  if (!section || !select) return;
+  const applies = pagerCallTypeApplies(type, getCurrentSiteId());
+  section.classList.toggle('hidden', !applies);
+  if (!applies) { select.value = ''; return; }
+  if (resetToSuggested) {
+    const isHol = !!document.getElementById('shiftHoliday')?.checked;
+    const wknd = isWeekend(workingDate);
+    const suggested = suggestPagerCallType(type, wknd, isHol);
+    select.value = suggested || '';
+  }
+}
+
 function updateEndTimeWarning() {
   const shift = data.shifts[workingDate];
   const banner = document.getElementById('endTimeWarning');
@@ -11599,6 +11764,7 @@ function checkEndTimeNotification() {
 
 document.getElementById('shiftAssignmentType').addEventListener('change', function() {
   const type = this.value;
+  updatePagerCallTypeVisibility(type, /*resetToSuggested*/ true);
   document.getElementById('cardiacLiverOptions').classList.toggle('hidden', type !== 'cardiac_liver');
   document.getElementById('vacationRangeSection').classList.toggle('hidden', type !== 'vacation');
   document.getElementById('eveningAssignmentSection').classList.toggle('hidden', type !== 'pre_call');
@@ -11645,6 +11811,16 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
 
 document.getElementById('supervisionOverlayCheck').addEventListener('change', function() {
   document.getElementById('supervisionTimes').classList.toggle('hidden', !this.checked);
+});
+
+// Holiday toggle re-suggests the pager-call type since the weekday/weekend
+// variant flips. User can override afterward.
+document.getElementById('shiftHoliday').addEventListener('change', function() {
+  const t = document.getElementById('shiftAssignmentType').value;
+  if (pagerCallTypeApplies(t, getCurrentSiteId())) {
+    const sug = suggestPagerCallType(t, isWeekend(workingDate), !!this.checked);
+    document.getElementById('shiftPagerCallType').value = sug || '';
+  }
 });
 
 document.getElementById('preCallOverlayCheck').addEventListener('change', function() {
@@ -11797,6 +11973,25 @@ function loadShiftForDate() {
       }
     }
     document.getElementById('shiftHoliday').checked = shift.isHoliday || false;
+    {
+      // Pager-call type dropdown — show for IMC pager-bearing shifts.
+      // Use the saved value if present; otherwise auto-suggest based on
+      // weekday/weekend + holiday flag.
+      const _pcSection = document.getElementById('pagerCallTypeSection');
+      const _pcSelect = document.getElementById('shiftPagerCallType');
+      const applies = pagerCallTypeApplies(shift);
+      _pcSection.classList.toggle('hidden', !applies);
+      if (applies) {
+        if (shift.pagerCallType) {
+          _pcSelect.value = shift.pagerCallType;
+        } else {
+          const sug = suggestPagerCallType(shift.assignmentType, isWeekend(shift.date), !!shift.isHoliday);
+          _pcSelect.value = sug || '';
+        }
+      } else {
+        _pcSelect.value = '';
+      }
+    }
     document.getElementById('cardiacLiverOptions').classList.toggle('hidden', shift.assignmentType !== 'cardiac_liver');
     document.getElementById('vacationRangeSection').classList.toggle('hidden', shift.assignmentType !== 'vacation');
     document.getElementById('vacationEndDate').value = '';
@@ -12240,6 +12435,14 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     const hasPreCall = preCallEligible && document.getElementById('hasPreCallCheck').checked;
     const preCallEntries = hasPreCall ? collectPreCallEntries() : [];
     const preCallForcedOffFlag = hasPreCall && document.getElementById('preCallForcedOff').checked;
+    // IMC pager-call type only applies to specific IMC pager-bearing shifts;
+    // anywhere else, save it as null so toggling between sites doesn't carry
+    // a stale value.
+    const _pcSelectEl = document.getElementById('shiftPagerCallType');
+    const _pcRawVal = (_pcSelectEl && _pcSelectEl.value) || '';
+    const _pcSaved = pagerCallTypeApplies(effectiveType, getCurrentSiteId()) && _pcRawVal && PAGER_CALL_TYPES[_pcRawVal]
+      ? _pcRawVal
+      : null;
     data.shifts[dt] = {
       date: dt, assignmentType: effectiveType,
       siteId: data.shifts[dt]?.siteId || getCurrentSiteId(),
@@ -12248,6 +12451,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       timeEntries: allTimeEntries,
       isHoliday: document.getElementById('shiftHoliday').checked,
       forcedOff: false,
+      pagerCallType: _pcSaved,
       subspecCoverage: document.getElementById('subspecCoverage').checked,
       teeCount: parseInt(document.getElementById('teeCount').value) || 0,
       unrestrictedCallHours: parseFloat(document.getElementById('unrestrictedCallHours').value) || 0,
@@ -15139,8 +15343,15 @@ function getShiftPayBreakdown(shift) {
   const hasEnd = hasEntries && (entries.length > 1 || (lastEntry && lastEntry.end));
 
   // No time entries: return pager pay row only if eligible (or if a
-  // per-shift unrestrictedCallHours override is set).
+  // per-shift unrestrictedCallHours override is set, or an IMC pager-call
+  // type is selected).
   if (!hasEntries || !hasEnd) {
+    const _earlyPCType = getPagerCallType(shift);
+    if (_earlyPCType && !_earlyPCType.isForceOff) {
+      return _earlyPCType.pagerPts > 0
+        ? [{ clockIn: '', clockOut: '', payCode: _earlyPCType.label, durationMin: 0, payRate: 0, amount: _earlyPCType.pagerPts, isPager: true, isSubRow: false }]
+        : [];
+    }
     const ucH = parseFloat(shift.unrestrictedCallHours) || 0;
     if (ucH > 0) {
       return [{ clockIn: '', clockOut: '', payCode: 'Pager Pay (manual)', durationMin: ucH * 60, payRate: 3.5, amount: round2(ucH * 3.5), isPager: true, isSubRow: false }];
@@ -15182,6 +15393,12 @@ function getShiftPayBreakdown(shift) {
   }
 
   function pagerOnlyRows() {
+    const _polPCType = getPagerCallType(shift);
+    if (_polPCType && !_polPCType.isForceOff) {
+      return _polPCType.pagerPts > 0
+        ? [{ clockIn: '', clockOut: '', payCode: _polPCType.label, durationMin: 0, payRate: 0, amount: _polPCType.pagerPts, isPager: true, isSubRow: false }]
+        : [];
+    }
     const ucH = parseFloat(shift.unrestrictedCallHours) || 0;
     if (ucH > 0) {
       return [{ clockIn: '', clockOut: '', payCode: 'Pager Pay (manual)', durationMin: ucH * 60, payRate: 3.5, amount: round2(ucH * 3.5), isPager: true, isSubRow: false }];
@@ -15294,11 +15511,26 @@ function getShiftPayBreakdown(shift) {
   });
 
   // Pager pay: guaranteed full window duration (does not stop when clocked in).
-  // shift.unrestrictedCallHours, when set, is a per-shift override of the
-  // rule's window (used by Other-site shifts and shifts migrated from Other).
+  // IMC pager-call selection is the highest-priority source (single flat row).
+  // Otherwise shift.unrestrictedCallHours, when set, overrides the rule's
+  // pagerWindow (used by Other-site shifts and shifts migrated from Other).
   const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
+  const _bdPCType = getPagerCallType(shift);
   const ucOverrideH = parseFloat(shift.unrestrictedCallHours) || 0;
-  if (ucOverrideH > 0) {
+  if (_bdPCType && !_bdPCType.isForceOff) {
+    if (_bdPCType.pagerPts > 0) {
+      rows.push({
+        clockIn: '',
+        clockOut: '',
+        payCode: _bdPCType.label,
+        durationMin: 0,
+        payRate: 0,
+        amount: _bdPCType.pagerPts,
+        isPager: true,
+        isSubRow: false
+      });
+    }
+  } else if (ucOverrideH > 0) {
     rows.push({
       clockIn: '',
       clockOut: '',
@@ -15426,7 +15658,7 @@ function getShiftPayBreakdown(shift) {
       }
 
       let eveningResult = eveningRows;
-      if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
+      if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && !getPagerCallType(shift)) {
         const eveningTotal = eveningRows.reduce((sum, r) => sum + r.amount, 0);
         const isOBRate = shiftIsOBStyle(shift);
         const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
@@ -15444,8 +15676,9 @@ function getShiftPayBreakdown(shift) {
       preCallResult.forEach(r => consolidated.push(r));
       eveningResult.forEach(r => consolidated.push(r));
       pagerRows.forEach(r => consolidated.push(r));
-    } else if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2') {
-      // Non-pre-call: single 4hr minimum (SF1/SF2 excluded — no minimum)
+    } else if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && !getPagerCallType(shift)) {
+      // Non-pre-call: single 4hr minimum (SF1/SF2 excluded — no minimum;
+      // also skipped when an IMC pager-call type is selected).
       const isOBRate = shiftIsOBStyle(shift);
       const minPoints = isOBRate ? 13 * 4 : 20 * 4;
       const arRows = consolidated.filter(r => !r.isPager);
