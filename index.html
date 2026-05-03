@@ -8804,9 +8804,11 @@ function _basePagerCallType(assignmentType, wkndOrHol) {
 
 // Suggested pager-call types (multi-select) for the shift. Returns an
 // array of catalog keys. On weekday non-holidays with no production logged
-// AND clock-in < 4 hrs, the suggestion includes 'force_off' on top of the
-// base type — the "scheduled but never worked" flow. Otherwise just the
-// base type for the assignment + day.
+// AND the user has been clocked in for over 2 hours, the suggestion adds
+// 'force_off' on top of the base type — at that point sitting in pager
+// call without any cases logged is the "force-off" pattern. Brief or
+// nonexistent clock-ins fall back to the base type alone (no force-off
+// auto-prediction).
 function suggestPagerCallTypes(shift) {
   if (!shift) return [];
   const at = shift.assignmentType;
@@ -8828,7 +8830,7 @@ function suggestPagerCallTypes(shift) {
     if (en < s) en += 1440;
     totalClockMin += (en - s);
   });
-  return totalClockMin < 240 ? [baseType, 'force_off'] : [baseType];
+  return totalClockMin > 120 ? [baseType, 'force_off'] : [baseType];
 }
 
 // Read the saved (or auto-suggested) pager-call type keys for a shift.
