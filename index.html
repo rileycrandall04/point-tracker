@@ -14310,13 +14310,20 @@ function updateTodayRateChips() {
       }
     }
     const isWkndOrHol = isWknd || isHol;
+    const _tickerPCType = getPagerCallType(shift);
+    // When IMC pager-call types are active, pager pay comes as one or more
+    // flat lumps from the catalog (not per-minute accruals), so the ticker
+    // shouldn't tick the pager rate. force_off (suppressAR / suppressProd)
+    // zeroes AR + production tick rates too so the running total stays
+    // pinned to the static (pager + subspec + 56) figure already in
+    // result.total.
     const pagerWin = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
     let inPagerWindow = false;
     if (pagerWin) {
       const nowMin = currentMin < pagerWin.start && pagerWin.end > 1440 ? currentMin + 1440 : currentMin;
       inPagerWindow = nowMin >= pagerWin.start && nowMin < pagerWin.end;
     }
-    const pagerRate = inPagerWindow ? 3.5 : 0;
+    const pagerRate = (_tickerPCType ? 0 : (inPagerWindow ? 3.5 : 0));
 
     // In-progress production rate (open cases without end time). Doubling
     // is "live" — for SF1 it switches off outside the 07:00-17:00 weekday
