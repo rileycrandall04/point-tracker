@@ -2195,6 +2195,18 @@ body.hide-monetary .monetary-hide { display: none !important; }
             Pick any combination. Each box adds its pager pay (+ baked-in subspec for specialty options) to the shift. Selected pager-call types skip the 4-hr AR minimum. Force Off adds +56 on top and zeroes AR + production for the day; only available on weekdays.
           </p>
         </details>
+        <!-- "Add Force Off?" prompt — visible when this is an IMC pager-bearing
+             call shift on a weekday with no production logged yet. Tapping
+             Yes checks the force_off box; once production is added, the
+             prompt disappears and the engine reverts to the standard 4-hr
+             AR minimum. -->
+        <div id="forceOffPrompt" class="hidden" style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.35);border-radius:8px;font-size:0.78rem;">
+          <span><strong style="color:#f59e0b;">Add Force Off?</strong> No production logged yet on a weekday call shift.</span>
+          <span style="display:flex;gap:6px;flex-shrink:0;">
+            <button type="button" class="btn btn-primary btn-sm" onclick="addForceOffFromPrompt()" style="font-size:0.7rem;padding:3px 10px;">Yes (+56)</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="dismissForceOffPrompt()" style="font-size:0.7rem;padding:3px 10px;">No</button>
+          </span>
+        </div>
       </div>
 
       <div class="checkbox-group hidden" id="shiftForcedOffGroup">
@@ -8802,33 +8814,36 @@ function _basePagerCallType(assignmentType, wkndOrHol) {
   }
 }
 
-// Suggested pager-call types (multi-select) for the shift. Returns an
-// array of catalog keys. On weekday non-holidays with no production logged
-// AND clock-in < 4 hrs, the suggestion includes 'force_off' on top of the
-// base type — the "scheduled but never worked" flow. Otherwise just the
-// base type for the assignment + day.
+// Suggested pager-call types (multi-select) for the shift. Returns the
+// base call type for the assignment + day. force_off is NOT auto-suggested
+// — instead the form surfaces an explicit "Add Force Off?" prompt when the
+// user is on a weekday IMC call shift with no production logged. The user
+// opts in by checking the force_off box (or accepting the prompt). Once
+// production is added the prompt goes away and the engine falls back to
+// the standard 4-hr AR minimum.
 function suggestPagerCallTypes(shift) {
   if (!shift) return [];
   const at = shift.assignmentType;
   const wknd = shift.date ? isWeekend(shift.date) : false;
   const isHol = !!shift.isHoliday;
-  const wkndOrHol = wknd || isHol;
-  const baseType = _basePagerCallType(at, wkndOrHol);
-  if (!baseType) return [];
-  if (wkndOrHol) return [baseType];
-  // Weekday non-holiday: check production + clock-in duration.
+  const baseType = _basePagerCallType(at, wknd || isHol);
+  return baseType ? [baseType] : [];
+}
+
+// Whether the form should show the "Add Force Off?" prompt for this shift.
+// Conditions: IMC pager-bearing call shift, weekday non-holiday, no cases
+// logged for the day, and force_off isn't already part of the saved /
+// suggested selection.
+function _shouldPromptForceOff(shift, currentlyCheckedKeys) {
+  if (!shift) return false;
+  if (!pagerCallTypeApplies(shift)) return false;
+  const wknd = shift.date ? isWeekend(shift.date) : false;
+  const isHol = !!shift.isHoliday;
+  if (wknd || isHol) return false;
   const hasCases = !!(typeof data === 'object' && data && Array.isArray(data.cases) && data.cases.some(c => c.shiftDate === shift.date));
-  if (hasCases) return [baseType];
-  let totalClockMin = 0;
-  (shift.timeEntries || []).forEach(e => {
-    if (!e.start || !e.end) return;
-    let s = timeToMinutes(e.start);
-    let en = timeToMinutes(e.end);
-    if (isNaN(s) || isNaN(en)) return;
-    if (en < s) en += 1440;
-    totalClockMin += (en - s);
-  });
-  return totalClockMin < 240 ? [baseType, 'force_off'] : [baseType];
+  if (hasCases) return false;
+  if (Array.isArray(currentlyCheckedKeys) && currentlyCheckedKeys.indexOf('force_off') !== -1) return false;
+  return true;
 }
 
 // Read the saved (or auto-suggested) pager-call type keys for a shift.
@@ -11786,18 +11801,54 @@ function _updatePagerCallSummary() {
     .map(t => t.label.replace(/\s*\([^)]*\)\s*$/, ''));
   el.textContent = labels.join(' + ');
 }
+
+// Show / hide the "Add Force Off?" prompt based on the form's current
+// state (assignment type, weekday/holiday, what's checked, what cases are
+// logged for this shift's date). Called on shift load and any time the
+// inputs that affect the answer change.
+function _updateForceOffPrompt() {
+  const promptEl = document.getElementById('forceOffPrompt');
+  if (!promptEl) return;
+  const at = document.getElementById('shiftAssignmentType')?.value;
+  if (!at) { promptEl.classList.add('hidden'); return; }
+  const shape = {
+    assignmentType: at,
+    siteId: getCurrentSiteId(),
+    date: workingDate,
+    isHoliday: !!document.getElementById('shiftHoliday')?.checked
+  };
+  const checks = _getPagerCallChecks();
+  promptEl.classList.toggle('hidden', !_shouldPromptForceOff(shape, checks));
+}
+
+function addForceOffFromPrompt() {
+  const cb = document.querySelector('#pagerCallTypeChecks input[value="force_off"]');
+  if (cb && !cb.disabled) {
+    cb.checked = true;
+    _updatePagerCallSummary();
+    _updateForceOffPrompt();
+    // Open the collapsible so the user sees the now-checked Force Off row.
+    const det = document.getElementById('pagerCallTypeDetails');
+    if (det) det.open = true;
+  }
+}
+
+function dismissForceOffPrompt() {
+  document.getElementById('forceOffPrompt')?.classList.add('hidden');
+}
 document.addEventListener('change', e => {
   if (e.target && e.target.matches && e.target.matches('#pagerCallTypeChecks input[type="checkbox"]')) {
     _updatePagerCallSummary();
+    _updateForceOffPrompt();
   }
 });
 function updatePagerCallTypeVisibility(type, resetToSuggested) {
   const section = document.getElementById('pagerCallTypeSection');
   const checksContainer = document.getElementById('pagerCallTypeChecks');
-  if (!section || !checksContainer) return;
+  if (!section || !checksContainer) { _updateForceOffPrompt(); return; }
   const applies = pagerCallTypeApplies(type, getCurrentSiteId());
   section.classList.toggle('hidden', !applies);
-  if (!applies) { _setPagerCallChecks([]); return; }
+  if (!applies) { _setPagerCallChecks([]); _updateForceOffPrompt(); return; }
   const isHol = !!document.getElementById('shiftHoliday')?.checked;
   const wknd = isWeekend(workingDate);
   const wkndOrHol = wknd || isHol;
@@ -11819,6 +11870,7 @@ function updatePagerCallTypeVisibility(type, resetToSuggested) {
     };
     _setPagerCallChecks(suggestPagerCallTypes(shape));
   }
+  _updateForceOffPrompt();
 }
 
 function updateEndTimeWarning() {
@@ -12169,8 +12221,10 @@ function loadShiftForDate() {
         // summary line still shows the current selection.
         const _pcDet = document.getElementById('pagerCallTypeDetails');
         if (_pcDet) _pcDet.open = false;
+        _updateForceOffPrompt();
       } else {
         _setPagerCallChecks([]);
+        _updateForceOffPrompt();
       }
     }
     document.getElementById('cardiacLiverOptions').classList.toggle('hidden', shift.assignmentType !== 'cardiac_liver');
