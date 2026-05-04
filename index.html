@@ -21611,6 +21611,11 @@ function loadCommunityStats(force) {
   const mySite = getCurrentSiteId();
   db.collection('sharedShifts').where('siteId', '==', mySite).get()
     .then(snap => {
+      // Drop future-dated shifts (calendar placeholders, scheduled pager-only
+      // nights, etc.) — Community Stats should reflect what people have
+      // actually worked, not what's on the books. Today's date is included
+      // since it's "in progress," not future.
+      const today = todayStr();
       const byUid = {};
       snap.forEach(doc => {
         const d = doc.data() || {};
@@ -21618,6 +21623,7 @@ function loadCommunityStats(force) {
         // Vacation shifts have hours = 0 by definition; the per-24hr view
         // still wants pager-only nights with 0 clocked hours but >0 points.
         if (d.assignmentType === 'vacation') return;
+        if (d.shiftDate && d.shiftDate > today) return;
         if (!byUid[d.uid]) byUid[d.uid] = [];
         byUid[d.uid].push({
           siteId: d.siteId,
