@@ -2986,7 +2986,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <button class="tab-btn active" id="adTabTotals" onclick="switchAssignDataTab('totals')">Average Shift Totals</button>
       <button class="tab-btn" id="adTabDOW" onclick="switchAssignDataTab('dow')">Day of Week</button>
       <button class="tab-btn" id="adTabEfficiency" onclick="switchAssignDataTab('efficiency')">Shift Efficiency</button>
-      <button class="tab-btn" id="adTabWorkerBee" onclick="switchAssignDataTab('workerBee')">Daily Shift Averages</button>
     </div>
     <div id="assignDataContent"></div>
   </div>
@@ -4215,17 +4214,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div id="communityStatsDetailContent"></div>
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" id="closeCommunityStatsDetail">Close</button>
-    </div>
-  </div>
-</div>
-
-<!-- Daily Shift Averages drill-down (Time tab → Daily Shift Averages) -->
-<div class="modal-overlay hidden" id="dailyShiftAvgDetailModal">
-  <div class="modal" style="max-width:520px;max-height:85vh;overflow-y:auto;">
-    <h2 id="dailyShiftAvgDetailTitle">Shifts</h2>
-    <div id="dailyShiftAvgDetailContent"></div>
-    <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" id="closeDailyShiftAvgDetail">Close</button>
     </div>
   </div>
 </div>
@@ -15192,16 +15180,6 @@ document.getElementById('dayModal').addEventListener('click', (e) => {
   }
 })();
 (function () {
-  const closeBtn = document.getElementById('closeDailyShiftAvgDetail');
-  const overlay = document.getElementById('dailyShiftAvgDetailModal');
-  if (closeBtn && overlay) {
-    closeBtn.addEventListener('click', () => overlay.classList.add('hidden'));
-    overlay.addEventListener('click', (e) => {
-      if (e.target.id === 'dailyShiftAvgDetailModal') overlay.classList.add('hidden');
-    });
-  }
-})();
-(function () {
   const closeBtn = document.getElementById('closeAvgShiftTotalsDetail');
   const overlay = document.getElementById('avgShiftTotalsDetailModal');
   if (closeBtn && overlay) {
@@ -21504,7 +21482,6 @@ function switchAssignDataTab(tab) {
   document.getElementById('adTabTotals').classList.toggle('active', tab === 'totals');
   document.getElementById('adTabDOW').classList.toggle('active', tab === 'dow');
   document.getElementById('adTabEfficiency').classList.toggle('active', tab === 'efficiency');
-  document.getElementById('adTabWorkerBee').classList.toggle('active', tab === 'workerBee');
   renderAssignData();
 }
 
@@ -21517,9 +21494,6 @@ function renderAssignData() {
     el.innerHTML = buildDayOfWeek();
   } else if (activeAssignDataTab === 'efficiency') {
     el.innerHTML = buildShiftEfficiency();
-  } else {
-    el.innerHTML = buildWorkerBeeAvg();
-    if (typeof _wireDailyShiftAvgRowClicks === 'function') _wireDailyShiftAvgRowClicks();
   }
 }
 
@@ -22081,131 +22055,6 @@ function renderCommunityStatsDetail() {
   const nextBtn = document.getElementById('csDetailNext');
   if (prevBtn) prevBtn.addEventListener('click', () => { _communityStatsDetailPage--; renderCommunityStatsDetail(); });
   if (nextBtn) nextBtn.addEventListener('click', () => { _communityStatsDetailPage++; renderCommunityStatsDetail(); });
-}
-
-// Last-rendered Daily Shift Averages groups, keyed by calendar-assignment
-// label. Drives the click-through detail modal — same shape as the
-// Community Stats drill-down, but sourced from local data.shifts only.
-let _dailyShiftAvgLastGroups = {};
-let _dailyShiftAvgDetailKey = null;
-let _dailyShiftAvgDetailPage = 0;
-const DAILY_SHIFT_AVG_DETAIL_PAGE_SIZE = 20;
-
-function buildWorkerBeeAvg() {
-  const groups = {};
-  Object.values(data.shifts).forEach(shift => {
-    const cal = data.calendarAssignments[shift.date];
-    if (!cal || !cal.label) return;
-    const label = cal.label;
-    const pts = calcShiftTotal(shift).total;
-    const hrs = calcShiftHours(shift);
-    if (!groups[label]) groups[label] = { totalPts: 0, totalHrs: 0, count: 0, shifts: [] };
-    groups[label].totalPts += pts;
-    groups[label].totalHrs += hrs;
-    groups[label].count++;
-    groups[label].shifts.push({
-      date: shift.date,
-      startTime: shift.startTime || (shift.timeEntries && shift.timeEntries[0] && shift.timeEntries[0].start) || '',
-      endTime: shift.endTime || (shift.timeEntries && shift.timeEntries.length > 0 && shift.timeEntries[shift.timeEntries.length - 1].end) || '',
-      points: round2(pts),
-      hours: round2(hrs)
-    });
-  });
-  _dailyShiftAvgLastGroups = groups;
-  const ranked = Object.entries(groups)
-    .filter(([, g]) => g.totalHrs > 0)
-    .map(([label, g]) => ({
-      label,
-      avgPts: round2(g.totalPts / g.count),
-      avgHrs: round2(g.totalHrs / g.count),
-      ptsPerHr: round2(g.totalPts / g.totalHrs),
-      count: g.count
-    }))
-    .sort((a, b) => b.avgPts - a.avgPts);
-  let html = '';
-  if (ranked.length > 0) {
-    html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Calendar assignments — sorted by average total points · tap a row for per-shift detail</div>';
-    ranked.forEach(r => {
-      html += `<div class="efficiency-item" data-dsa-label="${escHtml(r.label)}" role="button" tabindex="0" style="flex-wrap:wrap;gap:2px;cursor:pointer;">`;
-      html += `<span class="eff-label">${escHtml(r.label)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count})</span></span>`;
-      html += `<span style="font-size:0.82rem;"><span class="eff-value" style="color:var(--primary);">${r.avgPts.toFixed(1)} pts</span> <span style="color:var(--text-dim);font-size:0.75rem;">&middot; ${r.avgHrs.toFixed(1)} hrs</span></span>`;
-      html += `</div>`;
-    });
-  }
-  return html || '<p style="font-size:0.85rem;color:var(--text-dim);">No calendar assignment data yet. Sync your calendar in Settings.</p>';
-}
-
-// Wire up the row click → detail modal. Called after innerHTML write so the
-// new DOM nodes exist. Idempotent: removes any old listeners by relying on
-// a freshly-rendered DOM each time renderAssignData() runs.
-function _wireDailyShiftAvgRowClicks() {
-  const root = document.getElementById('assignDataContent');
-  if (!root) return;
-  root.querySelectorAll('[data-dsa-label]').forEach(el => {
-    el.addEventListener('click', () => {
-      const lbl = el.getAttribute('data-dsa-label');
-      if (lbl) openDailyShiftAvgDetail(lbl);
-    });
-  });
-}
-
-function openDailyShiftAvgDetail(label) {
-  const g = _dailyShiftAvgLastGroups && _dailyShiftAvgLastGroups[label];
-  if (!g) return;
-  _dailyShiftAvgDetailKey = label;
-  _dailyShiftAvgDetailPage = 0;
-  renderDailyShiftAvgDetail();
-  const modal = document.getElementById('dailyShiftAvgDetailModal');
-  if (modal) modal.classList.remove('hidden');
-}
-
-function renderDailyShiftAvgDetail() {
-  const g = _dailyShiftAvgLastGroups && _dailyShiftAvgLastGroups[_dailyShiftAvgDetailKey];
-  if (!g) return;
-  const titleEl = document.getElementById('dailyShiftAvgDetailTitle');
-  const bodyEl = document.getElementById('dailyShiftAvgDetailContent');
-  if (!titleEl || !bodyEl) return;
-  titleEl.textContent = _dailyShiftAvgDetailKey;
-  const sorted = (g.shifts || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const pageSize = DAILY_SHIFT_AVG_DETAIL_PAGE_SIZE;
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  if (_dailyShiftAvgDetailPage >= totalPages) _dailyShiftAvgDetailPage = totalPages - 1;
-  if (_dailyShiftAvgDetailPage < 0) _dailyShiftAvgDetailPage = 0;
-  const start = _dailyShiftAvgDetailPage * pageSize;
-  const slice = sorted.slice(start, start + pageSize);
-
-  let html = '';
-  html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">' + sorted.length + ' shift' + (sorted.length !== 1 ? 's' : '') + ' total · most recent first</div>';
-  html += '<div style="display:grid;grid-template-columns:auto 1fr auto;gap:6px 12px;font-size:0.78rem;">';
-  html += '<div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Date</div>';
-  html += '<div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Start &rarr; End</div>';
-  html += '<div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;text-align:right;">Points</div>';
-  slice.forEach(s => {
-    const dateStr = s.date || '—';
-    const startStr = s.startTime || '—';
-    const endStr = s.endTime || '—';
-    const ptsStr = (s.points != null ? Number(s.points) : 0).toFixed(1);
-    html += '<div style="color:var(--text);">' + escHtml(dateStr) + '</div>';
-    html += '<div style="color:var(--text-dim);">' + escHtml(startStr) + ' &rarr; ' + escHtml(endStr) + '</div>';
-    html += '<div style="text-align:right;font-weight:600;color:var(--text);">' + ptsStr + '</div>';
-  });
-  html += '</div>';
-
-  if (totalPages > 1) {
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;font-size:0.78rem;">';
-    const prevDisabled = _dailyShiftAvgDetailPage <= 0;
-    const nextDisabled = _dailyShiftAvgDetailPage >= totalPages - 1;
-    html += '<button class="btn btn-outline btn-sm" id="dsaDetailPrev"' + (prevDisabled ? ' disabled' : '') + ' style="opacity:' + (prevDisabled ? '0.4' : '1') + ';">&larr; Prev</button>';
-    html += '<span style="color:var(--text-dim);">Page ' + (_dailyShiftAvgDetailPage + 1) + ' / ' + totalPages + '</span>';
-    html += '<button class="btn btn-outline btn-sm" id="dsaDetailNext"' + (nextDisabled ? ' disabled' : '') + ' style="opacity:' + (nextDisabled ? '0.4' : '1') + ';">Next &rarr;</button>';
-    html += '</div>';
-  }
-
-  bodyEl.innerHTML = html;
-  const prevBtn = document.getElementById('dsaDetailPrev');
-  const nextBtn = document.getElementById('dsaDetailNext');
-  if (prevBtn) prevBtn.addEventListener('click', () => { _dailyShiftAvgDetailPage--; renderDailyShiftAvgDetail(); });
-  if (nextBtn) nextBtn.addEventListener('click', () => { _dailyShiftAvgDetailPage++; renderDailyShiftAvgDetail(); });
 }
 
 // ================================================================
