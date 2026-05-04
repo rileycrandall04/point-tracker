@@ -21698,8 +21698,14 @@ function renderCommunityStats() {
     }
   }
   // Filter to groups with enough distinct contributors to anonymize.
+  // UVH OB buckets get a lower floor (2) since splitting one shift type into
+  // three day-of-week / AM-PM buckets makes the default 3-sample threshold
+  // hide rows until more people contribute.
   const ranked = Object.entries(groups)
-    .filter(([, g]) => g.vals.length >= COMMUNITY_STATS_MIN_SAMPLE)
+    .filter(([, g]) => {
+      const minSample = (g.siteId === 'UVH' && g.assignmentType === 'OB_restricted') ? 2 : COMMUNITY_STATS_MIN_SAMPLE;
+      return g.vals.length >= minSample;
+    })
     .map(([, g]) => {
       const n = g.vals.length;
       const mean = g.vals.reduce((a, b) => a + b, 0) / n;
