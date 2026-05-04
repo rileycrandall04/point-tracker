@@ -4208,6 +4208,17 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 </div>
 
+<!-- Community Stats drill-down (app owner only) -->
+<div class="modal-overlay hidden" id="communityStatsDetailModal">
+  <div class="modal" style="max-width:520px;max-height:85vh;overflow-y:auto;">
+    <h2 id="communityStatsDetailTitle">Shifts</h2>
+    <div id="communityStatsDetailContent"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" id="closeCommunityStatsDetail">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Date picker modal -->
 <div class="modal-overlay hidden" id="datePickerModal">
   <div class="modal">
@@ -7686,6 +7697,7 @@ function buildSharedShift(shift) {
     points: round2(total),
     hours: round2(hrs),
     startTime: shift.startTime || (shift.timeEntries && shift.timeEntries[0] && shift.timeEntries[0].start) || '',
+    endTime: shift.endTime || (shift.timeEntries && shift.timeEntries.length > 0 && shift.timeEntries[shift.timeEntries.length - 1].end) || '',
     isHoliday: !!shift.isHoliday,
     updatedAt: new Date().toISOString()
   };
@@ -15147,6 +15159,16 @@ document.getElementById('closeDayModal').addEventListener('click', () => { docum
 document.getElementById('dayModal').addEventListener('click', (e) => {
   if (e.target.id === 'dayModal') document.getElementById('dayModal').classList.add('hidden');
 });
+(function () {
+  const closeBtn = document.getElementById('closeCommunityStatsDetail');
+  const overlay = document.getElementById('communityStatsDetailModal');
+  if (closeBtn && overlay) {
+    closeBtn.addEventListener('click', () => overlay.classList.add('hidden'));
+    overlay.addEventListener('click', (e) => {
+      if (e.target.id === 'communityStatsDetailModal') overlay.classList.add('hidden');
+    });
+  }
+})();
 
 // ================================================================
 // DASHBOARD — Tabs & Rendering
@@ -21547,6 +21569,13 @@ function buildShiftEfficiency() {
 let _communityStatsCache = null;       // { ts, byUid: { uid: [ {siteId, assignmentType, points, hours, shiftDate} ] } }
 let _communityStatsCurrentSite = null; // currently-displayed siteId
 const COMMUNITY_STATS_MIN_SAMPLE = 3;
+// Last rendered group map — keyed by bucket key (e.g. "OB_restricted__24"),
+// each value carries .shifts[] for the app-owner drill-down modal. Anonymized:
+// no uid is included in the row data.
+let _communityStatsLastGroups = {};
+let _communityStatsDetailKey = null; // bucket key currently shown in detail
+let _communityStatsDetailPage = 0;
+const COMMUNITY_STATS_DETAIL_PAGE_SIZE = 20;
 
 function initCommunityStats() {
   // Community Stats is now scoped to the user's own site. Render a static
@@ -21596,7 +21625,8 @@ function loadCommunityStats(force) {
           points: Number(d.points) || 0,
           hours: Number(d.hours) || 0,
           shiftDate: d.shiftDate || '',
-          startTime: d.startTime || ''
+          startTime: d.startTime || '',
+          endTime: d.endTime || ''
         });
       });
       _communityStatsCache = { ts: Date.now(), byUid };
@@ -21688,13 +21718,20 @@ function renderCommunityStats() {
       const key = bucket.key;
       if (!groups[key]) groups[key] = {
         siteId: r.siteId, assignmentType: r.assignmentType, labelSuffix: bucket.suffix,
-        uids: new Set(), vals: [], totalPts: 0, totalHrs: 0, shiftCount: 0
+        uids: new Set(), vals: [], totalPts: 0, totalHrs: 0, shiftCount: 0,
+        shifts: []
       };
       groups[key].uids.add(uid);
       groups[key].vals.push(val);
       groups[key].totalPts += r.points;
       groups[key].totalHrs += r.hours;
       groups[key].shiftCount++;
+      // Per-shift detail used by the app-owner drill-down. Anonymized — no uid
+      // is exposed in the rendered modal.
+      groups[key].shifts.push({
+        date: r.shiftDate, startTime: r.startTime, endTime: r.endTime,
+        points: r.points, hours: r.hours
+      });
     }
   }
   // Filter to groups with enough distinct contributors to anonymize.
@@ -21706,7 +21743,7 @@ function renderCommunityStats() {
       const minSample = (g.siteId === 'UVH' && g.assignmentType === 'OB_restricted') ? 2 : COMMUNITY_STATS_MIN_SAMPLE;
       return g.vals.length >= minSample;
     })
-    .map(([, g]) => {
+    .map(([key, g]) => {
       const n = g.vals.length;
       const mean = g.vals.reduce((a, b) => a + b, 0) / n;
       let std = null;
@@ -21715,6 +21752,7 @@ function renderCommunityStats() {
         std = Math.sqrt(variance);
       }
       return {
+        bucketKey: key,
         name: getAssignmentTypeName(g.assignmentType, g.siteId) + (g.labelSuffix || ''),
         mean: round2(mean),
         std: std == null ? null : round2(std),
@@ -21748,6 +21786,10 @@ function renderCommunityStats() {
   html +=   '<span>Shift type</span><span>' + unitLabel + ' &plusmn; sd</span>';
   html += '</div>';
 
+  // App owners get a click-to-drill row; everyone else sees the static list.
+  const ownerDrillEnabled = (typeof isAppOwner === 'function') && isAppOwner();
+  _communityStatsLastGroups = groups;
+
   ranked.forEach(r => {
     const meanStr = r.mean.toFixed(1);
     const stdStr = r.std == null ? '&plusmn; n/a' : '&plusmn; ' + r.std.toFixed(1);
@@ -21762,7 +21804,10 @@ function renderCommunityStats() {
       secondary = ptsPerHr + ' pts/hr · ' + r.avgHours.toFixed(1) + ' hrs/shift';
     }
 
-    html += '<div style="padding:8px 4px;border-bottom:1px solid rgba(71,85,105,0.3);">';
+    const rowAttrs = ownerDrillEnabled
+      ? ' role="button" tabindex="0" data-bucket-key="' + escHtml(r.bucketKey) + '" style="padding:8px 4px;border-bottom:1px solid rgba(71,85,105,0.3);cursor:pointer;"'
+      : ' style="padding:8px 4px;border-bottom:1px solid rgba(71,85,105,0.3);"';
+    html += '<div class="cs-row"' + rowAttrs + '>';
     html +=   '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">';
     html +=     '<span style="font-weight:600;color:var(--text);font-size:0.88rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(r.name) + '</span>';
     html +=     '<span style="font-size:0.92rem;font-weight:700;color:var(--primary);white-space:nowrap;">' + meanStr + ' <span style="color:var(--text-dim);font-weight:400;font-size:0.72rem;">' + stdStr + '</span></span>';
@@ -21774,6 +21819,80 @@ function renderCommunityStats() {
     html += '</div>';
   });
   out.innerHTML = html;
+
+  if (ownerDrillEnabled) {
+    out.querySelectorAll('.cs-row[data-bucket-key]').forEach(el => {
+      el.addEventListener('click', () => {
+        const k = el.getAttribute('data-bucket-key');
+        if (k) openCommunityStatsDetail(k);
+      });
+    });
+  }
+}
+
+// App-owner drill-down: list every shift in a Community Stats bucket
+// (most recent first), 20 per page. Anonymized — no uid shown.
+function openCommunityStatsDetail(bucketKey) {
+  if (!isAppOwner()) return;
+  const g = _communityStatsLastGroups && _communityStatsLastGroups[bucketKey];
+  if (!g) return;
+  _communityStatsDetailKey = bucketKey;
+  _communityStatsDetailPage = 0;
+  renderCommunityStatsDetail();
+  document.getElementById('communityStatsDetailModal').classList.remove('hidden');
+}
+
+function renderCommunityStatsDetail() {
+  const g = _communityStatsLastGroups && _communityStatsLastGroups[_communityStatsDetailKey];
+  if (!g) return;
+  const titleEl = document.getElementById('communityStatsDetailTitle');
+  const bodyEl = document.getElementById('communityStatsDetailContent');
+  if (!titleEl || !bodyEl) return;
+
+  const labelName = getAssignmentTypeName(g.assignmentType, g.siteId) + (g.labelSuffix || '');
+  titleEl.textContent = labelName;
+
+  const sorted = (g.shifts || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const pageSize = COMMUNITY_STATS_DETAIL_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  if (_communityStatsDetailPage >= totalPages) _communityStatsDetailPage = totalPages - 1;
+  if (_communityStatsDetailPage < 0) _communityStatsDetailPage = 0;
+  const start = _communityStatsDetailPage * pageSize;
+  const slice = sorted.slice(start, start + pageSize);
+
+  let html = '';
+  html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">' + sorted.length + ' shift' + (sorted.length !== 1 ? 's' : '') + ' total · most recent first</div>';
+  html += '<div style="display:grid;grid-template-columns:auto 1fr auto;gap:6px 12px;font-size:0.78rem;">';
+  html += '<div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Date</div>';
+  html += '<div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Start &rarr; End</div>';
+  html += '<div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;text-align:right;">Points</div>';
+  slice.forEach(s => {
+    const dateStr = s.date || '—';
+    const startStr = s.startTime || '—';
+    const endStr = s.endTime || '—';
+    const ptsStr = (s.points != null ? Number(s.points) : 0).toFixed(1);
+    html += '<div style="color:var(--text);">' + escHtml(dateStr) + '</div>';
+    html += '<div style="color:var(--text-dim);">' + escHtml(startStr) + ' &rarr; ' + escHtml(endStr) + '</div>';
+    html += '<div style="text-align:right;font-weight:600;color:var(--text);">' + ptsStr + '</div>';
+  });
+  html += '</div>';
+
+  // Pager
+  if (totalPages > 1) {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;font-size:0.78rem;">';
+    const prevDisabled = _communityStatsDetailPage <= 0;
+    const nextDisabled = _communityStatsDetailPage >= totalPages - 1;
+    html += '<button class="btn btn-outline btn-sm" id="csDetailPrev"' + (prevDisabled ? ' disabled' : '') + ' style="opacity:' + (prevDisabled ? '0.4' : '1') + ';">&larr; Prev</button>';
+    html += '<span style="color:var(--text-dim);">Page ' + (_communityStatsDetailPage + 1) + ' / ' + totalPages + '</span>';
+    html += '<button class="btn btn-outline btn-sm" id="csDetailNext"' + (nextDisabled ? ' disabled' : '') + ' style="opacity:' + (nextDisabled ? '0.4' : '1') + ';">Next &rarr;</button>';
+    html += '</div>';
+  }
+
+  bodyEl.innerHTML = html;
+  const prevBtn = document.getElementById('csDetailPrev');
+  const nextBtn = document.getElementById('csDetailNext');
+  if (prevBtn) prevBtn.addEventListener('click', () => { _communityStatsDetailPage--; renderCommunityStatsDetail(); });
+  if (nextBtn) nextBtn.addEventListener('click', () => { _communityStatsDetailPage++; renderCommunityStatsDetail(); });
 }
 
 function buildWorkerBeeAvg() {
@@ -28555,10 +28674,11 @@ auth.onAuthStateChanged(async (user) => {
     // Re-runs once when the schema gains a new field (e.g. startTime) so
     // older docs get the new column without forcing users to re-save shifts.
     if (settings.shareData !== false && Object.keys(data.shifts || {}).length > 0
-        && (!settings.sharedShiftsBackfilled || !settings.sharedShiftsHasStartTime)) {
+        && (!settings.sharedShiftsBackfilled || !settings.sharedShiftsHasStartTime || !settings.sharedShiftsHasEndTime)) {
       syncAllSharedShifts();
       settings.sharedShiftsBackfilled = true;
       settings.sharedShiftsHasStartTime = true;
+      settings.sharedShiftsHasEndTime = true;
       saveSettings(settings);
     }
 
