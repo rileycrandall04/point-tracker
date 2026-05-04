@@ -21631,6 +21631,9 @@ function loadCommunityStats(force) {
         // still wants pager-only nights with 0 clocked hours but >0 points.
         if (d.assignmentType === 'vacation') return;
         if (!_isShiftSettled(d.shiftDate)) return;
+        // Drop 0-point shifts — placeholders / never-worked entries that
+        // would otherwise drag the per-shift and per-hour averages down.
+        if (!(Number(d.points) > 0)) return;
         if (!byUid[d.uid]) byUid[d.uid] = [];
         byUid[d.uid].push({
           siteId: d.siteId,
