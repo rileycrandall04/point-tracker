@@ -21660,21 +21660,25 @@ let communityStatsMode = 'clocked';
 //   - Mon–Thu, starts before noon: ~12-hour OB AM (~07:00 start)
 //   - Mon–Thu, starts at noon or later: ~12-hour OB PM (~19:00 start)
 // Split them so the per-shift / per-hour averages don't blend the patterns.
+// fixedTotalHrs locks the "total shift hours" stat for these buckets so it
+// doesn't get pulled around by stray time entries — 24 hr for OB call,
+// 12 hr for the AM/PM blocks. Other buckets compute total = end − start.
 // Legacy shared docs without startTime fall back to a generic "(12 hr)" row.
 function _communityStatsBucket(r) {
   if (r.siteId === 'UVH' && r.assignmentType === 'OB_restricted' && r.shiftDate) {
     const dow = new Date(r.shiftDate + 'T12:00:00').getDay();
     if (dow === 5 || dow === 6 || dow === 0) {
-      return { key: 'OB_restricted__24', suffix: ' (24 hr)' };
+      return { key: 'OB_restricted__24', suffix: ' (24 hr)', fixedTotalHrs: 24 };
     }
     if (r.startTime) {
       const [h, m] = r.startTime.split(':').map(Number);
       const startMin = (h || 0) * 60 + (m || 0);
       const isAM = startMin < 720; // before noon
       return { key: isAM ? 'OB_restricted__12am' : 'OB_restricted__12pm',
-               suffix: isAM ? ' (12 hr AM)' : ' (12 hr PM)' };
+               suffix: isAM ? ' (12 hr AM)' : ' (12 hr PM)',
+               fixedTotalHrs: 12 };
     }
-    return { key: 'OB_restricted__12', suffix: ' (12 hr)' };
+    return { key: 'OB_restricted__12', suffix: ' (12 hr)', fixedTotalHrs: 12 };
   }
   return { key: r.assignmentType, suffix: '' };
 }
@@ -21732,6 +21736,7 @@ function renderCommunityStats() {
       if (!groups[key]) groups[key] = {
         siteId: r.siteId, assignmentType: r.assignmentType, labelSuffix: bucket.suffix,
         uids: new Set(), vals: [], totalPts: 0, totalHrs: 0, shiftCount: 0,
+        shiftWindowHrsSum: 0, shiftWindowHrsCount: 0,
         shifts: []
       };
       groups[key].uids.add(uid);
@@ -21739,6 +21744,24 @@ function renderCommunityStats() {
       groups[key].totalPts += r.points;
       groups[key].totalHrs += r.hours;
       groups[key].shiftCount++;
+      // "Total shift hours" = the shift's full window. UVH OB buckets pin
+      // it (24 / 12). Everything else computes end − start (cross-midnight
+      // aware). Pager-only / missing-time docs are skipped.
+      let _winHrs = null;
+      if (bucket.fixedTotalHrs != null) {
+        _winHrs = bucket.fixedTotalHrs;
+      } else if (r.startTime && r.endTime) {
+        const [_sh, _sm] = String(r.startTime).split(':').map(Number);
+        const [_eh, _em] = String(r.endTime).split(':').map(Number);
+        const _sMin = (_sh || 0) * 60 + (_sm || 0);
+        let _eMin = (_eh || 0) * 60 + (_em || 0);
+        if (_eMin <= _sMin) _eMin += 1440;
+        _winHrs = (_eMin - _sMin) / 60;
+      }
+      if (_winHrs != null) {
+        groups[key].shiftWindowHrsSum += _winHrs;
+        groups[key].shiftWindowHrsCount++;
+      }
       // Per-shift detail used by the app-owner drill-down. Anonymized — no uid
       // is exposed in the rendered modal.
       groups[key].shifts.push({
@@ -21771,6 +21794,7 @@ function renderCommunityStats() {
         std: std == null ? null : round2(std),
         avgTotal: round2(g.totalPts / g.shiftCount),
         avgHours: round2(g.totalHrs / g.shiftCount),
+        avgWindowHours: g.shiftWindowHrsCount > 0 ? round2(g.shiftWindowHrsSum / g.shiftWindowHrsCount) : null,
         contributors: g.uids.size,
         shifts: g.shiftCount
       };
@@ -21809,12 +21833,17 @@ function renderCommunityStats() {
     // Secondary line shows the "other" perspective so the table is informative
     // regardless of which mode is active.
     const meta = r.shifts + ' shift' + (r.shifts !== 1 ? 's' : '') + ' · ' + r.contributors + ' people';
+    // hrs/shift suffix shows clocked (active work) and total (window from
+    // start to stop, fixed at 24/12 for UVH OB call). Total drops out of the
+    // line when no shift in the bucket has the data to compute it.
+    const totHrsStr = r.avgWindowHours != null ? r.avgWindowHours.toFixed(1) : '—';
+    const hrsBlurb = r.avgHours.toFixed(1) + ' clocked / ' + totHrsStr + ' total hrs/shift';
     let secondary;
     if (mode === 'clocked') {
-      secondary = 'avg ' + r.avgTotal.toFixed(1) + ' pts/shift · ' + r.avgHours.toFixed(1) + ' hrs/shift';
+      secondary = 'avg ' + r.avgTotal.toFixed(1) + ' pts/shift · ' + hrsBlurb;
     } else {
       const ptsPerHr = r.avgHours > 0 ? (r.avgTotal / r.avgHours).toFixed(1) : '—';
-      secondary = ptsPerHr + ' pts/hr · ' + r.avgHours.toFixed(1) + ' hrs/shift';
+      secondary = ptsPerHr + ' pts/hr · ' + hrsBlurb;
     }
 
     const rowAttrs = ownerDrillEnabled
