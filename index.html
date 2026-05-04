@@ -4230,6 +4230,17 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 </div>
 
+<!-- Average Shift Totals drill-down (Time tab → Average Shift Totals) -->
+<div class="modal-overlay hidden" id="avgShiftTotalsDetailModal">
+  <div class="modal" style="max-width:520px;max-height:85vh;overflow-y:auto;">
+    <h2 id="avgShiftTotalsDetailTitle">Shifts</h2>
+    <div id="avgShiftTotalsDetailContent"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" id="closeAvgShiftTotalsDetail">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Date picker modal -->
 <div class="modal-overlay hidden" id="datePickerModal">
   <div class="modal">
@@ -15190,6 +15201,16 @@ document.getElementById('dayModal').addEventListener('click', (e) => {
     });
   }
 })();
+(function () {
+  const closeBtn = document.getElementById('closeAvgShiftTotalsDetail');
+  const overlay = document.getElementById('avgShiftTotalsDetailModal');
+  if (closeBtn && overlay) {
+    closeBtn.addEventListener('click', () => overlay.classList.add('hidden'));
+    overlay.addEventListener('click', (e) => {
+      if (e.target.id === 'avgShiftTotalsDetailModal') overlay.classList.add('hidden');
+    });
+  }
+})();
 
 // ================================================================
 // DASHBOARD — Tabs & Rendering
@@ -21491,6 +21512,7 @@ function renderAssignData() {
   const el = document.getElementById('assignDataContent');
   if (activeAssignDataTab === 'totals') {
     el.innerHTML = buildAvgShiftTotals();
+    if (typeof _wireAvgShiftTotalsRowClicks === 'function') _wireAvgShiftTotalsRowClicks();
   } else if (activeAssignDataTab === 'dow') {
     el.innerHTML = buildDayOfWeek();
   } else if (activeAssignDataTab === 'efficiency') {
@@ -21501,26 +21523,117 @@ function renderAssignData() {
   }
 }
 
+// Last-rendered Average Shift Totals groups, keyed by assignmentType.
+// Drives the click-through detail modal (same pattern as Daily Shift
+// Averages / Community Stats drill-downs).
+let _avgShiftTotalsLastGroups = {};
+let _avgShiftTotalsDetailKey = null;
+let _avgShiftTotalsDetailPage = 0;
+const AVG_SHIFT_TOTALS_DETAIL_PAGE_SIZE = 20;
+
 function buildAvgShiftTotals() {
+  const today = todayStr();
   const groups = {};
   Object.values(data.shifts).forEach(shift => {
+    // Future-dated shifts (calendar placeholders, scheduled call) and
+    // 0-point shifts (vacation, never-worked entries) shouldn't drag the
+    // averages around. Skip them at the source.
+    if (shift.date && shift.date > today) return;
     const t = calcShiftTotal(shift).total;
+    if (!(t > 0)) return;
     const type = shift.assignmentType;
-    if (!groups[type]) groups[type] = { totalPts: 0, count: 0 };
+    if (!groups[type]) groups[type] = { totalPts: 0, count: 0, shifts: [] };
     groups[type].totalPts += t;
     groups[type].count++;
+    groups[type].shifts.push({
+      date: shift.date,
+      startTime: shift.startTime || (shift.timeEntries && shift.timeEntries[0] && shift.timeEntries[0].start) || '',
+      endTime: shift.endTime || (shift.timeEntries && shift.timeEntries.length > 0 && shift.timeEntries[shift.timeEntries.length - 1].end) || '',
+      points: round2(t)
+    });
   });
+  _avgShiftTotalsLastGroups = groups;
   const ranked = Object.entries(groups)
-    .map(([type, g]) => ({ name: getAssignmentTypeName(type), avgPts: round2(g.totalPts / g.count), count: g.count }))
+    .map(([type, g]) => ({ key: type, name: getAssignmentTypeName(type), avgPts: round2(g.totalPts / g.count), count: g.count }))
     .sort((a, b) => b.avgPts - a.avgPts);
   let html = '';
   if (ranked.length > 0) {
-    html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Average total points per shift (AR + production + call)</div>';
+    html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">Average total points per shift (AR + production + call) · tap a row for per-shift detail</div>';
     ranked.forEach(r => {
-      html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count} shift${r.count !== 1 ? 's' : ''})</span></span><span class="eff-value" style="color:var(--primary);">${r.avgPts.toFixed(1)}</span></div>`;
+      html += `<div class="efficiency-item" data-ast-key="${escHtml(r.key)}" role="button" tabindex="0" style="cursor:pointer;"><span class="eff-label">${escHtml(r.name)} <span style="color:var(--text-dim);font-size:0.75rem;">(${r.count} shift${r.count !== 1 ? 's' : ''})</span></span><span class="eff-value" style="color:var(--primary);">${r.avgPts.toFixed(1)}</span></div>`;
     });
   }
   return html || '<p style="font-size:0.85rem;color:var(--text-dim);">No shift data yet.</p>';
+}
+
+function _wireAvgShiftTotalsRowClicks() {
+  const root = document.getElementById('assignDataContent');
+  if (!root) return;
+  root.querySelectorAll('[data-ast-key]').forEach(el => {
+    el.addEventListener('click', () => {
+      const k = el.getAttribute('data-ast-key');
+      if (k) openAvgShiftTotalsDetail(k);
+    });
+  });
+}
+
+function openAvgShiftTotalsDetail(typeKey) {
+  const g = _avgShiftTotalsLastGroups && _avgShiftTotalsLastGroups[typeKey];
+  if (!g) return;
+  _avgShiftTotalsDetailKey = typeKey;
+  _avgShiftTotalsDetailPage = 0;
+  renderAvgShiftTotalsDetail();
+  const modal = document.getElementById('avgShiftTotalsDetailModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function renderAvgShiftTotalsDetail() {
+  const g = _avgShiftTotalsLastGroups && _avgShiftTotalsLastGroups[_avgShiftTotalsDetailKey];
+  if (!g) return;
+  const titleEl = document.getElementById('avgShiftTotalsDetailTitle');
+  const bodyEl = document.getElementById('avgShiftTotalsDetailContent');
+  if (!titleEl || !bodyEl) return;
+  titleEl.textContent = getAssignmentTypeName(_avgShiftTotalsDetailKey);
+  const sorted = (g.shifts || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const pageSize = AVG_SHIFT_TOTALS_DETAIL_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  if (_avgShiftTotalsDetailPage >= totalPages) _avgShiftTotalsDetailPage = totalPages - 1;
+  if (_avgShiftTotalsDetailPage < 0) _avgShiftTotalsDetailPage = 0;
+  const start = _avgShiftTotalsDetailPage * pageSize;
+  const slice = sorted.slice(start, start + pageSize);
+
+  let html = '';
+  html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">' + sorted.length + ' shift' + (sorted.length !== 1 ? 's' : '') + ' total · most recent first</div>';
+  html += '<div style="display:grid;grid-template-columns:auto 1fr auto;gap:6px 12px;font-size:0.78rem;">';
+  html += '<div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Date</div>';
+  html += '<div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Start &rarr; End</div>';
+  html += '<div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;text-align:right;">Points</div>';
+  slice.forEach(s => {
+    const dateStr = s.date || '—';
+    const startStr = s.startTime || '—';
+    const endStr = s.endTime || '—';
+    const ptsStr = (s.points != null ? Number(s.points) : 0).toFixed(1);
+    html += '<div style="color:var(--text);">' + escHtml(dateStr) + '</div>';
+    html += '<div style="color:var(--text-dim);">' + escHtml(startStr) + ' &rarr; ' + escHtml(endStr) + '</div>';
+    html += '<div style="text-align:right;font-weight:600;color:var(--text);">' + ptsStr + '</div>';
+  });
+  html += '</div>';
+
+  if (totalPages > 1) {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;font-size:0.78rem;">';
+    const prevDisabled = _avgShiftTotalsDetailPage <= 0;
+    const nextDisabled = _avgShiftTotalsDetailPage >= totalPages - 1;
+    html += '<button class="btn btn-outline btn-sm" id="astDetailPrev"' + (prevDisabled ? ' disabled' : '') + ' style="opacity:' + (prevDisabled ? '0.4' : '1') + ';">&larr; Prev</button>';
+    html += '<span style="color:var(--text-dim);">Page ' + (_avgShiftTotalsDetailPage + 1) + ' / ' + totalPages + '</span>';
+    html += '<button class="btn btn-outline btn-sm" id="astDetailNext"' + (nextDisabled ? ' disabled' : '') + ' style="opacity:' + (nextDisabled ? '0.4' : '1') + ';">Next &rarr;</button>';
+    html += '</div>';
+  }
+
+  bodyEl.innerHTML = html;
+  const prevBtn = document.getElementById('astDetailPrev');
+  const nextBtn = document.getElementById('astDetailNext');
+  if (prevBtn) prevBtn.addEventListener('click', () => { _avgShiftTotalsDetailPage--; renderAvgShiftTotalsDetail(); });
+  if (nextBtn) nextBtn.addEventListener('click', () => { _avgShiftTotalsDetailPage++; renderAvgShiftTotalsDetail(); });
 }
 
 // 'clocked' = divide each shift's total by its clocked-in hours (skips
