@@ -7685,6 +7685,7 @@ function buildSharedShift(shift) {
     monthBucket: shift.date.slice(0, 7), // YYYY-MM, handy for future filters
     points: round2(total),
     hours: round2(hrs),
+    startTime: shift.startTime || (shift.timeEntries && shift.timeEntries[0] && shift.timeEntries[0].start) || '',
     isHoliday: !!shift.isHoliday,
     updatedAt: new Date().toISOString()
   };
@@ -21594,7 +21595,8 @@ function loadCommunityStats(force) {
           assignmentType: d.assignmentType,
           points: Number(d.points) || 0,
           hours: Number(d.hours) || 0,
-          shiftDate: d.shiftDate || ''
+          shiftDate: d.shiftDate || '',
+          startTime: d.startTime || ''
         });
       });
       _communityStatsCache = { ts: Date.now(), byUid };
@@ -21610,17 +21612,26 @@ function loadCommunityStats(force) {
 // vs '24hr' (each shift's pts ÷ 24, includes pager-only nights).
 let communityStatsMode = 'clocked';
 
-// UVH OB has two flavors based on the shift's start day-of-week:
-//   - Mon–Thu: ~12-hour OB shift
-//   - Fri/Sat/Sun: ~24-hour OB shift (07:00 to 07:00 next day)
-// Split them into separate buckets so the per-shift / per-hour averages
-// don't blend the two scheduling patterns.
+// UVH OB has three flavors based on the shift's start day-of-week + time:
+//   - Fri/Sat/Sun: ~24-hour OB shift (07:00 → 07:00 next day)
+//   - Mon–Thu, starts before noon: ~12-hour OB AM (~07:00 start)
+//   - Mon–Thu, starts at noon or later: ~12-hour OB PM (~19:00 start)
+// Split them so the per-shift / per-hour averages don't blend the patterns.
+// Legacy shared docs without startTime fall back to a generic "(12 hr)" row.
 function _communityStatsBucket(r) {
   if (r.siteId === 'UVH' && r.assignmentType === 'OB_restricted' && r.shiftDate) {
     const dow = new Date(r.shiftDate + 'T12:00:00').getDay();
-    const is24 = dow === 5 || dow === 6 || dow === 0; // Fri/Sat/Sun
-    return { key: is24 ? 'OB_restricted__24' : 'OB_restricted__12',
-             suffix: is24 ? ' (24 hr)' : ' (12 hr)' };
+    if (dow === 5 || dow === 6 || dow === 0) {
+      return { key: 'OB_restricted__24', suffix: ' (24 hr)' };
+    }
+    if (r.startTime) {
+      const [h, m] = r.startTime.split(':').map(Number);
+      const startMin = (h || 0) * 60 + (m || 0);
+      const isAM = startMin < 720; // before noon
+      return { key: isAM ? 'OB_restricted__12am' : 'OB_restricted__12pm',
+               suffix: isAM ? ' (12 hr AM)' : ' (12 hr PM)' };
+    }
+    return { key: 'OB_restricted__12', suffix: ' (12 hr)' };
   }
   return { key: r.assignmentType, suffix: '' };
 }
@@ -28535,9 +28546,13 @@ auth.onAuthStateChanged(async (user) => {
     }
 
     // Backfill shared shifts on first run after this feature shipped.
-    if (settings.shareData !== false && Object.keys(data.shifts || {}).length > 0 && !settings.sharedShiftsBackfilled) {
+    // Re-runs once when the schema gains a new field (e.g. startTime) so
+    // older docs get the new column without forcing users to re-save shifts.
+    if (settings.shareData !== false && Object.keys(data.shifts || {}).length > 0
+        && (!settings.sharedShiftsBackfilled || !settings.sharedShiftsHasStartTime)) {
       syncAllSharedShifts();
       settings.sharedShiftsBackfilled = true;
+      settings.sharedShiftsHasStartTime = true;
       saveSettings(settings);
     }
 
