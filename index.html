@@ -21610,6 +21610,21 @@ function loadCommunityStats(force) {
 // vs '24hr' (each shift's pts ÷ 24, includes pager-only nights).
 let communityStatsMode = 'clocked';
 
+// UVH OB has two flavors based on the shift's start day-of-week:
+//   - Mon–Thu: ~12-hour OB shift
+//   - Fri/Sat/Sun: ~24-hour OB shift (07:00 to 07:00 next day)
+// Split them into separate buckets so the per-shift / per-hour averages
+// don't blend the two scheduling patterns.
+function _communityStatsBucket(r) {
+  if (r.siteId === 'UVH' && r.assignmentType === 'OB_restricted' && r.shiftDate) {
+    const dow = new Date(r.shiftDate + 'T12:00:00').getDay();
+    const is24 = dow === 5 || dow === 6 || dow === 0; // Fri/Sat/Sun
+    return { key: is24 ? 'OB_restricted__24' : 'OB_restricted__12',
+             suffix: is24 ? ' (24 hr)' : ' (12 hr)' };
+  }
+  return { key: r.assignmentType, suffix: '' };
+}
+
 function setCommunityStatsMode(mode) {
   communityStatsMode = mode;
   _updateCommunityStatsModeButtons();
@@ -21658,9 +21673,10 @@ function renderCommunityStats() {
         // 'shift': points per shift
         val = r.points;
       }
-      const key = r.assignmentType;
+      const bucket = _communityStatsBucket(r);
+      const key = bucket.key;
       if (!groups[key]) groups[key] = {
-        siteId: r.siteId, assignmentType: r.assignmentType,
+        siteId: r.siteId, assignmentType: r.assignmentType, labelSuffix: bucket.suffix,
         uids: new Set(), vals: [], totalPts: 0, totalHrs: 0, shiftCount: 0
       };
       groups[key].uids.add(uid);
@@ -21682,7 +21698,7 @@ function renderCommunityStats() {
         std = Math.sqrt(variance);
       }
       return {
-        name: getAssignmentTypeName(g.assignmentType, g.siteId),
+        name: getAssignmentTypeName(g.assignmentType, g.siteId) + (g.labelSuffix || ''),
         mean: round2(mean),
         std: std == null ? null : round2(std),
         avgTotal: round2(g.totalPts / g.shiftCount),
