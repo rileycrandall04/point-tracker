@@ -21655,30 +21655,44 @@ function loadCommunityStats(force) {
 // vs '24hr' (each shift's pts ÷ 24, includes pager-only nights).
 let communityStatsMode = 'clocked';
 
-// UVH OB has three flavors based on the shift's start day-of-week + time:
-//   - Fri/Sat/Sun: ~24-hour OB shift (07:00 → 07:00 next day)
-//   - Mon–Thu, starts before noon: ~12-hour OB AM (~07:00 start)
-//   - Mon–Thu, starts at noon or later: ~12-hour OB PM (~19:00 start)
-// Split them so the per-shift / per-hour averages don't blend the patterns.
-// fixedTotalHrs locks the "total shift hours" stat for these buckets so it
-// doesn't get pulled around by stray time entries — 24 hr for OB call,
-// 12 hr for the AM/PM blocks. Other buckets compute total = end − start.
-// Legacy shared docs without startTime fall back to a generic "(12 hr)" row.
+// Bucket key + label suffix + (optional) fixed total-shift-hours for the
+// "total hrs/shift" stat. UVH-specific:
+//
+//   OB_restricted:
+//     - Fri/Sat/Sun: 24-hour OB call (07:00 → 07:00 next day)
+//     - Mon–Thu starts before noon: 12-hour OB AM (~07:00 start)
+//     - Mon–Thu starts at noon or later: 12-hour OB PM (~19:00 start)
+//
+//   Always-24-hour shifts: 1st–4th call, SF1, SF2, Endo.
+//   Mole: 24 on Sat/Sun, 12 (19:00 → 07:00) on weekdays.
+//
+// fixedTotalHrs locks the per-bucket total so it doesn't get pulled around
+// by stray time entries. Other buckets compute total = end − start.
 function _communityStatsBucket(r) {
-  if (r.siteId === 'UVH' && r.assignmentType === 'OB_restricted' && r.shiftDate) {
-    const dow = new Date(r.shiftDate + 'T12:00:00').getDay();
-    if (dow === 5 || dow === 6 || dow === 0) {
-      return { key: 'OB_restricted__24', suffix: ' (24 hr)', fixedTotalHrs: 24 };
+  if (r.siteId === 'UVH') {
+    const t = r.assignmentType;
+    const dow = r.shiftDate ? new Date(r.shiftDate + 'T12:00:00').getDay() : null;
+    if (t === 'OB_restricted' && r.shiftDate) {
+      if (dow === 5 || dow === 6 || dow === 0) {
+        return { key: 'OB_restricted__24', suffix: ' (24 hr)', fixedTotalHrs: 24 };
+      }
+      if (r.startTime) {
+        const [h, m] = r.startTime.split(':').map(Number);
+        const startMin = (h || 0) * 60 + (m || 0);
+        const isAM = startMin < 720; // before noon
+        return { key: isAM ? 'OB_restricted__12am' : 'OB_restricted__12pm',
+                 suffix: isAM ? ' (12 hr AM)' : ' (12 hr PM)',
+                 fixedTotalHrs: 12 };
+      }
+      return { key: 'OB_restricted__12', suffix: ' (12 hr)', fixedTotalHrs: 12 };
     }
-    if (r.startTime) {
-      const [h, m] = r.startTime.split(':').map(Number);
-      const startMin = (h || 0) * 60 + (m || 0);
-      const isAM = startMin < 720; // before noon
-      return { key: isAM ? 'OB_restricted__12am' : 'OB_restricted__12pm',
-               suffix: isAM ? ' (12 hr AM)' : ' (12 hr PM)',
-               fixedTotalHrs: 12 };
+    if (['1st_call', '2nd_call', '3rd_call', '4th_call', 'SF1', 'SF2', 'endo'].includes(t)) {
+      return { key: t, suffix: '', fixedTotalHrs: 24 };
     }
-    return { key: 'OB_restricted__12', suffix: ' (12 hr)', fixedTotalHrs: 12 };
+    if (t === 'mole') {
+      const isWknd = dow === 0 || dow === 6; // Sat or Sun
+      return { key: t, suffix: '', fixedTotalHrs: isWknd ? 24 : 12 };
+    }
   }
   return { key: r.assignmentType, suffix: '' };
 }
