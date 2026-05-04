@@ -21840,8 +21840,6 @@ function renderCommunityStats() {
   html +=   '<span>Shift type</span><span>' + unitLabel + ' &plusmn; sd</span>';
   html += '</div>';
 
-  // App owners get a click-to-drill row; everyone else sees the static list.
-  const ownerDrillEnabled = (typeof isAppOwner === 'function') && isAppOwner();
   _communityStatsLastGroups = groups;
 
   ranked.forEach(r => {
@@ -21863,9 +21861,7 @@ function renderCommunityStats() {
       secondary = ptsPerHr + ' pts/hr · ' + hrsBlurb;
     }
 
-    const rowAttrs = ownerDrillEnabled
-      ? ' role="button" tabindex="0" data-bucket-key="' + escHtml(r.bucketKey) + '" style="padding:8px 4px;border-bottom:1px solid rgba(71,85,105,0.3);cursor:pointer;"'
-      : ' style="padding:8px 4px;border-bottom:1px solid rgba(71,85,105,0.3);"';
+    const rowAttrs = ' role="button" tabindex="0" data-bucket-key="' + escHtml(r.bucketKey) + '" style="padding:8px 4px;border-bottom:1px solid rgba(71,85,105,0.3);cursor:pointer;"';
     html += '<div class="cs-row"' + rowAttrs + '>';
     html +=   '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">';
     html +=     '<span style="font-weight:600;color:var(--text);font-size:0.88rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(r.name) + '</span>';
@@ -21879,20 +21875,18 @@ function renderCommunityStats() {
   });
   out.innerHTML = html;
 
-  if (ownerDrillEnabled) {
-    out.querySelectorAll('.cs-row[data-bucket-key]').forEach(el => {
-      el.addEventListener('click', () => {
-        const k = el.getAttribute('data-bucket-key');
-        if (k) openCommunityStatsDetail(k);
-      });
+  out.querySelectorAll('.cs-row[data-bucket-key]').forEach(el => {
+    el.addEventListener('click', () => {
+      const k = el.getAttribute('data-bucket-key');
+      if (k) openCommunityStatsDetail(k);
     });
-  }
+  });
 }
 
-// App-owner drill-down: list every shift in a Community Stats bucket
-// (most recent first), 20 per page. Anonymized — no uid shown.
+// Click-through drill-down for any signed-in user: list every shift in
+// a Community Stats bucket (most recent first), 20 per page. Anonymized
+// — no uid shown, matches the same fields that built the row.
 function openCommunityStatsDetail(bucketKey) {
-  if (!isAppOwner()) return;
   const g = _communityStatsLastGroups && _communityStatsLastGroups[bucketKey];
   if (!g) return;
   _communityStatsDetailKey = bucketKey;
