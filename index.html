@@ -21611,15 +21611,18 @@ function loadCommunityStats(force) {
   const mySite = getCurrentSiteId();
   db.collection('sharedShifts').where('siteId', '==', mySite).get()
     .then(snap => {
-      // Drop future-dated shifts (calendar placeholders, scheduled pager-only
-      // nights, etc.) — Community Stats should reflect what people have
-      // actually worked, not what's on the books. Today's shifts only count
-      // once they've actually finished: must have a saved start + end, must
-      // not cross midnight, and the current wall-clock time must be past the
-      // saved end. Mid-shift / pager-only entries are skipped until tomorrow.
-      const today = todayStr();
+      // A shift is considered "complete and ready to add" at 08:00 on the
+      // day after its start date. This handles cross-midnight call shifts
+      // and post-shift documentation in one rule — by 8am the next morning,
+      // any reasonable clock-out window has closed. Single threshold
+      // replaces the older future + today-end-time checks.
       const _now = new Date();
-      const nowMin = _now.getHours() * 60 + _now.getMinutes();
+      const _isShiftSettled = (shiftDateStr) => {
+        if (!shiftDateStr) return true; // legacy docs without shiftDate — let through
+        const [y, m, d] = shiftDateStr.split('-').map(Number);
+        const cutoff = new Date(y, m - 1, d + 1, 8, 0, 0);
+        return _now >= cutoff;
+      };
       const byUid = {};
       snap.forEach(doc => {
         const d = doc.data() || {};
@@ -21627,16 +21630,7 @@ function loadCommunityStats(force) {
         // Vacation shifts have hours = 0 by definition; the per-24hr view
         // still wants pager-only nights with 0 clocked hours but >0 points.
         if (d.assignmentType === 'vacation') return;
-        if (d.shiftDate && d.shiftDate > today) return;
-        if (d.shiftDate === today) {
-          if (!d.startTime || !d.endTime) return;
-          const [sh, sm] = String(d.startTime).split(':').map(Number);
-          const [eh, em] = String(d.endTime).split(':').map(Number);
-          const sMin = (sh || 0) * 60 + (sm || 0);
-          const eMin = (eh || 0) * 60 + (em || 0);
-          if (eMin <= sMin) return; // cross-midnight: shift ends tomorrow
-          if (nowMin <= eMin) return; // hasn't finished yet
-        }
+        if (!_isShiftSettled(d.shiftDate)) return;
         if (!byUid[d.uid]) byUid[d.uid] = [];
         byUid[d.uid].push({
           siteId: d.siteId,
