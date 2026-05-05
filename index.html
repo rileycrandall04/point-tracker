@@ -3322,8 +3322,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <h2>Settings</h2>
     <div class="settings-field">
       <label>Site</label>
-      <input type="text" id="settingsSite" disabled placeholder="—" style="opacity:0.85;">
-      <p style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">Your group's location. Contact the admin to change.</p>
+      <select id="settingsSite"></select>
+      <p style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">Your group's location. Switching sites moves all your shifts and cases to the new site.</p>
     </div>
     <div class="settings-field">
       <label>Name</label>
@@ -25162,9 +25162,81 @@ function downloadFile(content, filename, type) {
 // ================================================================
 function renderSiteRow() {
   const el = document.getElementById('settingsSite');
-  if (el) el.value = getCurrentSiteName();
+  if (!el) return;
+  const currentSid = getCurrentSiteId();
+  const ids = Object.keys(sitesCache || {}).slice().sort((a, b) => {
+    const an = ((sitesCache[a] && sitesCache[a].name) || a).toLowerCase();
+    const bn = ((sitesCache[b] && sitesCache[b].name) || b).toLowerCase();
+    return an.localeCompare(bn);
+  });
+  // Make sure the user's current site shows up even if sitesCache hasn't
+  // populated it for some reason — otherwise the select would lose it.
+  if (currentSid && !ids.includes(currentSid)) ids.unshift(currentSid);
+  if (ids.length === 0) {
+    el.innerHTML = `<option value="${escHtml(currentSid)}">${escHtml(getCurrentSiteName())}</option>`;
+  } else {
+    el.innerHTML = ids.map(id => {
+      const name = (sitesCache[id] && sitesCache[id].name) || id;
+      const sel = id === currentSid ? ' selected' : '';
+      return `<option value="${escHtml(id)}"${sel}>${escHtml(name)} (${escHtml(id)})</option>`;
+    }).join('');
+  }
+  el.dataset.currentSid = currentSid;
 }
 renderSiteRow();
+
+(function () {
+  const sel = document.getElementById('settingsSite');
+  if (!sel || sel._wired) return;
+  sel._wired = true;
+  sel.addEventListener('change', async () => {
+    const oldSid = sel.dataset.currentSid || getCurrentSiteId();
+    const newSid = sel.value;
+    if (!newSid || newSid === oldSid) return;
+    const newName = (sitesCache[newSid] && sitesCache[newSid].name) || newSid;
+    const oldName = (sitesCache[oldSid] && sitesCache[oldSid].name) || oldSid;
+    const ok = confirm(
+      'Switch site from "' + oldName + '" to "' + newName + '"?\n\n' +
+      'This moves every shift and case you\'ve logged onto the new site:\n' +
+      '  • Shift assignment-types will be remapped to the new site\'s\n' +
+      '    equivalents (per-site rules); some types may collapse if no\n' +
+      '    direct match exists.\n' +
+      '  • Your shared cases will appear in the new site\'s pool and\n' +
+      '    leave the current one.\n' +
+      '  • Surgeon mappings are site-specific; only mappings used by your\n' +
+      '    own cases get copied. The rest stay on the old site.\n' +
+      '\nThis can\'t be undone automatically. Continue?'
+    );
+    if (!ok) {
+      sel.value = oldSid;
+      return;
+    }
+    if (!currentUser) {
+      sel.value = oldSid;
+      showToast('Sign in first');
+      return;
+    }
+    try {
+      await migrateUserDataToSite(currentUser.uid, oldSid, newSid);
+      settings.siteId = newSid;
+      saveSettings(settings);
+      try {
+        await db.collection('users').doc(currentUser.uid).collection('data').doc('settings')
+          .set({ siteId: newSid }, { merge: true });
+      } catch (e) { console.error('Settings siteId write failed:', e); }
+      if (typeof invalidateResolvedRulesCache === 'function') invalidateResolvedRulesCache();
+      sel.dataset.currentSid = newSid;
+      showToast('Site switched to ' + newName + ' — reloading');
+      // Reload so every cached view (rules, dropdowns, shared pool) re-pulls
+      // for the new site cleanly.
+      setTimeout(() => { try { location.reload(); } catch (e) {} }, 600);
+    } catch (err) {
+      console.error('Site switch failed:', err);
+      sel.value = oldSid;
+      showToast('Site switch failed: ' + (err.message || err));
+    }
+  });
+})();
 
 const nameInput = document.getElementById('settingsName');
 nameInput.value = settings.name || '';
