@@ -7337,62 +7337,174 @@ function refreshProcedureDatalist() {
   dl.innerHTML = html;
 }
 
+// Build groups for the alphabetical procedure-mapping list. Mirrors the
+// surgeon-mappings shape so the UI can reuse the same row template:
+//   { canonical, variants: [{ name, count }] }
+// Canonicals are taken from procedureMappingsCache values + every known
+// procedure name (ASA codes, local cases, shared cases, mappings).
+function _buildProcedureGroups() {
+  const knownNames = (typeof _buildKnownProcedureList === 'function') ? _buildKnownProcedureList() : [];
+  const groupByCanonical = {};
+  const variantSet = new Set();
+  // First: every existing mapping defines a canonical row + a variant chip.
+  for (const [variant, canonical] of Object.entries(procedureMappingsCache || {})) {
+    if (!canonical) continue;
+    if (!groupByCanonical[canonical]) groupByCanonical[canonical] = { canonical, variants: [] };
+    if (!groupByCanonical[canonical].variants.some(v => v.name === variant)) {
+      groupByCanonical[canonical].variants.push({ name: variant, count: 0 });
+    }
+    variantSet.add(variant);
+  }
+  // Second: any procedure name that isn't already a variant becomes its
+  // own canonical row (could be one we already created above as a target,
+  // which is fine — ensure() is idempotent).
+  for (const name of knownNames) {
+    if (variantSet.has(name)) continue;
+    if (!groupByCanonical[name]) groupByCanonical[name] = { canonical: name, variants: [] };
+  }
+  return Object.values(groupByCanonical);
+}
+
 function renderAdminProcedureMappings() {
   const out = document.getElementById('adminProcMapList');
   if (!out) return;
   if (!isAppOwner()) { out.innerHTML = ''; return; }
-  // Refresh the shared datalist so the variant/canonical inputs predict
-  // against the latest known procedure names from every cache.
   refreshProcedureDatalist();
-  const entries = Object.entries(procedureMappingsCache || {}).sort((a, b) =>
-    a[0].toLowerCase().localeCompare(b[0].toLowerCase())
-  );
-  if (entries.length === 0) {
-    out.innerHTML = '<p style="color:var(--text-dim);font-size:0.78rem;margin:0;">No mappings yet. Add one above &mdash; e.g. <em>TKA &rarr; Total Knee</em>.</p>';
+  const groups = _buildProcedureGroups();
+  // Always alphabetical so admins can scan / find names predictably.
+  groups.sort((a, b) => (a.canonical || '').toLowerCase().localeCompare((b.canonical || '').toLowerCase()));
+  if (groups.length === 0) {
+    out.innerHTML = '<p style="color:var(--text-dim);font-size:0.78rem;margin:0;">No procedures yet.</p>';
+    out._procGroups = [];
     return;
   }
-  // Group rows by canonical so it's easy to see which variants feed each
-  // canonical name. Ordered by canonical name for predictability.
-  const byCanonical = {};
-  for (const [variant, canonical] of entries) {
-    if (!byCanonical[canonical]) byCanonical[canonical] = [];
-    byCanonical[canonical].push(variant);
-  }
-  const canonicals = Object.keys(byCanonical).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-
-  // Outer collapsible wraps the whole list; each canonical group nests its
-  // own collapsible. Both default closed so the admin page opens compact —
-  // the owner can expand any group they want to inspect.
-  let html = '<details style="background:var(--surface);border-radius:8px;padding:8px 10px;">';
-  html += '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;outline:none;">';
-  html +=   'Saved mappings <span style="color:var(--text-dim);font-weight:400;font-size:0.72rem;">';
-  html +=     '(' + entries.length + ' mapping' + (entries.length !== 1 ? 's' : '');
-  html +=     ' across ' + canonicals.length + ' canonical name' + (canonicals.length !== 1 ? 's' : '') + ')';
-  html +=   '</span>';
-  html += '</summary>';
-  html += '<div style="margin-top:8px;">';
-
-  for (const canonical of canonicals) {
-    const variants = byCanonical[canonical].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-    html += '<details style="margin-bottom:6px;">';
-    html += '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;outline:none;padding:4px 0;">';
-    html +=   escHtml(canonical);
-    html +=   ' <span style="color:var(--text-dim);font-weight:400;font-size:0.7rem;">(' + variants.length + ')</span>';
-    html += '</summary>';
-    html += '<div style="margin-top:4px;">';
-    for (const variant of variants) {
-      html += '<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);padding:6px 10px;border-radius:6px;margin-bottom:4px;">';
-      html += '<span style="flex:1;font-size:0.8rem;">' + escHtml(variant) + '</span>';
-      html += '<button class="btn btn-sm" onclick="deleteAdminProcedureMapping(' + JSON.stringify(variant).replace(/"/g, '&quot;') + ')" style="background:var(--surface);color:var(--accent2);font-size:0.7rem;padding:3px 9px;">Remove</button>';
-      html += '</div>';
-    }
-    html += '</div>';
-    html += '</details>';
-  }
-
-  html += '</div>';
-  html += '</details>';
+  let html = `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">${groups.length} name${groups.length !== 1 ? 's' : ''} · alphabetical · click <strong>Add to canonical name</strong> on a variant to merge it under a canonical</div>`;
+  groups.forEach((g, i) => { html += procedureGroupHtml(g, i); });
   out.innerHTML = html;
+  out._procGroups = groups;
+}
+
+function procedureGroupHtml(group, index) {
+  let html = `<div class="surgeon-mapping-group" data-proc-group-idx="${index}">`;
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">`;
+  html +=   `<span style="font-size:0.72rem;color:var(--text-dim);">Canonical name:</span>`;
+  if (group.variants.length > 0) {
+    html += `<span style="font-size:0.72rem;color:var(--text-dim);">${group.variants.length} variant${group.variants.length !== 1 ? 's' : ''}</span>`;
+  }
+  html += `</div>`;
+  html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 8px;font-size:0.85rem;color:var(--text);margin-bottom:6px;">${escHtml(group.canonical)}</div>`;
+  if (group.variants.length > 0) {
+    html += `<div class="variant-list" style="margin-bottom:6px;">`;
+    group.variants.forEach((v, vi) => {
+      html += `<span class="variant-chip" data-name="${escHtml(v.name)}">`;
+      html +=   escHtml(v.name);
+      html +=   ` <span class="variant-remove" onclick="event.stopPropagation();removeProcedureSubName(${index}, ${vi})" title="Pull out as its own name" style="cursor:pointer;color:var(--danger);font-weight:bold;margin-left:4px;">×</span>`;
+      html += `</span>`;
+    });
+    html += `</div>`;
+  }
+  html += `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">`;
+  html +=   `<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:4px 8px;" onclick="showProcedureMergePicker(${index})">Add to canonical name</button>`;
+  html +=   `<select id="procMergeInto_${index}" class="hidden" onchange="mergeProcedureIntoCanonical(${index}, this.value)" style="font-size:0.78rem;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);"></select>`;
+  html += `</div>`;
+  html += `</div>`;
+  return html;
+}
+
+function showProcedureMergePicker(sourceGroupIdx) {
+  const out = document.getElementById('adminProcMapList');
+  const groups = out && out._procGroups;
+  if (!groups) return;
+  const sel = document.getElementById('procMergeInto_' + sourceGroupIdx);
+  if (!sel) return;
+  const options = [];
+  groups.forEach((g, i) => {
+    if (i === sourceGroupIdx) return;
+    options.push({ idx: i, label: g.canonical || '(unnamed)' });
+  });
+  options.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+  let optsHtml = '<option value="">Pick a canonical name…</option>'
+    + '<option value="__new__">+ Create new canonical…</option>';
+  if (options.length > 0) {
+    optsHtml += '<option disabled>──────────</option>'
+      + options.map(o => '<option value="' + o.idx + '">' + escHtml(o.label) + '</option>').join('');
+  }
+  sel.innerHTML = optsHtml;
+  sel.classList.remove('hidden');
+  sel.style.display = '';
+  setTimeout(() => { try { sel.focus(); } catch (e) {} }, 0);
+}
+
+async function mergeProcedureIntoCanonical(sourceGroupIdx, choice) {
+  if (!isAppOwner() || !choice) return;
+  const out = document.getElementById('adminProcMapList');
+  const groups = out && out._procGroups;
+  if (!groups) return;
+  const source = groups[sourceGroupIdx];
+  if (!source) return;
+  let targetCanonical = null;
+  if (choice === '__new__') {
+    const entered = prompt('New canonical name to add to:', source.canonical || '');
+    if (!entered) {
+      const sel = document.getElementById('procMergeInto_' + sourceGroupIdx);
+      if (sel) sel.value = '';
+      return;
+    }
+    const trimmed = entered.trim();
+    if (!trimmed || trimmed === source.canonical) return;
+    targetCanonical = trimmed;
+  } else {
+    const tIdx = parseInt(choice, 10);
+    if (!Number.isInteger(tIdx) || tIdx < 0 || tIdx >= groups.length) return;
+    const target = groups[tIdx];
+    if (!target || target === source) return;
+    targetCanonical = target.canonical;
+  }
+  if (!targetCanonical) return;
+  // Build the merge: every name in source (the canonical itself + any of
+  // its existing variants) becomes a variant of targetCanonical, except
+  // for targetCanonical itself.
+  const namesToMove = [source.canonical, ...source.variants.map(v => v.name)]
+    .filter(n => n && n !== targetCanonical);
+  for (const n of namesToMove) procedureMappingsCache[n] = targetCanonical;
+  // If targetCanonical was previously mapped somewhere else, drop that
+  // self-reference so we don't end up with chained loops.
+  if (procedureMappingsCache[targetCanonical] === targetCanonical) {
+    delete procedureMappingsCache[targetCanonical];
+  }
+  // Re-point any existing mapping whose canonical was source.canonical
+  // (chain collapse — keeps the cache flat).
+  for (const [k, v] of Object.entries(procedureMappingsCache)) {
+    if (v === source.canonical && source.canonical !== targetCanonical) {
+      procedureMappingsCache[k] = targetCanonical;
+    }
+  }
+  try {
+    await _persistProcedureMappings();
+    renderAdminProcedureMappings();
+  } catch (err) {
+    console.error('Procedure mapping merge save error:', err);
+    alert('Save failed: ' + (err.message || err));
+  }
+}
+
+async function removeProcedureSubName(groupIdx, variantIdx) {
+  if (!isAppOwner()) return;
+  const out = document.getElementById('adminProcMapList');
+  const groups = out && out._procGroups;
+  if (!groups) return;
+  const g = groups[groupIdx];
+  if (!g) return;
+  const variant = g.variants[variantIdx];
+  if (!variant || !variant.name) return;
+  delete procedureMappingsCache[variant.name];
+  try {
+    await _persistProcedureMappings();
+    renderAdminProcedureMappings();
+  } catch (err) {
+    console.error('Procedure mapping remove save error:', err);
+    alert('Save failed: ' + (err.message || err));
+  }
 }
 
 async function addAdminProcedureMapping() {
