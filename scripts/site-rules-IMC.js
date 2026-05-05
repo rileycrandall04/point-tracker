@@ -42,7 +42,8 @@ module.exports = {
       label: 'IMC Night Call',
       pagerWindow: null,
       unrestrictedCall: null,
-      arRate: { mode: 'general' }
+      arRate: { mode: 'general' },
+      dayForceOffEligible: true
     },
 
     // ============================================================
