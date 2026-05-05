@@ -23694,6 +23694,29 @@ async function saveSurgeonMappings() {
       if (v.name !== canonical) newMappings[v.name] = canonical;
     });
   });
+  // Guardrail: pairs that share no name token of length ≥ 2 are almost
+  // certainly unrelated surgeons accidentally grouped together. Confirm
+  // before persisting so an admin can't silently lock in something like
+  // "B. Dickinson → C. Kawa". Single-letter initials don't count as a
+  // real match — "T. Cook → T. Smith" should still flag.
+  const _tokens = (name) => new Set(
+    String(name || '').toLowerCase().replace(/[.,\s]+/g, ' ').trim()
+      .split(/\s+/).filter(Boolean)
+  );
+  const suspicious = [];
+  for (const [variant, canonical] of Object.entries(newMappings)) {
+    const a = _tokens(variant);
+    const b = _tokens(canonical);
+    let shared = false;
+    for (const t of a) { if (t.length >= 2 && b.has(t)) { shared = true; break; } }
+    if (!shared) suspicious.push(variant + ' → ' + canonical);
+  }
+  if (suspicious.length > 0) {
+    const msg = 'These mappings look unrelated (no shared name tokens):\n\n  '
+      + suspicious.join('\n  ')
+      + '\n\nSave anyway?';
+    if (!confirm(msg)) return;
+  }
   try {
     await db.collection('surgeonMappings').doc(getCurrentSiteId()).set({
       mappings: newMappings,
