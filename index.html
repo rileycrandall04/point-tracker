@@ -7392,7 +7392,7 @@ function procedureGroupHtml(group, index) {
     html += `<span style="font-size:0.72rem;color:var(--text-dim);">${group.variants.length} variant${group.variants.length !== 1 ? 's' : ''}</span>`;
   }
   html += `</div>`;
-  html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:6px 8px;font-size:0.85rem;color:var(--text);margin-bottom:6px;">${escHtml(group.canonical)}</div>`;
+  html += `<input class="canonical-input" id="procCanonical_${index}" value="${escHtml(group.canonical)}" data-original="${escHtml(group.canonical)}" placeholder="Canonical name" onblur="renameProcedureCanonical(${index}, this.value)">`;
   if (group.variants.length > 0) {
     html += `<div class="variant-list" style="margin-bottom:6px;">`;
     group.variants.forEach((v, vi) => {
@@ -7484,6 +7484,44 @@ async function mergeProcedureIntoCanonical(sourceGroupIdx, choice) {
     renderAdminProcedureMappings();
   } catch (err) {
     console.error('Procedure mapping merge save error:', err);
+    alert('Save failed: ' + (err.message || err));
+  }
+}
+
+// Inline rename of a canonical procedure name. Triggered on blur from the
+// canonical input. Updates every variant currently mapped to oldName so it
+// points to newName, plus adds oldName → newName so any case still saved
+// with the old procedure string normalizes through.
+async function renameProcedureCanonical(groupIdx, rawNewName) {
+  if (!isAppOwner()) return;
+  const out = document.getElementById('adminProcMapList');
+  const groups = out && out._procGroups;
+  if (!groups) return;
+  const g = groups[groupIdx];
+  if (!g) return;
+  const input = document.getElementById('procCanonical_' + groupIdx);
+  const oldName = (input && input.getAttribute('data-original')) || g.canonical;
+  const newName = String(rawNewName || '').trim();
+  if (!newName || newName === oldName) {
+    if (input) input.value = oldName;
+    return;
+  }
+  // Re-point every variant whose canonical was oldName.
+  for (const [k, v] of Object.entries(procedureMappingsCache)) {
+    if (v === oldName) procedureMappingsCache[k] = newName;
+  }
+  // Map oldName → newName so any case still saved under the old name flows
+  // to the new canonical via normalizeProcedureName().
+  if (oldName) procedureMappingsCache[oldName] = newName;
+  // Drop self-loop if newName was already an entry pointing at itself.
+  if (procedureMappingsCache[newName] === newName) {
+    delete procedureMappingsCache[newName];
+  }
+  try {
+    await _persistProcedureMappings();
+    renderAdminProcedureMappings();
+  } catch (err) {
+    console.error('Procedure mapping rename save error:', err);
     alert('Save failed: ' + (err.message || err));
   }
 }
