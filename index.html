@@ -23636,49 +23636,126 @@ function renderSurgeonMappingGroups(groups) {
     el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No surgeon names found in cases.</p>';
     return;
   }
-  let html = '';
-  const multiGroups = groups.filter(g => g.variants.length > 1);
-  const singleGroups = groups.filter(g => g.variants.length === 1);
-
-  if (multiGroups.length > 0) {
-    html += `<div style="font-size:0.78rem;color:var(--accent2);font-weight:600;margin-bottom:8px;">${multiGroups.length} name${multiGroups.length !== 1 ? 's' : ''} with variants</div>`;
-    multiGroups.forEach((g, i) => { html += surgeonGroupHtml(g, i, false); });
-  }
-  if (singleGroups.length > 0) {
-    html += `<div style="font-size:0.78rem;color:var(--text-dim);font-weight:600;margin:12px 0 8px;">${singleGroups.length} unique name${singleGroups.length !== 1 ? 's' : ''} (no variants detected)</div>`;
-    html += `<div id="singleSurgeonGroups" style="display:none;">`;
-    singleGroups.forEach((g, i) => { html += surgeonGroupHtml(g, multiGroups.length + i, true); });
-    html += `</div>`;
-    html += `<button class="btn btn-outline btn-sm" onclick="toggleSingleSurgeonGroups()" style="width:100%;font-size:0.75rem;margin-top:4px;" id="toggleSingleBtn">Show All Names</button>`;
-  }
+  // Always alphabetical so admins can scan / find names predictably.
+  groups.sort((a, b) => (a.canonical || '').toLowerCase().localeCompare((b.canonical || '').toLowerCase()));
+  let html = `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">${groups.length} name${groups.length !== 1 ? 's' : ''} · alphabetical · click <strong>+ Add sub-name</strong> to merge variants into a canonical name</div>`;
+  groups.forEach((g, i) => { html += surgeonGroupHtml(g, i); });
   el.innerHTML = html;
   el._groups = groups;
 }
 
-function surgeonGroupHtml(group, index, isSingle) {
+function surgeonGroupHtml(group, index) {
   const totalCount = group.variants.reduce((s, v) => s + v.count, 0);
   let html = `<div class="surgeon-mapping-group" data-group-idx="${index}">`;
   html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">`;
-  html += `<span style="font-size:0.72rem;color:var(--text-dim);">Canonical name:</span>`;
-  html += `<span style="font-size:0.72rem;color:var(--text-dim);">${totalCount} cases</span></div>`;
+  html +=   `<span style="font-size:0.72rem;color:var(--text-dim);">Canonical name:</span>`;
+  html +=   `<span style="font-size:0.72rem;color:var(--text-dim);">${totalCount} cases</span>`;
+  html += `</div>`;
   html += `<input class="canonical-input" id="surgCanonical_${index}" value="${escHtml(group.canonical)}" placeholder="Canonical name">`;
-  if (!isSingle) {
-    html += `<div class="variant-list">`;
-    group.variants.forEach(v => {
-      const isCan = v.name === group.canonical;
-      html += `<span class="variant-chip${isCan ? ' is-canonical' : ''}" onclick="document.getElementById('surgCanonical_${index}').value=this.dataset.name" data-name="${escHtml(v.name)}">${escHtml(v.name)} <span class="chip-count">(${v.count})</span></span>`;
+  // Variant chips for everything that isn't the current canonical. Each chip
+  // has an × to pull the variant back out as its own row.
+  const subVariants = group.variants
+    .map((v, vi) => ({ v, vi }))
+    .filter(({ v }) => v.name !== group.canonical);
+  if (subVariants.length > 0) {
+    html += `<div class="variant-list" style="margin-bottom:6px;">`;
+    subVariants.forEach(({ v, vi }) => {
+      html += `<span class="variant-chip" onclick="document.getElementById('surgCanonical_${index}').value=this.dataset.name" data-name="${escHtml(v.name)}">`;
+      html +=   `${escHtml(v.name)} <span class="chip-count">(${v.count})</span>`;
+      html +=   ` <span class="variant-remove" onclick="event.stopPropagation();removeSurgeonSubName(${index}, ${vi})" title="Pull out as its own name" style="cursor:pointer;color:var(--danger);font-weight:bold;margin-left:4px;">×</span>`;
+      html += `</span>`;
     });
     html += `</div>`;
   }
+  html += `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">`;
+  html +=   `<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:4px 8px;" onclick="showAddSubNamePicker(${index})">+ Add sub-name</button>`;
+  html +=   `<select id="addSubName_${index}" class="hidden" onchange="addSurgeonSubName(${index}, this.value)" style="font-size:0.78rem;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);"></select>`;
+  html += `</div>`;
   html += `</div>`;
   return html;
 }
 
-function toggleSingleSurgeonGroups() {
-  const el = document.getElementById('singleSurgeonGroups');
-  const btn = document.getElementById('toggleSingleBtn');
-  if (el.style.display === 'none') { el.style.display = ''; btn.textContent = 'Hide Unique Names'; }
-  else { el.style.display = 'none'; btn.textContent = 'Show All Names'; }
+// Edits to canonical-name inputs need to survive an add/remove re-render.
+// Pull the current input values into the in-memory _groups before any
+// structural mutation.
+function _commitSurgeonGroupInputsToState() {
+  const el = document.getElementById('surgeonMappingList');
+  const groups = el && el._groups;
+  if (!groups) return;
+  groups.forEach((g, i) => {
+    const input = document.getElementById('surgCanonical_' + i);
+    if (input) {
+      const v = input.value.trim();
+      if (v) g.canonical = v;
+    }
+  });
+}
+
+function showAddSubNamePicker(groupIdx) {
+  _commitSurgeonGroupInputsToState();
+  const el = document.getElementById('surgeonMappingList');
+  const groups = el && el._groups;
+  if (!groups) return;
+  const sel = document.getElementById('addSubName_' + groupIdx);
+  if (!sel) return;
+  const options = [];
+  groups.forEach((g, i) => {
+    if (i === groupIdx) return;
+    options.push({ idx: i, label: g.canonical || '(unnamed)' });
+  });
+  options.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+  if (options.length === 0) {
+    sel.innerHTML = '<option value="">No other names available</option>';
+  } else {
+    sel.innerHTML = '<option value="">Pick a name to merge…</option>'
+      + options.map(o => '<option value="' + o.idx + '">' + escHtml(o.label) + '</option>').join('');
+  }
+  sel.classList.remove('hidden');
+  sel.style.display = '';
+  setTimeout(() => { try { sel.focus(); } catch (e) {} }, 0);
+}
+
+function addSurgeonSubName(targetGroupIdx, sourceGroupIdxStr) {
+  _commitSurgeonGroupInputsToState();
+  const el = document.getElementById('surgeonMappingList');
+  const groups = el && el._groups;
+  if (!groups) return;
+  const sIdx = parseInt(sourceGroupIdxStr, 10);
+  if (!Number.isInteger(sIdx) || sIdx < 0 || sIdx >= groups.length) return;
+  const target = groups[targetGroupIdx];
+  const source = groups[sIdx];
+  if (!target || !source || target === source) return;
+  // Merge every variant from the source group into the target. Skip names
+  // that are already in the target (no duplicate chips).
+  source.variants.forEach(v => {
+    if (!target.variants.some(tv => tv.name === v.name)) target.variants.push(v);
+  });
+  groups.splice(sIdx, 1);
+  renderSurgeonMappingGroups(groups);
+}
+
+function removeSurgeonSubName(groupIdx, variantIdx) {
+  _commitSurgeonGroupInputsToState();
+  const el = document.getElementById('surgeonMappingList');
+  const groups = el && el._groups;
+  if (!groups) return;
+  const g = groups[groupIdx];
+  if (!g) return;
+  const removed = g.variants[variantIdx];
+  if (!removed) return;
+  g.variants.splice(variantIdx, 1);
+  // Pulled-out variant becomes its own row.
+  groups.push({ canonical: removed.name, variants: [removed] });
+  // Drop empty groups (canonical typed in but no variants left) so the list
+  // doesn't collect orphans the user can't act on.
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (groups[i] !== g && groups[i].variants.length === 0) groups.splice(i, 1);
+  }
+  if (g.variants.length === 0) {
+    const i = groups.indexOf(g);
+    if (i >= 0) groups.splice(i, 1);
+  }
+  renderSurgeonMappingGroups(groups);
 }
 
 async function saveSurgeonMappings() {
