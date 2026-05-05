@@ -2226,6 +2226,22 @@ body.hide-monetary .monetary-hide { display: none !important; }
         </div>
       </div>
 
+      <!-- Daytime force off: shows on overnight shifts (UVH Mole, IMC Night
+           Call, and any per-site type with dayForceOffEligible: true on its
+           rule). Adds the +56 force-off bonus on top of the shift's normal
+           AR / production / pager pay — for the case where the user worked
+           the night shift but the daytime portion was a force-off. -->
+      <div id="dayForceOffSection" class="hidden">
+        <div class="divider"></div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="dayForceOffCheck">
+          <label for="dayForceOffCheck">Daytime force off (+56 pts)</label>
+        </div>
+        <p style="font-size:0.72rem;color:var(--text-dim);margin:4px 0 0;line-height:1.4;">
+          Adds the 56-pt force-off bonus to this shift. Use when the daytime portion was a force-off but you still worked the night. Nothing else about the shift's AR / production / pager pay changes.
+        </p>
+      </div>
+
       <!-- Pre-call (morning OR) — UVH OB and Mole only -->
       <div id="preCallOverlaySection" class="hidden">
         <div class="divider"></div>
@@ -8959,7 +8975,8 @@ const DEFAULT_SHIFT_RULES = {
   mole:             { label: 'Mole',
                       pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
                       unrestrictedCall: { weekday: { afterMin: 1140 },          weekend: 'all' },
-                      arRate: { mode: 'general' } },
+                      arRate: { mode: 'general' },
+                      dayForceOffEligible: true },
   '1st_call':       { label: '1st Call',
                       pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
                       unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
@@ -11294,7 +11311,16 @@ function calcShiftTotal(shift) {
   } else {
     subspecPts = _hasSubspec ? calcSubspecPoints(shift) : 0;
   }
-  const forceOffBonusPts = _pcType ? (_pcType.forceOffBonusPts || 0) : 0;
+  // Force-off bonus: pager-call force_off (IMC) AND/OR the dayForceOff flag
+  // (UVH mole, IMC night call, any rule with dayForceOffEligible: true).
+  // The flag adds a flat 56 on top of the shift's normal AR / production /
+  // pager pay — used when the daytime portion was a force-off but the user
+  // still worked the night.
+  let forceOffBonusPts = _pcType ? (_pcType.forceOffBonusPts || 0) : 0;
+  const _dfRuleCalc = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+  if (shift && shift.dayForceOff && _dfRuleCalc && _dfRuleCalc.dayForceOffEligible) {
+    forceOffBonusPts += 56;
+  }
   const supervisionPts = calcSupervisionPoints(shift);
   // Float bonus: rule-driven so per-site float types (e.g. IMC_OR_float
   // inheriting OR_float) automatically pick it up.
@@ -11978,6 +12004,18 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
   const isUnrestrictedEntry = !!(getResolvedShiftRules(getCurrentSiteId())[type]
     && getResolvedShiftRules(getCurrentSiteId())[type].unrestrictedCallEntry);
   document.getElementById('unrestrictedCallEntryOptions').classList.toggle('hidden', !isUnrestrictedEntry);
+  // Daytime force-off checkbox: visible when the rule is flagged on the
+  // current shift type (UVH mole, IMC night call, etc.). Re-toggle on
+  // every assignment-type change. Reset the checkbox so a leftover check
+  // from a different type doesn't carry over.
+  const isDayForceOffEligible = !!(getResolvedShiftRules(getCurrentSiteId())[type]
+    && getResolvedShiftRules(getCurrentSiteId())[type].dayForceOffEligible);
+  const dayForceOffSection = document.getElementById('dayForceOffSection');
+  if (dayForceOffSection) dayForceOffSection.classList.toggle('hidden', !isDayForceOffEligible);
+  if (!isDayForceOffEligible) {
+    const dfChk = document.getElementById('dayForceOffCheck');
+    if (dfChk) dfChk.checked = false;
+  }
   // Help text on the time-entries section: only the unrestricted call
   // case needs an inline explanation right now.
   const helpEl = document.getElementById('timeEntriesHelp');
@@ -12219,6 +12257,12 @@ function loadShiftForDate() {
       document.getElementById('unrestrictedCallHours').value = shift.unrestrictedCallHours || 0;
       if (isUC) document.getElementById('timeEntriesGroup').classList.add('hidden');
     }
+    {
+      const dfRule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+      const isDayForceOffEligible = !!(dfRule && dfRule.dayForceOffEligible);
+      document.getElementById('dayForceOffSection').classList.toggle('hidden', !isDayForceOffEligible);
+      document.getElementById('dayForceOffCheck').checked = !!(isDayForceOffEligible && shift.dayForceOff);
+    }
     if (shift.supervisionStart || shift.supervisionEnd) {
       document.getElementById('supervisionOverlayCheck').checked = true;
       document.getElementById('supervisionStart').value = shift.supervisionStart || '';
@@ -12310,6 +12354,8 @@ function loadShiftForDate() {
     document.getElementById('teeCount').value = 0;
     document.getElementById('unrestrictedCallEntryOptions').classList.add('hidden');
     document.getElementById('unrestrictedCallHours').value = 0;
+    document.getElementById('dayForceOffSection').classList.add('hidden');
+    document.getElementById('dayForceOffCheck').checked = false;
     document.getElementById('supervisionOverlayCheck').checked = false;
     document.getElementById('supervisionStart').value = '';
     document.getElementById('supervisionEnd').value = '';
@@ -12665,6 +12711,12 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       hasPreCall: hasPreCall,
       preCallTimeEntries: preCallEntries,
       preCallForcedOff: preCallForcedOffFlag,
+      dayForceOff: (() => {
+        const _dfRule = getResolvedShiftRules(getCurrentSiteId())[effectiveType];
+        const _dfEligible = !!(_dfRule && _dfRule.dayForceOffEligible);
+        const _dfChk = document.getElementById('dayForceOffCheck');
+        return !!(_dfEligible && _dfChk && _dfChk.checked);
+      })(),
       tempCoverage: (() => {
         const tcCheck = document.getElementById('tempCoverageCheck');
         if (!tcCheck || !tcCheck.checked) return [];
@@ -15756,6 +15808,13 @@ function getShiftPayBreakdown(shift) {
   const pagerWindow = getPagerPayWindow(shift.assignmentType, isWkndOrHol, shift.date, shift.siteId);
   const _bdPCType = getPagerCallType(shift);
   const ucOverrideH = parseFloat(shift.unrestrictedCallHours) || 0;
+  // Daytime force-off bonus row. Shown alongside (not instead of) the
+  // shift's normal AR / pager / production rows so the user can see
+  // exactly where the +56 came from.
+  const _bdRule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+  if (shift && shift.dayForceOff && _bdRule && _bdRule.dayForceOffEligible) {
+    rows.push({ clockIn: '', clockOut: '', payCode: 'Daytime Force Off Bonus', durationMin: 0, payRate: 0, amount: 56, isPager: true, isSubRow: false });
+  }
   if (_bdPCType) {
     _pagerCallBreakdownRows(_bdPCType).forEach(r => rows.push(r));
   } else if (ucOverrideH > 0) {
