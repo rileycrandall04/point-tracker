@@ -23668,8 +23668,8 @@ function surgeonGroupHtml(group, index) {
     html += `</div>`;
   }
   html += `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">`;
-  html +=   `<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:4px 8px;" onclick="showAddSubNamePicker(${index})">+ Add sub-name</button>`;
-  html +=   `<select id="addSubName_${index}" class="hidden" onchange="addSurgeonSubName(${index}, this.value)" style="font-size:0.78rem;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);"></select>`;
+  html +=   `<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:4px 8px;" onclick="showMergeIntoCanonicalPicker(${index})">Add to canonical name</button>`;
+  html +=   `<select id="mergeIntoCanonical_${index}" class="hidden" onchange="mergeIntoCanonical(${index}, this.value)" style="font-size:0.78rem;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);"></select>`;
   html += `</div>`;
   html += `</div>`;
   return html;
@@ -23691,46 +23691,73 @@ function _commitSurgeonGroupInputsToState() {
   });
 }
 
-function showAddSubNamePicker(groupIdx) {
+function showMergeIntoCanonicalPicker(sourceGroupIdx) {
   _commitSurgeonGroupInputsToState();
   const el = document.getElementById('surgeonMappingList');
   const groups = el && el._groups;
   if (!groups) return;
-  const sel = document.getElementById('addSubName_' + groupIdx);
+  const sel = document.getElementById('mergeIntoCanonical_' + sourceGroupIdx);
   if (!sel) return;
   const options = [];
   groups.forEach((g, i) => {
-    if (i === groupIdx) return;
+    if (i === sourceGroupIdx) return;
     options.push({ idx: i, label: g.canonical || '(unnamed)' });
   });
   options.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
-  if (options.length === 0) {
-    sel.innerHTML = '<option value="">No other names available</option>';
-  } else {
-    sel.innerHTML = '<option value="">Pick a name to merge…</option>'
+  // "__new__" sentinel triggers a prompt for a brand-new canonical when the
+  // one the admin wants doesn't exist in the list yet.
+  let optsHtml = '<option value="">Pick a canonical name…</option>'
+    + '<option value="__new__">+ Create new canonical…</option>';
+  if (options.length > 0) {
+    optsHtml += '<option disabled>──────────</option>'
       + options.map(o => '<option value="' + o.idx + '">' + escHtml(o.label) + '</option>').join('');
   }
+  sel.innerHTML = optsHtml;
   sel.classList.remove('hidden');
   sel.style.display = '';
   setTimeout(() => { try { sel.focus(); } catch (e) {} }, 0);
 }
 
-function addSurgeonSubName(targetGroupIdx, sourceGroupIdxStr) {
+function mergeIntoCanonical(sourceGroupIdx, choice) {
+  if (!choice) return; // "Pick a canonical name…" placeholder
   _commitSurgeonGroupInputsToState();
   const el = document.getElementById('surgeonMappingList');
   const groups = el && el._groups;
   if (!groups) return;
-  const sIdx = parseInt(sourceGroupIdxStr, 10);
-  if (!Number.isInteger(sIdx) || sIdx < 0 || sIdx >= groups.length) return;
-  const target = groups[targetGroupIdx];
-  const source = groups[sIdx];
-  if (!target || !source || target === source) return;
-  // Merge every variant from the source group into the target. Skip names
-  // that are already in the target (no duplicate chips).
+  const source = groups[sourceGroupIdx];
+  if (!source) return;
+  let target;
+  if (choice === '__new__') {
+    const suggested = source.canonical || '';
+    const entered = prompt('New canonical name to add to:', suggested);
+    if (!entered) {
+      // User cancelled — reset the picker and bail.
+      const sel = document.getElementById('mergeIntoCanonical_' + sourceGroupIdx);
+      if (sel) sel.value = '';
+      return;
+    }
+    const trimmed = entered.trim();
+    if (!trimmed) return;
+    if (trimmed === source.canonical && source.variants.every(v => v.name === source.canonical)) {
+      // Same canonical, nothing to do.
+      return;
+    }
+    target = { canonical: trimmed, variants: [] };
+    groups.push(target);
+  } else {
+    const tIdx = parseInt(choice, 10);
+    if (!Number.isInteger(tIdx) || tIdx < 0 || tIdx >= groups.length) return;
+    target = groups[tIdx];
+  }
+  if (!target || target === source) return;
+  // Move every variant from the source row into the target. Skip duplicates
+  // so we don't get repeat chips.
   source.variants.forEach(v => {
     if (!target.variants.some(tv => tv.name === v.name)) target.variants.push(v);
   });
-  groups.splice(sIdx, 1);
+  // Drop the source row entirely — it now lives as variants of the target.
+  const srcIdx = groups.indexOf(source);
+  if (srcIdx >= 0) groups.splice(srcIdx, 1);
   renderSurgeonMappingGroups(groups);
 }
 
