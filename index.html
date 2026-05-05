@@ -14156,6 +14156,11 @@ function _todayRunningStandardCases(date) {
 // estimated finish time. Below this threshold the median is too noisy to
 // help the user — better to show nothing than guess.
 const CASE_FINISH_MIN_SAMPLES = 3;
+// Surgeon-specific samples are more predictive than the broader pool — a
+// single surgeon's case durations cluster tighter — so the surgeon tier
+// fires at a lower floor. Site / cross-site tiers still need 3 to avoid
+// noisy single-outlier medians.
+const CASE_FINISH_SURGEON_MIN_SAMPLES = 2;
 
 // Returns an "HH:MM" estimated finish time for an in-progress case. Two-tier
 // strategy, preferring the surgeon-specific signal when it's strong enough:
@@ -14236,7 +14241,7 @@ function estimateCaseFinish(caseData) {
         durations.push(dur);
       }
     }
-    if (durations.length >= CASE_FINISH_MIN_SAMPLES) {
+    if (durations.length >= CASE_FINISH_SURGEON_MIN_SAMPLES) {
       source = 'surgeon';
     } else {
       durations = [];
@@ -14296,7 +14301,8 @@ function estimateCaseFinish(caseData) {
     }
   }
 
-  if (durations.length < CASE_FINISH_MIN_SAMPLES) return null;
+  const minForSource = source === 'surgeon' ? CASE_FINISH_SURGEON_MIN_SAMPLES : CASE_FINISH_MIN_SAMPLES;
+  if (durations.length < minForSource) return null;
 
   durations.sort((a, b) => a - b);
   const m = durations.length;
