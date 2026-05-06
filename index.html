@@ -7723,27 +7723,83 @@ function scheduleSharedShiftsSync() {
   }, 5000);
 }
 
+// Diff cache for shared-shift sync: shiftDate -> fingerprint of last
+// successfully-synced payload. We compare freshly-built payloads against
+// this cache and only write the differences, instead of rewriting every
+// shift on every save. The cache is primed from Firestore once per session
+// (see primeSharedShiftsCache) so we also know which docs exist remotely
+// and can detect deletions without a full collection query.
+let _lastSyncedShiftPayloads = new Map();
+let _sharedShiftsPrimePromise = null;
+
+// Stable fingerprint for diff comparison. Excludes `updatedAt` (which
+// changes on every buildSharedShift call) and sorts keys so insertion-order
+// drift between locally-built and Firestore-roundtripped payloads can't
+// cause spurious diffs.
+function _shiftFingerprint(payload) {
+  if (!payload) return '';
+  const keys = Object.keys(payload).filter(k => k !== 'updatedAt').sort();
+  const out = {};
+  keys.forEach(k => { out[k] = payload[k]; });
+  return JSON.stringify(out);
+}
+
+// Read the user's existing sharedShifts docs once per session and seed the
+// diff cache. After this, syncs only write deltas. Called from the auth
+// state listener after firestoreSyncEnabled is set; safe to call again on
+// shareData toggle on. Idempotent — subsequent calls reuse the in-flight
+// promise.
+function primeSharedShiftsCache() {
+  if (_sharedShiftsPrimePromise) return _sharedShiftsPrimePromise;
+  if (!firestoreSyncEnabled || !currentUser) return Promise.resolve();
+  if (settings.shareData === false) return Promise.resolve();
+  const uid = currentUser.uid;
+  _sharedShiftsPrimePromise = db.collection('sharedShifts').where('uid', '==', uid).get()
+    .then(snap => {
+      _lastSyncedShiftPayloads.clear();
+      snap.forEach(doc => {
+        const d = doc.data() || {};
+        if (d.shiftDate) {
+          _lastSyncedShiftPayloads.set(d.shiftDate, _shiftFingerprint(d));
+        }
+      });
+    })
+    .catch(err => {
+      console.error('Shared shifts prime error:', err);
+      // Leave cache empty; next sync will write everything (correct fallback).
+      _sharedShiftsPrimePromise = null;
+    });
+  return _sharedShiftsPrimePromise;
+}
+
 // Removes sharedShifts docs whose corresponding shift no longer exists
-// locally. Runs alongside syncAllSharedShifts so deletes propagate.
+// locally. Uses the diff cache as the authoritative "what's in Firestore"
+// view, so we no longer need a full where(uid).get() on every save.
 function syncDeletedSharedShifts() {
   if (!firestoreSyncEnabled || !currentUser) return;
   if (settings.shareData === false) return;
-  db.collection('sharedShifts').where('uid', '==', currentUser.uid).get()
-    .then(snap => {
-      const localDates = new Set(Object.keys(data.shifts || {}));
-      const stale = [];
-      snap.forEach(doc => {
-        const d = doc.data() || {};
-        if (!localDates.has(d.shiftDate)) stale.push(doc.ref);
+  const run = () => {
+    const localDates = new Set(Object.keys(data.shifts || {}));
+    const stale = [];
+    _lastSyncedShiftPayloads.forEach((_fp, date) => {
+      if (!localDates.has(date)) stale.push(date);
+    });
+    if (stale.length === 0) return;
+    const uid = currentUser.uid;
+    const batchSize = 500;
+    for (let i = 0; i < stale.length; i += batchSize) {
+      const slice = stale.slice(i, i + batchSize);
+      const batch = db.batch();
+      slice.forEach(date => {
+        batch.delete(db.collection('sharedShifts').doc(uid + '_' + date));
       });
-      const batchSize = 500;
-      for (let i = 0; i < stale.length; i += batchSize) {
-        const batch = db.batch();
-        stale.slice(i, i + batchSize).forEach(ref => batch.delete(ref));
-        batch.commit().catch(err => console.error('Shared shifts cleanup error:', err));
-      }
-    })
-    .catch(err => console.error('Shared shifts cleanup query error:', err));
+      batch.commit()
+        .then(() => slice.forEach(date => _lastSyncedShiftPayloads.delete(date)))
+        .catch(err => console.error('Shared shifts cleanup error:', err));
+    }
+  };
+  if (_sharedShiftsPrimePromise) _sharedShiftsPrimePromise.then(run, run);
+  else run();
 }
 
 function loadSettings() {
@@ -7903,19 +7959,36 @@ function deleteSharedShift(shiftDate) {
 function syncAllSharedShifts() {
   if (!firestoreSyncEnabled || !currentUser) return;
   if (settings.shareData === false) return;
-  const dates = Object.keys(data.shifts || {});
-  const batchSize = 500;
-  for (let i = 0; i < dates.length; i += batchSize) {
-    const batch = db.batch();
-    dates.slice(i, i + batchSize).forEach(d => {
-      const shift = data.shifts[d];
-      const payload = buildSharedShift(shift);
-      if (!payload) return;
-      const docId = currentUser.uid + '_' + d;
-      batch.set(db.collection('sharedShifts').doc(docId), payload);
-    });
-    batch.commit().catch(err => console.error('Shared shifts batch write error:', err));
-  }
+  const run = () => {
+    const uid = currentUser.uid;
+    const dates = Object.keys(data.shifts || {});
+    // Build only the dates whose payload differs from the last-synced
+    // fingerprint. Empty cache (prime not done / failed) ⇒ all dates write.
+    const changed = []; // [{ date, payload, fingerprint }]
+    for (let i = 0; i < dates.length; i++) {
+      const d = dates[i];
+      const payload = buildSharedShift(data.shifts[d]);
+      if (!payload) continue;
+      const fp = _shiftFingerprint(payload);
+      if (_lastSyncedShiftPayloads.get(d) !== fp) {
+        changed.push({ date: d, payload, fingerprint: fp });
+      }
+    }
+    if (changed.length === 0) return;
+    const batchSize = 500;
+    for (let i = 0; i < changed.length; i += batchSize) {
+      const slice = changed.slice(i, i + batchSize);
+      const batch = db.batch();
+      slice.forEach(c => {
+        batch.set(db.collection('sharedShifts').doc(uid + '_' + c.date), c.payload);
+      });
+      batch.commit()
+        .then(() => slice.forEach(c => _lastSyncedShiftPayloads.set(c.date, c.fingerprint)))
+        .catch(err => console.error('Shared shifts batch write error:', err));
+    }
+  };
+  if (_sharedShiftsPrimePromise) _sharedShiftsPrimePromise.then(run, run);
+  else run();
 }
 
 function deleteAllUserSharedShifts() {
@@ -7924,6 +7997,9 @@ function deleteAllUserSharedShifts() {
     .where('uid', '==', currentUser.uid)
     .get()
     .then(snapshot => {
+      // Diff cache no longer reflects remote state once we delete everything.
+      _lastSyncedShiftPayloads.clear();
+      _sharedShiftsPrimePromise = null;
       if (snapshot.empty) return;
       const batchSize = 500;
       const docs = snapshot.docs;
@@ -29144,6 +29220,10 @@ auth.onAuthStateChanged(async (user) => {
     await loadSettingsFromFirestore(user.uid);
 
     firestoreSyncEnabled = true;
+    // Seed the shared-shifts diff cache once per session so subsequent
+    // saves only write what changed. Fire-and-forget; sync functions
+    // await this promise before running.
+    primeSharedShiftsCache();
     hideSessionExpiredBanner();
     updateAccountUI(user);
     document.getElementById('authOverlay').classList.add('hidden');
@@ -29304,6 +29384,8 @@ auth.onAuthStateChanged(async (user) => {
     // Not signed in — show auth overlay
     currentUser = null;
     firestoreSyncEnabled = false;
+    _lastSyncedShiftPayloads.clear();
+    _sharedShiftsPrimePromise = null;
     document.getElementById('authOverlay').classList.remove('hidden');
   }
 });
