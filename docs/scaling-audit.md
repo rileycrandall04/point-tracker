@@ -4,7 +4,7 @@ Snapshot of the user-count scaling review run on 2026-05-05. Items are ordered b
 
 ## Status
 
-- [ ] **#1 — Dirty-track shared-shifts sync** ([index.html:7717](../index.html), [index.html:7903](../index.html)) — every save rewrites every shift the user has ever logged. Cut to write only what changed.
+- [x] **#1 — Dirty-track shared-shifts sync** ([index.html:7717](../index.html), [index.html:7903](../index.html)) — every save rewrites every shift the user has ever logged. Cut to write only what changed. _Done in PR #347 via diff cache primed once per session._
 - [ ] **#2 — Migrate per-user data blob off the 1 MiB ceiling** ([index.html:7707](../index.html), [index.html:7768](../index.html)) — `users/{uid}/data/data` will silently fail at ~1,500 cases/year × 2–4 years. Move cases to a subcollection.
 - [ ] **#3 — Bound `sharedCases` reads** ([index.html:7971](../index.html), [index.html:11617](../index.html), [index.html:29347](../index.html)) — entire site history re-pulled on tab change, 30s visibility refresh, and two retry timers. Add date bound + delta sync.
 - [ ] **#4 — Admin views are N+1** ([index.html:5607](../index.html), [index.html:5805](../index.html)) — pulls every user's full data blob to render lists. Denormalize an `activitySummary` field.
