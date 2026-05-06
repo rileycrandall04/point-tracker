@@ -18531,6 +18531,41 @@ function goToOpenLaborCases() {
   }
 }
 
+// Paychecks deposit on the 20th of each month; when the 20th lands on a
+// weekend or US federal holiday, the deposit shifts to the next business
+// day (typically the 21st-23rd). The PV reminder is gated on this date so
+// it doesn't appear before users actually have the paycheck in hand.
+function _isUSBankHoliday(date) {
+  const y = date.getFullYear();
+  const m = date.getMonth(); // 0-indexed
+  const d = date.getDate();
+  const dow = date.getDay();
+  // Fixed-date holidays w/ standard observed-day rule (Sat→Fri, Sun→Mon).
+  const fixed = [[0,1], [5,19], [6,4], [10,11], [11,25]];
+  for (let i = 0; i < fixed.length; i++) {
+    const hDate = new Date(y, fixed[i][0], fixed[i][1]);
+    const hDow = hDate.getDay();
+    let obs = hDate;
+    if (hDow === 6) obs = new Date(y, fixed[i][0], fixed[i][1] - 1);
+    else if (hDow === 0) obs = new Date(y, fixed[i][0], fixed[i][1] + 1);
+    if (obs.getFullYear() === y && obs.getMonth() === m && obs.getDate() === d) return true;
+  }
+  // Floating holidays
+  if (m === 0  && dow === 1 && d >= 15 && d <= 21) return true; // MLK Day
+  if (m === 1  && dow === 1 && d >= 15 && d <= 21) return true; // Presidents Day
+  if (m === 4  && dow === 1 && d >= 25)             return true; // Memorial Day
+  if (m === 8  && dow === 1 && d >= 1  && d <= 7)   return true; // Labor Day
+  if (m === 9  && dow === 1 && d >= 8  && d <= 14)  return true; // Columbus / Indigenous Peoples
+  if (m === 10 && dow === 4 && d >= 22 && d <= 28)  return true; // Thanksgiving
+  return false;
+}
+function _paydayForMonth(yyyy, mm) {
+  const d = new Date(yyyy, mm, 20);
+  while (d.getDay() === 0 || d.getDay() === 6 || _isUSBankHoliday(d)) {
+    d.setDate(d.getDate() + 1);
+  }
+  return d;
+}
 function checkPVReminder() {
   const todayBanner = document.getElementById('todayPVReminder');
   const compBanner = document.getElementById('pvReminderBanner');
@@ -18540,7 +18575,9 @@ function checkPVReminder() {
     return;
   }
   const now = new Date();
-  if (now.getDate() < 20) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const payday = _paydayForMonth(now.getFullYear(), now.getMonth());
+  if (today < payday) {
     if (todayBanner) todayBanner.classList.add('hidden');
     if (compBanner) compBanner.classList.add('hidden');
     return;
