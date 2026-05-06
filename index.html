@@ -2767,15 +2767,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
   <!-- Case Logs Tab -->
   <div id="dtab-caselogs" class="hidden">
-    <div class="case-log-help" style="font-size:0.72rem;color:var(--text-dim);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.45;">
-      <strong style="color:var(--text);">How to use:</strong>
-      <span style="white-space:nowrap;">← / → switch months.</span>
-      Type in the search box to filter by surgeon, procedure, or ASA code.
-      Tap a row to edit a case; tap its <strong>×</strong> to delete it,
-      <strong>⚑</strong> to flag it for follow-up, or <strong>$</strong> to mark it
-      missing from billing. Check rows to enable <em>Delete Selected</em> for bulk delete.
-      <strong>Download CSV</strong> exports the visible month.
-    </div>
     <div class="month-nav">
       <button id="clPrevMonth">&larr;</button>
       <span id="clMonthLabel">January 2026</span>
@@ -2786,6 +2777,18 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
     <input type="text" class="case-log-search" id="caseLogSearch" placeholder="Search cases...">
     <button id="clDeleteSelectedBtn" class="hidden">Delete Selected (<span id="clDeleteSelectedCount">0</span>)</button>
+    <div style="text-align:right;margin:4px 0 2px;">
+      <a href="#" id="caseLogHelpToggle" onclick="toggleCaseLogHelp(event)" style="font-size:0.78rem;color:var(--accent2);font-weight:600;text-decoration:none;">Help &#9660;</a>
+    </div>
+    <div id="caseLogHelpBox" class="case-log-help hidden" style="font-size:0.72rem;color:var(--text-dim);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.45;">
+      <strong style="color:var(--text);">How to use:</strong>
+      <span style="white-space:nowrap;">← / → switch months.</span>
+      Type in the search box to filter by surgeon, procedure, or ASA code.
+      Tap a row to edit a case; tap its <strong>×</strong> to delete it,
+      <strong>⚑</strong> to flag it for follow-up, or <strong>$</strong> to mark it
+      missing from billing. Check rows to enable <em>Delete Selected</em> for bulk delete.
+      <strong>Download CSV</strong> exports the visible month.
+    </div>
     <div class="case-log-wrap">
       <div id="caseLogTableContainer">
         <div class="empty-state"><p>No cases for this month.</p></div>
@@ -15878,6 +15881,15 @@ document.getElementById('clNextMonth').addEventListener('click', () => {
 
 document.getElementById('caseLogSearch').addEventListener('input', () => filterCaseLog());
 
+function toggleCaseLogHelp(e) {
+  if (e) e.preventDefault();
+  const box = document.getElementById('caseLogHelpBox');
+  const link = document.getElementById('caseLogHelpToggle');
+  if (!box || !link) return;
+  const nowHidden = box.classList.toggle('hidden');
+  link.innerHTML = nowHidden ? 'Help &#9660;' : 'Hide help &#9650;';
+}
+
 function getCaseAddOnSummary(c) {
   const parts = [];
   if (c.nerveBlock === 'brachial_plexus') parts.push('NB-BP');
@@ -18577,7 +18589,12 @@ function checkPVReminder() {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const payday = _paydayForMonth(now.getFullYear(), now.getMonth());
-  if (today < payday) {
+  // 3-day visibility window starting on payday — auto-hide after that
+  // even if the user never confirms or skips, so a stale banner doesn't
+  // sit on the home screen all month.
+  const expiry = new Date(payday);
+  expiry.setDate(expiry.getDate() + 3);
+  if (today < payday || today >= expiry) {
     if (todayBanner) todayBanner.classList.add('hidden');
     if (compBanner) compBanner.classList.add('hidden');
     return;
