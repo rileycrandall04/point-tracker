@@ -6,6 +6,9 @@ Snapshot of the user-count scaling review run on 2026-05-05. Items are ordered b
 
 - [x] **#1 — Dirty-track shared-shifts sync** ([index.html:7717](../index.html), [index.html:7903](../index.html)) — every save rewrites every shift the user has ever logged. Cut to write only what changed. _Done in PR #347 via diff cache primed once per session._
 - [ ] **#2 — Migrate per-user data blob off the 1 MiB ceiling** ([index.html:7707](../index.html), [index.html:7768](../index.html)) — `users/{uid}/data/data` will silently fail at ~1,500 cases/year × 2–4 years. Move cases to a subcollection.
+  - [x] **Phase 1: dual-write + backfill** — every case mutation mirrors to `users/{uid}/cases/{caseId}`; one-time backfill on login. Reads still on blob. Kill switch `settings.dualWriteCasesEnabled`.
+  - [ ] **Phase 2: switch reads + stop writing cases to blob** — after ~1 week of soak, verify subcollection matches blob, then flip read path.
+  - [ ] **Phase 3: prune `cases[]` from existing blobs** — once Phase 2 stable.
 - [ ] **#3 — Bound `sharedCases` reads** ([index.html:7971](../index.html), [index.html:11617](../index.html), [index.html:29347](../index.html)) — entire site history re-pulled on tab change, 30s visibility refresh, and two retry timers. Add date bound + delta sync.
 - [ ] **#4 — Admin views are N+1** ([index.html:5607](../index.html), [index.html:5805](../index.html)) — pulls every user's full data blob to render lists. Denormalize an `activitySummary` field.
 - [ ] **#5 — `loadAllSiteProcedureSamples` fans out across all sites** ([index.html:8161](../index.html)) — queries `sharedCases` per site, unions client-side. Precompute aggregate stats doc.
