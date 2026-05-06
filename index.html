@@ -13755,7 +13755,7 @@ function autoLearnProcedureMapping(procedure, asaCode) {
   initSurgeonAutocomplete('editCaseNotes', 'editSurgeonSuggestions');
 })();
 
-['caseBaseUnits','caseStart','caseEnd','casePhysicalStatus','laborStart','laborEnd','caseNerveBlock','apsEpiduralCount','apsPainCount','caseSharedPct'].forEach(id => {
+['caseBaseUnits','caseStart','caseEnd','casePhysicalStatus','laborStart','laborEnd','laborInitialStart','caseNerveBlock','apsEpiduralCount','apsPainCount','caseSharedPct'].forEach(id => {
   const el = document.getElementById(id);
   if (el) { el.addEventListener('input', updatePointPreview); el.addEventListener('change', updatePointPreview); }
 });
