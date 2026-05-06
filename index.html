@@ -15184,12 +15184,14 @@ function tickLiveUpdate() {
   } catch(e) { /* ticker resilience — don't stop interval on transient errors */ }
 }
 
-// Median of past completed shifts (same assignmentType) interpolated at the
-// given minute-of-day. Linear within the shift's start→end window. Limited
-// to the last ~6 months of data.shifts for relevance. Returns null when
-// fewer than 3 prior shifts have usable data — quartile-style comparison
-// isn't meaningful below that.
-function _medianShiftPointsAtMinute(assignmentType, currentMin) {
+// Median of past completed shifts (same assignmentType + same day-class)
+// interpolated at the given minute-of-day. Linear within the shift's
+// start→end window. Limited to the last ~6 months of data.shifts.
+// `isWkndOrHol` filters samples to weekend/holiday shifts when true and
+// to weekday non-holiday shifts when false — pay rates differ enough that
+// blending the two would skew the comparison. Returns null when fewer
+// than 3 matching prior shifts exist.
+function _medianShiftPointsAtMinute(assignmentType, isWkndOrHol, currentMin) {
   if (!assignmentType || !data || !data.shifts) return null;
   const today = todayStr();
   const cutoffDate = new Date();
@@ -15203,6 +15205,8 @@ function _medianShiftPointsAtMinute(assignmentType, currentMin) {
     if (!sh.date || sh.date >= today) continue;
     if (sh.date < cutoffStr) continue;
     if (!sh.startTime || !sh.endTime) continue;
+    const shWknd = isWeekend(sh.date) || !!sh.isHoliday;
+    if (shWknd !== !!isWkndOrHol) continue;
     let s = timeToMinutes(sh.startTime);
     let e = timeToMinutes(sh.endTime);
     if (!isFinite(s) || !isFinite(e)) continue;
@@ -15232,13 +15236,15 @@ function _updateLivePaceIcon(shift, currentMin, liveTotal) {
     if (el) { el.style.display = 'none'; el.dataset.state = ''; }
     return;
   }
-  const m = _medianShiftPointsAtMinute(shift.assignmentType, currentMin);
+  const isWkndOrHol = isWeekend(shift.date) || !!shift.isHoliday;
+  const m = _medianShiftPointsAtMinute(shift.assignmentType, isWkndOrHol, currentMin);
   if (!m || !(m.median > 0)) { el.style.display = 'none'; el.dataset.state = ''; return; }
   const ratio = liveTotal / m.median;
   if (ratio >= 1.10) {
     el.dataset.state = 'fire';
     el.dataset.median = m.median.toFixed(1);
     el.dataset.n = String(m.n);
+    el.dataset.dayClass = isWkndOrHol ? 'wknd' : 'wkday';
     el.innerHTML = '&#128293;'; // 🔥
     el.title = 'You\'re ahead of pace — tap for details';
     el.style.display = '';
@@ -15246,6 +15252,7 @@ function _updateLivePaceIcon(shift, currentMin, liveTotal) {
     el.dataset.state = 'ice';
     el.dataset.median = m.median.toFixed(1);
     el.dataset.n = String(m.n);
+    el.dataset.dayClass = isWkndOrHol ? 'wknd' : 'wkday';
     el.innerHTML = '&#129482;'; // 🧊
     el.title = 'You\'re behind pace — tap for details';
     el.style.display = '';
@@ -15263,22 +15270,26 @@ function showLivePaceIconHelp() {
   const state = el.dataset.state || '';
   const median = el.dataset.median || '?';
   const n = el.dataset.n || '?';
+  const dayClass = el.dataset.dayClass === 'wknd' ? 'weekend / holiday' : 'weekday';
   if (state === 'fire') {
     alert('🔥 Hot streak\n\n'
       + 'Your live point total is more than 10% above the median for this '
-      + 'shift type at this point in the day, based on your last ~6 months '
-      + 'of completed shifts (n=' + n + ', median ≈ ' + median + ' pts).');
+      + 'shift type on ' + dayClass + ' shifts at this point in the day, '
+      + 'based on your last ~6 months of completed shifts '
+      + '(n=' + n + ', median ≈ ' + median + ' pts).');
   } else if (state === 'ice') {
     alert('🧊 Behind pace\n\n'
       + 'Your live point total is more than 25% below the median for this '
-      + 'shift type at this point in the day, based on your last ~6 months '
-      + 'of completed shifts (n=' + n + ', median ≈ ' + median + ' pts).');
+      + 'shift type on ' + dayClass + ' shifts at this point in the day, '
+      + 'based on your last ~6 months of completed shifts '
+      + '(n=' + n + ', median ≈ ' + median + ' pts).');
   } else {
     alert('Live pace indicator\n\n'
       + 'Compares your current point total to the median for this shift type '
       + 'at this minute of the day, computed from your last ~6 months of '
-      + 'completed shifts. 🔥 means more than 10% above; 🧊 means more than '
-      + '25% below. No icon means you\'re in the typical range.');
+      + 'completed shifts of the same kind (weekday vs weekend/holiday are '
+      + 'tracked separately). 🔥 means more than 10% above; 🧊 means more '
+      + 'than 25% below. No icon means you\'re in the typical range.');
   }
 }
 
