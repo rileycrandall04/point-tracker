@@ -10302,10 +10302,12 @@ document.addEventListener('click', function(e) {
 
 // Desktop: also show on hover, hide on leave
 document.addEventListener('pointerenter', function(e) {
+  if (!(e.target instanceof Element)) return;
   const icon = e.target.closest('.info-icon');
   if (icon && e.pointerType === 'mouse') _showTip(icon);
 }, true);
 document.addEventListener('pointerleave', function(e) {
+  if (!(e.target instanceof Element)) return;
   if (e.target.closest('.info-icon') && e.pointerType === 'mouse') _hideTip();
 }, true);
 
