@@ -961,12 +961,23 @@ textarea { resize: vertical; min-height: 60px; }
 .cr-section-header.open .cr-toggle { transform: rotate(90deg); }
 .cr-section-body { display: none; padding: 10px 14px; font-size: 0.8rem; line-height: 1.6; color: var(--text); }
 .cr-section-body.open { display: block; }
-.cr-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; margin: 8px 0; }
-.cr-table th { text-align: left; padding: 5px 8px; background: var(--surface2); border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text-dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
-.cr-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+/* Tables wrap headers and word-break long cells so 4–5 column layouts fit
+   ~320 px screens without horizontal scroll. The scroll-x wrapper kicks in
+   only when a table genuinely can't fit, so wide cells don't overflow the
+   card. */
+.cr-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.cr-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; margin: 8px 0; table-layout: fixed; }
+.cr-table th { text-align: left; padding: 4px 6px; background: var(--surface2); border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text-dim); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.2px; white-space: normal; word-break: break-word; }
+.cr-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); vertical-align: top; word-break: break-word; }
 .cr-table tr:last-child td { border-bottom: none; }
-.cr-note { font-size: 0.72rem; color: var(--text-dim); margin-top: 6px; font-style: italic; }
-.cr-formula { background: var(--surface2); padding: 6px 10px; border-radius: 6px; font-family: monospace; font-size: 0.75rem; margin: 6px 0; overflow-x: auto; }
+.cr-note { font-size: 0.7rem; color: var(--text-dim); margin-top: 6px; font-style: italic; }
+.cr-formula { background: var(--surface2); padding: 6px 10px; border-radius: 6px; font-family: monospace; font-size: 0.72rem; margin: 6px 0; overflow-x: auto; }
+@media (max-width: 420px) {
+  .cr-section-body { padding: 8px 10px; font-size: 0.76rem; }
+  .cr-table { font-size: 0.68rem; }
+  .cr-table th { font-size: 0.58rem; padding: 3px 4px; }
+  .cr-table td { padding: 3px 4px; }
+}
 .cr-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem; font-weight: 600; }
 .cr-badge-yes { background: rgba(52,211,153,0.15); color: var(--accent2); }
 .cr-badge-no { background: rgba(255,107,107,0.15); color: #ff6b6b; }
