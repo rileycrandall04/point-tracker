@@ -14350,7 +14350,17 @@ function renderToday() {
         } else {
           label = '(based on median duration for ' + procLabel + ' across all surgeons, all sites' + countTag + ')';
         }
-        estFinishHtml = '<div style="flex-basis:100%;text-align:center;font-size:0.72rem;color:var(--text-dim);margin-top:8px;line-height:1.4;">est. finish <strong style="color:var(--text);">' + escHtml(est.finish) + '</strong> <span style="opacity:0.85;">' + label + '</span></div>';
+        // Snail / racecar tag — surgeon's median for this procedure relative
+        // to other surgeons in the pool. Only shown when 4+ surgeons have
+        // data so the quartile is meaningful.
+        let speedIcon = '';
+        const _speed = (typeof caseSpeedIndicator === 'function') ? caseSpeedIndicator(c) : null;
+        if (_speed && _speed.indicator === 'fast') {
+          speedIcon = ' <span title="Surgeon median in top 25% (fastest) for this procedure (' + _speed.surgeons + ' surgeons)">&#127950;&#65039;</span>';
+        } else if (_speed && _speed.indicator === 'slow') {
+          speedIcon = ' <span title="Surgeon median in bottom 25% (slowest) for this procedure (' + _speed.surgeons + ' surgeons)">&#128012;</span>';
+        }
+        estFinishHtml = '<div style="flex-basis:100%;text-align:center;font-size:0.72rem;color:var(--text-dim);margin-top:8px;line-height:1.4;">est. finish <strong style="color:var(--text);">' + escHtml(est.finish) + '</strong>' + speedIcon + ' <span style="opacity:0.85;">' + label + '</span></div>';
       }
     }
     listHtml += `
@@ -14604,6 +14614,74 @@ function estimateCaseFinish(caseData) {
   const finish = String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
 
   return { finish, source, procedure: procedureDisplay, surgeon: surgeonDisplay, sampleCount: m };
+}
+
+// Surgeon speed indicator for the estimated-finish line. Compares the
+// selected surgeon's median duration for this procedure against every
+// other surgeon at this site (local data.cases + sharedCasesCache).
+//   - Returns null when the procedure has fewer than 4 surgeons with
+//     at least one completed case in the pool, or when the selected
+//     surgeon has no own data on the procedure.
+//   - Returns 'fast' when the surgeon's median is in the top 25%
+//     (shortest) of medians, 'slow' when in the bottom 25% (longest).
+//   - Returns null in the middle 50%.
+function caseSpeedIndicator(caseData) {
+  if (!caseData || caseData.caseType !== 'standard') return null;
+  const procRaw = (caseData.procedure || '').trim();
+  if (!procRaw) return null;
+  const procKey = normalizeProcedureName(procRaw).toLowerCase();
+  const surgRaw = (caseData.notes || '').trim();
+  if (!surgRaw) return null;
+  const surgKey = normalizeSurgeonName(surgRaw).toLowerCase();
+  const bySurgeon = new Map();
+  const collect = (list, getProc, getSurg) => {
+    if (!Array.isArray(list)) return;
+    for (const c of list) {
+      if (!c || c.id === caseData.id) continue;
+      if (c.caseType !== 'standard') continue;
+      if (!c.startTime || !c.endTime) continue;
+      const cProc = normalizeProcedureName((getProc(c) || '').trim()).toLowerCase();
+      if (cProc !== procKey) continue;
+      const cSurg = normalizeSurgeonName((getSurg(c) || '').trim()).toLowerCase();
+      if (!cSurg) continue;
+      let s = timeToMinutes(c.startTime);
+      let e = timeToMinutes(c.endTime);
+      if (!isFinite(s) || !isFinite(e)) continue;
+      if (e <= s) e += 1440;
+      const dur = e - s;
+      if (dur <= 0 || dur > 1440) continue;
+      let arr = bySurgeon.get(cSurg);
+      if (!arr) { arr = []; bySurgeon.set(cSurg, arr); }
+      arr.push(dur);
+    }
+  };
+  collect(data.cases || [], c => c.procedure, c => c.notes);
+  collect(sharedCasesCache || [], c => c.procedure, c => c.surgeon);
+  if (bySurgeon.size < 4) return null;
+  const myDurations = bySurgeon.get(surgKey);
+  if (!myDurations || myDurations.length === 0) return null;
+  const _median = (arr) => {
+    const s = arr.slice().sort((a, b) => a - b);
+    const n = s.length;
+    return n % 2 === 1 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+  };
+  const medians = [];
+  let myMedian = null;
+  for (const [k, durs] of bySurgeon.entries()) {
+    const m = _median(durs);
+    medians.push(m);
+    if (k === surgKey) myMedian = m;
+  }
+  if (myMedian == null) return null;
+  const sorted = medians.slice().sort((a, b) => a - b);
+  const idx = sorted.indexOf(myMedian);
+  // Position by rank: 1/n = fastest, n/n = slowest. Top quartile (≤ 0.25)
+  // = fast; bottom quartile (> 0.75) = slow.
+  const p = (idx + 1) / sorted.length;
+  let indicator = null;
+  if (p <= 0.25) indicator = 'fast';
+  else if (p > 0.75) indicator = 'slow';
+  return { surgeons: sorted.length, indicator };
 }
 
 // Debug helper — call from the browser console to see why a running case's
