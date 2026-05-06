@@ -7876,6 +7876,84 @@ function deleteSharedCase(caseId) {
   });
 }
 
+// ---- Per-case subcollection (scaling audit #2, Phase 1: dual-write) ----
+// Mirrors every case to users/{uid}/cases/{caseId} alongside the existing
+// blob write at users/{uid}/data/data, so the blob doesn't keep growing
+// toward Firestore's 1 MiB doc cap. Reads still come from the blob in
+// Phase 1; Phase 2 will switch reads and stop writing cases to the blob.
+//
+// Kill switch: settings.dualWriteCasesEnabled === false disables the
+// mirror writes (and skips the backfill) for that user. Default is on.
+function isCaseDualWriteEnabled() {
+  return settings.dualWriteCasesEnabled !== false;
+}
+
+function writeCaseDoc(caseData) {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (!isCaseDualWriteEnabled()) return;
+  if (!caseData || !caseData.id) return;
+  const ref = db.collection('users').doc(currentUser.uid)
+    .collection('cases').doc(caseData.id);
+  const payload = JSON.parse(JSON.stringify(caseData));
+  payload.updatedAt = new Date().toISOString();
+  ref.set(payload).catch(err => {
+    console.error('Per-case mirror write error:', err);
+  });
+}
+
+function deleteCaseDoc(caseId) {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (!isCaseDualWriteEnabled()) return;
+  if (!caseId) return;
+  const ref = db.collection('users').doc(currentUser.uid)
+    .collection('cases').doc(caseId);
+  ref.delete().catch(err => {
+    console.error('Per-case mirror delete error:', err);
+  });
+}
+
+// One-time backfill: populate users/{uid}/cases from data.cases. Idempotent
+// — safe to re-run after a partial failure. Marks settings.casesBackfilledV1
+// on success so subsequent logins skip it. Shows a single toast on entry
+// and a completion toast when finished.
+async function backfillCaseSubcollection() {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (!isCaseDualWriteEnabled()) return;
+  if (settings.casesBackfilledV1) return;
+  const cases = (data.cases || []).filter(c => c && c.id);
+  if (cases.length === 0) {
+    settings.casesBackfilledV1 = true;
+    saveSettings(settings);
+    return;
+  }
+  const uid = currentUser.uid;
+  const total = cases.length;
+  showToast('Syncing ' + total + ' cases…');
+  const batchSize = 400; // stay under Firestore's 500-op batch limit
+  let written = 0;
+  try {
+    for (let i = 0; i < cases.length; i += batchSize) {
+      const slice = cases.slice(i, i + batchSize);
+      const batch = db.batch();
+      slice.forEach(c => {
+        const ref = db.collection('users').doc(uid).collection('cases').doc(c.id);
+        const payload = JSON.parse(JSON.stringify(c));
+        payload.updatedAt = new Date().toISOString();
+        batch.set(ref, payload);
+      });
+      await batch.commit();
+      written += slice.length;
+    }
+    settings.casesBackfilledV1 = true;
+    saveSettings(settings);
+    showToast('Synced ' + written + ' cases');
+  } catch (err) {
+    console.error('Per-case backfill error:', err);
+    showToast('Case sync incomplete — will retry next login');
+    // Leave casesBackfilledV1 unset so we retry on next login.
+  }
+}
+
 function syncAllSharedCases() {
   if (!firestoreSyncEnabled || !currentUser) return;
   if (settings.shareData === false) return;
@@ -12776,6 +12854,7 @@ function deleteCaseDE(id) {
   if (!confirm('Delete this case?')) return;
   data.cases = data.cases.filter(c => c.id !== id);
   deleteSharedCase(id);
+  deleteCaseDoc(id);
   saveData(data);
   updateHeaderPoints();
   renderDECaseList();
@@ -13955,6 +14034,7 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   data.cases.push(caseData);
   saveData(data);
   writeSharedCase(caseData, data.shifts[date]);
+  writeCaseDoc(caseData);
   autoLearnProcedureMapping(caseData.procedure, caseData.asaCode);
   updateHeaderPoints();
   showToast('Case saved! (' + calcCasePoints(caseData, data.shifts[date]).toFixed(2) + ' pts)');
@@ -14511,6 +14591,7 @@ function todayStopRunningCase() {
   const c = running[0];
   c.endTime = _nowHHMM();
   if (typeof writeSharedCase === 'function') writeSharedCase(c, data.shifts[date]);
+  writeCaseDoc(c);
   saveData(data);
   if (typeof renderToday === 'function') renderToday();
   if (typeof renderDECaseList === 'function') renderDECaseList();
@@ -14566,6 +14647,7 @@ function autoFillOpenEpiduralEnds(date, endTimeStr) {
   openEpidurals.forEach(c => {
     c.endTime = endTimeStr;
     writeSharedCase(c, data.shifts[c.shiftDate]);
+    writeCaseDoc(c);
   });
   saveData(data);
   if (typeof renderDECaseList === 'function') renderDECaseList();
@@ -14593,6 +14675,7 @@ function forceShiftSignOut() {
   openCases.forEach(c => {
     c.endTime = nowStr;
     writeSharedCase(c, data.shifts[c.shiftDate]);
+    writeCaseDoc(c);
   });
   saveData(data);
   closeSignOutWarning();
@@ -15347,6 +15430,7 @@ function deleteCase(id) {
   if (!confirm('Delete this case?')) return;
   data.cases = data.cases.filter(c => c.id !== id);
   deleteSharedCase(id);
+  deleteCaseDoc(id);
   saveData(data);
   updateHeaderPoints();
   renderToday();
@@ -15758,7 +15842,7 @@ document.getElementById('clDeleteSelectedBtn').addEventListener('click', () => {
   if (ids.length === 0) return;
   if (!confirm(`Delete ${ids.length} selected case${ids.length > 1 ? 's' : ''}?`)) return;
   const idSet = new Set(ids);
-  ids.forEach(id => deleteSharedCase(id));
+  ids.forEach(id => { deleteSharedCase(id); deleteCaseDoc(id); });
   data.cases = data.cases.filter(c => !idSet.has(c.id));
   saveData(data);
   updateHeaderPoints();
@@ -16722,7 +16806,7 @@ function slUpdateDeleteBar() {
 
 function deleteShiftFromLog(dateStr) {
   if (!confirm('Delete this shift and its associated cases? This cannot be undone.')) return;
-  data.cases.filter(c => c.shiftDate === dateStr).forEach(c => deleteSharedCase(c.id));
+  data.cases.filter(c => c.shiftDate === dateStr).forEach(c => { deleteSharedCase(c.id); deleteCaseDoc(c.id); });
   delete data.shifts[dateStr];
   data.cases = data.cases.filter(c => c.shiftDate !== dateStr);
   saveData(data);
@@ -16740,7 +16824,7 @@ function deleteSelectedShifts() {
   const unique = [...new Set(dates)];
   if (!confirm(`Delete ${unique.length} shift${unique.length > 1 ? 's' : ''} and their associated cases? This cannot be undone.`)) return;
   unique.forEach(dateStr => {
-    data.cases.filter(c => c.shiftDate === dateStr).forEach(c => deleteSharedCase(c.id));
+    data.cases.filter(c => c.shiftDate === dateStr).forEach(c => { deleteSharedCase(c.id); deleteCaseDoc(c.id); });
     delete data.shifts[dateStr];
     data.cases = data.cases.filter(c => c.shiftDate !== dateStr);
   });
@@ -23514,6 +23598,7 @@ function deleteCaseDayDetail(id) {
   if (!confirm('Delete this case?')) return;
   data.cases = data.cases.filter(c => c.id !== id);
   deleteSharedCase(id);
+  deleteCaseDoc(id);
   saveData(data);
   updateHeaderPoints();
   renderDayDetailContent();
@@ -23758,6 +23843,7 @@ async function saveAdminCaseGroup(groupIdx) {
       if (procChanged) caseObj.procedure = newProc;
       const shift = data.shifts[caseObj.shiftDate];
       writeSharedCase(caseObj, shift);
+      writeCaseDoc(caseObj);
       personalCount++;
     } else if (c.source === 'shared' && c._docId) {
       const overrideObj = { siteId: getCurrentSiteId(), updatedAt: new Date().toISOString() };
@@ -24317,6 +24403,7 @@ async function saveSCEChanges() {
       // Sync shared case
       const shift = data.shifts[caseObj.shiftDate];
       writeSharedCase(caseObj, shift);
+      writeCaseDoc(caseObj);
       personalUpdated++;
     } else if (c.source === 'shared' && c._docId) {
       const overrideObj = { siteId: getCurrentSiteId() };
@@ -24908,6 +24995,7 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
   if (!c.unbilled && wasUnbilled) delete c.billingMonth;
   saveData(data);
   writeSharedCase(c, data.shifts[c.shiftDate]);
+  writeCaseDoc(c);
   updateHeaderPoints();
   renderCaseLogTable();
   renderToday();
@@ -24933,6 +25021,7 @@ document.getElementById('deleteCaseEdit').addEventListener('click', () => {
   if (!confirm('Delete this case?')) return;
   data.cases = data.cases.filter(c => c.id !== editingCaseId);
   deleteSharedCase(editingCaseId);
+  deleteCaseDoc(editingCaseId);
   saveData(data);
   updateHeaderPoints();
   renderCaseLogTable();
@@ -24949,6 +25038,7 @@ function deleteCaseFromList(id) {
   if (!confirm('Delete this case?')) return;
   data.cases = data.cases.filter(c => c.id !== id);
   deleteSharedCase(id);
+  deleteCaseDoc(id);
   saveData(data);
   updateHeaderPoints();
   renderCaseLogTable();
@@ -27093,7 +27183,7 @@ function showCSVImportConfirmation(result) {
     newCases.forEach(c => { c.siteId = data.shifts[c.shiftDate]?.siteId || getCurrentSiteId(); });
     data.cases.push(...newCases);
     saveData(data);
-    newCases.forEach(c => writeSharedCase(c, data.shifts[c.shiftDate]));
+    newCases.forEach(c => { writeSharedCase(c, data.shifts[c.shiftDate]); writeCaseDoc(c); });
     updateHeaderPoints();
     showToast(`Imported ${newCases.length} cases` + (shiftsCreated > 0 ? ` and created ${shiftsCreated} placeholder shifts` : ''));
   };
@@ -28937,7 +29027,7 @@ document.getElementById('scanImportBtn').addEventListener('click', () => {
   newCases.forEach(c => { c.siteId = data.shifts[c.shiftDate]?.siteId || getCurrentSiteId(); });
   data.cases.push(...newCases);
   saveData(data);
-  newCases.forEach(c => writeSharedCase(c, data.shifts[c.shiftDate]));
+  newCases.forEach(c => { writeSharedCase(c, data.shifts[c.shiftDate]); writeCaseDoc(c); });
   updateHeaderPoints();
 
   const skipped = scanParsedCases.length - newCases.length;
@@ -29301,6 +29391,13 @@ auth.onAuthStateChanged(async (user) => {
       settings.sharedShiftsHasEndTime = true;
       saveSettings(settings);
     }
+
+    // Scaling audit #2 Phase 1: populate the per-case subcollection from
+    // the existing data.cases blob. Idempotent and gated by
+    // settings.casesBackfilledV1; retries on next login if it fails.
+    backfillCaseSubcollection().catch(err => {
+      console.warn('Per-case backfill threw:', err);
+    });
 
     // Load all shared data in parallel — no sequential chaining.
     // Each fetch is independent so one hanging doesn't block the others.
