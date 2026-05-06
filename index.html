@@ -15184,44 +15184,139 @@ function tickLiveUpdate() {
   } catch(e) { /* ticker resilience — don't stop interval on transient errors */ }
 }
 
+// Lazy session cache of sharedShifts for the current site, used by the
+// live-pace median to pool other users' shifts. Reuses the Community Stats
+// cache when warm; otherwise fires a one-time fetch. Returns null until
+// data is loaded — caller falls back to local-only median in the meantime.
+let _livePaceSharedCache = null;       // { ts, siteId, samples: [...] }
+let _livePaceSharedFetching = false;
+function _getSharedSamplesForPace() {
+  if (typeof getCurrentSiteId !== 'function') return null;
+  const mySite = getCurrentSiteId();
+  if (!mySite) return null;
+  // Reuse the Community Stats cache if it's recent and for our site —
+  // it already pulled the same query, so no need to duplicate the read.
+  if (_communityStatsCache
+      && _communityStatsCurrentSite === mySite
+      && (Date.now() - _communityStatsCache.ts) < 5 * 60 * 1000) {
+    const out = [];
+    const byUid = _communityStatsCache.byUid || {};
+    for (const uid in byUid) {
+      const list = byUid[uid] || [];
+      for (let i = 0; i < list.length; i++) {
+        const r = list[i];
+        out.push({
+          uid: uid,
+          assignmentType: r.assignmentType,
+          startTime: r.startTime,
+          endTime: r.endTime,
+          points: r.points,
+          shiftDate: r.shiftDate
+        });
+      }
+    }
+    return out;
+  }
+  if (_livePaceSharedCache
+      && _livePaceSharedCache.siteId === mySite
+      && (Date.now() - _livePaceSharedCache.ts) < 30 * 60 * 1000) {
+    return _livePaceSharedCache.samples;
+  }
+  if (!_livePaceSharedFetching && firestoreSyncEnabled && currentUser && typeof db !== 'undefined' && db) {
+    _livePaceSharedFetching = true;
+    db.collection('sharedShifts').where('siteId', '==', mySite).get()
+      .then(snap => {
+        const samples = [];
+        snap.forEach(doc => {
+          const d = doc.data() || {};
+          if (!d.assignmentType || !d.startTime || !d.endTime) return;
+          if (!(Number(d.points) > 0)) return;
+          samples.push({
+            uid: d.uid || '',
+            assignmentType: d.assignmentType,
+            startTime: d.startTime,
+            endTime: d.endTime,
+            points: Number(d.points) || 0,
+            shiftDate: d.shiftDate || ''
+          });
+        });
+        _livePaceSharedCache = { ts: Date.now(), siteId: mySite, samples };
+        _livePaceSharedFetching = false;
+      })
+      .catch(err => {
+        console.warn('live-pace shared shifts fetch failed:', err);
+        _livePaceSharedFetching = false;
+      });
+  }
+  return null;
+}
+
 // Median of past completed shifts (same assignmentType + same day-class)
 // interpolated at the given minute-of-day. Linear within the shift's
-// start→end window. Limited to the last ~6 months of data.shifts.
+// start→end window. Limited to the last ~6 months. Pools the user's own
+// shifts (data.shifts) with other users' shifts at the same site
+// (sharedShifts) so the comparison reflects site-wide norms.
 // `isWkndOrHol` filters samples to weekend/holiday shifts when true and
 // to weekday non-holiday shifts when false — pay rates differ enough that
 // blending the two would skew the comparison. Returns null when fewer
 // than 3 matching prior shifts exist.
 function _medianShiftPointsAtMinute(assignmentType, isWkndOrHol, currentMin) {
-  if (!assignmentType || !data || !data.shifts) return null;
+  if (!assignmentType) return null;
   const today = todayStr();
   const cutoffDate = new Date();
   cutoffDate.setMonth(cutoffDate.getMonth() - 6);
   const cutoffStr = cutoffDate.getFullYear() + '-'
     + String(cutoffDate.getMonth() + 1).padStart(2, '0') + '-01';
   const samples = [];
-  for (const k in data.shifts) {
-    const sh = data.shifts[k];
-    if (!sh || sh.assignmentType !== assignmentType) continue;
-    if (!sh.date || sh.date >= today) continue;
-    if (sh.date < cutoffStr) continue;
-    if (!sh.startTime || !sh.endTime) continue;
-    const shWknd = isWeekend(sh.date) || !!sh.isHoliday;
-    if (shWknd !== !!isWkndOrHol) continue;
-    let s = timeToMinutes(sh.startTime);
-    let e = timeToMinutes(sh.endTime);
-    if (!isFinite(s) || !isFinite(e)) continue;
-    if (e <= s) e += 1440;
-    const total = (calcShiftTotal(sh) || {}).total;
-    if (!(total > 0)) continue;
-    // Roll currentMin into [s, s+1440) so cross-midnight shifts compare
-    // at the same minute-of-day as the running shift.
+  // Roll currentMin into [s, s+1440) so cross-midnight shifts compare
+  // at the same minute-of-day as the running shift.
+  const interpolate = (s, e, total) => {
     let cur = currentMin;
     if (cur < s) cur += 1440;
-    let val;
-    if (cur <= s) val = 0;
-    else if (cur >= e) val = total;
-    else val = total * ((cur - s) / (e - s));
-    samples.push(val);
+    if (cur <= s) return 0;
+    if (cur >= e) return total;
+    return total * ((cur - s) / (e - s));
+  };
+  // 1) User's own shifts (uses calcShiftTotal so includes any local edits).
+  if (data && data.shifts) {
+    for (const k in data.shifts) {
+      const sh = data.shifts[k];
+      if (!sh || sh.assignmentType !== assignmentType) continue;
+      if (!sh.date || sh.date >= today) continue;
+      if (sh.date < cutoffStr) continue;
+      if (!sh.startTime || !sh.endTime) continue;
+      const shWknd = isWeekend(sh.date) || !!sh.isHoliday;
+      if (shWknd !== !!isWkndOrHol) continue;
+      let s = timeToMinutes(sh.startTime);
+      let e = timeToMinutes(sh.endTime);
+      if (!isFinite(s) || !isFinite(e)) continue;
+      if (e <= s) e += 1440;
+      const total = (calcShiftTotal(sh) || {}).total;
+      if (!(total > 0)) continue;
+      samples.push(interpolate(s, e, total));
+    }
+  }
+  // 2) Other users' shifts at the same site (sharedShifts pool, dedup'd
+  //    against current user — their data is already covered by step 1).
+  const shared = _getSharedSamplesForPace() || [];
+  const myUid = (currentUser && currentUser.uid) || null;
+  for (let i = 0; i < shared.length; i++) {
+    const r = shared[i];
+    if (myUid && r.uid === myUid) continue;
+    if (r.assignmentType !== assignmentType) continue;
+    if (!r.shiftDate || r.shiftDate >= today) continue;
+    if (r.shiftDate < cutoffStr) continue;
+    if (!r.startTime || !r.endTime) continue;
+    // Holidays aren't tracked on shared docs; weekend filter only.
+    const shWknd = isWeekend(r.shiftDate);
+    if (shWknd !== !!isWkndOrHol) continue;
+    let s = timeToMinutes(r.startTime);
+    let e = timeToMinutes(r.endTime);
+    if (!isFinite(s) || !isFinite(e)) continue;
+    if (e <= s) e += 1440;
+    const total = Number(r.points) || 0;
+    if (!(total > 0)) continue;
+    samples.push(interpolate(s, e, total));
   }
   if (samples.length < 3) return null;
   samples.sort((a, b) => a - b);
@@ -15275,21 +15370,21 @@ function showLivePaceIconHelp() {
     alert('🔥 Hot streak\n\n'
       + 'Your live point total is more than 10% above the median for this '
       + 'shift type on ' + dayClass + ' shifts at this point in the day, '
-      + 'based on your last ~6 months of completed shifts '
+      + 'pooled across all users at your site over the last ~6 months '
       + '(n=' + n + ', median ≈ ' + median + ' pts).');
   } else if (state === 'ice') {
     alert('🧊 Behind pace\n\n'
       + 'Your live point total is more than 25% below the median for this '
       + 'shift type on ' + dayClass + ' shifts at this point in the day, '
-      + 'based on your last ~6 months of completed shifts '
+      + 'pooled across all users at your site over the last ~6 months '
       + '(n=' + n + ', median ≈ ' + median + ' pts).');
   } else {
     alert('Live pace indicator\n\n'
       + 'Compares your current point total to the median for this shift type '
-      + 'at this minute of the day, computed from your last ~6 months of '
-      + 'completed shifts of the same kind (weekday vs weekend/holiday are '
-      + 'tracked separately). 🔥 means more than 10% above; 🧊 means more '
-      + 'than 25% below. No icon means you\'re in the typical range.');
+      + 'at this minute of the day, pooled across all users at your site '
+      + 'over the last ~6 months (weekday vs weekend/holiday tracked '
+      + 'separately). 🔥 means more than 10% above; 🧊 means more than 25% '
+      + 'below. No icon means you\'re in the typical range.');
   }
 }
 
