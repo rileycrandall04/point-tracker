@@ -2970,7 +2970,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <!-- Time Summary (compact) -->
   <div class="card" style="padding:10px 14px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-      <span style="font-size:0.78rem;font-weight:600;">Time Summary</span>
+      <span id="timeSummaryTitle" style="font-size:0.78rem;font-weight:600;">Time Summary</span>
       <span style="font-size:0.68rem;color:var(--text-dim);">Past 3 Months</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 8px;text-align:center;margin-bottom:6px;">
@@ -3010,7 +3010,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
   <!-- Assignment Data (combined) -->
   <div class="card">
-    <h2>Assignment Data</h2>
+    <h2 id="assignDataTitle">Assignment Data</h2>
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
       <button class="tab-btn active" id="adTabTotals" onclick="switchAssignDataTab('totals')">Average Shift Totals</button>
       <button class="tab-btn" id="adTabDOW" onclick="switchAssignDataTab('dow')">Day of Week</button>
@@ -21963,11 +21963,12 @@ function buildAvgShiftTotals() {
     if (shift.date && shift.date > today) return;
     const t = calcShiftTotal(shift).total;
     if (!(t > 0)) return;
-    const type = shift.assignmentType;
-    if (!groups[type]) groups[type] = { totalPts: 0, count: 0, shifts: [] };
-    groups[type].totalPts += t;
-    groups[type].count++;
-    groups[type].shifts.push({
+    const bucket = _assignDataBucketForShift(shift);
+    const key = bucket.key;
+    if (!groups[key]) groups[key] = { name: bucket.name, totalPts: 0, count: 0, shifts: [] };
+    groups[key].totalPts += t;
+    groups[key].count++;
+    groups[key].shifts.push({
       date: shift.date,
       startTime: shift.startTime || (shift.timeEntries && shift.timeEntries[0] && shift.timeEntries[0].start) || '',
       endTime: shift.endTime || (shift.timeEntries && shift.timeEntries.length > 0 && shift.timeEntries[shift.timeEntries.length - 1].end) || '',
@@ -21976,7 +21977,7 @@ function buildAvgShiftTotals() {
   });
   _avgShiftTotalsLastGroups = groups;
   const ranked = Object.entries(groups)
-    .map(([type, g]) => ({ key: type, name: getAssignmentTypeName(type), avgPts: round2(g.totalPts / g.count), count: g.count }))
+    .map(([key, g]) => ({ key, name: g.name, avgPts: round2(g.totalPts / g.count), count: g.count }))
     .sort((a, b) => b.avgPts - a.avgPts);
   let html = '';
   if (ranked.length > 0) {
@@ -22015,7 +22016,7 @@ function renderAvgShiftTotalsDetail() {
   const titleEl = document.getElementById('avgShiftTotalsDetailTitle');
   const bodyEl = document.getElementById('avgShiftTotalsDetailContent');
   if (!titleEl || !bodyEl) return;
-  titleEl.textContent = getAssignmentTypeName(_avgShiftTotalsDetailKey);
+  titleEl.textContent = (g && g.name) || _avgShiftTotalsDetailKey;
   const sorted = (g.shifts || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const pageSize = AVG_SHIFT_TOTALS_DETAIL_PAGE_SIZE;
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
@@ -22070,7 +22071,9 @@ function setShiftEfficiencyMode(mode) {
 
 function buildShiftEfficiency() {
   // Collect each shift's pts/hr individually so we can compute the mean
-  // and the sample standard deviation across that distribution.
+  // and the sample standard deviation across that distribution. Buckets
+  // mirror Community Stats so SF1/SF2 split Wkday/Wknd, UVH OB splits
+  // 24/12 AM/12 PM, mole splits day-of-week, etc.
   const mode = shiftEfficiencyMode;
   const groups = {};
   Object.values(data.shifts).forEach(shift => {
@@ -22084,13 +22087,15 @@ function buildShiftEfficiency() {
       denom = hrs;
     }
     const total = calcShiftTotal(shift).total;
-    const type = shift.assignmentType;
-    if (!groups[type]) groups[type] = [];
-    groups[type].push(total / denom);
+    const bucket = _assignDataBucketForShift(shift);
+    const key = bucket.key;
+    if (!groups[key]) groups[key] = { name: bucket.name, vals: [] };
+    groups[key].vals.push(total / denom);
   });
   const ranked = Object.entries(groups)
-    .filter(([, vals]) => vals.length >= 1)
-    .map(([type, vals]) => {
+    .filter(([, g]) => g.vals.length >= 1)
+    .map(([, g]) => {
+      const vals = g.vals;
       const n = vals.length;
       const mean = vals.reduce((a, b) => a + b, 0) / n;
       let std = null;
@@ -22098,7 +22103,7 @@ function buildShiftEfficiency() {
         const variance = vals.reduce((acc, v) => acc + (v - mean) * (v - mean), 0) / (n - 1);
         std = Math.sqrt(variance);
       }
-      return { name: getAssignmentTypeName(type), mean: round2(mean), std: std == null ? null : round2(std), count: n };
+      return { name: g.name, mean: round2(mean), std: std == null ? null : round2(std), count: n };
     })
     .sort((a, b) => b.mean - a.mean);
   const clockedActive = mode === 'clocked';
@@ -22521,12 +22526,40 @@ function renderCommunityStatsDetail() {
 // TIME TAB
 // ================================================================
 function renderTimeTab() {
+  // Personalize the Time Summary + Assignment Data titles with the user's
+  // name when one is set. Falls back to the bare title for new users.
+  const _userName = String((settings && settings.name) || '').trim();
+  const timeTitleEl = document.getElementById('timeSummaryTitle');
+  if (timeTitleEl) timeTitleEl.textContent = _userName ? (_userName + "'s Time Summary") : 'Time Summary';
+  const assignTitleEl = document.getElementById('assignDataTitle');
+  if (assignTitleEl) assignTitleEl.textContent = _userName ? (_userName + "'s Assignment Data") : 'Assignment Data';
   renderTimeSummary();
   renderProductionTrend();
   renderWeekendVsWeekday();
   renderAssignData();
   renderNightCallFreq();
   renderVacationTracker();
+}
+
+// Adapter that runs a local data.shifts entry through the same bucketing
+// rules as Community Stats — UVH OB splits 24 hr / 12 hr AM / 12 hr PM,
+// SF1 / SF2 split Wkday / Wknd, mole splits by day-of-week, etc. — so the
+// Assignment Data card lines up with what users see in Community Stats.
+function _assignDataBucketForShift(shift) {
+  const row = {
+    siteId: shift.siteId,
+    assignmentType: shift.assignmentType,
+    shiftDate: shift.date,
+    startTime: shift.startTime
+      || (shift.timeEntries && shift.timeEntries[0] && shift.timeEntries[0].start)
+      || ''
+  };
+  const b = (typeof _communityStatsBucket === 'function') ? _communityStatsBucket(row) : null;
+  if (!b) return { key: shift.assignmentType, name: getAssignmentTypeName(shift.assignmentType, shift.siteId) };
+  return {
+    key: b.key,
+    name: getAssignmentTypeName(shift.assignmentType, shift.siteId) + (b.suffix || '')
+  };
 }
 
 function getRecentShifts(months) {
