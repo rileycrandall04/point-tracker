@@ -1004,6 +1004,8 @@ textarea { resize: vertical; min-height: 60px; }
 .modifiers-section summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; color: var(--text-dim); list-style: none; display: flex; align-items: center; gap: 8px; }
 .modifiers-section summary::-webkit-details-marker { display: none; }
 #pagerCallTypeDetails > summary::-webkit-details-marker { display: none; }
+#adminProcMapDetails > summary::-webkit-details-marker { display: none; }
+#adminProcMapDetails[open] > summary .proc-map-arrow { transform: rotate(180deg); }
 #pagerCallTypeDetails > summary::marker { display: none; content: ''; }
 #pagerCallTypeDetails[open] > summary .pc-arrow { transform: rotate(180deg); }
 .modifiers-section summary::before { content: '\25B6'; font-size: 0.65rem; transition: transform 0.2s; }
@@ -4178,24 +4180,31 @@ body.hide-monetary .monetary-hide { display: none !important; }
        across all sites. Variants like "TKA" map to a canonical name like
        "Total Knee" so analytics and the case-finish estimator pool them. -->
   <div class="card hidden" id="adminProcedureMappingsCard" style="margin-top:12px;">
-    <h2>Procedure Mappings</h2>
-    <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;line-height:1.5;">
-      Map procedure-name variants to a canonical name, shared across all sites.
-      Used by the case-finish estimator and any future per-procedure analytics
-      to recognize "TKA" and "Total Knee" as the same case type.
-    </p>
-    <div style="background:var(--surface);padding:10px;border-radius:8px;margin-bottom:12px;">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-        <input type="text" id="adminProcMapVariant" placeholder="Variant (e.g. TKA)" list="knownProceduresList" onfocus="refreshProcedureDatalist()" oninput="refreshProcedureDatalist()"
-          style="flex:1;min-width:140px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
-        <span style="color:var(--text-dim);">&rarr;</span>
-        <input type="text" id="adminProcMapCanonical" placeholder="Canonical (e.g. Total Knee)" list="knownProceduresList" onfocus="refreshProcedureDatalist()" oninput="refreshProcedureDatalist()"
-          style="flex:1;min-width:160px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
-        <button class="btn btn-primary btn-sm" onclick="addAdminProcedureMapping()">Add</button>
+    <details id="adminProcMapDetails">
+      <summary style="cursor:pointer;outline:none;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <h2 style="margin:0;">Procedure Mappings</h2>
+        <span class="proc-map-arrow" style="font-size:0.9rem;color:var(--text-dim);transition:transform 0.2s;display:inline-block;">&#9660;</span>
+      </summary>
+      <div style="margin-top:12px;">
+        <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;line-height:1.5;">
+          Map procedure-name variants to a canonical name, shared across all sites.
+          Used by the case-finish estimator and any future per-procedure analytics
+          to recognize "TKA" and "Total Knee" as the same case type.
+        </p>
+        <div style="background:var(--surface);padding:10px;border-radius:8px;margin-bottom:12px;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+            <input type="text" id="adminProcMapVariant" placeholder="Variant (e.g. TKA)" list="knownProceduresList" onfocus="refreshProcedureDatalist()" oninput="refreshProcedureDatalist()"
+              style="flex:1;min-width:140px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
+            <span style="color:var(--text-dim);">&rarr;</span>
+            <input type="text" id="adminProcMapCanonical" placeholder="Canonical (e.g. Total Knee)" list="knownProceduresList" onfocus="refreshProcedureDatalist()" oninput="refreshProcedureDatalist()"
+              style="flex:1;min-width:160px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
+            <button class="btn btn-primary btn-sm" onclick="addAdminProcedureMapping()">Add</button>
+          </div>
+          <div id="adminProcMapStatus" style="font-size:0.72rem;margin-top:6px;"></div>
+        </div>
+        <div id="adminProcMapList" style="font-size:0.85rem;"></div>
       </div>
-      <div id="adminProcMapStatus" style="font-size:0.72rem;margin-top:6px;"></div>
-    </div>
-    <div id="adminProcMapList" style="font-size:0.85rem;"></div>
+    </details>
   </div>
 
   <!-- Daily Tips viewer (app owner only) — read-only listing of every tip
