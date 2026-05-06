@@ -2767,10 +2767,22 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
   <!-- Case Logs Tab -->
   <div id="dtab-caselogs" class="hidden">
+    <div class="case-log-help" style="font-size:0.72rem;color:var(--text-dim);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.45;">
+      <strong style="color:var(--text);">How to use:</strong>
+      <span style="white-space:nowrap;">← / → switch months.</span>
+      Type in the search box to filter by surgeon, procedure, or ASA code.
+      Tap a row to edit a case; tap its <strong>×</strong> to delete it,
+      <strong>⚑</strong> to flag it for follow-up, or <strong>$</strong> to mark it
+      missing from billing. Check rows to enable <em>Delete Selected</em> for bulk delete.
+      <strong>Download CSV</strong> exports the visible month.
+    </div>
     <div class="month-nav">
       <button id="clPrevMonth">&larr;</button>
       <span id="clMonthLabel">January 2026</span>
       <button id="clNextMonth">&rarr;</button>
+    </div>
+    <div style="margin:6px 0 8px;text-align:center;">
+      <button class="btn btn-outline btn-sm" id="exportCSVBtn">Download Case Log CSV</button>
     </div>
     <input type="text" class="case-log-search" id="caseLogSearch" placeholder="Search cases...">
     <button id="clDeleteSelectedBtn" class="hidden">Delete Selected (<span id="clDeleteSelectedCount">0</span>)</button>
@@ -2778,9 +2790,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <div id="caseLogTableContainer">
         <div class="empty-state"><p>No cases for this month.</p></div>
       </div>
-    </div>
-    <div style="margin-top:12px;text-align:center;">
-      <button class="btn btn-outline btn-sm" id="exportCSVBtn">Download Case Log CSV</button>
     </div>
   </div>
 
@@ -5007,15 +5016,11 @@ body.hide-monetary .monetary-hide { display: none !important; }
 <div class="drawer-backdrop" id="drawerBackdrop"></div>
 <div class="drawer-panel" id="drawerPanel">
   <div class="drawer-handle"></div>
-  <div class="drawer-item" data-page="dataentry">
-    <span class="drawer-icon">&#128137;</span>
-    <span>Work</span>
-  </div>
   <div class="drawer-item" data-page="history">
     <span class="drawer-icon">&#128197;</span>
     <span>History</span>
   </div>
-  <div class="drawer-item" data-page="import">
+  <div class="drawer-item hidden" data-page="import">
     <span class="drawer-icon">&#128229;</span>
     <span>Import</span>
   </div>
