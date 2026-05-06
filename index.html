@@ -3763,6 +3763,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
           <thead><tr><th>Shift</th><th>Day Rate</th><th>Eve/Night</th><th>Hol/Wknd</th><th>Pager</th></tr></thead>
           <tbody>
             <tr><td>OR / General</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
+            <tr><td>OR Float***</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
             <tr><td>UVH OB</td><td>13 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-no">No</span></td></tr>
             <tr><td>SF 1</td><td>13 pts/hr*</td><td>20 &times;1.10 / &times;1.25</td><td>20 &times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
             <tr><td>SF 2</td><td>20 pts/hr</td><td>&times;1.10 / &times;1.25</td><td>&times;1.10</td><td><span class="cr-badge cr-badge-yes">Yes</span></td></tr>
@@ -3780,6 +3781,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
         </table>
         <p class="cr-note">*SF1 uses 13 pts/hr on weekday daytime only; 20 pts/hr at all other times.</p>
         <p class="cr-note">**Cardiac/Liver base = pager pay + automatic 45-pt subspecialty bonus: <strong>94 pts</strong> weekday (14 hrs × 3.5 + 45), <strong>129 pts</strong> weekend/holiday (24 hrs × 3.5 + 45).</p>
+        <p class="cr-note">***OR Float adds a flat <strong>+30 pt</strong> float bonus on top of normal AR. Same 20 pts/hr base as OR / General.</p>
         <p class="cr-note">Evening = 17:00&ndash;23:00 (&times;1.10). Night = 23:00&ndash;07:00 (&times;1.25). Holiday/Weekend daytime = &times;1.10.</p>
       </div>
     </div>
@@ -3820,7 +3822,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
             <tr><td>Shared Case</td><td>Base &times; (shared % / 100), default 50%</td></tr>
           </tbody>
         </table>
-        <p class="cr-note">OB shift doubling: non-OR cases on UVH OB, SF1, or SF2 shifts are doubled (&times;2).</p>
+        <p class="cr-note">OB production doubling (&times;2) on non-OR cases — applies during the in-house restricted window for that shift:</p>
+        <ul style="font-size:0.72rem;color:var(--text-dim);margin:4px 0 0 18px;line-height:1.55;">
+          <li><strong>UVH OB:</strong> always (24 hrs).</li>
+          <li><strong>SF 1:</strong> only 07:00&ndash;17:00 weekday non-holiday. Cases that span the boundary are pro-rated minute-by-minute (e.g. &times;1.5 partial).</li>
+          <li><strong>SF 2:</strong> always.</li>
+        </ul>
       </div>
     </div>
 
@@ -3877,9 +3884,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
             <tr><td>Emergency Intubation</td><td>4 pts</td></tr>
             <tr><td>Epidural Rounding (01996)</td><td>3 pts per round</td></tr>
             <tr><td>CRNA Supervision Block</td><td>2.63 pts</td></tr>
-            <tr><td>Pain Rounding (99231)</td><td>2 pts per round</td></tr>
+            <tr><td>Pain Rounding (99231)</td><td>2 pts per round + 10 min AR each†</td></tr>
           </tbody>
         </table>
+        <p class="cr-note">†Effective 2026-04-01: each Pain Rounding entry adds <strong>10 minutes of AR points</strong> at the shift's current rate when you're <strong>not clocked in</strong>. If you are clocked in, only the 2 pts apply (the AR is already accruing).</p>
       </div>
     </div>
 
