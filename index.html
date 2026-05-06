@@ -14266,6 +14266,7 @@ function renderToday() {
   const ptsPrecision = result.isInProgress ? 3 : 2;
   bdHtml += `<span id="todayLivePts" style="font-size:1.9rem;font-weight:700;line-height:1;">${result.total.toFixed(ptsPrecision)}</span>`;
   bdHtml += `<span style="font-size:0.85rem;color:var(--text-dim);">pts</span>`;
+  bdHtml += `<span id="todayPaceIcon" style="font-size:1.1rem;cursor:pointer;display:none;" onclick="showLivePaceIconHelp()"></span>`;
   bdHtml += estTag;
   bdHtml += `<span id="todayLiveDollars" class="monetary" style="font-size:1.1rem;font-weight:600;color:var(--text-dim);margin-left:auto;">$${dollarTotal.toFixed(2)}</span>`;
   bdHtml += `</div>`;
@@ -14356,7 +14357,7 @@ function renderToday() {
         let speedIcon = '';
         const _speed = (typeof caseSpeedIndicator === 'function') ? caseSpeedIndicator(c) : null;
         if (_speed && _speed.indicator === 'fast') {
-          speedIcon = ' <span title="Surgeon median in top 25% (fastest) for this procedure (' + _speed.surgeons + ' surgeons)">&#127950;&#65039;</span>';
+          speedIcon = ' <span title="Surgeon median in top 25% (fastest) for this procedure (' + _speed.surgeons + ' surgeons)">&#128007;</span>';
         } else if (_speed && _speed.indicator === 'slow') {
           speedIcon = ' <span title="Surgeon median in bottom 25% (slowest) for this procedure (' + _speed.surgeons + ' surgeons)">&#128012;</span>';
         }
@@ -15176,7 +15177,109 @@ function tickLiveUpdate() {
 
   // Also update the rate chips
   updateTodayRateChips();
+  // Fire / ice indicator: how the live total compares to the median total
+  // for past shifts of the same assignmentType at this minute-of-day.
+  // Updates the small icon next to the big point number.
+  try { _updateLivePaceIcon(shift, currentMin, liveTotal); } catch (_e) {}
   } catch(e) { /* ticker resilience — don't stop interval on transient errors */ }
+}
+
+// Median of past completed shifts (same assignmentType) interpolated at the
+// given minute-of-day. Linear within the shift's start→end window. Limited
+// to the last ~6 months of data.shifts for relevance. Returns null when
+// fewer than 3 prior shifts have usable data — quartile-style comparison
+// isn't meaningful below that.
+function _medianShiftPointsAtMinute(assignmentType, currentMin) {
+  if (!assignmentType || !data || !data.shifts) return null;
+  const today = todayStr();
+  const cutoffDate = new Date();
+  cutoffDate.setMonth(cutoffDate.getMonth() - 6);
+  const cutoffStr = cutoffDate.getFullYear() + '-'
+    + String(cutoffDate.getMonth() + 1).padStart(2, '0') + '-01';
+  const samples = [];
+  for (const k in data.shifts) {
+    const sh = data.shifts[k];
+    if (!sh || sh.assignmentType !== assignmentType) continue;
+    if (!sh.date || sh.date >= today) continue;
+    if (sh.date < cutoffStr) continue;
+    if (!sh.startTime || !sh.endTime) continue;
+    let s = timeToMinutes(sh.startTime);
+    let e = timeToMinutes(sh.endTime);
+    if (!isFinite(s) || !isFinite(e)) continue;
+    if (e <= s) e += 1440;
+    const total = (calcShiftTotal(sh) || {}).total;
+    if (!(total > 0)) continue;
+    // Roll currentMin into [s, s+1440) so cross-midnight shifts compare
+    // at the same minute-of-day as the running shift.
+    let cur = currentMin;
+    if (cur < s) cur += 1440;
+    let val;
+    if (cur <= s) val = 0;
+    else if (cur >= e) val = total;
+    else val = total * ((cur - s) / (e - s));
+    samples.push(val);
+  }
+  if (samples.length < 3) return null;
+  samples.sort((a, b) => a - b);
+  const n = samples.length;
+  const median = n % 2 === 1 ? samples[(n - 1) / 2] : (samples[n / 2 - 1] + samples[n / 2]) / 2;
+  return { median, n };
+}
+
+function _updateLivePaceIcon(shift, currentMin, liveTotal) {
+  const el = document.getElementById('todayPaceIcon');
+  if (!el || !shift || !liveTotal || liveTotal <= 0) {
+    if (el) { el.style.display = 'none'; el.dataset.state = ''; }
+    return;
+  }
+  const m = _medianShiftPointsAtMinute(shift.assignmentType, currentMin);
+  if (!m || !(m.median > 0)) { el.style.display = 'none'; el.dataset.state = ''; return; }
+  const ratio = liveTotal / m.median;
+  if (ratio >= 1.10) {
+    el.dataset.state = 'fire';
+    el.dataset.median = m.median.toFixed(1);
+    el.dataset.n = String(m.n);
+    el.innerHTML = '&#128293;'; // 🔥
+    el.title = 'You\'re ahead of pace — tap for details';
+    el.style.display = '';
+  } else if (ratio <= 0.75) {
+    el.dataset.state = 'ice';
+    el.dataset.median = m.median.toFixed(1);
+    el.dataset.n = String(m.n);
+    el.innerHTML = '&#129482;'; // 🧊
+    el.title = 'You\'re behind pace — tap for details';
+    el.style.display = '';
+  } else {
+    el.style.display = 'none';
+    el.dataset.state = '';
+  }
+}
+
+// Click handler for the fire / ice live-pace icon. Plain alert with a
+// short explanation so the icon's meaning is discoverable.
+function showLivePaceIconHelp() {
+  const el = document.getElementById('todayPaceIcon');
+  if (!el) return;
+  const state = el.dataset.state || '';
+  const median = el.dataset.median || '?';
+  const n = el.dataset.n || '?';
+  if (state === 'fire') {
+    alert('🔥 Hot streak\n\n'
+      + 'Your live point total is more than 10% above the median for this '
+      + 'shift type at this point in the day, based on your last ~6 months '
+      + 'of completed shifts (n=' + n + ', median ≈ ' + median + ' pts).');
+  } else if (state === 'ice') {
+    alert('🧊 Behind pace\n\n'
+      + 'Your live point total is more than 25% below the median for this '
+      + 'shift type at this point in the day, based on your last ~6 months '
+      + 'of completed shifts (n=' + n + ', median ≈ ' + median + ' pts).');
+  } else {
+    alert('Live pace indicator\n\n'
+      + 'Compares your current point total to the median for this shift type '
+      + 'at this minute of the day, computed from your last ~6 months of '
+      + 'completed shifts. 🔥 means more than 10% above; 🧊 means more than '
+      + '25% below. No icon means you\'re in the typical range.');
+  }
 }
 
 function renderWeeklyChart() {
