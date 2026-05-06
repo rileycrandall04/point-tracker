@@ -22204,7 +22204,10 @@ let communityStatsMode = 'clocked';
 //     - Mon–Thu starts before noon: 12-hour OB AM (~07:00 start)
 //     - Mon–Thu starts at noon or later: 12-hour OB PM (~19:00 start)
 //
-//   Always-24-hour shifts: 1st–4th call, SF1, SF2, Endo.
+//   Always-24-hour shifts: 1st–4th call, Endo.
+//   SF1 / SF2: 24-hour, split into (Wkday) and (Wknd) buckets — pay
+//     differs enough between the two that blending them blurs the
+//     per-shift averages.
 //   Mole: 24 on Sat/Sun, 12 (19:00 → 07:00) on weekdays.
 //
 // fixedTotalHrs locks the per-bucket total so it doesn't get pulled around
@@ -22227,8 +22230,17 @@ function _communityStatsBucket(r) {
       }
       return { key: 'OB_restricted__12', suffix: ' (12 hr)', fixedTotalHrs: 12 };
     }
-    if (['1st_call', '2nd_call', '3rd_call', '4th_call', 'SF1', 'SF2', 'endo'].includes(t)) {
+    if (['1st_call', '2nd_call', '3rd_call', '4th_call', 'endo'].includes(t)) {
       return { key: t, suffix: '', fixedTotalHrs: 24 };
+    }
+    if ((t === 'SF1' || t === 'SF2') && r.shiftDate) {
+      // SF1 / SF2 pay differently on weekend vs weekday — different AR
+      // multipliers, different doubling windows. Split them so the per-
+      // shift / per-hour averages don't blend the two patterns.
+      const isWknd = dow === 0 || dow === 6; // Sat or Sun
+      return { key: t + (isWknd ? '__wknd' : '__wkday'),
+               suffix: isWknd ? ' (Wknd)' : ' (Wkday)',
+               fixedTotalHrs: 24 };
     }
     if (t === 'mole') {
       const isWknd = dow === 0 || dow === 6; // Sat or Sun

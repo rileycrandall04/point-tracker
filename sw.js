@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mwa-tracker-v302';
+const CACHE_NAME = 'mwa-tracker-v303';
 const ASSETS = [
   './',
   './index.html',
@@ -29,7 +29,6 @@ self.addEventListener('fetch', e => {
   const isAppPage = url.pathname.endsWith('/') || url.pathname.endsWith('.html');
 
   if (isAppPage) {
-    // Network-first for HTML pages — always get latest code
     e.respondWith(
       fetch(e.request).then(response => {
         if (response && response.status === 200) {
@@ -40,7 +39,6 @@ self.addEventListener('fetch', e => {
       }).catch(() => caches.match(e.request))
     );
   } else {
-    // Cache-first for static assets (CDN libs, manifest, etc.)
     e.respondWith(
       caches.match(e.request).then(cached => {
         if (cached) return cached;
