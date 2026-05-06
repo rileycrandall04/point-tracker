@@ -3078,12 +3078,30 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <span style="font-size:0.82rem;font-weight:600;">Monthly Pace <span class="info-icon" id="paceInfoIcon" data-tip="">i</span></span>
       <span id="paceRightLabel" style="font-size:0.78rem;color:var(--text-dim);"></span>
     </div>
-    <div style="background:var(--surface2); border-radius:6px; height:8px; overflow:hidden;">
-      <div id="paceBar" style="height:100%; background:var(--primary); border-radius:6px; transition:width 0.3s; width:0%;"></div>
+    <!-- Bar + diff row — shown once a target is set (custom, default, or
+         rolling avg). When no target exists, the prompt block below takes
+         over so the user can set one. -->
+    <div id="paceBarBlock">
+      <div style="background:var(--surface2); border-radius:6px; height:8px; overflow:hidden;">
+        <div id="paceBar" style="height:100%; background:var(--primary); border-radius:6px; transition:width 0.3s; width:0%;"></div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
+        <div id="paceDiff" style="font-size:0.78rem; font-weight:600; flex:1; text-align:center;"></div>
+        <span id="paceTarget" style="font-size:0.7rem;color:var(--text-dim);cursor:pointer;white-space:nowrap;" title="Click to set a custom monthly goal"></span>
+      </div>
     </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
-      <div id="paceDiff" style="font-size:0.78rem; font-weight:600; flex:1; text-align:center;"></div>
-      <span id="paceTarget" style="font-size:0.7rem;color:var(--text-dim);cursor:pointer;white-space:nowrap;" title="Click to set a custom monthly goal"></span>
+    <!-- Prompt for users who haven't set a target yet (and don't have
+         enough prior-month data for a rolling-average fallback). Once a
+         goal is entered, it's saved as settings.defaultMonthlyGoal and
+         this block hides until the user clears it. -->
+    <div id="pacePromptBlock" class="hidden">
+      <p style="font-size:0.78rem;color:var(--text-dim);line-height:1.5;margin:0 0 8px;">
+        Enter a monthly point target so the pace bar can track how you're tracking against your goal. You can override it for any single month later by clicking the target on this card.
+      </p>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="number" id="pacePromptInput" min="0" step="1" placeholder="e.g. 800" style="flex:1;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
+        <button class="btn btn-primary btn-sm" id="pacePromptSetBtn" onclick="setDefaultMonthlyGoalFromPrompt()">Set</button>
+      </div>
     </div>
   </div>
 
@@ -21484,14 +21502,45 @@ function renderMonthlyPace() {
     expectedByNow = round2(sumAtDay / priorMonthCurves.length);
   }
 
-  // Custom monthly goal overrides the rolling average target
+  // Custom per-month goal > user-set default goal > rolling avg of prior 3+
+  // months. With nothing set and < 3 months of data, the pace card shows
+  // a prompt asking the user to enter a default target instead of
+  // rendering an unstable / empty bar.
   const customGoal = settings.monthlyGoals && settings.monthlyGoals[thisPrefix];
+  const defaultGoal = (settings && typeof settings.defaultMonthlyGoal === 'number' && settings.defaultMonthlyGoal > 0)
+    ? settings.defaultMonthlyGoal : 0;
   const rollingAvg = avgMonthEnd;
-  if (customGoal > 0) {
-    // Scale expectedByNow proportionally to new target
-    if (avgMonthEnd > 0) expectedByNow = round2(expectedByNow * (customGoal / avgMonthEnd));
-    avgMonthEnd = customGoal;
+  let effectiveGoal;
+  let goalSource;
+  if (customGoal > 0) { effectiveGoal = customGoal; goalSource = 'custom'; }
+  else if (defaultGoal > 0) { effectiveGoal = defaultGoal; goalSource = 'default'; }
+  else if (priorMonthCurves.length >= 3 && rollingAvg > 0) { effectiveGoal = rollingAvg; goalSource = 'rolling'; }
+  else { effectiveGoal = 0; goalSource = 'none'; }
+
+  const _barBlock = document.getElementById('paceBarBlock');
+  const _promptBlock = document.getElementById('pacePromptBlock');
+  if (effectiveGoal <= 0) {
+    if (_barBlock) _barBlock.classList.add('hidden');
+    if (_promptBlock) _promptBlock.classList.remove('hidden');
+    const _rl = document.getElementById('paceRightLabel');
+    if (_rl) _rl.textContent = '';
+    const _info = document.getElementById('paceInfoIcon');
+    if (_info) _info.setAttribute('data-tip', 'Set a monthly point target to enable pace tracking.');
+    return;
   }
+  if (_barBlock) _barBlock.classList.remove('hidden');
+  if (_promptBlock) _promptBlock.classList.add('hidden');
+
+  // Scale expectedByNow to the effective target. When the rolling avg is
+  // zero (no prior-month data, but a goal is set) fall back to a linear
+  // expectation across working days.
+  if (avgMonthEnd > 0 && effectiveGoal !== avgMonthEnd) {
+    expectedByNow = round2(expectedByNow * (effectiveGoal / avgMonthEnd));
+  } else if (avgMonthEnd <= 0) {
+    const fraction = workingDaysInMonth > 0 ? workingDaysElapsed / workingDaysInMonth : 0;
+    expectedByNow = round2(effectiveGoal * fraction);
+  }
+  avgMonthEnd = effectiveGoal;
 
   // Project end-of-month
   let projected;
@@ -21545,17 +21594,75 @@ function renderMonthlyPace() {
   }
   document.getElementById('paceBar').style.background = paceColor;
 
-  // Target label (bottom right of pace card)
+  // Target label (bottom right of pace card). Click → per-month override
+  // via editPaceTarget. If the active source is the user's default goal,
+  // also surface a small ✎ to edit the default itself.
   const targetEl = document.getElementById('paceTarget');
   if (avgMonthEnd > 0) {
-    const isCustom = customGoal > 0;
-    targetEl.innerHTML = 'Target: <strong>' + avgMonthEnd.toFixed(0) + '</strong>' + (isCustom ? ' <span style="font-size:0.6rem;">(custom)</span>' : '');
-    targetEl.title = isCustom ? 'Custom goal — click to edit or reset' : 'Rolling avg — click to set a custom goal';
+    let tag = '';
+    if (goalSource === 'custom') tag = ' <span style="font-size:0.6rem;">(custom)</span>';
+    else if (goalSource === 'default') tag = ' <span style="font-size:0.6rem;">(goal)</span>';
+    let editLink = '';
+    if (goalSource === 'default') {
+      editLink = ' <span style="font-size:0.65rem;color:var(--primary);cursor:pointer;" title="Edit default goal" onclick="event.stopPropagation();editDefaultMonthlyGoal()">&#9998;</span>';
+    }
+    targetEl.innerHTML = 'Target: <strong>' + avgMonthEnd.toFixed(0) + '</strong>' + tag + editLink;
+    targetEl.title = goalSource === 'custom'
+      ? 'Custom goal for this month — click to edit or reset'
+      : (goalSource === 'default'
+          ? 'Default goal — click to override just this month'
+          : 'Rolling avg — click to set a custom goal');
     targetEl.onclick = () => editPaceTarget(thisPrefix, rollingAvg, customGoal);
   } else {
     targetEl.textContent = '';
     targetEl.onclick = null;
   }
+}
+
+// Saves the input from the in-card pace prompt as the user's default
+// monthly goal. The pace card re-renders as a normal bar afterward.
+function setDefaultMonthlyGoalFromPrompt() {
+  const inp = document.getElementById('pacePromptInput');
+  if (!inp) return;
+  const v = parseFloat(inp.value);
+  if (!Number.isFinite(v) || v <= 0) {
+    showToast('Enter a positive monthly target');
+    inp.focus();
+    return;
+  }
+  if (!settings) settings = {};
+  settings.defaultMonthlyGoal = round2(v);
+  saveSettings(settings);
+  inp.value = '';
+  renderMonthlyPace();
+  showToast('Monthly goal set to ' + Math.round(v));
+}
+
+// Re-prompt for the user's default monthly goal — used by the ✎ icon
+// next to the target label when the default goal is the active source.
+function editDefaultMonthlyGoal() {
+  const cur = (settings && settings.defaultMonthlyGoal) || 0;
+  const input = prompt(
+    'Default monthly point target\n\n' +
+    'Applies to every month unless you set a per-month override.\n' +
+    'Leave blank to clear it (the prompt comes back).',
+    cur > 0 ? String(cur) : ''
+  );
+  if (input === null) return;
+  const trimmed = String(input).trim();
+  if (!settings) settings = {};
+  if (trimmed === '') {
+    settings.defaultMonthlyGoal = 0;
+  } else {
+    const v = parseFloat(trimmed);
+    if (!Number.isFinite(v) || v <= 0) {
+      showToast('Enter a positive monthly target or leave blank');
+      return;
+    }
+    settings.defaultMonthlyGoal = round2(v);
+  }
+  saveSettings(settings);
+  renderMonthlyPace();
 }
 
 function editPaceTarget(monthKey, rollingAvg, currentGoal) {
