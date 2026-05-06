@@ -5569,6 +5569,20 @@ function _adminMSSiteOptionsHTML(currentSiteId) {
 
 // Render a single user-list row. Extracted so the alphabetical and
 // grouped-by-site paths share the same markup.
+// Small inline badge showing whether the user has run the per-case backfill
+// (i.e. has logged in to v299+ since audit #2 Phase 1 shipped). Reads the
+// flag denormalized onto userProfiles by stampCasesBackfilledOnProfile().
+// Returns '' when admin-side migration tracking isn't relevant.
+function _adminMSMigrationBadge(profile) {
+  if (!profile) return '';
+  if (profile.casesBackfilledV1) {
+    const at = profile.casesBackfilledV1At ? new Date(profile.casesBackfilledV1At).toLocaleDateString() : '';
+    const tip = at ? ('Per-case migration: synced ' + at) : 'Per-case migration: synced';
+    return ' <span title="' + escapeHtml(tip) + '" style="font-size:0.6rem;color:var(--accent);background:rgba(34,197,94,0.12);padding:1px 6px;border-radius:8px;font-weight:600;vertical-align:middle;">&check; v2</span>';
+  }
+  return ' <span title="Per-case migration pending — user has not logged in since the new sync system shipped" style="font-size:0.6rem;color:var(--accent2);background:rgba(245,158,11,0.12);padding:1px 6px;border-radius:8px;font-weight:600;vertical-align:middle;">pending</span>';
+}
+
 function _adminMSRenderUserRow(r) {
   const name = r.profile.displayName || '(no name)';
   const email = r.profile.email || '(no email)';
@@ -5583,6 +5597,7 @@ function _adminMSRenderUserRow(r) {
   let html = '';
   html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;" onclick="adminMSOpenUser(\'' + r.uid + '\')">';
   html += '<div><strong>' + escapeHtml(name) + '</strong>';
+  html += _adminMSMigrationBadge(r.profile);
   if (userIsAdmin) {
     const tag = userIsOwner ? (isMaster ? 'owner/master' : 'owner') : 'site admin';
     html += ' <span style="font-size:0.65rem;color:var(--accent);">[' + tag + ']</span>';
@@ -5930,6 +5945,7 @@ function _adminMSRenderActivityRow(r) {
   html += '<div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">';
   html += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0;"></span>';
   html += '<div style="min-width:0;flex:1;"><strong>' + escapeHtml(name) + '</strong>';
+  html += _adminMSMigrationBadge(r.profile);
   html += '<br><span style="font-size:0.72rem;color:var(--text-dim);">' + escapeHtml(email) + '</span>';
   if (r.lastDate) {
     html += '<br><span style="font-size:0.68rem;color:var(--text-dim);">Last case: ' + escapeHtml(r.lastDate) + '</span>';
@@ -7921,18 +7937,44 @@ function deleteCaseDoc(caseId) {
   });
 }
 
+// Denormalized "this user has run the per-case backfill" flag on
+// userProfiles, so admins can tell at a glance which users have logged in
+// to the new system without N+1 reads of the per-user settings doc. Idempotent
+// — only writes if the flag isn't already stamped on the profile we loaded.
+function stampCasesBackfilledOnProfile() {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (currentUserProfile && currentUserProfile.casesBackfilledV1) return;
+  const ts = new Date().toISOString();
+  db.collection('userProfiles').doc(currentUser.uid).set({
+    casesBackfilledV1: true,
+    casesBackfilledV1At: ts
+  }, { merge: true }).then(() => {
+    if (currentUserProfile) {
+      currentUserProfile.casesBackfilledV1 = true;
+      currentUserProfile.casesBackfilledV1At = ts;
+    }
+  }).catch(err => console.error('userProfiles backfill stamp error:', err));
+}
+
 // One-time backfill: populate users/{uid}/cases from data.cases. Idempotent
 // — safe to re-run after a partial failure. Marks settings.casesBackfilledV1
-// on success so subsequent logins skip it. Shows a single toast on entry
-// and a completion toast when finished.
+// on success so subsequent logins skip it, and stamps the same flag onto
+// userProfiles for admin visibility. Shows a single toast on entry and a
+// completion toast when finished.
 async function backfillCaseSubcollection() {
   if (!firestoreSyncEnabled || !currentUser) return;
   if (!isCaseDualWriteEnabled()) return;
-  if (settings.casesBackfilledV1) return;
+  if (settings.casesBackfilledV1) {
+    // Already done previously (e.g. on v299 before the userProfiles stamp
+    // was wired up). Make sure the profile flag is set for admin views.
+    stampCasesBackfilledOnProfile();
+    return;
+  }
   const cases = (data.cases || []).filter(c => c && c.id);
   if (cases.length === 0) {
     settings.casesBackfilledV1 = true;
     saveSettings(settings);
+    stampCasesBackfilledOnProfile();
     return;
   }
   const uid = currentUser.uid;
@@ -7955,6 +7997,7 @@ async function backfillCaseSubcollection() {
     }
     settings.casesBackfilledV1 = true;
     saveSettings(settings);
+    stampCasesBackfilledOnProfile();
     showToast('Synced ' + written + ' cases');
   } catch (err) {
     console.error('Per-case backfill error:', err);
