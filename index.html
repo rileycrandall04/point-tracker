@@ -14638,9 +14638,9 @@ function estimateCaseFinish(caseData) {
 //   - Returns null when the procedure has fewer than 4 surgeons with
 //     at least one completed case in the pool, or when the selected
 //     surgeon has no own data on the procedure.
-//   - Returns 'fast' when the surgeon's median is in the top 25%
-//     (shortest) of medians, 'slow' when in the bottom 25% (longest).
-//   - Returns null in the middle 50%.
+//   - Returns 'fast' when the surgeon's median is in the top ~33%
+//     (shortest) of medians, 'slow' when in the bottom ~33% (longest).
+//   - Returns null in the middle ~33%.
 function caseSpeedIndicator(caseData) {
   if (!caseData || caseData.caseType !== 'standard') return null;
   const procRaw = (caseData.procedure || '').trim();
@@ -14691,12 +14691,12 @@ function caseSpeedIndicator(caseData) {
   if (myMedian == null) return null;
   const sorted = medians.slice().sort((a, b) => a - b);
   const idx = sorted.indexOf(myMedian);
-  // Position by rank: 1/n = fastest, n/n = slowest. Top quartile (≤ 0.25)
-  // = fast; bottom quartile (> 0.75) = slow.
+  // Position by rank: 1/n = fastest, n/n = slowest. Top tertile (≤ 0.334)
+  // = fast; bottom tertile (> 0.666) = slow.
   const p = (idx + 1) / sorted.length;
   let indicator = null;
-  if (p <= 0.25) indicator = 'fast';
-  else if (p > 0.75) indicator = 'slow';
+  if (p <= 0.334) indicator = 'fast';
+  else if (p > 0.666) indicator = 'slow';
   return { surgeons: sorted.length, indicator };
 }
 
@@ -14706,9 +14706,9 @@ function explainCaseSpeed(kind, surgeons) {
   const n = (typeof surgeons === 'number' && surgeons > 0) ? surgeons : 0;
   const pool = n ? (' across ' + n + ' surgeons in the data pool') : '';
   if (kind === 'fast') {
-    showToast('Rabbit: this surgeon’s median time for this procedure is in the top 25% (fastest)' + pool + '.', 5000);
+    showToast('Rabbit: this surgeon’s median time for this procedure is in the top third (fastest)' + pool + '.', 5000);
   } else if (kind === 'slow') {
-    showToast('Snail: this surgeon’s median time for this procedure is in the bottom 25% (slowest)' + pool + '.', 5000);
+    showToast('Snail: this surgeon’s median time for this procedure is in the bottom third (slowest)' + pool + '.', 5000);
   }
 }
 
