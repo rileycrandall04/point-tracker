@@ -15599,12 +15599,38 @@ function renderWeeklyChart() {
       onClick: function(evt, elements) {
         if (elements.length > 0) {
           const i = elements[0].index;
+          // Pin the tooltip to the clicked day so it stays visible after the
+          // chart re-renders inside setWorkingDate -> renderToday.
+          weeklyTooltipStickyDate = weekDates[i];
           setWorkingDate(weekDates[i]);
         }
       }
     },
     plugins: [monthBoundaryPlugin, barValueLabels, assignmentLabelPlugin]
   });
+
+  // If a click pinned a day in this week, force its tooltip open after the
+  // rebuild. Tooltip resets on the next hover/touch so the user can dismiss
+  // by interacting with the chart again. Sticky date is cleared when it
+  // falls outside the current week (e.g. the user navigated weeks).
+  if (weeklyTooltipStickyDate) {
+    const selIdx = weekDates.indexOf(weeklyTooltipStickyDate);
+    if (selIdx < 0) {
+      weeklyTooltipStickyDate = null;
+    } else {
+      let activeDsIdx = -1;
+      for (let d = 0; d < weeklyBarChart.data.datasets.length; d++) {
+        if (weeklyBarChart.data.datasets[d].data[selIdx] > 0) { activeDsIdx = d; break; }
+      }
+      if (activeDsIdx >= 0) {
+        const meta = weeklyBarChart.getDatasetMeta(activeDsIdx);
+        const bar = meta && meta.data && meta.data[selIdx];
+        const pos = bar ? { x: bar.x, y: bar.y } : { x: 0, y: 0 };
+        weeklyBarChart.tooltip.setActiveElements([{ datasetIndex: activeDsIdx, index: selIdx }], pos);
+        weeklyBarChart.update();
+      }
+    }
+  }
 
   // Compute month total split into time and production
   const monthPrefix = workingDate.substring(0, 7);
@@ -15822,6 +15848,10 @@ document.getElementById('dayModal').addEventListener('click', (e) => {
 // ================================================================
 let weeklyBarChart = null;
 let weeklyShowDollars = false;
+// Date string of the bar whose tooltip should stay visible after a click. Set
+// in the chart's onClick handler so renderWeeklyChart can re-pin the tooltip
+// when it rebuilds the chart for the new working date.
+let weeklyTooltipStickyDate = null;
 let monthlyChart = null;
 let breakdownChart = null; // unused, kept for compat
 let histRangeFrom = '';
