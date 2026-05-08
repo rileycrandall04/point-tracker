@@ -2733,7 +2733,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <button class="btn btn-danger btn-sm hidden" id="todaySignOutBtn" onclick="shiftSignOut()" style="flex:1;">Sign Out of Shift</button>
   </div>
 
-  <div class="card" id="todayBreakdownCard" style="padding:12px 16px;">
+  <div class="card" id="todayBreakdownCard" style="padding:12px 16px;overflow:hidden;">
+    <div id="tickerCaseFinishBar" style="display:none;margin:-12px -16px 10px;"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <h2 id="todayTitle" style="margin:0;font-size:0.9rem;">Today</h2>
       <button class="btn btn-sm hidden" id="todayEditShiftBtn" style="padding:4px 10px;font-size:0.72rem;background:none;color:var(--primary);">Edit Shift</button>
@@ -14229,6 +14230,7 @@ function renderToday() {
 
   if (!shift) {
     if (typeof stopLiveTicker === 'function') stopLiveTicker();
+    if (typeof renderTickerCaseFinishBar === 'function') renderTickerCaseFinishBar();
     document.getElementById('todayBreakdown').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No shift saved for this date.</p>';
     document.getElementById('todayCaseList').innerHTML = '<div class="empty-state"><p>No cases logged yet.</p></div>';
     document.getElementById('todayCaseCount').textContent = '';
@@ -14300,6 +14302,7 @@ function renderToday() {
   bdHtml += '</div>';
   document.getElementById('todayBreakdown').innerHTML = bdHtml;
   updateTodayRateChips();
+  renderTickerCaseFinishBar();
 
   // Start or stop live ticker based on shift state
   if (result.isInProgress) {
@@ -14364,9 +14367,9 @@ function renderToday() {
         let speedIcon = '';
         const _speed = (typeof caseSpeedIndicator === 'function') ? caseSpeedIndicator(c) : null;
         if (_speed && _speed.indicator === 'fast') {
-          speedIcon = ' <span title="Surgeon median in top 25% (fastest) for this procedure (' + _speed.surgeons + ' surgeons)">&#128007;</span>';
+          speedIcon = ' <span onclick="event.stopPropagation();explainCaseSpeed(\'fast\',' + _speed.surgeons + ')" style="cursor:pointer;" title="Tap for details">&#128007;</span>';
         } else if (_speed && _speed.indicator === 'slow') {
-          speedIcon = ' <span title="Surgeon median in bottom 25% (slowest) for this procedure (' + _speed.surgeons + ' surgeons)">&#128012;</span>';
+          speedIcon = ' <span onclick="event.stopPropagation();explainCaseSpeed(\'slow\',' + _speed.surgeons + ')" style="cursor:pointer;" title="Tap for details">&#128012;</span>';
         }
         estFinishHtml = '<div style="flex-basis:100%;text-align:center;font-size:0.72rem;color:var(--text-dim);margin-top:8px;line-height:1.4;">est. finish <strong style="color:var(--text);">' + escHtml(est.finish) + '</strong>' + speedIcon + ' <span style="opacity:0.85;">' + label + '</span></div>';
       }
@@ -14690,6 +14693,77 @@ function caseSpeedIndicator(caseData) {
   if (p <= 0.25) indicator = 'fast';
   else if (p > 0.75) indicator = 'slow';
   return { surgeons: sorted.length, indicator };
+}
+
+// User-facing explanation for the snail / rabbit speed icon. Called from the
+// onclick handler on the icon in the ticker bar and case lists.
+function explainCaseSpeed(kind, surgeons) {
+  const n = (typeof surgeons === 'number' && surgeons > 0) ? surgeons : 0;
+  const pool = n ? (' across ' + n + ' surgeons in the data pool') : '';
+  if (kind === 'fast') {
+    showToast('Rabbit: this surgeon’s median time for this procedure is in the top 25% (fastest)' + pool + '.', 5000);
+  } else if (kind === 'slow') {
+    showToast('Snail: this surgeon’s median time for this procedure is in the bottom 25% (slowest)' + pool + '.', 5000);
+  }
+}
+
+// Renders one stripe per running standard case at the top of the ticker card.
+// Green when the current time is at/before the estimated finish, red once we're
+// past it. Updated every second by tickLiveUpdate so the color flips live.
+function renderTickerCaseFinishBar() {
+  const bar = document.getElementById('tickerCaseFinishBar');
+  if (!bar) return;
+  const date = workingDate;
+  const shift = data && data.shifts ? data.shifts[date] : null;
+  if (!shift || date !== effectiveWorkDate()) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    return;
+  }
+  const running = _todayRunningStandardCases(date);
+  if (!running.length) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    return;
+  }
+  const now = new Date();
+  const curMin = now.getHours() * 60 + now.getMinutes();
+  let html = '';
+  let any = false;
+  running.forEach(c => {
+    const est = estimateCaseFinish(c);
+    if (!est) return;
+    any = true;
+    const startMin = timeToMinutes(c.startTime);
+    let finAdj = timeToMinutes(est.finish);
+    if (isFinite(startMin) && isFinite(finAdj) && finAdj < startMin) finAdj += 1440;
+    let nowAdj = curMin;
+    if (isFinite(startMin) && nowAdj < startMin) nowAdj += 1440;
+    const overdue = isFinite(finAdj) && nowAdj > finAdj;
+    const bg = overdue ? '#c62828' : '#2e7d32';
+    const proc = est.procedure ? escHtml(est.procedure) : '';
+    let speedHtml = '';
+    const sp = (typeof caseSpeedIndicator === 'function') ? caseSpeedIndicator(c) : null;
+    if (sp && sp.indicator === 'fast') {
+      speedHtml = ' <span onclick="event.stopPropagation();explainCaseSpeed(\'fast\',' + sp.surgeons + ')" style="cursor:pointer;" title="Tap for details">&#128007;</span>';
+    } else if (sp && sp.indicator === 'slow') {
+      speedHtml = ' <span onclick="event.stopPropagation();explainCaseSpeed(\'slow\',' + sp.surgeons + ')" style="cursor:pointer;" title="Tap for details">&#128012;</span>';
+    }
+    const status = overdue ? 'over est.' : 'on track';
+    html += '<div style="background:' + bg + ';color:#fff;padding:6px 12px;font-size:0.78rem;font-weight:600;text-align:center;letter-spacing:0.2px;line-height:1.3;">' +
+            'Est. finish <strong>' + escHtml(est.finish) + '</strong>' +
+            (proc ? ' &middot; ' + proc : '') +
+            speedHtml +
+            ' <span style="opacity:0.85;font-weight:500;">(' + status + ')</span>' +
+            '</div>';
+  });
+  if (!any) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    return;
+  }
+  bar.innerHTML = html;
+  bar.style.display = 'block';
 }
 
 // Debug helper — call from the browser console to see why a running case's
@@ -15184,6 +15258,9 @@ function tickLiveUpdate() {
 
   // Also update the rate chips
   updateTodayRateChips();
+  // Refresh the running-case finish bar so its color flips when current time
+  // crosses the estimated finish.
+  renderTickerCaseFinishBar();
   } catch(e) { /* ticker resilience — don't stop interval on transient errors */ }
 }
 
