@@ -10077,15 +10077,50 @@ function populateShiftTypeSelect(selectEl, siteId, opts) {
   for (const t of types) {
     html += '<option value="' + escapeHtml(t) + '">' + escapeHtml(getShiftTypeLabel(t, siteId)) + '</option>';
   }
+  // If prevValue is set but isn't in the visible list, keep it as an option
+  // anyway so the select can still display it. Otherwise the value silently
+  // falls back to types[0] and the user appears to be on a different shift
+  // type than they actually are.
+  if (prevValue && prevValue !== '' && types.indexOf(prevValue) === -1) {
+    html += '<option value="' + escapeHtml(prevValue) + '">' + escapeHtml(getShiftTypeLabel(prevValue, siteId)) + '</option>';
+  }
   selectEl.innerHTML = html;
-  // Restore previous selection if still valid (or blank)
-  if (prevValue && (types.indexOf(prevValue) !== -1 || (blank && prevValue === ''))) {
+  // Restore previous selection. With the fallback option above, every
+  // non-empty prevValue now has a matching option.
+  if (prevValue && prevValue !== '') {
     selectEl.value = prevValue;
   } else if (blank) {
     selectEl.value = '';
   } else if (types.length > 0) {
     selectEl.value = types[0];
   }
+}
+
+// Defensive setter for the shift-type selects. If `value` isn't already an
+// option, append it (with the resolved label) so the select can display
+// calendar-emitted or saved types that aren't in the site's
+// visibleShiftTypes whitelist. Without this the select renders blank — on
+// Android the user sees an empty field and can't tell what they've been
+// assigned to, and the picker doesn't include the calendar-mapped type.
+function setShiftTypeSelectValue(selectEl, value) {
+  if (!selectEl) return;
+  if (value == null || value === '') {
+    selectEl.value = '';
+    return;
+  }
+  let hasOption = false;
+  for (let i = 0; i < selectEl.options.length; i++) {
+    if (selectEl.options[i].value === value) { hasOption = true; break; }
+  }
+  if (!hasOption) {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = (typeof getShiftTypeLabel === 'function')
+      ? getShiftTypeLabel(value, getCurrentSiteId())
+      : value;
+    selectEl.appendChild(o);
+  }
+  selectEl.value = value;
 }
 
 // Repopulates every shift-type dropdown in the page based on the current
@@ -12145,7 +12180,7 @@ function renderTemplates() {
   grid.querySelectorAll('.template-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const t = templates[parseInt(btn.dataset.tidx)];
-      document.getElementById('shiftAssignmentType').value = t.type;
+      setShiftTypeSelectValue(document.getElementById('shiftAssignmentType'), t.type);
       populateTimeEntries([{ start: t.start, end: t.end }]);
       document.getElementById('cardiacLiverOptions').classList.toggle('hidden', t.type !== 'cardiac_liver');
       updateSupervisionOverlayVisibility();
@@ -12573,7 +12608,7 @@ function loadShiftForDate() {
     // If shift has pre-call overlay on mole/OB, show as pre_call with evening assignment
     const hasPreCallOverlay = (shift.preCallStart || shift.preCallEnd) && ['mole','OB_restricted'].includes(effectiveType);
     if (hasPreCallOverlay) {
-      document.getElementById('shiftAssignmentType').value = 'pre_call';
+      setShiftTypeSelectValue(document.getElementById('shiftAssignmentType'), 'pre_call');
       document.getElementById('timeEntriesLabel').textContent = 'Pre-Call Times';
       document.getElementById('eveningAssignmentSection').classList.remove('hidden');
       document.getElementById('eveningAssignmentType').value = effectiveType;
@@ -12595,7 +12630,7 @@ function loadShiftForDate() {
       populateTimeEntries(preCallEntries.length > 0 ? preCallEntries : [{ start: shift.preCallStart || '07:00', end: shift.preCallEnd || '' }]);
       populateEveningTimeEntries(eveningEntries);
     } else {
-      document.getElementById('shiftAssignmentType').value = effectiveType;
+      setShiftTypeSelectValue(document.getElementById('shiftAssignmentType'), effectiveType);
       const isPreCall = effectiveType === 'pre_call';
       const isForcedOff = effectiveType === 'forced_off';
       const isFlatPaymentLoad = !!getFlatPaymentRule(effectiveType, shift.siteId);
@@ -12732,11 +12767,11 @@ function loadShiftForDate() {
       banner.style.background = 'rgba(52,211,153,0.12)';
       banner.style.color = 'var(--accent2)';
       banner.classList.remove('hidden');
-      document.getElementById('shiftAssignmentType').value = calType;
+      setShiftTypeSelectValue(document.getElementById('shiftAssignmentType'), calType);
       document.getElementById('shiftAssignmentType').dispatchEvent(new Event('change'));
     } else {
       banner.classList.add('hidden');
-      document.getElementById('shiftAssignmentType').value = 'OR';
+      setShiftTypeSelectValue(document.getElementById('shiftAssignmentType'), 'OR');
       document.getElementById('timeEntriesGroup').classList.remove('hidden');
     }
     if (calType === 'forced_off') {
