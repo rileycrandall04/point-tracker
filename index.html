@@ -6125,8 +6125,9 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
     html += '</div>';
   }
 
-  // Danger zone — app owner only, never offered for self / master / admins.
-  if (viewerIsOwner && !isMaster && !userIsAdmin && (!currentUser || uid !== currentUser.uid)) {
+  // Danger zone — strictly app owner (not legacy admin), never offered for
+  // self / master / admins.
+  if (isAppOwner() && !isMaster && !userIsAdmin && (!currentUser || uid !== currentUser.uid)) {
     html += '<div style="background:rgba(229,57,53,0.08);border:1px solid var(--accent2);padding:10px;border-radius:8px;margin-top:8px;">';
     html += '<div style="font-size:0.82rem;font-weight:600;color:var(--accent2);margin-bottom:6px;">Danger zone</div>';
     html += '<p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px 0;line-height:1.4;">Deletes this user\'s profile, settings, shifts, cases, and shared data. The Firebase Auth record itself is not removed — do that from the Firebase console if needed.</p>';
