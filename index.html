@@ -5637,8 +5637,9 @@ function _adminMSMigrationBadge(profile) {
 }
 
 function _adminMSRenderUserRow(r) {
-  const name = r.profile.displayName || '(no name)';
-  const email = r.profile.email || '(no email)';
+  const isDeleted = !!r.profile.deletedAt;
+  const name = r.profile.displayName || (isDeleted ? '(deleted user)' : '(no name)');
+  const email = r.profile.email || r.profile.deletedEmail || '(no email)';
   const isMaster = r.uid === ADMIN_UID;
   const userRole = isMaster ? 'app_owner'
     : (r.profile.role === 'app_owner' || r.profile.role === 'siteAdmin') ? r.profile.role
@@ -5648,8 +5649,9 @@ function _adminMSRenderUserRow(r) {
   const inv = r.profile.pendingInvite;
   const inviteSite = inv && inv.siteId ? ((sitesCache[inv.siteId] && sitesCache[inv.siteId].name) || inv.siteId) : null;
   let html = '';
-  html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;" onclick="adminMSOpenUser(\'' + r.uid + '\')">';
+  html += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;' + (isDeleted ? 'opacity:0.6;' : '') + '" onclick="adminMSOpenUser(\'' + r.uid + '\')">';
   html += '<div><strong>' + escapeHtml(name) + '</strong>';
+  if (isDeleted) html += ' <span style="font-size:0.65rem;color:var(--accent2);">[deleted]</span>';
   html += _adminMSMigrationBadge(r.profile);
   if (userIsAdmin) {
     const tag = userIsOwner ? (isMaster ? 'owner/master' : 'owner') : 'site admin';
@@ -5686,7 +5688,7 @@ async function adminMSListUsers() {
     const rows = [];
     snap.forEach(doc => {
       const data = doc.data() || {};
-      const email = (data.email || '').toLowerCase();
+      const email = (data.email || data.deletedEmail || '').toLowerCase();
       const name = (data.displayName || '').toLowerCase();
       if (filterRaw && !email.includes(filterRaw) && !name.includes(filterRaw)) return;
       rows.push({ uid: doc.id, profile: data });
@@ -6029,6 +6031,27 @@ function adminMSActivityOpenUser(uid) {
 function renderAdminMSUserCard(uid, profile, userSiteId) {
   const out = document.getElementById('adminMSUserCard');
   if (!out) return;
+  // Tombstoned profile: short-circuit to a minimal "deleted" view. The
+  // regular admin actions (invite, change site, promote, delete) don't
+  // apply to a deleted account.
+  if (profile && profile.deletedAt) {
+    const deletedOn = (profile.deletedAt || '').split('T')[0];
+    const deletedBy = profile.deletedBy || '(unknown)';
+    const deletedEmail = profile.deletedEmail || '(no email)';
+    let html = '';
+    html += '<div style="background:var(--surface);padding:12px;border-radius:8px;">';
+    html += '<strong>Deleted account</strong>';
+    html += '<br><span style="font-size:0.78rem;">Email: <strong>' + escapeHtml(deletedEmail) + '</strong></span>';
+    html += '<br><span style="font-size:0.78rem;color:var(--text-dim);">Deleted ' + escapeHtml(deletedOn) + ' by ' + escapeHtml(deletedBy) + '</span>';
+    if (isAppOwner()) {
+      html += '<br><span style="font-size:0.72rem;color:var(--text-dim);">UID: ' + uid + '</span>';
+    }
+    html += '<p style="font-size:0.72rem;color:var(--text-dim);margin:10px 0 0 0;line-height:1.4;">Sign-in is blocked: any attempt to log in with this Firebase Auth record is bounced with a banner. To free up the email entirely, remove the Auth record from the Firebase console.</p>';
+    html += '</div>';
+    html += '<div id="adminMSUserStatus_' + uid + '" style="margin-top:10px;font-size:0.8rem;"></div>';
+    out.innerHTML = html;
+    return;
+  }
   const name = profile.displayName || '(no name)';
   const email = profile.email || '(no email)';
   const isMaster = uid === ADMIN_UID;
@@ -7175,9 +7198,18 @@ async function adminMSDeleteUser(uid) {
     _adminMSSetStatus(uid, 'Deleting user data…');
     await db.collection('users').doc(uid).collection('data').doc('data').delete().catch(() => {});
     await db.collection('users').doc(uid).collection('data').doc('settings').delete().catch(() => {});
-    _adminMSSetStatus(uid, 'Deleting user profile…');
-    await db.collection('userProfiles').doc(uid).delete();
-    _adminMSSetStatus(uid, 'Deleted ' + email + '. Remove the Firebase Auth record from the console if needed.');
+    _adminMSSetStatus(uid, 'Marking profile as deleted…');
+    // Soft-delete: replace the userProfile with a tombstone instead of
+    // removing the doc. onAuthStateChanged checks for deletedAt and bounces
+    // the sign-in, so the user can't accidentally re-provision a fresh
+    // empty account by signing back in with the same Firebase Auth record.
+    const deletedBy = (currentUser && currentUser.email) || (currentUser && currentUser.uid) || 'unknown';
+    await db.collection('userProfiles').doc(uid).set({
+      deletedAt: new Date().toISOString(),
+      deletedBy: deletedBy,
+      deletedEmail: email
+    });
+    _adminMSSetStatus(uid, 'Deleted ' + email + '. They will be signed out the next time they open the app. Remove the Firebase Auth record from the console if you also want to free up the email.');
     setTimeout(() => { adminMSListUsers(); }, 1200);
   } catch (err) {
     console.error('Delete user failed:', err);
@@ -29869,6 +29901,24 @@ auth.onAuthStateChanged(async (user) => {
     currentUser = user;
     document.getElementById('authLoading').classList.add('hidden');
 
+    // Tombstone check: if an app-owner has marked this account deleted, bounce
+    // the sign-in before recreating the profile or loading any data. The
+    // signed-out branch below reads `pt_deletedAccount` to surface a banner
+    // on the auth overlay so the user knows why they were kicked out.
+    try {
+      const tomb = await db.collection('userProfiles').doc(user.uid).get();
+      if (tomb.exists && tomb.data() && tomb.data().deletedAt) {
+        try { localStorage.setItem('pt_deletedAccount', user.email || ''); } catch (_) {}
+        await auth.signOut();
+        return;
+      }
+    } catch (e) {
+      console.warn('Tombstone check failed; proceeding with sign-in:', e);
+    }
+    // Past this point we know the account isn't tombstoned — clear any
+    // leftover banner flag from an earlier bounced session.
+    try { localStorage.removeItem('pt_deletedAccount'); } catch (_) {}
+
     // Write/update user profile (fire-and-forget)
     db.collection('userProfiles').doc(user.uid).set({
       email: user.email || '',
@@ -30059,6 +30109,22 @@ auth.onAuthStateChanged(async (user) => {
     _lastSyncedShiftPayloads.clear();
     _sharedShiftsPrimePromise = null;
     document.getElementById('authOverlay').classList.remove('hidden');
+
+    // If we just bounced a deleted user (tombstone check above), surface a
+    // banner in the auth-overlay error slot so they understand why they were
+    // kicked. One-shot: clear the flag after rendering.
+    try {
+      const deletedEmail = localStorage.getItem('pt_deletedAccount');
+      if (deletedEmail !== null) {
+        const errEl = document.getElementById('authError');
+        if (errEl) {
+          const safeEmail = deletedEmail ? ' <strong>' + escapeHtml(deletedEmail) + '</strong>' : '';
+          errEl.innerHTML = '<strong>Account deleted.</strong> The account' + safeEmail + ' has been deleted by an administrator. Sign in with a different account, or contact your admin if this was a mistake.';
+          errEl.classList.remove('hidden');
+        }
+        localStorage.removeItem('pt_deletedAccount');
+      }
+    } catch (_) {}
   }
 });
 
