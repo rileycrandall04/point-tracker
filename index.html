@@ -1864,7 +1864,8 @@ input.mil-time.invalid {
 }
 .account-card .ac-info { flex: 1; min-width: 0; }
 .account-card .ac-name { font-size: 0.85rem; font-weight: 600; }
-.account-card .ac-email { font-size: 0.72rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-card .ac-email { font-size: 0.8rem; color: var(--text); overflow-wrap: anywhere; word-break: break-all; }
+.account-card .ac-email-label { font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
 
 /* ===== BOTTOM NAV — 5 items ===== */
 .bottom-nav button { font-size: 0.6rem; }
@@ -3444,6 +3445,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <img id="accountPhoto" src="" alt="">
       <div class="ac-info">
         <div class="ac-name" id="accountName"></div>
+        <div class="ac-email-label">Signed in as</div>
         <div class="ac-email" id="accountEmail"></div>
       </div>
       <span class="sync-indicator synced" id="syncStatus">Synced</span>
@@ -6123,6 +6125,15 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
     html += '</div>';
   }
 
+  // Danger zone — app owner only, never offered for self / master / admins.
+  if (viewerIsOwner && !isMaster && !userIsAdmin && (!currentUser || uid !== currentUser.uid)) {
+    html += '<div style="background:rgba(229,57,53,0.08);border:1px solid var(--accent2);padding:10px;border-radius:8px;margin-top:8px;">';
+    html += '<div style="font-size:0.82rem;font-weight:600;color:var(--accent2);margin-bottom:6px;">Danger zone</div>';
+    html += '<p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px 0;line-height:1.4;">Deletes this user\'s profile, settings, shifts, cases, and shared data. The Firebase Auth record itself is not removed — do that from the Firebase console if needed.</p>';
+    html += '<button class="btn btn-sm" onclick="adminMSDeleteUser(\'' + uid + '\')" style="background:var(--accent2);color:#fff;">Delete user account</button>';
+    html += '</div>';
+  }
+
   html += '<div id="adminMSUserStatus_' + uid + '" style="margin-top:10px;font-size:0.8rem;"></div>';
   out.innerHTML = html;
 }
@@ -7116,6 +7127,60 @@ async function adminMSWipeUser() {
     status.style.color = 'var(--accent2)';
     status.textContent = 'Failed: ' + (err.message || err);
     btn.disabled = false;
+  }
+}
+
+// Delete a user account directly from the admin user card. Same destructive
+// flow as adminMSWipeUser (shared cases + overrides, user data + settings,
+// userProfile), but driven by uid so the admin doesn't have to retype the
+// email in a separate panel. Auth account is intentionally not touched —
+// removing that requires the Admin SDK / Firebase console.
+async function adminMSDeleteUser(uid) {
+  if (!isAppOwner()) return;
+  try {
+    const profileSnap = await db.collection('userProfiles').doc(uid).get();
+    if (!profileSnap.exists) {
+      _adminMSSetStatus(uid, 'User profile not found.', true);
+      return;
+    }
+    const profile = profileSnap.data() || {};
+    const email = profile.email || '';
+    if (currentUser && uid === currentUser.uid) {
+      _adminMSSetStatus(uid, 'Cannot delete your own account.', true);
+      return;
+    }
+    if (uid === ADMIN_UID) {
+      _adminMSSetStatus(uid, 'Cannot delete the master admin.', true);
+      return;
+    }
+    if (profile.isAdmin === true || profile.role === 'app_owner' || profile.role === 'siteAdmin') {
+      _adminMSSetStatus(uid, 'Revoke admin first, then delete.', true);
+      return;
+    }
+    if (!email) {
+      _adminMSSetStatus(uid, 'Profile is missing an email — refusing to delete blindly.', true);
+      return;
+    }
+    const typed = prompt('Type the email "' + email + '" exactly to confirm deletion. This wipes the user\'s profile, data, and shared cases — and cannot be undone.');
+    if (typed == null) { _adminMSSetStatus(uid, 'Cancelled.'); return; }
+    if (typed.trim().toLowerCase() !== email.toLowerCase()) {
+      _adminMSSetStatus(uid, 'Email did not match. Cancelled.', true);
+      return;
+    }
+    _adminMSSetStatus(uid, 'Deleting shared cases…');
+    await deleteByQuery(db.collection('sharedCases').where('uid', '==', uid));
+    _adminMSSetStatus(uid, 'Deleting shared overrides…');
+    await deleteByQuery(db.collection('sharedCaseOverrides').where('uid', '==', uid));
+    _adminMSSetStatus(uid, 'Deleting user data…');
+    await db.collection('users').doc(uid).collection('data').doc('data').delete().catch(() => {});
+    await db.collection('users').doc(uid).collection('data').doc('settings').delete().catch(() => {});
+    _adminMSSetStatus(uid, 'Deleting user profile…');
+    await db.collection('userProfiles').doc(uid).delete();
+    _adminMSSetStatus(uid, 'Deleted ' + email + '. Remove the Firebase Auth record from the console if needed.');
+    setTimeout(() => { adminMSListUsers(); }, 1200);
+  } catch (err) {
+    console.error('Delete user failed:', err);
+    _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
   }
 }
 
