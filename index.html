@@ -4364,12 +4364,26 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="card" id="sandboxExperimentsCard" style="margin-bottom:12px;">
     <h3 style="margin:0 0 6px 0;font-size:0.95rem;">Experiments</h3>
     <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 10px 0;">
-      A named set of rule changes applied to a snapshot, with a comparison report
-      showing per-user point deltas vs. current rules.
+      Override engine constants and re-score a snapshot against today&rsquo;s prod engine.
+      Per-user / per-site / per-shift-type deltas appear below the editor.
+      Blank inputs use prod defaults; any number you type takes effect for this run only.
     </p>
-    <div id="sandboxExperimentsList" style="font-size:0.82rem;color:var(--text-dim);">
-      <em>Experiment editor not yet implemented &mdash; coming next.</em>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+      <label style="font-size:0.74rem;color:var(--text-dim);display:flex;flex-direction:column;gap:3px;flex:1;min-width:200px;">
+        Snapshot
+        <select id="sandboxExperimentSnapshot"
+          style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+          <option value="">&mdash; choose a snapshot &mdash;</option>
+        </select>
+      </label>
+      <button class="btn btn-sm" id="sandboxExperimentResetBtn"
+        style="flex:none;" onclick="resetSandboxExperimentClick()">Reset all</button>
+      <button class="btn btn-primary btn-sm" id="sandboxExperimentRunBtn"
+        style="flex:none;" onclick="runSandboxExperimentClick()">Run</button>
     </div>
+    <div id="sandboxExperimentEditor" style="font-size:0.78rem;color:var(--text);"></div>
+    <div id="sandboxExperimentStatus" style="font-size:0.76rem;color:var(--text-dim);margin:10px 0 0 0;min-height:1em;"></div>
+    <div id="sandboxExperimentResult" style="font-size:0.78rem;color:var(--text);margin-top:8px;"></div>
   </div>
 </div>
 
@@ -12376,6 +12390,10 @@ function renderSandboxPage() {
   _sandboxExcludedUids = new Set();
   loadSandboxUserList();
   loadSandboxSnapshots();
+  // Build experiment editor once (idempotent); refresh snapshot picker.
+  const expHost = document.getElementById('sandboxExperimentEditor');
+  if (expHost && !expHost.firstChild) renderSandboxExperimentEditor();
+  loadSandboxExperimentSnapshots();
 }
 
 async function loadSandboxUserList() {
@@ -12493,6 +12511,8 @@ async function loadSandboxSnapshots() {
     console.error('loadSandboxSnapshots failed:', e);
     list.innerHTML = '<span style="color:var(--accent2);">Failed to load: ' + escapeHtml(e.message || String(e)) + '</span>';
   }
+  // Keep the experiment picker in sync after capture / delete / score.
+  loadSandboxExperimentSnapshots();
 }
 
 function sandboxFormatRange(s) {
@@ -12935,6 +12955,385 @@ function renderSandboxBaselineSection(title, keyLabel, rows, monoKey) {
   return '<div style="margin-bottom:14px;">' +
     '<div style="font-weight:600;margin-bottom:6px;">' + escapeHtml(title) + '</div>' +
     '<div style="display:grid;grid-template-columns:1fr repeat(6, auto);gap:3px 10px;align-items:center;">' +
+    header + body + footer +
+    '</div></div>';
+}
+
+// =================================================================
+// 3b.2a — POLICY SANDBOX EXPERIMENTS (engine-constant overlay)
+//
+// The schema below is the editable surface for "what would this
+// engine produce if I changed these constants?". Each row is a path
+// + default that mirrors a single _eo() call site (or _engineSandboxOverrides
+// .ar.* / .prod.* reader) in the compensation engine. Defaults MUST
+// match the literal in the source so the editor's "prod" column is
+// truthful — verified against the override-schema comment block above
+// _eo() in this file.
+//
+// Run flow: editor → _collectSandboxExperimentOverrides() → for each
+// snapshot user payload, score twice — once with overrides=null (fresh
+// baseline against today's engine) and once with overrides applied —
+// and diff. Stored snapshot baselineTotals are NOT used; the run
+// always compares against "today's engine" so the editor reflects
+// what would change if you shipped these constants right now.
+// =================================================================
+const ENGINE_SANDBOX_SCHEMA = [
+  // AR base rates (per hr)
+  { group: 'AR base rates', path: 'ar.general',    label: 'General AR',     def: 20, type: 'number' },
+  { group: 'AR base rates', path: 'ar.ob',         label: 'OB AR',          def: 13, type: 'number' },
+  { group: 'AR base rates', path: 'ar.sf1Daytime', label: 'SF1 daytime AR', def: 13, type: 'number' },
+  { group: 'AR base rates', path: 'ar.sf1Other',   label: 'SF1 other AR',   def: 20, type: 'number' },
+  // AR multipliers
+  { group: 'AR multipliers', path: 'ar.weekendHolidayDayMult', label: 'Wknd/hol day mult',       def: 1.10, type: 'number' },
+  { group: 'AR multipliers', path: 'ar.weekendHolidayEveMult', label: 'Wknd/hol eve mult',       def: 1.25, type: 'number' },
+  { group: 'AR multipliers', path: 'ar.weekdayEveMult',        label: 'Weekday 1700-2300 mult',  def: 1.10, type: 'number' },
+  { group: 'AR multipliers', path: 'ar.weekdayLateMult',       label: 'Weekday late-night mult', def: 1.25, type: 'number' },
+  // Production
+  { group: 'Production', path: 'prod.doubleMult',                  label: 'Doubling factor (case pts)',   def: 2,     type: 'number' },
+  { group: 'Production', path: 'generic.baseUnitFactor',           label: 'Base unit factor',             def: 0.5,   type: 'number' },
+  { group: 'Production', path: 'generic.sharedStartupPctDefault',  label: 'Shared startup % (default)',   def: 50,    type: 'number' },
+  { group: 'Production', path: 'generic.timePerAdjustedHr',        label: 'Time pts / adjusted hr',       def: 6,     type: 'number' },
+  { group: 'Production', path: 'generic.medicalUnitFactor',        label: 'Medical proc unit factor',     def: 0.20,  type: 'number' },
+  { group: 'Production', path: 'generic.acutePainUnitFactor',      label: 'Acute pain unit factor',       def: 0.375, type: 'number' },
+  { group: 'Production', path: 'generic.emergencyFlatPoints',      label: 'Emergency flat pts',           def: 1,     type: 'number' },
+  // Time multipliers
+  { group: 'Time multipliers', path: 'timeMult.p4WeekdayDay',             label: 'P4 weekday day',         def: 1.33, type: 'number' },
+  { group: 'Time multipliers', path: 'timeMult.p5WeekdayDay',             label: 'P5 weekday day',         def: 1.83, type: 'number' },
+  { group: 'Time multipliers', path: 'timeMult.p5WeekdayEveOrWeekendDay', label: 'P5 eve / wknd day',      def: 1.5,  type: 'number' },
+  { group: 'Time multipliers', path: 'timeMult.highRiskPedsWeekdayDay',   label: 'High-risk peds wk day',  def: 1.33, type: 'number' },
+  // Case add-ons
+  { group: 'Case add-ons', path: 'addOn.nerveBlockBrachialPlexus', label: 'Brachial plexus block', def: 3,    type: 'number' },
+  { group: 'Case add-ons', path: 'addOn.nerveBlockOther',          label: 'Other nerve block',     def: 2.6,  type: 'number' },
+  { group: 'Case add-ons', path: 'addOn.nerveBlockItMorphine',     label: 'IT morphine (block)',   def: 3,    type: 'number' },
+  { group: 'Case add-ons', path: 'addOn.centralLine',              label: 'Central line',          def: 0.8,  type: 'number' },
+  { group: 'Case add-ons', path: 'addOn.arterialLine',             label: 'Arterial line',         def: 0.6,  type: 'number' },
+  { group: 'Case add-ons', path: 'addOn.pulmonaryArteryCatheter',  label: 'Pulm artery catheter',  def: 2,    type: 'number' },
+  { group: 'Case add-ons', path: 'addOn.teeAddOn',                 label: 'TEE add-on',            def: 0.4,  type: 'number' },
+  { group: 'Case add-ons', path: 'addOn.teeExam',                  label: 'TEE exam',              def: 22,   type: 'number' },
+  { group: 'Case add-ons', path: 'addOn.itMorphine',               label: 'IT morphine',           def: 3,    type: 'number' },
+  { group: 'Case add-ons', path: 'addOn.thoracicEpidural',         label: 'Thoracic epidural',     def: 3.75, type: 'number' },
+  // Labor epidural tiers
+  { group: 'Labor epidural', path: 'laborEpidural.startup',      label: 'Startup pts',  def: 2.5, type: 'number' },
+  { group: 'Labor epidural', path: 'laborEpidural.hr1PerHr',     label: 'Hr 1 rate',    def: 6,   type: 'number' },
+  { group: 'Labor epidural', path: 'laborEpidural.hr2PerHr',     label: 'Hr 2 rate',    def: 3,   type: 'number' },
+  { group: 'Labor epidural', path: 'laborEpidural.hr3PlusPerHr', label: 'Hr 3+ rate',   def: 1.5, type: 'number' },
+  // Flat case types
+  { group: 'Flat case types', path: 'flat.icu_er_lines',                       label: 'ICU/ER lines',           def: 30,           type: 'number' },
+  { group: 'Flat case types', path: 'flat.epidural_blood_patch',               label: 'Epidural blood patch',   def: 5,            type: 'number' },
+  { group: 'Flat case types', path: 'flat.emergency_intubation',               label: 'Emergency intubation',   def: 4,            type: 'number' },
+  { group: 'Flat case types', path: 'flat.cpt01996',                           label: 'CPT 01996',              def: 3,            type: 'number' },
+  { group: 'Flat case types', path: 'flat.cpt99231Base',                       label: 'CPT 99231 base',         def: 2,            type: 'number' },
+  { group: 'Flat case types', path: 'flat.cpt99231AddOnMinutes',               label: 'CPT 99231 add-on min',   def: 10,           type: 'number' },
+  { group: 'Flat case types', path: 'flat.cpt99231AddOnFromDate',              label: 'CPT 99231 add-on from',  def: '2026-04-01', type: 'date'   },
+  { group: 'Flat case types', path: 'flat.tee',                                label: 'TEE (flat)',             def: 22,           type: 'number' },
+  { group: 'Flat case types', path: 'flat.supervision_block',                  label: 'Supervision block',      def: 2.63,         type: 'number' },
+  { group: 'Flat case types', path: 'flat.acute_pain_proc_thoracic_or_lumbar', label: 'Acute pain proc (T/L)',  def: 3.75,         type: 'number' },
+  { group: 'Flat case types', path: 'flat.aps_rounding_per_epi_round',         label: 'APS epi round',          def: 3,            type: 'number' },
+  { group: 'Flat case types', path: 'flat.aps_rounding_per_pain_round',        label: 'APS pain round',         def: 2,            type: 'number' },
+  // Supervision / Bonuses / Pager
+  { group: 'Supervision', path: 'supervision.crnaPerHr', label: 'CRNA supervision (per hr)', def: 7, type: 'number' },
+  { group: 'Bonuses', path: 'bonuses.subspecCardiacLiver',     label: 'Subspec cardiac/liver',      def: 45, type: 'number' },
+  { group: 'Bonuses', path: 'bonuses.teePerCount',             label: 'TEE per count',              def: 22, type: 'number' },
+  { group: 'Bonuses', path: 'bonuses.forceOffFlat',            label: 'Force off (flat)',           def: 56, type: 'number' },
+  { group: 'Bonuses', path: 'bonuses.preCallWeekdayMinimum',   label: 'Pre-call wkday minimum',     def: 80, type: 'number' },
+  { group: 'Bonuses', path: 'bonuses.preCallForcedOffMorning', label: 'Pre-call forced-off (am)',   def: 56, type: 'number' },
+  { group: 'Pager', path: 'pager.unrestrictedCallRate', label: 'Unrestricted call (per hr)', def: 3.5, type: 'number' },
+];
+
+// Walks dotted path on obj, creating intermediate objects as needed,
+// and sets the leaf to value. Mirrors the read shape used by _eo().
+function _sandboxSetDeep(obj, path, value) {
+  const parts = path.split('.');
+  let cur = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (!cur[parts[i]] || typeof cur[parts[i]] !== 'object') cur[parts[i]] = {};
+    cur = cur[parts[i]];
+  }
+  cur[parts[parts.length - 1]] = value;
+}
+
+// Renders the editor into #sandboxExperimentEditor as one <details>
+// section per group with rows: label · prod default · override input.
+// Groups stay open by default; inputs are blank (placeholder shows the
+// default). Built once on first page render and on Reset.
+function renderSandboxExperimentEditor() {
+  const host = document.getElementById('sandboxExperimentEditor');
+  if (!host) return;
+  const groups = {};
+  for (const item of ENGINE_SANDBOX_SCHEMA) {
+    if (!groups[item.group]) groups[item.group] = [];
+    groups[item.group].push(item);
+  }
+  const html = Object.keys(groups).map(g => {
+    const rows = groups[g].map(it => {
+      const placeholder = String(it.def);
+      const inputAttrs = it.type === 'date'
+        ? 'type="date"'
+        : 'type="number" step="any" inputmode="decimal"';
+      return '<div style="display:contents;">' +
+        '<div style="color:var(--text);">' + escapeHtml(it.label) + '</div>' +
+        '<div style="color:var(--text-dim);text-align:right;font-variant-numeric:tabular-nums;">' + escapeHtml(placeholder) + '</div>' +
+        '<input ' + inputAttrs +
+          ' data-sandbox-path="' + escapeHtml(it.path) + '"' +
+          ' data-sandbox-type="' + it.type + '"' +
+          ' data-sandbox-default="' + escapeHtml(placeholder) + '"' +
+          ' placeholder="' + escapeHtml(placeholder) + '"' +
+          ' style="padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.78rem;width:100px;text-align:right;">' +
+      '</div>';
+    }).join('');
+    return '<details open style="margin-bottom:8px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">' +
+      '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;">' + escapeHtml(g) + '</summary>' +
+      '<div style="display:grid;grid-template-columns:1fr auto auto;gap:4px 10px;align-items:center;margin-top:6px;">' +
+        '<div style="font-size:0.72rem;color:var(--text-dim);">Constant</div>' +
+        '<div style="font-size:0.72rem;color:var(--text-dim);text-align:right;">Prod</div>' +
+        '<div style="font-size:0.72rem;color:var(--text-dim);text-align:right;">Override</div>' +
+        rows +
+      '</div>' +
+    '</details>';
+  }).join('');
+  host.innerHTML = html;
+}
+
+// Walks every override input. Returns a nested overrides tree (paths
+// joined back into objects via _sandboxSetDeep) or null if every input
+// is blank. Non-finite numbers are silently skipped.
+function _collectSandboxExperimentOverrides() {
+  const root = document.getElementById('sandboxExperimentEditor');
+  if (!root) return null;
+  const inputs = root.querySelectorAll('input[data-sandbox-path]');
+  let any = false;
+  const out = {};
+  inputs.forEach(inp => {
+    const v = (inp.value || '').trim();
+    if (!v) return;
+    const path = inp.dataset.sandboxPath;
+    const type = inp.dataset.sandboxType;
+    if (type === 'number') {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return;
+      _sandboxSetDeep(out, path, n);
+    } else {
+      _sandboxSetDeep(out, path, v);
+    }
+    any = true;
+  });
+  return any ? out : null;
+}
+
+function resetSandboxExperimentClick() {
+  const root = document.getElementById('sandboxExperimentEditor');
+  if (!root) return;
+  root.querySelectorAll('input[data-sandbox-path]').forEach(inp => { inp.value = ''; });
+  const result = document.getElementById('sandboxExperimentResult');
+  if (result) result.innerHTML = '';
+  const status = document.getElementById('sandboxExperimentStatus');
+  if (status) status.textContent = '';
+}
+
+// Wraps scoreSnapshotPayloadSync with an override swap. The inner
+// function already try/finally-restores `data`; this wrapper does the
+// same for `_engineSandboxOverrides`. Synchronous so the engine never
+// observes a half-swapped state.
+function scoreSnapshotPayloadWithOverridesSync(payload, overrides) {
+  const saved = _engineSandboxOverrides;
+  try {
+    _engineSandboxOverrides = overrides || null;
+    return scoreSnapshotPayloadSync(payload);
+  } finally {
+    _engineSandboxOverrides = saved;
+  }
+}
+
+// Loads completed snapshots into the experiment picker. Snapshots
+// without baselineComputedAt are still listed (we score baseline on
+// the fly at Run time), but baseline-having snapshots are marked.
+async function loadSandboxExperimentSnapshots() {
+  const sel = document.getElementById('sandboxExperimentSnapshot');
+  if (!sel || !currentUser) return;
+  try {
+    const snap = await db.collection('users').doc(currentUser.uid)
+      .collection('policySandboxSnapshots')
+      .orderBy('createdAt', 'desc').limit(50).get();
+    const current = sel.value;
+    const opts = ['<option value="">&mdash; choose a snapshot &mdash;</option>'];
+    snap.docs.forEach(d => {
+      const s = d.data() || {};
+      const sid = s.snapshotId || d.id;
+      const label = s.label || sandboxFormatRange(s) || sid;
+      const subtitle = (s.userCount || 0) + 'u · ' + (s.shiftCount || 0) + 's · ' + (s.caseCount || 0) + 'c';
+      opts.push('<option value="' + escapeHtml(sid) + '">' + escapeHtml(label) + ' (' + subtitle + ')</option>');
+    });
+    sel.innerHTML = opts.join('');
+    if (current) sel.value = current;
+  } catch (e) {
+    console.error('loadSandboxExperimentSnapshots failed:', e);
+  }
+}
+
+// Orchestrates: collect overrides → fetch payloads → score each user
+// twice (baseline + sandbox) → render delta. Baseline is recomputed on
+// the fly against today's engine so the editor reflects "what would
+// change if I shipped these constants right now," independent of any
+// previously stored baselineTotals.
+async function runSandboxExperimentClick() {
+  if (!isAppOwner()) return;
+  const sel = document.getElementById('sandboxExperimentSnapshot');
+  const status = document.getElementById('sandboxExperimentStatus');
+  const result = document.getElementById('sandboxExperimentResult');
+  const btn = document.getElementById('sandboxExperimentRunBtn');
+  const snapshotId = sel && sel.value;
+  if (!snapshotId) { if (status) status.textContent = 'Pick a snapshot first.'; return; }
+  const overrides = _collectSandboxExperimentOverrides();
+  if (!overrides) {
+    if (status) status.textContent = 'No overrides entered — fill at least one field to see a delta.';
+    if (result) result.innerHTML = '';
+    return;
+  }
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = 'Scoring ' + snapshotId + '…';
+  if (result) result.innerHTML = '';
+  try {
+    const root = db.collection('users').doc(currentUser.uid)
+      .collection('policySandboxSnapshots').doc(snapshotId);
+    const payloadsSnap = await root.collection('userPayloads').get();
+    const rows = [];
+    let totalShifts = 0;
+    for (const d of payloadsSnap.docs) {
+      const payload = d.data() || {};
+      // Score baseline first (fresh, against today's engine), then with overrides.
+      const baseline = scoreSnapshotPayloadWithOverridesSync(payload, null);
+      const sandbox  = scoreSnapshotPayloadWithOverridesSync(payload, overrides);
+      rows.push({
+        userKey: payload.userKey || d.id,
+        baseline: baseline.totals, sandbox: sandbox.totals,
+        baselineBySite: baseline.bySite, sandboxBySite: sandbox.bySite,
+        baselineByType: baseline.byShiftType, sandboxByType: sandbox.byShiftType
+      });
+      totalShifts += baseline.totals.scoredShifts || 0;
+    }
+    if (status) status.textContent = 'Scored ' + rows.length + ' users · ' + totalShifts + ' shifts.';
+    renderSandboxExperimentDelta(result, rows, overrides);
+  } catch (e) {
+    console.error('runSandboxExperiment failed:', e);
+    if (status) status.textContent = 'Run failed: ' + (e.message || String(e));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Renders the delta UI: a top-line summary card, then three sections
+// (per-user, per-site, per-shift-type) of baseline / sandbox / Δ /
+// shifts rows, each sorted by |Δ| desc so the biggest movers come first.
+function renderSandboxExperimentDelta(host, rows, overrides) {
+  if (!host) return;
+  if (!rows || rows.length === 0) {
+    host.innerHTML = '<em style="color:var(--text-dim);">No data.</em>';
+    return;
+  }
+  const byUser = rows.map(r => ({
+    key: r.userKey,
+    baseline: r.baseline.total || 0,
+    sandbox: r.sandbox.total || 0,
+    delta: (r.sandbox.total || 0) - (r.baseline.total || 0),
+    shiftCount: r.baseline.scoredShifts || 0
+  })).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+
+  const aggBuckets = (baseField, sandField) => {
+    const out = {};
+    for (const r of rows) {
+      const base = r[baseField] || {}, sand = r[sandField] || {};
+      const keys = new Set(Object.keys(base).concat(Object.keys(sand)));
+      keys.forEach(k => {
+        if (!out[k]) out[k] = { baseline: 0, sandbox: 0, shiftCount: 0 };
+        out[k].baseline += (base[k] && base[k].total) || 0;
+        out[k].sandbox  += (sand[k] && sand[k].total) || 0;
+        out[k].shiftCount += (base[k] && base[k].shiftCount) || (sand[k] && sand[k].shiftCount) || 0;
+      });
+    }
+    return Object.keys(out).map(k => ({
+      key: k, baseline: out[k].baseline, sandbox: out[k].sandbox,
+      delta: out[k].sandbox - out[k].baseline, shiftCount: out[k].shiftCount
+    })).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  };
+  const bySite = aggBuckets('baselineBySite', 'sandboxBySite');
+  const byType = aggBuckets('baselineByType', 'sandboxByType');
+
+  const totalBase = byUser.reduce((s, r) => s + r.baseline, 0);
+  const totalSand = byUser.reduce((s, r) => s + r.sandbox, 0);
+  const totalDelta = totalSand - totalBase;
+  const pct = totalBase !== 0 ? (totalDelta / totalBase) * 100 : 0;
+  const fmt = n => (Math.round((n || 0) * 10) / 10).toFixed(1);
+  const fmtDelta = n => (n > 0 ? '+' : '') + fmt(n);
+  const dColor = n => n === 0 ? 'var(--text-dim)' : (n > 0 ? 'var(--accent)' : 'var(--accent2)');
+
+  // Show what overrides are in effect so the run is self-documenting.
+  const flatOverrides = [];
+  const walk = (obj, prefix) => {
+    Object.keys(obj).forEach(k => {
+      const v = obj[k];
+      const p = prefix ? prefix + '.' + k : k;
+      if (v && typeof v === 'object') walk(v, p);
+      else flatOverrides.push({ path: p, value: v });
+    });
+  };
+  walk(overrides, '');
+  const overrideChips = flatOverrides.map(o =>
+    '<span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:0.7rem;margin:0 4px 4px 0;font-family:monospace;">' +
+    escapeHtml(o.path) + ' = ' + escapeHtml(String(o.value)) + '</span>'
+  ).join('');
+
+  const summary = '<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:10px;">' +
+    '<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:10px;margin-bottom:8px;">' +
+      '<div><div style="font-size:0.7rem;color:var(--text-dim);">Baseline</div><div style="font-weight:700;font-size:1.05rem;">' + fmt(totalBase) + '</div></div>' +
+      '<div><div style="font-size:0.7rem;color:var(--text-dim);">Sandbox</div><div style="font-weight:700;font-size:1.05rem;">' + fmt(totalSand) + '</div></div>' +
+      '<div><div style="font-size:0.7rem;color:var(--text-dim);">&Delta;</div><div style="font-weight:700;font-size:1.05rem;color:' + dColor(totalDelta) + ';">' + fmtDelta(totalDelta) + '</div></div>' +
+      '<div><div style="font-size:0.7rem;color:var(--text-dim);">% change</div><div style="font-weight:700;font-size:1.05rem;color:' + dColor(totalDelta) + ';">' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%</div></div>' +
+    '</div>' +
+    '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:3px;">Overrides applied:</div>' +
+    '<div>' + overrideChips + '</div>' +
+  '</div>';
+
+  host.innerHTML = summary +
+    renderSandboxDeltaSection('By user', 'User', byUser, true) +
+    renderSandboxDeltaSection('By site', 'Site', bySite, false) +
+    renderSandboxDeltaSection('By shift type', 'Shift type', byType, false);
+}
+
+function renderSandboxDeltaSection(title, keyLabel, rows, monoKey) {
+  if (!rows || rows.length === 0) {
+    return '<div style="margin-bottom:10px;"><div style="font-weight:600;margin-bottom:4px;">' +
+      escapeHtml(title) + '</div><em style="color:var(--text-dim);">No data.</em></div>';
+  }
+  const totalBase = rows.reduce((s, r) => s + (r.baseline || 0), 0);
+  const totalSand = rows.reduce((s, r) => s + (r.sandbox || 0), 0);
+  const totalDelta = totalSand - totalBase;
+  const totalShifts = rows.reduce((s, r) => s + (r.shiftCount || 0), 0);
+  const fmt = n => (Math.round((n || 0) * 10) / 10).toFixed(1);
+  const fmtDelta = n => (n > 0 ? '+' : '') + fmt(n);
+  const dColor = n => n === 0 ? 'var(--text-dim)' : (n > 0 ? 'var(--accent)' : 'var(--accent2)');
+  const header =
+    '<div style="font-weight:600;color:var(--text-dim);">' + escapeHtml(keyLabel) + '</div>' +
+    '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Baseline</div>' +
+    '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Sandbox</div>' +
+    '<div style="font-weight:600;color:var(--accent);text-align:right;">&Delta;</div>' +
+    '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Shifts</div>';
+  const body = rows.map(r =>
+    '<div style="' + (monoKey ? 'font-family:monospace;' : '') + 'overflow:hidden;text-overflow:ellipsis;">' +
+      escapeHtml(r.key || '') + '</div>' +
+    '<div style="text-align:right;">' + fmt(r.baseline) + '</div>' +
+    '<div style="text-align:right;">' + fmt(r.sandbox) + '</div>' +
+    '<div style="text-align:right;color:' + dColor(r.delta) + ';font-weight:600;">' + fmtDelta(r.delta) + '</div>' +
+    '<div style="text-align:right;color:var(--text-dim);">' + (r.shiftCount || 0) + '</div>'
+  ).join('');
+  const footer =
+    '<div style="border-top:1px solid var(--border);padding-top:3px;font-weight:600;">Total</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:3px;text-align:right;">' + fmt(totalBase) + '</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:3px;text-align:right;">' + fmt(totalSand) + '</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:3px;text-align:right;color:' + dColor(totalDelta) + ';font-weight:700;">' + fmtDelta(totalDelta) + '</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:3px;text-align:right;color:var(--text-dim);">' + totalShifts + '</div>';
+  return '<div style="margin-bottom:14px;">' +
+    '<div style="font-weight:600;margin-bottom:6px;">' + escapeHtml(title) + '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr repeat(4, auto);gap:3px 10px;align-items:center;">' +
     header + body + footer +
     '</div></div>';
 }
