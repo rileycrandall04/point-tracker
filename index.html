@@ -12527,7 +12527,13 @@ async function readUserRangeDataForSandbox(uid, ymStart, ymEnd) {
   }
   if (Array.isArray(d.cases)) {
     for (const c of d.cases) {
-      if (c && typeof c.date === 'string' && c.date >= startBound && c.date <= endBound) {
+      if (!c) continue;
+      // Cases use shiftDate as the canonical date field; legacy rows
+      // may carry only `date`. Match the same fallback used elsewhere
+      // in the app (see e.g. data.cases filters around line 7522/7540).
+      const cd = (typeof c.shiftDate === 'string' && c.shiftDate) ||
+                 (typeof c.date === 'string' && c.date) || '';
+      if (cd && cd >= startBound && cd <= endBound) {
         cases.push(c);
       }
     }
