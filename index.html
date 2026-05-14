@@ -4311,10 +4311,42 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="card" id="sandboxSnapshotsCard" style="margin-bottom:12px;">
     <h3 style="margin:0 0 6px 0;font-size:0.95rem;">Snapshots</h3>
     <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 10px 0;">
-      Capture all users&rsquo; data for one month, anonymized with stable hashes.
+      Capture shift &amp; case data across a range of months. By default
+      every user is included; opt out individual users below. App-user
+      names are replaced with stable per-snapshot hashes; surgeon names
+      are kept readable. Reads prod data; never writes to anyone else&rsquo;s account.
     </p>
-    <div id="sandboxSnapshotsList" style="font-size:0.82rem;color:var(--text-dim);">
-      <em>Snapshot capture not yet implemented &mdash; coming next.</em>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+      <label style="font-size:0.74rem;color:var(--text-dim);display:flex;flex-direction:column;gap:3px;">
+        Start month
+        <input type="month" id="sandboxSnapshotMonthStart"
+          style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+      </label>
+      <label style="font-size:0.74rem;color:var(--text-dim);display:flex;flex-direction:column;gap:3px;">
+        End month
+        <input type="month" id="sandboxSnapshotMonthEnd"
+          style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+      </label>
+      <label style="font-size:0.74rem;color:var(--text-dim);display:flex;flex-direction:column;gap:3px;flex:1;min-width:160px;">
+        Label (optional)
+        <input type="text" id="sandboxSnapshotLabel" placeholder="e.g. Q1 2026 baseline"
+          style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+      </label>
+      <button class="btn btn-primary btn-sm" id="sandboxCaptureBtn" onclick="captureSandboxSnapshotClick()">Capture</button>
+    </div>
+    <details id="sandboxUserFilter" style="margin-bottom:10px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">
+      <summary style="cursor:pointer;font-size:0.8rem;color:var(--text);">
+        <span id="sandboxUserFilterSummary">Users: loading&hellip;</span>
+      </summary>
+      <div style="display:flex;gap:10px;margin:8px 0 6px 0;font-size:0.74rem;">
+        <a href="#" onclick="sandboxSelectAllUsers(true);return false;" style="color:var(--accent);">Include all</a>
+        <a href="#" onclick="sandboxSelectAllUsers(false);return false;" style="color:var(--accent);">Exclude all</a>
+      </div>
+      <div id="sandboxUserChecklist" style="max-height:260px;overflow-y:auto;font-size:0.8rem;"></div>
+    </details>
+    <div id="sandboxSnapshotsStatus" style="font-size:0.76rem;color:var(--text-dim);margin-bottom:8px;min-height:1em;"></div>
+    <div id="sandboxSnapshotsList" style="font-size:0.82rem;color:var(--text);">
+      <em style="color:var(--text-dim);">No snapshots yet.</em>
     </div>
   </div>
 
@@ -12142,6 +12174,7 @@ document.querySelectorAll('.drawer-item[data-page]').forEach(item => {
     if (page === 'comprules') { /* static content, no init needed */ }
     if (page === 'asacodes') { renderAsaCodesPage(); }
     if (page === 'admin') { renderAdminPage(); }
+    if (page === 'sandbox') { renderSandboxPage(); }
     if (page === 'communitystats') { initCommunityStats(); }
     if (typeof maybeShowContextualTip === 'function') maybeShowContextualTip(page);
   });
@@ -12205,6 +12238,324 @@ function renderAdminPage() {
   }
 
   renderAdminPrivilegesList(isOwner, isSAdmin);
+}
+
+// ================================================================
+// POLICY SANDBOX (app-owner-only experimental rule-modeling workspace)
+//
+// Reads prod data; never writes to it. Snapshots live under the OWNER's
+// own user doc at users/{ownerUid}/policySandboxSnapshots/{snapshotId}
+// with per-user payload docs sharded into a userPayloads subcollection.
+//
+// Schema isolation: readUserMonthDataForSandbox() is the ONLY place that
+// touches the prod data schema. When the per-case subcollection migration
+// lands, swap that function's body to read from the new source — nothing
+// else here needs to change.
+// ================================================================
+
+// Cached list of profiles + the current opt-out set for the user filter UI.
+// Reset on every renderSandboxPage() so a fresh load reflects current state.
+let _sandboxProfiles = [];
+let _sandboxExcludedUids = new Set();
+
+function renderSandboxPage() {
+  if (!isAppOwner()) return;
+  const now = new Date();
+  const curYm = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const startInput = document.getElementById('sandboxSnapshotMonthStart');
+  const endInput = document.getElementById('sandboxSnapshotMonthEnd');
+  if (startInput && !startInput.value) startInput.value = curYm;
+  if (endInput && !endInput.value) endInput.value = curYm;
+  const status = document.getElementById('sandboxSnapshotsStatus');
+  if (status) status.textContent = '';
+  _sandboxExcludedUids = new Set();
+  loadSandboxUserList();
+  loadSandboxSnapshots();
+}
+
+async function loadSandboxUserList() {
+  const checklist = document.getElementById('sandboxUserChecklist');
+  const summary = document.getElementById('sandboxUserFilterSummary');
+  if (!checklist) return;
+  try {
+    const profSnap = await db.collection('userProfiles').get();
+    _sandboxProfiles = profSnap.docs
+      .map(d => ({ uid: d.id, profile: d.data() || {} }))
+      .filter(p => !p.profile.deletedAt)
+      .sort((a, b) => {
+        const an = (a.profile.displayName || a.profile.email || a.uid).toLowerCase();
+        const bn = (b.profile.displayName || b.profile.email || b.uid).toLowerCase();
+        return an < bn ? -1 : an > bn ? 1 : 0;
+      });
+    renderSandboxUserChecklist();
+  } catch (e) {
+    console.error('loadSandboxUserList failed:', e);
+    checklist.innerHTML = '<span style="color:var(--accent2);">Failed to load users: ' + escapeHtml(e.message || String(e)) + '</span>';
+    if (summary) summary.textContent = 'Users: failed to load';
+  }
+}
+
+function renderSandboxUserChecklist() {
+  const checklist = document.getElementById('sandboxUserChecklist');
+  const summary = document.getElementById('sandboxUserFilterSummary');
+  if (!checklist) return;
+  const total = _sandboxProfiles.length;
+  const included = total - _sandboxExcludedUids.size;
+  if (summary) {
+    summary.textContent = included === total
+      ? 'Users: all ' + total + ' included'
+      : 'Users: ' + included + ' of ' + total + ' included';
+  }
+  checklist.innerHTML = _sandboxProfiles.map(p => {
+    const name = escapeHtml(p.profile.displayName || p.profile.email || p.uid);
+    const sub = escapeHtml(p.profile.siteId || p.profile.email || '');
+    const checked = _sandboxExcludedUids.has(p.uid) ? '' : 'checked';
+    return '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;">' +
+      '<input type="checkbox" data-uid="' + escapeHtml(p.uid) + '" ' + checked + ' ' +
+        'onchange="sandboxToggleUser(this)" style="width:13px;height:13px;margin:0;flex:none;">' +
+      '<span style="flex:1;min-width:0;">' + name +
+        (sub && sub !== name ? ' <span style="color:var(--text-dim);font-size:0.72rem;">(' + sub + ')</span>' : '') +
+      '</span>' +
+    '</label>';
+  }).join('');
+}
+
+function sandboxToggleUser(cb) {
+  const uid = cb.dataset.uid;
+  if (!uid) return;
+  if (cb.checked) _sandboxExcludedUids.delete(uid);
+  else _sandboxExcludedUids.add(uid);
+  const summary = document.getElementById('sandboxUserFilterSummary');
+  if (summary) {
+    const total = _sandboxProfiles.length;
+    const included = total - _sandboxExcludedUids.size;
+    summary.textContent = included === total
+      ? 'Users: all ' + total + ' included'
+      : 'Users: ' + included + ' of ' + total + ' included';
+  }
+}
+
+function sandboxSelectAllUsers(include) {
+  if (include) _sandboxExcludedUids = new Set();
+  else _sandboxExcludedUids = new Set(_sandboxProfiles.map(p => p.uid));
+  renderSandboxUserChecklist();
+}
+
+async function loadSandboxSnapshots() {
+  const list = document.getElementById('sandboxSnapshotsList');
+  if (!list || !currentUser) return;
+  list.innerHTML = '<em style="color:var(--text-dim);">Loading&hellip;</em>';
+  try {
+    const snap = await db.collection('users').doc(currentUser.uid)
+      .collection('policySandboxSnapshots')
+      .orderBy('createdAt', 'desc').limit(50).get();
+    if (snap.empty) {
+      list.innerHTML = '<em style="color:var(--text-dim);">No snapshots yet.</em>';
+      return;
+    }
+    list.innerHTML = snap.docs.map(d => {
+      const s = d.data() || {};
+      const label = escapeHtml(s.label || s.yearMonthStart || s.yearMonth || s.snapshotId || '(unnamed)');
+      const rangeText = sandboxFormatRange(s);
+      const subtitle = rangeText + ' · ' + (s.userCount || 0) + ' users · ' +
+                       (s.shiftCount || 0) + ' shifts · ' + (s.caseCount || 0) + ' cases';
+      const created = s.createdAt ? new Date(s.createdAt).toLocaleString() : '';
+      const sid = escapeHtml(s.snapshotId || d.id);
+      return '<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-weight:600;">' + label + '</div>' +
+          '<div style="font-size:0.74rem;color:var(--text-dim);">' + escapeHtml(subtitle) + '</div>' +
+          '<div style="font-size:0.7rem;color:var(--text-dim);">Captured ' + escapeHtml(created) + '</div>' +
+        '</div>' +
+        '<button class="btn btn-sm" style="background:var(--accent2);color:white;flex:none;" ' +
+          'onclick="deleteSandboxSnapshotClick(\'' + sid + '\')">Delete</button>' +
+      '</div>';
+    }).join('');
+  } catch (e) {
+    console.error('loadSandboxSnapshots failed:', e);
+    list.innerHTML = '<span style="color:var(--accent2);">Failed to load: ' + escapeHtml(e.message || String(e)) + '</span>';
+  }
+}
+
+function sandboxFormatRange(s) {
+  // Handles legacy schemaVersion=1 docs (single yearMonth) and v2 docs (range).
+  if (s.yearMonthStart && s.yearMonthEnd) {
+    return s.yearMonthStart === s.yearMonthEnd
+      ? s.yearMonthStart
+      : s.yearMonthStart + ' → ' + s.yearMonthEnd;
+  }
+  return s.yearMonth || '';
+}
+
+async function captureSandboxSnapshotClick() {
+  const startInput = document.getElementById('sandboxSnapshotMonthStart');
+  const endInputEl = document.getElementById('sandboxSnapshotMonthEnd');
+  const labelInput = document.getElementById('sandboxSnapshotLabel');
+  const btn = document.getElementById('sandboxCaptureBtn');
+  const status = document.getElementById('sandboxSnapshotsStatus');
+  let ymStart = startInput && startInput.value;
+  let ymEnd = endInputEl && endInputEl.value;
+  if (!ymStart && !ymEnd) { showToast('Pick a start month'); return; }
+  if (!ymStart) ymStart = ymEnd;
+  if (!ymEnd) ymEnd = ymStart;
+  if (!/^\d{4}-\d{2}$/.test(ymStart) || !/^\d{4}-\d{2}$/.test(ymEnd)) {
+    showToast('Bad month format');
+    return;
+  }
+  if (ymStart > ymEnd) { const t = ymStart; ymStart = ymEnd; ymEnd = t; }
+  const months = sandboxMonthsInRange(ymStart, ymEnd);
+  const includedCount = _sandboxProfiles.length - _sandboxExcludedUids.size;
+  const rangeLabel = ymStart === ymEnd ? ymStart : ymStart + ' → ' + ymEnd + ' (' + months.length + ' months)';
+  const label = (labelInput && labelInput.value.trim()) || rangeLabel.replace(/ → /, '_to_');
+  if (!confirm('Capture a snapshot of ' + includedCount + ' users’ data for ' + rangeLabel + '?\nReads prod data; nothing is written to anyone else’s account.')) return;
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = 'Capturing…';
+  try {
+    const result = await captureSandboxSnapshot(ymStart, ymEnd, label, _sandboxExcludedUids);
+    if (status) {
+      status.textContent = 'Captured ' + result.userCount + ' users · ' +
+        result.shiftCount + ' shifts · ' + result.caseCount + ' cases across ' +
+        months.length + ' month' + (months.length === 1 ? '' : 's') + '.';
+    }
+    if (labelInput) labelInput.value = '';
+    await loadSandboxSnapshots();
+  } catch (e) {
+    console.error('captureSandboxSnapshot failed:', e);
+    if (status) status.textContent = 'Capture failed: ' + (e.message || String(e));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function captureSandboxSnapshot(ymStart, ymEnd, label, excludedUids) {
+  if (!isAppOwner()) throw new Error('App owner only');
+  if (!currentUser) throw new Error('Not signed in');
+  if (!/^\d{4}-\d{2}$/.test(ymStart)) throw new Error('Bad start month: ' + ymStart);
+  if (!/^\d{4}-\d{2}$/.test(ymEnd)) throw new Error('Bad end month: ' + ymEnd);
+  if (ymStart > ymEnd) throw new Error('Start month after end month');
+
+  const excluded = excludedUids instanceof Set ? excludedUids : new Set(excludedUids || []);
+  const snapshotId = ymStart + (ymStart === ymEnd ? '' : '_to_' + ymEnd) + '_' + Date.now().toString(36);
+  const profSnap = await db.collection('userProfiles').get();
+  const profiles = profSnap.docs
+    .map(d => ({ uid: d.id, profile: d.data() || {} }))
+    .filter(p => !p.profile.deletedAt && !excluded.has(p.uid));
+
+  const ownerRoot = db.collection('users').doc(currentUser.uid)
+    .collection('policySandboxSnapshots').doc(snapshotId);
+
+  let totalShifts = 0, totalCases = 0, includedUsers = 0;
+
+  for (const { uid, profile } of profiles) {
+    let rangeData;
+    try {
+      rangeData = await readUserRangeDataForSandbox(uid, ymStart, ymEnd);
+    } catch (e) {
+      console.warn('Sandbox: skipping uid', uid, 'read failed:', e);
+      continue;
+    }
+    const { shifts, cases } = rangeData;
+    const shiftCount = Object.keys(shifts).length;
+    if (shiftCount === 0 && cases.length === 0) continue;
+
+    const userKey = await sandboxHashId(uid, snapshotId);
+    await ownerRoot.collection('userPayloads').doc(userKey).set({
+      userKey,
+      siteId: profile.siteId || null,
+      year: profile.year || null,
+      shifts,
+      cases,
+      shiftCount,
+      caseCount: cases.length
+    });
+
+    totalShifts += shiftCount;
+    totalCases += cases.length;
+    includedUsers += 1;
+  }
+
+  await ownerRoot.set({
+    snapshotId,
+    label: label || (ymStart === ymEnd ? ymStart : ymStart + '_to_' + ymEnd),
+    yearMonthStart: ymStart,
+    yearMonthEnd: ymEnd,
+    monthCount: sandboxMonthsInRange(ymStart, ymEnd).length,
+    excludedCount: excluded.size,
+    createdAt: new Date().toISOString(),
+    createdBy: currentUser.uid,
+    userCount: includedUsers,
+    shiftCount: totalShifts,
+    caseCount: totalCases,
+    schemaVersion: 2
+  });
+
+  return { snapshotId, userCount: includedUsers, shiftCount: totalShifts, caseCount: totalCases };
+}
+
+function sandboxMonthsInRange(ymStart, ymEnd) {
+  const [ys, ms] = ymStart.split('-').map(Number);
+  const [ye, me] = ymEnd.split('-').map(Number);
+  const out = [];
+  let y = ys, m = ms;
+  while (y < ye || (y === ye && m <= me)) {
+    out.push(y + '-' + String(m).padStart(2, '0'));
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+  return out;
+}
+
+// SINGLE source of truth for reading a user's shifts+cases for a month range.
+// When the database moves to per-shift / per-case subcollections (incremental
+// writes), swap this function's body to read from the new path. Nothing else
+// in the sandbox needs to change.
+async function readUserRangeDataForSandbox(uid, ymStart, ymEnd) {
+  const dataSnap = await db.collection('users').doc(uid).collection('data').doc('data').get();
+  const shifts = {};
+  const cases = [];
+  if (!dataSnap.exists) return { shifts, cases };
+  const d = dataSnap.data() || {};
+  // YYYY-MM strings compare lexically; date YYYY-MM-DD compares the same way.
+  const startBound = ymStart + '-01';
+  const endBound = ymEnd + '-32'; // greater than any real day in ymEnd
+  if (d.shifts && typeof d.shifts === 'object') {
+    for (const k of Object.keys(d.shifts)) {
+      if (typeof k === 'string' && k >= startBound && k <= endBound) {
+        shifts[k] = d.shifts[k];
+      }
+    }
+  }
+  if (Array.isArray(d.cases)) {
+    for (const c of d.cases) {
+      if (c && typeof c.date === 'string' && c.date >= startBound && c.date <= endBound) {
+        cases.push(c);
+      }
+    }
+  }
+  return { shifts, cases };
+}
+
+async function sandboxHashId(input, salt) {
+  const enc = new TextEncoder();
+  const buf = await crypto.subtle.digest('SHA-256', enc.encode((salt || '') + '|' + String(input)));
+  const arr = Array.from(new Uint8Array(buf));
+  return arr.slice(0, 6).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function deleteSandboxSnapshotClick(snapshotId) {
+  if (!snapshotId) return;
+  if (!confirm('Delete snapshot ' + snapshotId + '? This cannot be undone.')) return;
+  try {
+    const root = db.collection('users').doc(currentUser.uid)
+      .collection('policySandboxSnapshots').doc(snapshotId);
+    const subs = await root.collection('userPayloads').get();
+    await Promise.all(subs.docs.map(d => d.ref.delete()));
+    await root.delete();
+    await loadSandboxSnapshots();
+  } catch (e) {
+    console.error('deleteSandboxSnapshot failed:', e);
+    showToast('Delete failed: ' + (e.message || String(e)));
+  }
 }
 
 // Lists what the signed-in admin can do, with deeplinks to the page where
