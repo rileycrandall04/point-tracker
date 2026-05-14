@@ -10564,10 +10564,11 @@ function effectivePagerPts(shift, pagerWindow) {
   // override and the rule's pagerWindow. Force Off carries 0 pager pay.
   const pcType = getPagerCallType(shift);
   if (pcType) return pcType.pagerPts;
+  const _pagerRate = _eo('pager.unrestrictedCallRate', 3.5);
   const overrideH = parseFloat(shift && shift.unrestrictedCallHours);
-  if (overrideH > 0) return overrideH * 3.5;
+  if (overrideH > 0) return overrideH * _pagerRate;
   if (!pagerWindow) return 0;
-  return ((pagerWindow.end - pagerWindow.start) / 60) * 3.5;
+  return ((pagerWindow.end - pagerWindow.start) / 60) * _pagerRate;
 }
 
 function getAssignmentTypeName(type, siteId) {
@@ -11038,12 +11039,82 @@ function getMomentContext(shift, m) {
   return { isHol: !!(dayShift && dayShift.isHoliday), isWknd: isWeekend(key) };
 }
 
-// Policy Sandbox hook: when non-null, getARRate() + caseProductionMultiplier()
-// read their tunable constants from this object instead of the hardcoded
-// values. Defaults preserve current prod behavior exactly. The sandbox sets
-// this synchronously around a scoring run and restores in a try/finally so
-// no engine call outside the sandbox can observe overridden values.
+// Policy Sandbox hook: when non-null, every tunable constant in the
+// compensation engine is read through _eo() instead of being bare in
+// the source. The sandbox sets _engineSandboxOverrides synchronously
+// around a scoring run and restores in a try/finally so no engine call
+// outside the sandbox can observe overridden values.
+//
+// Override schema (paths used with _eo('...', default)):
+//   ar.general                     20    base general AR rate
+//   ar.ob                          13    base OB AR rate
+//   ar.sf1Daytime                  13    SF1 0700-1700 weekday non-hol
+//   ar.sf1Other                    20    SF1 outside that window
+//   ar.weekendHolidayDayMult       1.10  wknd/hol daytime AR mult
+//   ar.weekendHolidayEveMult       1.25  wknd/hol evening AR mult
+//   ar.weekdayEveMult              1.10  weekday 1700-2300 AR mult
+//   ar.weekdayLateMult             1.25  weekday late-night AR mult
+//   prod.doubleMult                2     case point mult for shifts that double
+//   flat.icu_er_lines              30
+//   flat.epidural_blood_patch      5
+//   flat.emergency_intubation      4
+//   flat.cpt01996                  3
+//   flat.cpt99231Base              2
+//   flat.cpt99231AddOnMinutes      10
+//   flat.cpt99231AddOnFromDate     '2026-04-01' (string)
+//   flat.tee                       22
+//   flat.supervision_block         2.63
+//   flat.acute_pain_proc_thoracic_or_lumbar  3.75
+//   flat.aps_rounding_per_epi_round           3
+//   flat.aps_rounding_per_pain_round          2
+//   laborEpidural.startup          2.5   5 startup units × 50%
+//   laborEpidural.hr1PerHr         6     0-1 hr tier
+//   laborEpidural.hr2PerHr         3     1-2 hr tier
+//   laborEpidural.hr3PlusPerHr     1.5   2+ hr tier
+//   generic.baseUnitFactor         0.5   basePoints = factor × baseUnits
+//   generic.sharedStartupPctDefault 50   used when sharedStartupPct missing
+//   generic.timePerAdjustedHr      6     timePoints = adjHrs × this
+//   generic.medicalUnitFactor      0.20
+//   generic.acutePainUnitFactor    0.375
+//   generic.emergencyFlatPoints    1
+//   timeMult.p4WeekdayDay          1.33
+//   timeMult.p5WeekdayDay          1.83
+//   timeMult.p5WeekdayEveOrWeekendDay  1.5
+//   timeMult.highRiskPedsWeekdayDay    1.33
+//   addOn.nerveBlockBrachialPlexus 3
+//   addOn.nerveBlockOther          2.6
+//   addOn.nerveBlockItMorphine     3
+//   addOn.centralLine              0.8
+//   addOn.arterialLine             0.6
+//   addOn.pulmonaryArteryCatheter  2
+//   addOn.teeAddOn                 0.4
+//   addOn.teeExam                  22
+//   addOn.itMorphine               3
+//   addOn.thoracicEpidural         3.75
+//   bonuses.subspecCardiacLiver    45
+//   bonuses.teePerCount            22
+//   bonuses.forceOffFlat           56
+//   bonuses.preCallWeekdayMinimum  80
+//   bonuses.preCallForcedOffMorning 56
+//   pager.unrestrictedCallRate     3.5
+//   supervision.crnaPerHr          7
 let _engineSandboxOverrides = null;
+
+// Read a dotted-path constant from _engineSandboxOverrides with a
+// fallback. Hot path during sandbox scoring runs (called per case /
+// shift / minute) so keep it cheap. Outside the sandbox returns
+// fallback in O(1).
+function _eo(path, fallback) {
+  const o = _engineSandboxOverrides;
+  if (!o) return fallback;
+  const parts = path.split('.');
+  let cur = o;
+  for (let i = 0; i < parts.length; i++) {
+    if (cur == null || typeof cur !== 'object') return fallback;
+    cur = cur[parts[i]];
+  }
+  return cur != null ? cur : fallback;
+}
 
 function getARRate(assignmentType, isHol, isWknd, timeMinutes, siteId) {
   const isDaytime = timeMinutes >= 420 && timeMinutes < 1020;
@@ -11103,11 +11174,11 @@ function calcPreCallOverlayPts(shift) {
         arPts += getARRate('OR', isHol, isWknd, m % 1440, shift.siteId) / 60;
       }
     }
-    if (weekdayNonHoliday) arPts = Math.max(arPts, 80);
+    if (weekdayNonHoliday) arPts = Math.max(arPts, _eo('bonuses.preCallWeekdayMinimum', 80));
     return round2(arPts);
   }
   // No times entered. Forced-off morning bonus only on weekday non-holidays.
-  if (shift.preCallForcedOff && weekdayNonHoliday) return 56;
+  if (shift.preCallForcedOff && weekdayNonHoliday) return _eo('bonuses.preCallForcedOffMorning', 56);
   return 0;
 }
 
@@ -11129,7 +11200,7 @@ function calcARPoints(shift) {
     let tcStart = timeToMinutes(tc.start);
     let tcEnd = timeToMinutes(tc.end);
     if (tcEnd <= tcStart) tcEnd += 1440;
-    const pagerPts = ((tcEnd - tcStart) / 60) * 3.5;
+    const pagerPts = ((tcEnd - tcStart) / 60) * _eo('pager.unrestrictedCallRate', 3.5);
     let arPts = 0;
     (tc.timeEntries || []).forEach(e => {
       if (!e.start || !e.end) return;
@@ -11331,7 +11402,7 @@ function getNextShiftStartMin(shiftDate) {
 // Separate getter for breakdown display purposes
 function calcARBreakdown(shift) {
   if (shift.assignmentType === 'vacation') return { ar: 0, call: 0, preCall: 0 };
-  if (shift.forcedOff || shift.assignmentType === 'forced_off') return { ar: 56, call: 0, preCall: 0 };
+  if (shift.forcedOff || shift.assignmentType === 'forced_off') return { ar: _eo('bonuses.forceOffFlat', 56), call: 0, preCall: 0 };
   const flatRuleBD = getFlatPaymentRule(shift);
   if (flatRuleBD) return { ar: flatRuleBD.flatPoints, call: 0, preCall: 0 };
   const _preCallOverlay = calcPreCallOverlayPts(shift);
@@ -11347,7 +11418,7 @@ function calcARBreakdown(shift) {
     let tcStart = timeToMinutes(tc.start);
     let tcEnd = timeToMinutes(tc.end);
     if (tcEnd <= tcStart) tcEnd += 1440;
-    const pagerPts = ((tcEnd - tcStart) / 60) * 3.5;
+    const pagerPts = ((tcEnd - tcStart) / 60) * _eo('pager.unrestrictedCallRate', 3.5);
     let arPts = 0;
     (tc.timeEntries || []).forEach(e => {
       if (!e.start || !e.end) return;
@@ -11538,77 +11609,86 @@ function getTimeMultiplier(physicalStatus, isHol, isWknd, caseStartMin, isHighRi
   const isWeekdayDay = !isHol && !isWknd && caseStartMin >= 420 && caseStartMin < 1020;
   const isWeekdayEve = !isHol && !isWknd && caseStartMin >= 1020 && caseStartMin < 1380;
   const isWeekendDay = (isHol || isWknd) && caseStartMin >= 420 && caseStartMin < 1020;
+  const _p4Day = _eo('timeMult.p4WeekdayDay', 1.33);
+  const _p5Day = _eo('timeMult.p5WeekdayDay', 1.83);
+  const _p5EveWknd = _eo('timeMult.p5WeekdayEveOrWeekendDay', 1.5);
+  const _hrpedDay = _eo('timeMult.highRiskPedsWeekdayDay', 1.33);
   let multiplier = 1.0;
   if (physicalStatus === 'P4') {
-    if (isWeekdayDay) multiplier = 1.33;
+    if (isWeekdayDay) multiplier = _p4Day;
   } else if (physicalStatus === 'P5') {
-    if (isWeekdayDay) multiplier = 1.83;
-    else if (isWeekdayEve || isWeekendDay) multiplier = 1.5;
+    if (isWeekdayDay) multiplier = _p5Day;
+    else if (isWeekdayEve || isWeekendDay) multiplier = _p5EveWknd;
   }
-  if (isHighRiskPeds && isWeekdayDay && multiplier < 1.33) multiplier = 1.33;
+  if (isHighRiskPeds && isWeekdayDay && multiplier < _hrpedDay) multiplier = _hrpedDay;
   return multiplier;
 }
 
 function calcAddOnPoints(caseData) {
   let pts = 0;
-  if (caseData.nerveBlock === 'brachial_plexus') pts += 3;
-  else if (caseData.nerveBlock === 'other') pts += 2.6;
-  else if (caseData.nerveBlock === 'it_morphine') pts += 3;
-  if (caseData.hasCentralLine) pts += 0.8;
-  if (caseData.hasArterialLine) pts += 0.6;
-  if (caseData.hasPAC) pts += 2;
-  if (caseData.hasTEEAddOn) pts += 0.4;
-  if (caseData.hasTEEExam) pts += 22;
-  if (caseData.hasITMorphine) pts += 3;
-  if (caseData.hasThoracicEpidural) pts += 3.75;
+  if (caseData.nerveBlock === 'brachial_plexus') pts += _eo('addOn.nerveBlockBrachialPlexus', 3);
+  else if (caseData.nerveBlock === 'other') pts += _eo('addOn.nerveBlockOther', 2.6);
+  else if (caseData.nerveBlock === 'it_morphine') pts += _eo('addOn.nerveBlockItMorphine', 3);
+  if (caseData.hasCentralLine) pts += _eo('addOn.centralLine', 0.8);
+  if (caseData.hasArterialLine) pts += _eo('addOn.arterialLine', 0.6);
+  if (caseData.hasPAC) pts += _eo('addOn.pulmonaryArteryCatheter', 2);
+  if (caseData.hasTEEAddOn) pts += _eo('addOn.teeAddOn', 0.4);
+  if (caseData.hasTEEExam) pts += _eo('addOn.teeExam', 22);
+  if (caseData.hasITMorphine) pts += _eo('addOn.itMorphine', 3);
+  if (caseData.hasThoracicEpidural) pts += _eo('addOn.thoracicEpidural', 3.75);
   return pts;
 }
 
 // Labor epidural tiered billing: calculates points for a time range within the tier schedule
-// fromHrs/toHrs are hours since original placement. Tier 1: 0-1hr=6pts/hr, Tier 2: 1-2hr=3pts/hr, Tier 3: 2+hr=1.5pts/hr
+// fromHrs/toHrs are hours since original placement. Defaults: Tier 1: 0-1hr=6pts/hr, Tier 2: 1-2hr=3pts/hr, Tier 3: 2+hr=1.5pts/hr
 function laborEpiduralTierPoints(fromHrs, toHrs) {
+  const _hr1 = _eo('laborEpidural.hr1PerHr', 6);
+  const _hr2 = _eo('laborEpidural.hr2PerHr', 3);
+  const _hr3 = _eo('laborEpidural.hr3PlusPerHr', 1.5);
   let pts = 0;
-  if (fromHrs < 1 && toHrs > 0) pts += (Math.min(toHrs, 1) - Math.max(fromHrs, 0)) * 6;
-  if (fromHrs < 2 && toHrs > 1) pts += (Math.min(toHrs, 2) - Math.max(fromHrs, 1)) * 3;
-  if (toHrs > 2) pts += (toHrs - Math.max(fromHrs, 2)) * 1.5;
+  if (fromHrs < 1 && toHrs > 0) pts += (Math.min(toHrs, 1) - Math.max(fromHrs, 0)) * _hr1;
+  if (fromHrs < 2 && toHrs > 1) pts += (Math.min(toHrs, 2) - Math.max(fromHrs, 1)) * _hr2;
+  if (toHrs > 2) pts += (toHrs - Math.max(fromHrs, 2)) * _hr3;
   return pts;
 }
 
 function calcCasePoints(caseData, shift, ignoreManual) {
   if (!ignoreManual && caseData.manualPoints != null) return round2(Number(caseData.manualPoints));
   const ct = caseData.caseType;
-  if (ct === 'icu_er_lines') return 30;
-  if (ct === 'epidural_blood_patch') return 5;
-  if (ct === 'emergency_intubation') return 4;
-  if (ct === '01996') return 3;
+  if (ct === 'icu_er_lines') return _eo('flat.icu_er_lines', 30);
+  if (ct === 'epidural_blood_patch') return _eo('flat.epidural_blood_patch', 5);
+  if (ct === 'emergency_intubation') return _eo('flat.emergency_intubation', 4);
+  if (ct === '01996') return _eo('flat.cpt01996', 3);
   // Pain Rounding: after April 1 2026, add 10 min AR if not clocked in
   if (ct === '99231') {
-    let pts = 2;
+    let pts = _eo('flat.cpt99231Base', 2);
     const caseDate = caseData.shiftDate || (shift && shift.date);
-    if (caseDate && caseDate >= '2026-04-01') {
+    if (caseDate && caseDate >= _eo('flat.cpt99231AddOnFromDate', '2026-04-01')) {
       const shiftEntries = shift ? (shift.timeEntries || []) : [];
       const isClockedIn = shiftEntries.length > 0 && shiftEntries[0].start;
       if (!isClockedIn) {
         const isHol = shift ? shift.isHoliday : false;
         const isWknd = shift ? isWeekend(shift.date) : false;
-        const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720, shift.siteId) : 20;
-        pts += round2(arRate * (10 / 60));
+        const arRate = shift ? getARRate(shift.assignmentType, isHol, isWknd, 720, shift.siteId) : _eo('ar.general', 20);
+        const addOnMin = _eo('flat.cpt99231AddOnMinutes', 10);
+        pts += round2(arRate * (addOnMin / 60));
       }
     }
     return round2(pts);
   }
-  if (ct === 'tee') return 22;
-  if (ct === 'supervision_block') return 2.63;
+  if (ct === 'tee') return _eo('flat.tee', 22);
+  if (ct === 'supervision_block') return _eo('flat.supervision_block', 2.63);
 
   if (ct === 'acute_pain_procedure') {
     const procType = caseData.acutePainProcType || '';
-    const procDefault = (procType === 'Thoracic Injection' || procType === 'Lumbar Injection') ? 3.75 : 0;
+    const procDefault = (procType === 'Thoracic Injection' || procType === 'Lumbar Injection')
+      ? _eo('flat.acute_pain_proc_thoracic_or_lumbar', 3.75) : 0;
     return round2(calcAddOnPoints(caseData) + procDefault);
   }
 
   if (ct === 'aps_rounding') {
-    const epi = (parseInt(caseData.epiduralRounds) || 0) * 3;
-    const pain = (parseInt(caseData.painRounds) || 0) * 2;
+    const epi = (parseInt(caseData.epiduralRounds) || 0) * _eo('flat.aps_rounding_per_epi_round', 3);
+    const pain = (parseInt(caseData.painRounds) || 0) * _eo('flat.aps_rounding_per_pain_round', 2);
     return round2(epi + pain);
   }
 
@@ -11646,19 +11726,22 @@ function calcCasePoints(caseData, shift, ignoreManual) {
 
     // Normal epidural
     const durationHrs = Math.min((ce - cs) / 60, 24);
-    let pts = 2.5; // 5 startup units × 50%
-    if (durationHrs > 0) pts += Math.min(durationHrs, 1) * 6;
-    if (durationHrs > 1) pts += Math.min(durationHrs - 1, 1) * 3;
-    if (durationHrs > 2) pts += (durationHrs - 2) * 1.5;
+    let pts = _eo('laborEpidural.startup', 2.5); // 5 startup units × 50%
+    const _hr1 = _eo('laborEpidural.hr1PerHr', 6);
+    const _hr2 = _eo('laborEpidural.hr2PerHr', 3);
+    const _hr3 = _eo('laborEpidural.hr3PlusPerHr', 1.5);
+    if (durationHrs > 0) pts += Math.min(durationHrs, 1) * _hr1;
+    if (durationHrs > 1) pts += Math.min(durationHrs - 1, 1) * _hr2;
+    if (durationHrs > 2) pts += (durationHrs - 2) * _hr3;
     pts *= caseProductionMultiplier(caseData, shift);
     return round2(pts);
   }
 
   const addOnPts = calcAddOnPoints(caseData);
   const baseUnits = parseFloat(caseData.baseUnits) || 0;
-  let basePoints = 0.5 * baseUnits;
+  let basePoints = _eo('generic.baseUnitFactor', 0.5) * baseUnits;
   if (caseData.isSharedCase) {
-    basePoints *= (parseFloat(caseData.sharedStartupPct) || 50) / 100;
+    basePoints *= (parseFloat(caseData.sharedStartupPct) || _eo('generic.sharedStartupPctDefault', 50)) / 100;
   }
   let caseStartMin = timeToMinutes(caseData.startTime);
   let caseHours = 0;
@@ -11689,10 +11772,10 @@ function calcCasePoints(caseData, shift, ignoreManual) {
   const isWknd = shift ? isWeekend(shift.date) : false;
   const timeMultiplier = getTimeMultiplier(caseData.physicalStatus, isHol, isWknd, caseStartMin, caseData.isHighRiskPeds);
   const adjustedHours = caseHours * timeMultiplier;
-  const timePoints = adjustedHours * 6;
-  const medicalPoints = caseData.isMedicalProc ? 0.20 * (parseFloat(caseData.medicalUnits) || 0) : 0;
-  const acutePainPoints = caseData.isAcutePain ? 0.375 * (parseFloat(caseData.acutePainUnits) || 0) : 0;
-  const emergencyPoints = caseData.isEmergency ? 1 : 0;
+  const timePoints = adjustedHours * _eo('generic.timePerAdjustedHr', 6);
+  const medicalPoints = caseData.isMedicalProc ? _eo('generic.medicalUnitFactor', 0.20) * (parseFloat(caseData.medicalUnits) || 0) : 0;
+  const acutePainPoints = caseData.isAcutePain ? _eo('generic.acutePainUnitFactor', 0.375) * (parseFloat(caseData.acutePainUnits) || 0) : 0;
+  const emergencyPoints = caseData.isEmergency ? _eo('generic.emergencyFlatPoints', 1) : 0;
   let total = basePoints + timePoints + medicalPoints + acutePainPoints + emergencyPoints + addOnPts;
   if (!caseData.isORCase) total *= caseProductionMultiplier(caseData, shift);
   return round2(total);
@@ -11884,7 +11967,7 @@ function calcSupervisionPoints(shift) {
     }
     let totalMin = 0;
     clockedRanges.forEach(r => { totalMin += (r.end - r.start); });
-    return round2(totalMin / 60 * 7);
+    return round2(totalMin / 60 * _eo('supervision.crnaPerHr', 7));
   }
   // Overlay on OR/SF1/SF2: +7/hr only (base AR already counted in calcARPoints)
   if (shift.supervisionStart) {
@@ -11900,7 +11983,7 @@ function calcSupervisionPoints(shift) {
       return 0; // past date with no end — can't calculate
     }
     if (endMin <= startMin) endMin += 1440;
-    return round2((endMin - startMin) / 60 * 7);
+    return round2((endMin - startMin) / 60 * _eo('supervision.crnaPerHr', 7));
   }
   return 0;
 }
@@ -11914,8 +11997,8 @@ function calcSubspecPoints(shift) {
   // Cardiac/Liver shifts always include the 45-pt subspecialty bonus
   // as part of their base. The legacy subspecCoverage checkbox is kept
   // as a no-op for backward compatibility but no longer required.
-  let pts = 45;
-  pts += (parseInt(shift.teeCount) || 0) * 22;
+  let pts = _eo('bonuses.subspecCardiacLiver', 45);
+  pts += (parseInt(shift.teeCount) || 0) * _eo('bonuses.teePerCount', 22);
   return pts;
 }
 
@@ -11973,7 +12056,7 @@ function calcShiftTotal(shift) {
   const _pcType = getPagerCallType(shift);
   let subspecPts;
   if (_pcType) {
-    subspecPts = round2((_pcType.subspecPts || 0) + (parseInt(shift.teeCount) || 0) * 22);
+    subspecPts = round2((_pcType.subspecPts || 0) + (parseInt(shift.teeCount) || 0) * _eo('bonuses.teePerCount', 22));
   } else {
     subspecPts = _hasSubspec ? calcSubspecPoints(shift) : 0;
   }
@@ -11985,7 +12068,7 @@ function calcShiftTotal(shift) {
   let forceOffBonusPts = _pcType ? (_pcType.forceOffBonusPts || 0) : 0;
   const _dfRuleCalc = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
   if (shift && shift.dayForceOff && _dfRuleCalc && _dfRuleCalc.dayForceOffEligible) {
-    forceOffBonusPts += 56;
+    forceOffBonusPts += _eo('bonuses.forceOffFlat', 56);
   }
   const supervisionPts = calcSupervisionPoints(shift);
   // Float bonus: rule-driven so per-site float types (e.g. IMC_OR_float
