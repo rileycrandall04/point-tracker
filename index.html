@@ -9520,14 +9520,14 @@ function getPagerCallType(shift) {
   const isHol = !!shift.isHoliday;
   const wkndOrHol = wknd || isHol;
   const keys = _resolvePagerCallTypeKeys(shift).filter(k => {
-    const t = PAGER_CALL_TYPES[k];
+    const t = _pagerCallConfig(k);
     if (!t) return false;
     if (t.weekdayOnly && wkndOrHol) return false;
     if (t.weekdayOnly && isAlreadyForcedOff) return false;
     return true;
   });
   if (keys.length === 0) return null;
-  const types = keys.map(k => PAGER_CALL_TYPES[k]);
+  const types = keys.map(k => _pagerCallConfig(k));
   let pagerPts = 0, subspecPts = 0, forceOffBonusPts = 0;
   let suppressAR = false, suppressProduction = false;
   types.forEach(t => {
@@ -10164,10 +10164,17 @@ function _deepMerge(base, override) {
 // (e.g. "IMC_1st_call"). A site-specific key may carry an `inherit_uvh` field
 // pointing at a UVH default to use as the base; the inherit_uvh field itself
 // is dropped from the resolved rule.
+//
+// Policy Sandbox hook: when _engineSandboxRuleOverlay is set, we apply its
+// shiftRules layer on top of the (site-override-merged) rules. Under sandbox
+// the per-site cache is bypassed entirely so cross-call mutation can't leak
+// into post-sandbox reads, and we don't write the overlaid copy back to the
+// cache. Outside the sandbox the cache path is unchanged.
+let _engineSandboxRuleOverlay = null;
 const _resolvedRulesCache = new Map();
 function getResolvedShiftRules(siteId) {
   if (!siteId) siteId = getCurrentSiteId();
-  if (_resolvedRulesCache.has(siteId)) return _resolvedRulesCache.get(siteId);
+  if (!_engineSandboxRuleOverlay && _resolvedRulesCache.has(siteId)) return _resolvedRulesCache.get(siteId);
   const override = (sitesCache[siteId] && sitesCache[siteId].shiftRulesOverride) || {};
   const merged = { ...DEFAULT_SHIFT_RULES };
   for (const [type, ruleOverride] of Object.entries(override)) {
@@ -10180,10 +10187,28 @@ function getResolvedShiftRules(siteId) {
     }
     merged[type] = _deepMerge(base, layer);
   }
-  _resolvedRulesCache.set(siteId, merged);
+  if (_engineSandboxRuleOverlay && _engineSandboxRuleOverlay.shiftRules) {
+    for (const [type, layer] of Object.entries(_engineSandboxRuleOverlay.shiftRules)) {
+      if (merged[type]) merged[type] = _deepMerge(merged[type], layer);
+    }
+  }
+  if (!_engineSandboxRuleOverlay) _resolvedRulesCache.set(siteId, merged);
   return merged;
 }
 function invalidateResolvedRulesCache() { _resolvedRulesCache.clear(); }
+
+// Sandbox-aware reader for the PAGER_CALL_TYPES catalog. Returns the base
+// config when no rule overlay is active; otherwise merges the overlay's
+// pagerCallTypes[key] layer on top of the catalog default. Mutation-safe
+// (returns a new object).
+function _pagerCallConfig(k) {
+  const base = PAGER_CALL_TYPES[k];
+  if (!base) return base;
+  if (!_engineSandboxRuleOverlay || !_engineSandboxRuleOverlay.pagerCallTypes) return base;
+  const layer = _engineSandboxRuleOverlay.pagerCallTypes[k];
+  if (!layer) return base;
+  return _deepMerge(base, layer);
+}
 
 // Returns the ordered list of shift type IDs that should appear in the
 // assignment-type dropdowns for users on this site.
@@ -13052,72 +13077,180 @@ function _sandboxSetDeep(obj, path, value) {
   cur[parts[parts.length - 1]] = value;
 }
 
+// Walks an object recursively and yields { path, value } for every numeric
+// leaf. Used to introspect DEFAULT_SHIFT_RULES and PAGER_CALL_TYPES for the
+// Rules section of the experiment editor. Strings, booleans, arrays, and
+// null are skipped (only numeric fields are tunable in the sandbox).
+function _discoverNumericLeaves(obj, prefix) {
+  const out = [];
+  if (!obj || typeof obj !== 'object') return out;
+  for (const k of Object.keys(obj)) {
+    const v = obj[k];
+    const p = prefix ? prefix + '.' + k : k;
+    if (typeof v === 'number') {
+      out.push({ path: p, value: v });
+    } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+      out.push.apply(out, _discoverNumericLeaves(v, p));
+    }
+  }
+  return out;
+}
+
+// Builds the dynamic portion of the editor schema by walking
+// DEFAULT_SHIFT_RULES and PAGER_CALL_TYPES. Returns one row per numeric
+// leaf with kind=shiftRule|pagerCallType so the collector knows which
+// overlay bucket to populate. Group label includes the human-readable
+// rule label so the user sees "Shift rule: 1st Call" rather than "1st_call".
+function _buildRuleFieldSandboxSchema() {
+  const rows = [];
+  Object.keys(DEFAULT_SHIFT_RULES).forEach(ruleId => {
+    const rule = DEFAULT_SHIFT_RULES[ruleId];
+    if (!rule) return;
+    const leaves = _discoverNumericLeaves(rule, '');
+    if (leaves.length === 0) return;
+    const groupLabel = 'Shift rule: ' + (rule.label || ruleId) + ' (' + ruleId + ')';
+    leaves.forEach(l => {
+      rows.push({
+        kind: 'shiftRule',
+        ruleId,
+        group: groupLabel,
+        path: ruleId + '.' + l.path,
+        fieldPath: l.path,
+        label: l.path,
+        def: l.value,
+        type: 'number'
+      });
+    });
+  });
+  Object.keys(PAGER_CALL_TYPES).forEach(typeId => {
+    const pct = PAGER_CALL_TYPES[typeId];
+    if (!pct) return;
+    const leaves = _discoverNumericLeaves(pct, '');
+    if (leaves.length === 0) return;
+    const groupLabel = 'Pager call: ' + (pct.label || typeId) + ' (' + typeId + ')';
+    leaves.forEach(l => {
+      rows.push({
+        kind: 'pagerCallType',
+        ruleId: typeId,
+        group: groupLabel,
+        path: typeId + '.' + l.path,
+        fieldPath: l.path,
+        label: l.path,
+        def: l.value,
+        type: 'number'
+      });
+    });
+  });
+  return rows;
+}
+
 // Renders the editor into #sandboxExperimentEditor as one <details>
 // section per group with rows: label · prod default · override input.
-// Groups stay open by default; inputs are blank (placeholder shows the
-// default). Built once on first page render and on Reset.
+// Engine-constant groups (the static ENGINE_SANDBOX_SCHEMA) are open by
+// default; rule-field groups (introspected from DEFAULT_SHIFT_RULES +
+// PAGER_CALL_TYPES) are collapsed by default since there are many of them.
+// Built once on first page render and on Reset.
 function renderSandboxExperimentEditor() {
   const host = document.getElementById('sandboxExperimentEditor');
   if (!host) return;
-  const groups = {};
-  for (const item of ENGINE_SANDBOX_SCHEMA) {
-    if (!groups[item.group]) groups[item.group] = [];
-    groups[item.group].push(item);
-  }
-  const html = Object.keys(groups).map(g => {
-    const rows = groups[g].map(it => {
-      const placeholder = String(it.def);
-      const inputAttrs = it.type === 'date'
-        ? 'type="date"'
-        : 'type="number" step="any" inputmode="decimal"';
-      return '<div style="display:contents;">' +
-        '<div style="color:var(--text);">' + escapeHtml(it.label) + '</div>' +
-        '<div style="color:var(--text-dim);text-align:right;font-variant-numeric:tabular-nums;">' + escapeHtml(placeholder) + '</div>' +
-        '<input ' + inputAttrs +
-          ' data-sandbox-path="' + escapeHtml(it.path) + '"' +
-          ' data-sandbox-type="' + it.type + '"' +
-          ' data-sandbox-default="' + escapeHtml(placeholder) + '"' +
-          ' placeholder="' + escapeHtml(placeholder) + '"' +
-          ' style="padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.78rem;width:100px;text-align:right;">' +
-      '</div>';
+  const ruleSchema = _buildRuleFieldSandboxSchema();
+  const renderSection = (rows, openByDefault) => {
+    const groups = {};
+    for (const item of rows) {
+      if (!groups[item.group]) groups[item.group] = [];
+      groups[item.group].push(item);
+    }
+    return Object.keys(groups).map(g => {
+      const body = groups[g].map(it => {
+        const placeholder = String(it.def);
+        const inputAttrs = it.type === 'date'
+          ? 'type="date"'
+          : 'type="number" step="any" inputmode="decimal"';
+        const kind = it.kind || 'engine';
+        return '<div style="display:contents;">' +
+          '<div style="color:var(--text);">' + escapeHtml(it.label) + '</div>' +
+          '<div style="color:var(--text-dim);text-align:right;font-variant-numeric:tabular-nums;">' + escapeHtml(placeholder) + '</div>' +
+          '<input ' + inputAttrs +
+            ' data-sandbox-path="' + escapeHtml(it.path) + '"' +
+            ' data-sandbox-type="' + it.type + '"' +
+            ' data-sandbox-kind="' + kind + '"' +
+            (it.ruleId ? ' data-sandbox-ruleid="' + escapeHtml(it.ruleId) + '"' : '') +
+            (it.fieldPath ? ' data-sandbox-fieldpath="' + escapeHtml(it.fieldPath) + '"' : '') +
+            ' data-sandbox-default="' + escapeHtml(placeholder) + '"' +
+            ' placeholder="' + escapeHtml(placeholder) + '"' +
+            ' style="padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.78rem;width:100px;text-align:right;">' +
+        '</div>';
+      }).join('');
+      return '<details' + (openByDefault ? ' open' : '') + ' style="margin-bottom:8px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">' +
+        '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;">' + escapeHtml(g) + '</summary>' +
+        '<div style="display:grid;grid-template-columns:1fr auto auto;gap:4px 10px;align-items:center;margin-top:6px;">' +
+          '<div style="font-size:0.72rem;color:var(--text-dim);">Field</div>' +
+          '<div style="font-size:0.72rem;color:var(--text-dim);text-align:right;">Prod</div>' +
+          '<div style="font-size:0.72rem;color:var(--text-dim);text-align:right;">Override</div>' +
+          body +
+        '</div>' +
+      '</details>';
     }).join('');
-    return '<details open style="margin-bottom:8px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">' +
-      '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;">' + escapeHtml(g) + '</summary>' +
-      '<div style="display:grid;grid-template-columns:1fr auto auto;gap:4px 10px;align-items:center;margin-top:6px;">' +
-        '<div style="font-size:0.72rem;color:var(--text-dim);">Constant</div>' +
-        '<div style="font-size:0.72rem;color:var(--text-dim);text-align:right;">Prod</div>' +
-        '<div style="font-size:0.72rem;color:var(--text-dim);text-align:right;">Override</div>' +
-        rows +
-      '</div>' +
-    '</details>';
-  }).join('');
-  host.innerHTML = html;
+  };
+  const engineHeader = '<div style="font-weight:700;font-size:0.85rem;margin:4px 0 6px 0;color:var(--text-dim);">Engine constants</div>';
+  const ruleHeader = '<div style="font-weight:700;font-size:0.85rem;margin:14px 0 6px 0;color:var(--text-dim);">Rule fields <span style="font-weight:400;">&mdash; click a rule to expand</span></div>';
+  host.innerHTML = engineHeader + renderSection(ENGINE_SANDBOX_SCHEMA, true) +
+                   ruleHeader   + renderSection(ruleSchema,           false);
 }
 
-// Walks every override input. Returns a nested overrides tree (paths
-// joined back into objects via _sandboxSetDeep) or null if every input
-// is blank. Non-finite numbers are silently skipped.
+// Walks every override input. Returns { engine, ruleOverlay } where:
+//   engine       — nested overrides tree consumed by _eo() / direct
+//                  _engineSandboxOverrides.ar.* / .prod.* readers.
+//   ruleOverlay  — { shiftRules: { ruleId: { ...fieldPathTree } },
+//                    pagerCallTypes: { typeId: { ...fieldPathTree } } }
+//                  consumed by getResolvedShiftRules + _pagerCallConfig.
+// Returns { engine: null, ruleOverlay: null } if every input is blank.
+// Non-finite numbers are silently skipped.
 function _collectSandboxExperimentOverrides() {
   const root = document.getElementById('sandboxExperimentEditor');
-  if (!root) return null;
+  if (!root) return { engine: null, ruleOverlay: null };
   const inputs = root.querySelectorAll('input[data-sandbox-path]');
-  let any = false;
-  const out = {};
+  const engineOut = {};
+  const shiftRuleOut = {};
+  const pagerCallOut = {};
+  let anyEngine = false, anyRule = false;
   inputs.forEach(inp => {
     const v = (inp.value || '').trim();
     if (!v) return;
-    const path = inp.dataset.sandboxPath;
     const type = inp.dataset.sandboxType;
+    const kind = inp.dataset.sandboxKind || 'engine';
+    let value;
     if (type === 'number') {
       const n = Number(v);
       if (!Number.isFinite(n)) return;
-      _sandboxSetDeep(out, path, n);
+      value = n;
     } else {
-      _sandboxSetDeep(out, path, v);
+      value = v;
     }
-    any = true;
+    if (kind === 'shiftRule') {
+      const ruleId = inp.dataset.sandboxRuleid;
+      const fieldPath = inp.dataset.sandboxFieldpath;
+      if (!ruleId || !fieldPath) return;
+      if (!shiftRuleOut[ruleId]) shiftRuleOut[ruleId] = {};
+      _sandboxSetDeep(shiftRuleOut[ruleId], fieldPath, value);
+      anyRule = true;
+    } else if (kind === 'pagerCallType') {
+      const ruleId = inp.dataset.sandboxRuleid;
+      const fieldPath = inp.dataset.sandboxFieldpath;
+      if (!ruleId || !fieldPath) return;
+      if (!pagerCallOut[ruleId]) pagerCallOut[ruleId] = {};
+      _sandboxSetDeep(pagerCallOut[ruleId], fieldPath, value);
+      anyRule = true;
+    } else {
+      _sandboxSetDeep(engineOut, inp.dataset.sandboxPath, value);
+      anyEngine = true;
+    }
   });
-  return any ? out : null;
+  const ruleOverlay = anyRule
+    ? { shiftRules: anyRule && Object.keys(shiftRuleOut).length ? shiftRuleOut : undefined,
+        pagerCallTypes: anyRule && Object.keys(pagerCallOut).length ? pagerCallOut : undefined }
+    : null;
+  return { engine: anyEngine ? engineOut : null, ruleOverlay };
 }
 
 function resetSandboxExperimentClick() {
@@ -13130,17 +13263,21 @@ function resetSandboxExperimentClick() {
   if (status) status.textContent = '';
 }
 
-// Wraps scoreSnapshotPayloadSync with an override swap. The inner
-// function already try/finally-restores `data`; this wrapper does the
-// same for `_engineSandboxOverrides`. Synchronous so the engine never
-// observes a half-swapped state.
-function scoreSnapshotPayloadWithOverridesSync(payload, overrides) {
-  const saved = _engineSandboxOverrides;
+// Wraps scoreSnapshotPayloadSync with engine + rule overlay swaps. The inner
+// function already try/finally-restores `data`; this wrapper does the same
+// for both _engineSandboxOverrides (engine constants) and
+// _engineSandboxRuleOverlay (per-rule fields). Synchronous so the engine
+// never observes a half-swapped state.
+function scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay) {
+  const savedEng  = _engineSandboxOverrides;
+  const savedRule = _engineSandboxRuleOverlay;
   try {
-    _engineSandboxOverrides = overrides || null;
+    _engineSandboxOverrides   = overrides   || null;
+    _engineSandboxRuleOverlay = ruleOverlay || null;
     return scoreSnapshotPayloadSync(payload);
   } finally {
-    _engineSandboxOverrides = saved;
+    _engineSandboxOverrides   = savedEng;
+    _engineSandboxRuleOverlay = savedRule;
   }
 }
 
@@ -13183,8 +13320,8 @@ async function runSandboxExperimentClick() {
   const btn = document.getElementById('sandboxExperimentRunBtn');
   const snapshotId = sel && sel.value;
   if (!snapshotId) { if (status) status.textContent = 'Pick a snapshot first.'; return; }
-  const overrides = _collectSandboxExperimentOverrides();
-  if (!overrides) {
+  const { engine: overrides, ruleOverlay } = _collectSandboxExperimentOverrides();
+  if (!overrides && !ruleOverlay) {
     if (status) status.textContent = 'No overrides entered — fill at least one field to see a delta.';
     if (result) result.innerHTML = '';
     return;
@@ -13200,9 +13337,9 @@ async function runSandboxExperimentClick() {
     let totalShifts = 0;
     for (const d of payloadsSnap.docs) {
       const payload = d.data() || {};
-      // Score baseline first (fresh, against today's engine), then with overrides.
-      const baseline = scoreSnapshotPayloadWithOverridesSync(payload, null);
-      const sandbox  = scoreSnapshotPayloadWithOverridesSync(payload, overrides);
+      // Score baseline first (fresh, against today's engine), then with both overlays.
+      const baseline = scoreSnapshotPayloadWithOverridesSync(payload, null, null);
+      const sandbox  = scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay);
       rows.push({
         userKey: payload.userKey || d.id,
         baseline: baseline.totals, sandbox: sandbox.totals,
@@ -13212,7 +13349,7 @@ async function runSandboxExperimentClick() {
       totalShifts += baseline.totals.scoredShifts || 0;
     }
     if (status) status.textContent = 'Scored ' + rows.length + ' users · ' + totalShifts + ' shifts.';
-    renderSandboxExperimentDelta(result, rows, overrides);
+    renderSandboxExperimentDelta(result, rows, overrides, ruleOverlay);
   } catch (e) {
     console.error('runSandboxExperiment failed:', e);
     if (status) status.textContent = 'Run failed: ' + (e.message || String(e));
@@ -13224,7 +13361,7 @@ async function runSandboxExperimentClick() {
 // Renders the delta UI: a top-line summary card, then three sections
 // (per-user, per-site, per-shift-type) of baseline / sandbox / Δ /
 // shifts rows, each sorted by |Δ| desc so the biggest movers come first.
-function renderSandboxExperimentDelta(host, rows, overrides) {
+function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay) {
   if (!host) return;
   if (!rows || rows.length === 0) {
     host.innerHTML = '<em style="color:var(--text-dim);">No data.</em>';
@@ -13267,16 +13404,22 @@ function renderSandboxExperimentDelta(host, rows, overrides) {
   const dColor = n => n === 0 ? 'var(--text-dim)' : (n > 0 ? 'var(--accent)' : 'var(--accent2)');
 
   // Show what overrides are in effect so the run is self-documenting.
+  // Engine constants render as `engine.<path>`, rule overlays as
+  // `shiftRule.<ruleId>.<field>` / `pagerCall.<typeId>.<field>` so the
+  // chip set is unambiguous when both overlays are active in one run.
   const flatOverrides = [];
   const walk = (obj, prefix) => {
+    if (!obj) return;
     Object.keys(obj).forEach(k => {
       const v = obj[k];
       const p = prefix ? prefix + '.' + k : k;
-      if (v && typeof v === 'object') walk(v, p);
+      if (v && typeof v === 'object' && !Array.isArray(v)) walk(v, p);
       else flatOverrides.push({ path: p, value: v });
     });
   };
-  walk(overrides, '');
+  walk(overrides, 'engine');
+  if (ruleOverlay && ruleOverlay.shiftRules) walk(ruleOverlay.shiftRules, 'shiftRule');
+  if (ruleOverlay && ruleOverlay.pagerCallTypes) walk(ruleOverlay.pagerCallTypes, 'pagerCall');
   const overrideChips = flatOverrides.map(o =>
     '<span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:0.7rem;margin:0 4px 4px 0;font-family:monospace;">' +
     escapeHtml(o.path) + ' = ' + escapeHtml(String(o.value)) + '</span>'
