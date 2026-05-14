@@ -4859,7 +4859,7 @@ function refreshAdminDrawerVisibility() {
   const drawerAdmin = document.getElementById('drawerAdminItem');
   if (drawerAdmin) drawerAdmin.classList.toggle('hidden', !isSiteAdmin());
   const drawerSandbox = document.getElementById('drawerSandboxItem');
-  if (drawerSandbox) drawerSandbox.classList.toggle('hidden', !isSiteAdmin());
+  if (drawerSandbox) drawerSandbox.classList.toggle('hidden', !isAppOwner());
 }
 
 let _isAdminWarned = false;
