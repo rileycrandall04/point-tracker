@@ -12361,14 +12361,27 @@ async function loadSandboxSnapshots() {
                        (s.shiftCount || 0) + ' shifts · ' + (s.caseCount || 0) + ' cases';
       const created = s.createdAt ? new Date(s.createdAt).toLocaleString() : '';
       const sid = escapeHtml(s.snapshotId || d.id);
-      return '<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">' +
-        '<div style="flex:1;min-width:0;">' +
+      const baselineLine = s.baselineComputedAt
+        ? '<div style="font-size:0.7rem;color:var(--text-dim);">Baseline: ' +
+            (s.baselineTotalPoints != null ? s.baselineTotalPoints.toFixed(1) + ' pts total · ' : '') +
+            'scored ' + escapeHtml(new Date(s.baselineComputedAt).toLocaleString()) + '</div>'
+        : '<div style="font-size:0.7rem;color:var(--text-dim);font-style:italic;">No baseline yet</div>';
+      const viewBtn = s.baselineComputedAt
+        ? '<button class="btn btn-sm" style="flex:none;" onclick="viewSnapshotBaselineClick(\'' + sid + '\')">View</button>'
+        : '';
+      return '<div data-snapshot-row="' + sid + '" style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">' +
+        '<div style="flex:1;min-width:160px;">' +
           '<div style="font-weight:600;">' + label + '</div>' +
           '<div style="font-size:0.74rem;color:var(--text-dim);">' + escapeHtml(subtitle) + '</div>' +
           '<div style="font-size:0.7rem;color:var(--text-dim);">Captured ' + escapeHtml(created) + '</div>' +
+          baselineLine +
         '</div>' +
-        '<button class="btn btn-sm" style="background:var(--accent2);color:white;flex:none;" ' +
-          'onclick="deleteSandboxSnapshotClick(\'' + sid + '\')">Delete</button>' +
+        '<div style="display:flex;gap:6px;flex:none;flex-wrap:wrap;">' +
+          '<button class="btn btn-primary btn-sm" style="flex:none;" onclick="runSnapshotBaselineClick(\'' + sid + '\')">Score</button>' +
+          viewBtn +
+          '<button class="btn btn-sm" style="background:var(--accent2);color:white;flex:none;" ' +
+            'onclick="deleteSandboxSnapshotClick(\'' + sid + '\')">Delete</button>' +
+        '</div>' +
       '</div>';
     }).join('');
   } catch (e) {
@@ -12561,6 +12574,166 @@ async function deleteSandboxSnapshotClick(snapshotId) {
   } catch (e) {
     console.error('deleteSandboxSnapshot failed:', e);
     showToast('Delete failed: ' + (e.message || String(e)));
+  }
+}
+
+// =================================================================
+// 3a — BASELINE SCORING
+//
+// Runs the EXISTING prod engine (calcShiftTotal) over each snapshot
+// user's shifts+cases under CURRENT rules and stores per-user totals
+// back on the payload doc. The "globals swap" pattern temporarily
+// reassigns the script-scope `data` variable so the engine reads from
+// snapshot data instead of the live user. Restored in a try/finally
+// to guarantee we don't leak state.
+//
+// scoreSnapshotPayloadSync() is the SECOND (and final) place that
+// touches prod code — readUserRangeDataForSandbox() was the first.
+// Together these are the entire sandbox-to-prod interface.
+// =================================================================
+
+function scoreSnapshotPayloadSync(payload) {
+  // Build a data object shaped like loadData()'s output. Engine reads
+  // `data.cases` for case lookups; other top-level fields (overrides,
+  // stipends, etc.) aren't consumed by calcShiftTotal but include
+  // empty defaults so any incidental reads don't blow up.
+  const sandboxData = {
+    shifts: payload.shifts || {},
+    cases: Array.isArray(payload.cases) ? payload.cases : [],
+    overrides: {}, stipends: {}, calendarAssignments: {},
+    paychecks: {}, retirement: {}
+  };
+  const saved = data;
+  const totals = { ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0,
+                   floatBonus: 0, forceOffBonus: 0, total: 0 };
+  let scoredShifts = 0;
+  try {
+    data = sandboxData;
+    for (const dateStr of Object.keys(sandboxData.shifts)) {
+      const shift = sandboxData.shifts[dateStr];
+      if (!shift) continue;
+      // calcShiftTotal expects shift.date to be set so case filtering
+      // works (it does `c.shiftDate === shift.date`). Snapshot shifts
+      // are stored keyed by date but may not carry the field; patch
+      // a local copy to be safe.
+      const shiftWithDate = (shift.date === dateStr) ? shift : Object.assign({ date: dateStr }, shift);
+      let t;
+      try { t = calcShiftTotal(shiftWithDate); }
+      catch (e) { console.warn('Sandbox: shift', dateStr, 'failed:', e); continue; }
+      totals.ar += t.ar || 0;
+      totals.prod += t.prod || 0;
+      totals.call += t.call || 0;
+      totals.subspec += t.subspec || 0;
+      totals.supervision += t.supervision || 0;
+      totals.floatBonus += t.floatBonus || 0;
+      totals.forceOffBonus += t.forceOffBonus || 0;
+      totals.total += t.total || 0;
+      scoredShifts += 1;
+    }
+  } finally {
+    data = saved;
+  }
+  // Round all component sums to 2 decimals to match prod display.
+  for (const k of Object.keys(totals)) totals[k] = Math.round(totals[k] * 100) / 100;
+  totals.scoredShifts = scoredShifts;
+  return totals;
+}
+
+async function runSnapshotBaselineClick(snapshotId) {
+  if (!snapshotId) return;
+  const status = document.getElementById('sandboxSnapshotsStatus');
+  if (status) status.textContent = 'Scoring baseline for ' + snapshotId + '…';
+  try {
+    const result = await runSnapshotBaseline(snapshotId);
+    if (status) {
+      status.textContent = 'Baseline scored: ' + result.userCount + ' users · ' +
+        result.shiftCount + ' shifts · ' + result.totalPoints.toFixed(1) + ' pts total.';
+    }
+    await loadSandboxSnapshots();
+  } catch (e) {
+    console.error('runSnapshotBaseline failed:', e);
+    if (status) status.textContent = 'Baseline scoring failed: ' + (e.message || String(e));
+  }
+}
+
+async function runSnapshotBaseline(snapshotId) {
+  if (!isAppOwner()) throw new Error('App owner only');
+  const root = db.collection('users').doc(currentUser.uid)
+    .collection('policySandboxSnapshots').doc(snapshotId);
+  const payloadsSnap = await root.collection('userPayloads').get();
+
+  // Phase 1: score every user payload synchronously. No awaits between
+  // shifts so the engine never sees a partial globals swap.
+  const scored = [];
+  for (const d of payloadsSnap.docs) {
+    const payload = d.data() || {};
+    const totals = scoreSnapshotPayloadSync(payload);
+    scored.push({ ref: d.ref, userKey: payload.userKey || d.id, totals,
+                  shiftCount: payload.shiftCount || 0,
+                  caseCount: payload.caseCount || 0 });
+  }
+
+  // Phase 2: persist each per-user total + roll up to metadata doc.
+  let grandTotal = 0, grandShifts = 0;
+  await Promise.all(scored.map(s => {
+    grandTotal += s.totals.total;
+    grandShifts += s.totals.scoredShifts;
+    return s.ref.set({ baselineTotals: s.totals,
+                       baselineComputedAt: new Date().toISOString() },
+                     { merge: true });
+  }));
+  await root.set({
+    baselineComputedAt: new Date().toISOString(),
+    baselineTotalPoints: Math.round(grandTotal * 100) / 100,
+    baselineSchemaVersion: 1
+  }, { merge: true });
+  return { userCount: scored.length, shiftCount: grandShifts, totalPoints: grandTotal };
+}
+
+async function viewSnapshotBaselineClick(snapshotId) {
+  if (!snapshotId) return;
+  const list = document.getElementById('sandboxSnapshotsList');
+  const expanded = document.getElementById('snapshot-detail-' + snapshotId);
+  if (expanded) { expanded.remove(); return; } // toggle off
+  try {
+    const root = db.collection('users').doc(currentUser.uid)
+      .collection('policySandboxSnapshots').doc(snapshotId);
+    const payloadsSnap = await root.collection('userPayloads').get();
+    const rows = payloadsSnap.docs.map(d => d.data() || {})
+      .filter(p => p.baselineTotals)
+      .sort((a, b) => (b.baselineTotals.total || 0) - (a.baselineTotals.total || 0));
+    const anchor = document.querySelector('[data-snapshot-row="' + snapshotId + '"]');
+    if (!anchor) return;
+    const detail = document.createElement('div');
+    detail.id = 'snapshot-detail-' + snapshotId;
+    detail.style.cssText = 'margin:-4px 0 8px 0;padding:8px 10px;border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px;font-size:0.78rem;';
+    if (rows.length === 0) {
+      detail.innerHTML = '<em style="color:var(--text-dim);">No baseline totals yet — run Score first.</em>';
+    } else {
+      detail.innerHTML =
+        '<div style="display:grid;grid-template-columns:1fr repeat(5, auto);gap:4px 10px;align-items:center;">' +
+        '<div style="font-weight:600;color:var(--text-dim);">User</div>' +
+        '<div style="font-weight:600;color:var(--text-dim);text-align:right;">AR</div>' +
+        '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Prod</div>' +
+        '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Call</div>' +
+        '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Other</div>' +
+        '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Total</div>' +
+        rows.map(p => {
+          const t = p.baselineTotals;
+          const other = (t.subspec || 0) + (t.supervision || 0) + (t.floatBonus || 0) + (t.forceOffBonus || 0);
+          return '<div style="font-family:monospace;">' + escapeHtml(p.userKey || '') + '</div>' +
+            '<div style="text-align:right;">' + (t.ar || 0).toFixed(1) + '</div>' +
+            '<div style="text-align:right;">' + (t.prod || 0).toFixed(1) + '</div>' +
+            '<div style="text-align:right;">' + (t.call || 0).toFixed(1) + '</div>' +
+            '<div style="text-align:right;">' + other.toFixed(1) + '</div>' +
+            '<div style="text-align:right;font-weight:600;">' + (t.total || 0).toFixed(1) + '</div>';
+        }).join('') +
+        '</div>';
+    }
+    anchor.parentNode.insertBefore(detail, anchor.nextSibling);
+  } catch (e) {
+    console.error('viewSnapshotBaseline failed:', e);
+    showToast('View failed: ' + (e.message || String(e)));
   }
 }
 
