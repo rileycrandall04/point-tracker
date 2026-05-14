@@ -11131,6 +11131,33 @@ const SANDBOX_TEST_RULES = {
   },
 };
 
+// Policy Sandbox 3b.3a: shift-type → area taxonomy. Used by
+// scoreSnapshotPayloadSync to build a `byArea` rollup ({ points, hours,
+// shiftCount } per area) on top of the existing byShiftType bucket. The
+// Objective expression DSL reads `users[uid].byArea.<area>` so a question
+// like "OB pts/hr spread across users" is a one-liner instead of a
+// substring filter over assignmentType. Shift types not listed land in
+// `_uncategorized` so they're still scored, just not surfaced under a
+// named area. Subsequent slice (3b.3b) will add a `knobs` field per area
+// for tag-scoped sensitivity sweeps.
+const SANDBOX_AREA_TAXONOMY = {
+  or:          { label: 'OR',          shiftTypes: ['OR', 'OR_float', 'ACS', 'NORA', 'pre_call'] },
+  ob:          { label: 'OB',          shiftTypes: ['OB_restricted', 'SF1', 'SF2'] },
+  call:        { label: 'Call',        shiftTypes: ['1st_call', '2nd_call', '3rd_call', '4th_call', 'mole', 'endo', 'cardiac_liver', 'unrestricted_call_entry'] },
+  supervision: { label: 'Supervision', shiftTypes: ['CRNA_supervision'] },
+  off:         { label: 'Off',         shiftTypes: ['forced_off', 'vacation'] }
+};
+
+// Reverse index built once: assignmentType → areaKey. Anything missing is
+// `null` and the scorer buckets it under `_uncategorized`.
+const _SANDBOX_TYPE_TO_AREA = (() => {
+  const m = {};
+  for (const [areaKey, def] of Object.entries(SANDBOX_AREA_TAXONOMY)) {
+    (def.shiftTypes || []).forEach(t => { m[t] = areaKey; });
+  }
+  return m;
+})();
+
 // Runtime hook table installed by the sandbox Run wrapper. Outside the
 // sandbox this is always {}, so the per-call check at the top of each
 // engine function is a single property read on an empty object (falsy,
@@ -12860,16 +12887,24 @@ function scoreSnapshotPayloadSync(payload) {
   };
   const saved = data;
   const totals = { ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0,
-                   floatBonus: 0, forceOffBonus: 0, total: 0 };
-  const bySite = {};       // siteId -> { ar, prod, total, shiftCount }
-  const byShiftType = {};  // assignmentType -> { ar, prod, total, shiftCount }
+                   floatBonus: 0, forceOffBonus: 0, total: 0, hours: 0 };
+  const bySite = {};       // siteId        -> { ar, prod, total, hours, shiftCount }
+  const byShiftType = {};  // assignmentType -> { ar, prod, total, hours, shiftCount }
+  const byArea = {};       // areaKey       -> { points, hours, shiftCount }
   let scoredShifts = 0;
-  const bumpBucket = (bucket, key, t) => {
-    if (!bucket[key]) bucket[key] = { ar: 0, prod: 0, total: 0, shiftCount: 0 };
+  const bumpBucket = (bucket, key, t, hrs) => {
+    if (!bucket[key]) bucket[key] = { ar: 0, prod: 0, total: 0, hours: 0, shiftCount: 0 };
     bucket[key].ar += t.ar || 0;
     bucket[key].prod += t.prod || 0;
     bucket[key].total += t.total || 0;
+    bucket[key].hours += hrs || 0;
     bucket[key].shiftCount += 1;
+  };
+  const bumpArea = (key, t, hrs) => {
+    if (!byArea[key]) byArea[key] = { points: 0, hours: 0, shiftCount: 0 };
+    byArea[key].points += t.total || 0;
+    byArea[key].hours += hrs || 0;
+    byArea[key].shiftCount += 1;
   };
   try {
     data = sandboxData;
@@ -12884,6 +12919,11 @@ function scoreSnapshotPayloadSync(payload) {
       let t;
       try { t = calcShiftTotal(shiftWithDate); }
       catch (e) { console.warn('Sandbox: shift', dateStr, 'failed:', e); continue; }
+      // calcShiftHours reads `data.shifts[nextKey]` to cap overnight call.
+      // Safe here because `data` is already swapped to sandboxData above.
+      let hrs = 0;
+      try { hrs = calcShiftHours(shiftWithDate) || 0; }
+      catch (e) { /* fall through with 0 hours */ }
       totals.ar += t.ar || 0;
       totals.prod += t.prod || 0;
       totals.call += t.call || 0;
@@ -12892,8 +12932,11 @@ function scoreSnapshotPayloadSync(payload) {
       totals.floatBonus += t.floatBonus || 0;
       totals.forceOffBonus += t.forceOffBonus || 0;
       totals.total += t.total || 0;
-      bumpBucket(bySite, shift.siteId || '_unknown', t);
-      bumpBucket(byShiftType, shift.assignmentType || '_unknown', t);
+      totals.hours += hrs;
+      const aType = shift.assignmentType || '_unknown';
+      bumpBucket(bySite, shift.siteId || '_unknown', t, hrs);
+      bumpBucket(byShiftType, aType, t, hrs);
+      bumpArea(_SANDBOX_TYPE_TO_AREA[aType] || '_uncategorized', t, hrs);
       scoredShifts += 1;
     }
   } finally {
@@ -12907,8 +12950,9 @@ function scoreSnapshotPayloadSync(payload) {
   round(totals);
   for (const k of Object.keys(bySite)) round(bySite[k]);
   for (const k of Object.keys(byShiftType)) round(byShiftType[k]);
+  for (const k of Object.keys(byArea)) round(byArea[k]);
   totals.scoredShifts = scoredShifts;
-  return { totals, bySite, byShiftType };
+  return { totals, bySite, byShiftType, byArea };
 }
 
 async function runSnapshotBaselineClick(snapshotId) {
@@ -13299,8 +13343,35 @@ function renderSandboxExperimentEditor() {
   };
   const engineHeader = '<div style="font-weight:700;font-size:0.85rem;margin:4px 0 6px 0;color:var(--text-dim);">Engine constants</div>';
   const ruleHeader = '<div style="font-weight:700;font-size:0.85rem;margin:14px 0 6px 0;color:var(--text-dim);">Rule fields <span style="font-weight:400;">&mdash; click a rule to expand</span></div>';
+  const objectiveHeader = '<div style="font-weight:700;font-size:0.85rem;margin:14px 0 6px 0;color:var(--text-dim);">Objective expression <span style="font-weight:400;">&mdash; optional, evaluated against per-user metrics on Run</span></div>';
+  // Objective DSL: a free-form JS function body. Run() compiles it as
+  // `new Function('users', body)` and calls it on the per-user aggregate
+  // for both the baseline and sandbox passes — the delta summary surfaces
+  // the value of each plus the change. Lower-is-better convention so the
+  // recommender (3b.3b) can search by minimizing it. Empty = no objective.
+  const objectiveSection =
+    '<details style="margin-bottom:8px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">' +
+      '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;">Objective</summary>' +
+      '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:6px;line-height:1.45;">' +
+        'Per-user metrics available as <code>users[uid]</code>: ' +
+        '<code>{ points: { total, ar, prod, call, subspec, supervision, floatBonus, forceOffBonus, hours, scoredShifts }, ' +
+        'byArea: { ob, or, call, supervision, off, _uncategorized: { points, hours, shiftCount } }, ' +
+        'bySite, byShiftType, shiftCount, totalHours }</code>. ' +
+        'Return a number (lower = better). Example: minimize OB pts/hr spread across users.' +
+      '</div>' +
+      '<textarea id="sandboxObjectiveExpr" spellcheck="false" ' +
+        'style="width:100%;box-sizing:border-box;margin-top:6px;padding:6px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:0.78rem;min-height:140px;resize:vertical;" ' +
+        'placeholder="// e.g. minimize spread of OB pts/hr across users\n' +
+        'const obHr = Object.values(users)\n' +
+        '  .filter(u =&gt; u.byArea.ob &amp;&amp; u.byArea.ob.hours &gt; 0)\n' +
+        '  .map(u =&gt; u.byArea.ob.points / u.byArea.ob.hours);\n' +
+        'if (obHr.length &lt; 2) return 0;\n' +
+        'const max = Math.max(...obHr), min = Math.min(...obHr);\n' +
+        'return max &gt; 0 ? (max - min) / max : 0;"></textarea>' +
+    '</details>';
   host.innerHTML = engineHeader + renderSection(ENGINE_SANDBOX_SCHEMA, true) +
-                   ruleHeader   + renderSection(ruleSchema,           false);
+                   ruleHeader   + renderSection(ruleSchema,           false) +
+                   objectiveHeader + objectiveSection;
 }
 
 // Walks every override input. Returns { engine, ruleOverlay } where:
@@ -13362,6 +13433,8 @@ function resetSandboxExperimentClick() {
   const root = document.getElementById('sandboxExperimentEditor');
   if (!root) return;
   root.querySelectorAll('input[data-sandbox-path]').forEach(inp => { inp.value = ''; });
+  const obj = document.getElementById('sandboxObjectiveExpr');
+  if (obj) obj.value = '';
   const result = document.getElementById('sandboxExperimentResult');
   if (result) result.innerHTML = '';
   const status = document.getElementById('sandboxExperimentStatus');
@@ -13442,10 +13515,30 @@ async function runSandboxExperimentClick() {
   const { engine: overrides, ruleOverlay } = _collectSandboxExperimentOverrides();
   const activeHooks = _activeSandboxHookNames();
   const logicHooks = activeHooks.length > 0 ? SANDBOX_TEST_RULES.logicHooks : null;
-  if (!overrides && !ruleOverlay && !logicHooks) {
-    if (status) status.textContent = 'No overrides entered — fill at least one field (or set a SANDBOX_TEST_RULES.logicHooks function) to see a delta.';
+  const objectiveText = (() => {
+    const el = document.getElementById('sandboxObjectiveExpr');
+    return el ? (el.value || '').trim() : '';
+  })();
+  if (!overrides && !ruleOverlay && !logicHooks && !objectiveText) {
+    if (status) status.textContent = 'No overrides or objective entered — fill at least one field, set a SANDBOX_TEST_RULES.logicHooks function, or define an objective to see results.';
     if (result) result.innerHTML = '';
     return;
+  }
+  // Compile the objective once. A syntax error blocks the run with a
+  // clear message rather than crashing per-user inside the loop.
+  let objectiveFn = null;
+  let objectiveError = null;
+  if (objectiveText) {
+    try {
+      objectiveFn = new Function('users', objectiveText);
+    } catch (e) {
+      objectiveError = 'Objective syntax error: ' + (e.message || String(e));
+    }
+    if (objectiveError) {
+      if (status) status.textContent = objectiveError;
+      if (result) result.innerHTML = '';
+      return;
+    }
   }
   if (btn) btn.disabled = true;
   if (status) status.textContent = 'Scoring ' + snapshotId + '…';
@@ -13455,6 +13548,11 @@ async function runSandboxExperimentClick() {
       .collection('policySandboxSnapshots').doc(snapshotId);
     const payloadsSnap = await root.collection('userPayloads').get();
     const rows = [];
+    // Per-user metrics keyed by userKey, used by the objective DSL. Shape
+    // matches the shape advertised in the editor's help text — see
+    // renderSandboxExperimentEditor for the documented surface.
+    const usersBase = {};
+    const usersSand = {};
     let totalShifts = 0;
     for (const d of payloadsSnap.docs) {
       const payload = d.data() || {};
@@ -13462,16 +13560,43 @@ async function runSandboxExperimentClick() {
       // then with all three layers installed for the sandbox pass.
       const baseline = scoreSnapshotPayloadWithOverridesSync(payload, null, null, null);
       const sandbox  = scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay, logicHooks);
+      const userKey = payload.userKey || d.id;
       rows.push({
-        userKey: payload.userKey || d.id,
+        userKey,
         baseline: baseline.totals, sandbox: sandbox.totals,
         baselineBySite: baseline.bySite, sandboxBySite: sandbox.bySite,
         baselineByType: baseline.byShiftType, sandboxByType: sandbox.byShiftType
       });
+      const buildUser = (scored) => ({
+        points: scored.totals,
+        byArea: scored.byArea || {},
+        bySite: scored.bySite || {},
+        byShiftType: scored.byShiftType || {},
+        shiftCount: scored.totals.scoredShifts || 0,
+        totalHours: scored.totals.hours || 0
+      });
+      usersBase[userKey] = buildUser(baseline);
+      usersSand[userKey] = buildUser(sandbox);
       totalShifts += baseline.totals.scoredShifts || 0;
     }
+    let objective = null;
+    if (objectiveFn) {
+      // Wrap each call so a runtime throw in user code doesn't take down
+      // the whole render — surface the message in the summary instead.
+      const safeEval = (users) => {
+        try {
+          const v = objectiveFn(users);
+          return Number.isFinite(v) ? v : null;
+        } catch (e) {
+          return { _error: e.message || String(e) };
+        }
+      };
+      const valBase = safeEval(usersBase);
+      const valSand = safeEval(usersSand);
+      objective = { baseline: valBase, sandbox: valSand, expression: objectiveText };
+    }
     if (status) status.textContent = 'Scored ' + rows.length + ' users · ' + totalShifts + ' shifts.';
-    renderSandboxExperimentDelta(result, rows, overrides, ruleOverlay, activeHooks);
+    renderSandboxExperimentDelta(result, rows, overrides, ruleOverlay, activeHooks, objective, usersBase, usersSand);
   } catch (e) {
     console.error('runSandboxExperiment failed:', e);
     if (status) status.textContent = 'Run failed: ' + (e.message || String(e));
@@ -13483,7 +13608,12 @@ async function runSandboxExperimentClick() {
 // Renders the delta UI: a top-line summary card, then three sections
 // (per-user, per-site, per-shift-type) of baseline / sandbox / Δ /
 // shifts rows, each sorted by |Δ| desc so the biggest movers come first.
-function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, activeHooks) {
+// `objective` (optional, 3b.3a) is `{ baseline, sandbox, expression }`
+// where each value is either a finite number, null (non-finite), or an
+// `{ _error }` object from a runtime throw in the user expression. When
+// present, the objective row is rendered above the points-total grid and
+// a "Per-user metrics" details block is appended at the end.
+function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, activeHooks, objective, usersBase, usersSand) {
   if (!host) return;
   if (!rows || rows.length === 0) {
     host.innerHTML = '<em style="color:var(--text-dim);">No data.</em>';
@@ -13555,6 +13685,34 @@ function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, active
     ).join('');
   }
 
+  // Objective row (3b.3a): rendered above the points grid when an
+  // expression was supplied. baseline / sandbox / Δ values are signed
+  // (lower-is-better convention) and a runtime error in user code shows
+  // inline instead of crashing the render.
+  let objectiveRow = '';
+  if (objective) {
+    const formatObj = v => {
+      if (v && typeof v === 'object' && v._error) return '<span style="color:var(--accent2);">err</span>';
+      if (v === null || v === undefined || !Number.isFinite(v)) return '<span style="color:var(--text-dim);">&mdash;</span>';
+      return (Math.round(v * 10000) / 10000).toFixed(4);
+    };
+    const valBase = objective.baseline;
+    const valSand = objective.sandbox;
+    const hasNums = Number.isFinite(valBase) && Number.isFinite(valSand);
+    const oDelta = hasNums ? (valSand - valBase) : null;
+    const oColor = oDelta == null ? 'var(--text-dim)' : (oDelta < 0 ? 'var(--accent)' : (oDelta > 0 ? 'var(--accent2)' : 'var(--text-dim)'));
+    const oDeltaStr = hasNums ? ((oDelta > 0 ? '+' : '') + (Math.round(oDelta * 10000) / 10000).toFixed(4)) : '&mdash;';
+    const errMsg = (valBase && valBase._error) || (valSand && valSand._error);
+    objectiveRow =
+      '<div style="border-top:1px dashed var(--border);margin-top:8px;padding-top:8px;display:grid;grid-template-columns:1fr repeat(3, auto);gap:6px 14px;align-items:baseline;font-size:0.78rem;">' +
+        '<div style="color:var(--text-dim);">Objective <span style="font-size:0.7rem;">(lower = better)</span></div>' +
+        '<div style="text-align:right;"><span style="font-size:0.66rem;color:var(--text-dim);">baseline</span> <span style="font-variant-numeric:tabular-nums;font-weight:600;">' + formatObj(valBase) + '</span></div>' +
+        '<div style="text-align:right;"><span style="font-size:0.66rem;color:var(--text-dim);">sandbox</span> <span style="font-variant-numeric:tabular-nums;font-weight:600;">' + formatObj(valSand) + '</span></div>' +
+        '<div style="text-align:right;"><span style="font-size:0.66rem;color:var(--text-dim);">&Delta;</span> <span style="font-variant-numeric:tabular-nums;font-weight:700;color:' + oColor + ';">' + oDeltaStr + '</span></div>' +
+      '</div>' +
+      (errMsg ? '<div style="color:var(--accent2);font-size:0.72rem;margin-top:4px;font-family:monospace;">' + escapeHtml(errMsg) + '</div>' : '');
+  }
+
   const summary = '<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:10px;">' +
     '<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:10px;margin-bottom:8px;">' +
       '<div><div style="font-size:0.7rem;color:var(--text-dim);">Baseline</div><div style="font-weight:700;font-size:1.05rem;">' + fmt(totalBase) + '</div></div>' +
@@ -13564,12 +13722,64 @@ function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, active
     '</div>' +
     '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:3px;">Overrides applied:</div>' +
     '<div>' + overrideChips + '</div>' +
+    objectiveRow +
   '</div>';
 
   host.innerHTML = summary +
     renderSandboxDeltaSection('By user', 'User', byUser, true) +
     renderSandboxDeltaSection('By site', 'Site', bySite, false) +
-    renderSandboxDeltaSection('By shift type', 'Shift type', byType, false);
+    renderSandboxDeltaSection('By shift type', 'Shift type', byType, false) +
+    _renderSandboxPerUserMetrics(usersBase, usersSand);
+}
+
+// Compact per-user metrics dump for sanity-checking the objective
+// expression's inputs. Rendered as a collapsed <details> block at the
+// bottom of the delta UI. For each user we surface byArea (the most
+// commonly used branch in objectives) under baseline + sandbox columns
+// so it's easy to eyeball whether a hooked formula or rule overlay
+// moved the per-area numbers in the expected direction.
+function _renderSandboxPerUserMetrics(usersBase, usersSand) {
+  if (!usersBase || !usersSand) return '';
+  const keys = Array.from(new Set([...Object.keys(usersBase), ...Object.keys(usersSand)]));
+  if (keys.length === 0) return '';
+  const fmt = n => (Math.round((n || 0) * 100) / 100).toFixed(2);
+  const areaKeys = Array.from(new Set(
+    keys.flatMap(k => [
+      ...Object.keys((usersBase[k] && usersBase[k].byArea) || {}),
+      ...Object.keys((usersSand[k] && usersSand[k].byArea) || {})
+    ])
+  )).sort();
+  const headerCols = ['User', 'Pass'].concat(areaKeys.map(a => a + ' pts'))
+    .concat(areaKeys.map(a => a + ' hrs'))
+    .concat(['Total pts', 'Total hrs']);
+  const headerRow = headerCols.map(c =>
+    '<div style="font-size:0.66rem;color:var(--text-dim);font-weight:600;text-align:right;">' + escapeHtml(c) + '</div>'
+  ).join('');
+  // First user column is left-aligned for readability.
+  const headerRowFixed = headerRow.replace(
+    '<div style="font-size:0.66rem;color:var(--text-dim);font-weight:600;text-align:right;">User</div>',
+    '<div style="font-size:0.66rem;color:var(--text-dim);font-weight:600;">User</div>'
+  );
+  const renderRow = (uid, label, u) => {
+    const ba = (u && u.byArea) || {};
+    const cells = areaKeys.map(a => fmt((ba[a] && ba[a].points) || 0))
+      .concat(areaKeys.map(a => fmt((ba[a] && ba[a].hours) || 0)))
+      .concat([fmt((u && u.points && u.points.total) || 0),
+               fmt((u && u.totalHours) || 0)]);
+    return '<div style="font-family:monospace;overflow:hidden;text-overflow:ellipsis;font-size:0.72rem;">' + escapeHtml(uid) + '</div>' +
+      '<div style="text-align:right;color:var(--text-dim);font-size:0.72rem;">' + escapeHtml(label) + '</div>' +
+      cells.map(c => '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + c + '</div>').join('');
+  };
+  const body = keys.map(k =>
+    renderRow(k, 'base', usersBase[k]) +
+    renderRow(k, 'sand', usersSand[k])
+  ).join('');
+  const cols = '1fr auto' + ' auto'.repeat(areaKeys.length * 2 + 2);
+  return '<details style="margin-top:14px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">' +
+    '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;">Per-user metrics <span style="font-weight:400;color:var(--text-dim);">&mdash; inputs the Objective expression sees</span></summary>' +
+    '<div style="display:grid;grid-template-columns:' + cols + ';gap:3px 10px;margin-top:6px;align-items:center;">' +
+      headerRowFixed + body +
+    '</div></details>';
 }
 
 function renderSandboxDeltaSection(title, keyLabel, rows, monoKey) {
