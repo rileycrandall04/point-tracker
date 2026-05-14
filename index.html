@@ -12606,7 +12606,16 @@ function scoreSnapshotPayloadSync(payload) {
   const saved = data;
   const totals = { ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0,
                    floatBonus: 0, forceOffBonus: 0, total: 0 };
+  const bySite = {};       // siteId -> { ar, prod, total, shiftCount }
+  const byShiftType = {};  // assignmentType -> { ar, prod, total, shiftCount }
   let scoredShifts = 0;
+  const bumpBucket = (bucket, key, t) => {
+    if (!bucket[key]) bucket[key] = { ar: 0, prod: 0, total: 0, shiftCount: 0 };
+    bucket[key].ar += t.ar || 0;
+    bucket[key].prod += t.prod || 0;
+    bucket[key].total += t.total || 0;
+    bucket[key].shiftCount += 1;
+  };
   try {
     data = sandboxData;
     for (const dateStr of Object.keys(sandboxData.shifts)) {
@@ -12628,15 +12637,23 @@ function scoreSnapshotPayloadSync(payload) {
       totals.floatBonus += t.floatBonus || 0;
       totals.forceOffBonus += t.forceOffBonus || 0;
       totals.total += t.total || 0;
+      bumpBucket(bySite, shift.siteId || '_unknown', t);
+      bumpBucket(byShiftType, shift.assignmentType || '_unknown', t);
       scoredShifts += 1;
     }
   } finally {
     data = saved;
   }
-  // Round all component sums to 2 decimals to match prod display.
-  for (const k of Object.keys(totals)) totals[k] = Math.round(totals[k] * 100) / 100;
+  const round = (o) => {
+    for (const k of Object.keys(o)) {
+      if (typeof o[k] === 'number') o[k] = Math.round(o[k] * 100) / 100;
+    }
+  };
+  round(totals);
+  for (const k of Object.keys(bySite)) round(bySite[k]);
+  for (const k of Object.keys(byShiftType)) round(byShiftType[k]);
   totals.scoredShifts = scoredShifts;
-  return totals;
+  return { totals, bySite, byShiftType };
 }
 
 async function runSnapshotBaselineClick(snapshotId) {
@@ -12667,74 +12684,154 @@ async function runSnapshotBaseline(snapshotId) {
   const scored = [];
   for (const d of payloadsSnap.docs) {
     const payload = d.data() || {};
-    const totals = scoreSnapshotPayloadSync(payload);
-    scored.push({ ref: d.ref, userKey: payload.userKey || d.id, totals,
+    const { totals, bySite, byShiftType } = scoreSnapshotPayloadSync(payload);
+    scored.push({ ref: d.ref, userKey: payload.userKey || d.id,
+                  totals, bySite, byShiftType,
                   shiftCount: payload.shiftCount || 0,
                   caseCount: payload.caseCount || 0 });
   }
 
-  // Phase 2: persist each per-user total + roll up to metadata doc.
+  // Phase 2: persist per-user totals + per-axis rollups; roll up to metadata.
   let grandTotal = 0, grandShifts = 0;
   await Promise.all(scored.map(s => {
     grandTotal += s.totals.total;
     grandShifts += s.totals.scoredShifts;
-    return s.ref.set({ baselineTotals: s.totals,
-                       baselineComputedAt: new Date().toISOString() },
-                     { merge: true });
+    return s.ref.set({
+      baselineTotals: s.totals,
+      baselineBySite: s.bySite,
+      baselineByShiftType: s.byShiftType,
+      baselineComputedAt: new Date().toISOString()
+    }, { merge: true });
   }));
   await root.set({
     baselineComputedAt: new Date().toISOString(),
     baselineTotalPoints: Math.round(grandTotal * 100) / 100,
-    baselineSchemaVersion: 1
+    baselineSchemaVersion: 2
   }, { merge: true });
   return { userCount: scored.length, shiftCount: grandShifts, totalPoints: grandTotal };
 }
 
+// Sum a list of per-payload {bySite|byShiftType} maps into one rollup.
+function sandboxAggregateBuckets(payloads, field) {
+  const out = {};
+  for (const p of payloads) {
+    const m = p[field] || {};
+    for (const k of Object.keys(m)) {
+      if (!out[k]) out[k] = { ar: 0, prod: 0, total: 0, shiftCount: 0 };
+      out[k].ar += m[k].ar || 0;
+      out[k].prod += m[k].prod || 0;
+      out[k].total += m[k].total || 0;
+      out[k].shiftCount += m[k].shiftCount || 0;
+    }
+  }
+  for (const k of Object.keys(out)) {
+    out[k].ar = Math.round(out[k].ar * 100) / 100;
+    out[k].prod = Math.round(out[k].prod * 100) / 100;
+    out[k].total = Math.round(out[k].total * 100) / 100;
+  }
+  return out;
+}
+
 async function viewSnapshotBaselineClick(snapshotId) {
   if (!snapshotId) return;
-  const list = document.getElementById('sandboxSnapshotsList');
   const expanded = document.getElementById('snapshot-detail-' + snapshotId);
   if (expanded) { expanded.remove(); return; } // toggle off
   try {
     const root = db.collection('users').doc(currentUser.uid)
       .collection('policySandboxSnapshots').doc(snapshotId);
     const payloadsSnap = await root.collection('userPayloads').get();
-    const rows = payloadsSnap.docs.map(d => d.data() || {})
-      .filter(p => p.baselineTotals)
-      .sort((a, b) => (b.baselineTotals.total || 0) - (a.baselineTotals.total || 0));
+    const payloads = payloadsSnap.docs.map(d => d.data() || {})
+      .filter(p => p.baselineTotals);
     const anchor = document.querySelector('[data-snapshot-row="' + snapshotId + '"]');
     if (!anchor) return;
     const detail = document.createElement('div');
     detail.id = 'snapshot-detail-' + snapshotId;
     detail.style.cssText = 'margin:-4px 0 8px 0;padding:8px 10px;border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px;font-size:0.78rem;';
-    if (rows.length === 0) {
+    if (payloads.length === 0) {
       detail.innerHTML = '<em style="color:var(--text-dim);">No baseline totals yet — run Score first.</em>';
-    } else {
-      detail.innerHTML =
-        '<div style="display:grid;grid-template-columns:1fr repeat(5, auto);gap:4px 10px;align-items:center;">' +
-        '<div style="font-weight:600;color:var(--text-dim);">User</div>' +
-        '<div style="font-weight:600;color:var(--text-dim);text-align:right;">AR</div>' +
-        '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Prod</div>' +
-        '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Call</div>' +
-        '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Other</div>' +
-        '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Total</div>' +
-        rows.map(p => {
-          const t = p.baselineTotals;
-          const other = (t.subspec || 0) + (t.supervision || 0) + (t.floatBonus || 0) + (t.forceOffBonus || 0);
-          return '<div style="font-family:monospace;">' + escapeHtml(p.userKey || '') + '</div>' +
-            '<div style="text-align:right;">' + (t.ar || 0).toFixed(1) + '</div>' +
-            '<div style="text-align:right;">' + (t.prod || 0).toFixed(1) + '</div>' +
-            '<div style="text-align:right;">' + (t.call || 0).toFixed(1) + '</div>' +
-            '<div style="text-align:right;">' + other.toFixed(1) + '</div>' +
-            '<div style="text-align:right;font-weight:600;">' + (t.total || 0).toFixed(1) + '</div>';
-        }).join('') +
-        '</div>';
+      anchor.parentNode.insertBefore(detail, anchor.nextSibling);
+      return;
     }
+
+    // Build rows for each axis. Per-user comes from baselineTotals directly;
+    // per-site / per-shift-type aggregate across users via sandboxAggregateBuckets.
+    const byUser = payloads.map(p => {
+      const t = p.baselineTotals || {};
+      const other = (t.call || 0) + (t.subspec || 0) + (t.supervision || 0) +
+                    (t.floatBonus || 0) + (t.forceOffBonus || 0);
+      return { key: p.userKey || '', ar: t.ar || 0, prod: t.prod || 0,
+               other: Math.round(other * 100) / 100, total: t.total || 0,
+               shiftCount: t.scoredShifts || 0 };
+    }).sort((a, b) => (b.ar + b.prod) - (a.ar + a.prod));
+
+    const siteMap = sandboxAggregateBuckets(payloads, 'baselineBySite');
+    const bySite = Object.keys(siteMap).map(k => ({ key: k, ...siteMap[k],
+                       other: Math.round((siteMap[k].total - siteMap[k].ar - siteMap[k].prod) * 100) / 100 }))
+                   .sort((a, b) => (b.ar + b.prod) - (a.ar + a.prod));
+    const typeMap = sandboxAggregateBuckets(payloads, 'baselineByShiftType');
+    const byType = Object.keys(typeMap).map(k => ({ key: k, ...typeMap[k],
+                       other: Math.round((typeMap[k].total - typeMap[k].ar - typeMap[k].prod) * 100) / 100 }))
+                   .sort((a, b) => (b.ar + b.prod) - (a.ar + a.prod));
+
+    detail.innerHTML =
+      renderSandboxBaselineSection('By user', 'User', byUser, true) +
+      renderSandboxBaselineSection('By site', 'Site', bySite, false) +
+      renderSandboxBaselineSection('By shift type', 'Shift type', byType, false);
     anchor.parentNode.insertBefore(detail, anchor.nextSibling);
   } catch (e) {
     console.error('viewSnapshotBaseline failed:', e);
     showToast('View failed: ' + (e.message || String(e)));
   }
+}
+
+// Renders one section of the baseline detail panel as a small grid
+// table. Columns: keyLabel | AR | Prod | AR+Prod | Other | Total |
+// Shifts. AR+Prod is highlighted because the upcoming experiment
+// (step 3b) only modifies AR and Production knobs; Other passes
+// through unchanged and is shown only for transparency.
+function renderSandboxBaselineSection(title, keyLabel, rows, monoKey) {
+  if (!rows || rows.length === 0) {
+    return '<div style="margin-bottom:10px;"><div style="font-weight:600;margin-bottom:4px;">' +
+      escapeHtml(title) + '</div><em style="color:var(--text-dim);">No data.</em></div>';
+  }
+  const totalAR = rows.reduce((s, r) => s + (r.ar || 0), 0);
+  const totalProd = rows.reduce((s, r) => s + (r.prod || 0), 0);
+  const totalOther = rows.reduce((s, r) => s + (r.other || 0), 0);
+  const totalAll = rows.reduce((s, r) => s + (r.total || 0), 0);
+  const totalShifts = rows.reduce((s, r) => s + (r.shiftCount || 0), 0);
+  const fmt = n => (Math.round((n || 0) * 10) / 10).toFixed(1);
+  const header =
+    '<div style="font-weight:600;color:var(--text-dim);">' + escapeHtml(keyLabel) + '</div>' +
+    '<div style="font-weight:600;color:var(--text-dim);text-align:right;">AR</div>' +
+    '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Prod</div>' +
+    '<div style="font-weight:600;color:var(--accent);text-align:right;">AR+Prod</div>' +
+    '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Other</div>' +
+    '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Total</div>' +
+    '<div style="font-weight:600;color:var(--text-dim);text-align:right;">Shifts</div>';
+  const body = rows.map(r => {
+    const arProd = (r.ar || 0) + (r.prod || 0);
+    return '<div style="' + (monoKey ? 'font-family:monospace;' : '') + 'overflow:hidden;text-overflow:ellipsis;">' +
+        escapeHtml(r.key || '') + '</div>' +
+      '<div style="text-align:right;">' + fmt(r.ar) + '</div>' +
+      '<div style="text-align:right;">' + fmt(r.prod) + '</div>' +
+      '<div style="text-align:right;color:var(--accent);font-weight:600;">' + fmt(arProd) + '</div>' +
+      '<div style="text-align:right;">' + fmt(r.other) + '</div>' +
+      '<div style="text-align:right;font-weight:600;">' + fmt(r.total) + '</div>' +
+      '<div style="text-align:right;color:var(--text-dim);">' + (r.shiftCount || 0) + '</div>';
+  }).join('');
+  const footer =
+    '<div style="border-top:1px solid var(--border);padding-top:3px;font-weight:600;">Total</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:3px;text-align:right;">' + fmt(totalAR) + '</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:3px;text-align:right;">' + fmt(totalProd) + '</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:3px;text-align:right;color:var(--accent);font-weight:700;">' + fmt(totalAR + totalProd) + '</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:3px;text-align:right;">' + fmt(totalOther) + '</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:3px;text-align:right;font-weight:700;">' + fmt(totalAll) + '</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:3px;text-align:right;color:var(--text-dim);">' + totalShifts + '</div>';
+  return '<div style="margin-bottom:14px;">' +
+    '<div style="font-weight:600;margin-bottom:6px;">' + escapeHtml(title) + '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr repeat(6, auto);gap:3px 10px;align-items:center;">' +
+    header + body + footer +
+    '</div></div>';
 }
 
 // Lists what the signed-in admin can do, with deeplinks to the page where
