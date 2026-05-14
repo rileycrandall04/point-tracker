@@ -4277,6 +4277,70 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 </div>
 
+<!--
+  Policy Sandbox (experimental).
+  Read-only against prod data: snapshots Firestore, never writes back to
+  prod collections. Sandbox state lives under users/{uid}/policySandbox/*.
+  Engine modifications run against a parameterized SANDBOX COPY of the
+  calc functions; the prod engine in this file is not invoked by anything
+  on this page.
+-->
+<div class="page" id="page-sandbox">
+  <div class="card" style="margin-bottom:12px;border-left:3px solid var(--accent2);">
+    <h2 style="margin:0 0 4px 0;">Policy Sandbox</h2>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin:0;">
+      Experimental rule-modeling workspace. Reads prod data; never writes to it.
+      Compensation rules edited here do not affect anyone's actual points.
+    </p>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <h3 style="margin:0 0 6px 0;font-size:0.95rem;">What this is</h3>
+    <p style="font-size:0.8rem;color:var(--text);line-height:1.55;margin:0 0 8px 0;">
+      A workspace for asking &ldquo;what would compensation look like under different rules?&rdquo;
+      You take a snapshot of real shifts (anonymized), tweak the compensation engine knobs,
+      and see how each person&rsquo;s points would change.
+    </p>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin:0;">
+      <strong>Safety:</strong> nothing on this page modifies the production
+      compensation engine or anyone&rsquo;s saved points. Snapshots and saved
+      experiments live in your own sandbox area in Firestore.
+    </p>
+  </div>
+
+  <div class="card" id="sandboxSnapshotsCard" style="margin-bottom:12px;">
+    <h3 style="margin:0 0 6px 0;font-size:0.95rem;">Snapshots</h3>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 10px 0;">
+      Capture all users&rsquo; data for one month, anonymized with stable hashes.
+    </p>
+    <div id="sandboxSnapshotsList" style="font-size:0.82rem;color:var(--text-dim);">
+      <em>Snapshot capture not yet implemented &mdash; coming next.</em>
+    </div>
+  </div>
+
+  <div class="card" id="sandboxImportsCard" style="margin-bottom:12px;">
+    <h3 style="margin:0 0 6px 0;font-size:0.95rem;">Imported data</h3>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 10px 0;">
+      Bring in shift/case data from outside the app via CSV.
+      Imported rows are tagged with their source so reports can break them out separately.
+    </p>
+    <div id="sandboxImportsList" style="font-size:0.82rem;color:var(--text-dim);">
+      <em>CSV import not yet implemented &mdash; coming next.</em>
+    </div>
+  </div>
+
+  <div class="card" id="sandboxExperimentsCard" style="margin-bottom:12px;">
+    <h3 style="margin:0 0 6px 0;font-size:0.95rem;">Experiments</h3>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 10px 0;">
+      A named set of rule changes applied to a snapshot, with a comparison report
+      showing per-user point deltas vs. current rules.
+    </p>
+    <div id="sandboxExperimentsList" style="font-size:0.82rem;color:var(--text-dim);">
+      <em>Experiment editor not yet implemented &mdash; coming next.</em>
+    </div>
+  </div>
+</div>
+
 
 <!-- Day detail modal -->
 <div class="modal-overlay hidden" id="dayModal">
@@ -5067,6 +5131,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <span class="drawer-icon">&#128272;</span>
     <span>Admin</span>
   </div>
+  <div class="drawer-item hidden" id="drawerSandboxItem" data-page="sandbox">
+    <span class="drawer-icon">&#129514;</span>
+    <span>Policy Sandbox</span>
+  </div>
   <div class="drawer-item" data-page="asacodes">
     <span class="drawer-icon">&#128209;</span>
     <span>ASA Code Reference</span>
@@ -5146,6 +5214,8 @@ function isSiteAdmin(siteId) {
 function refreshAdminDrawerVisibility() {
   const drawerAdmin = document.getElementById('drawerAdminItem');
   if (drawerAdmin) drawerAdmin.classList.toggle('hidden', !isSiteAdmin());
+  const drawerSandbox = document.getElementById('drawerSandboxItem');
+  if (drawerSandbox) drawerSandbox.classList.toggle('hidden', !isAppOwner());
 }
 
 let _isAdminWarned = false;
