@@ -10538,6 +10538,12 @@ function _formatProductionMultiplierLabel(mult) {
 //   - Non-doubling shifts: 1x.
 function caseProductionMultiplier(caseData, shift) {
   if (!shiftDoublesProduction(shift)) return 1;
+  // Sandbox hook: experiments can replace the doubling factor. Defaults to
+  // 2 so non-sandbox callers see identical behavior. SF1 fractional
+  // doubling formula generalizes to 1 + fraction*(doubleMult - 1); when
+  // doubleMult == 2 this reduces to the original 1 + fraction.
+  const _po = (_engineSandboxOverrides && _engineSandboxOverrides.prod) || null;
+  const doubleMult = (_po && _po.doubleMult != null) ? Number(_po.doubleMult) : 2;
   if (shift && shift.assignmentType === 'SF1') {
     if (!shift.date || shift.date < SF1_FRACTIONAL_DOUBLING_FROM) return 1;
     if (!caseData || !caseData.startTime || !caseData.endTime) return 1;
@@ -10548,9 +10554,9 @@ function caseProductionMultiplier(caseData, shift) {
     if (e <= s) return 1;
     const doubled = _sf1DoubledMinutes(shift, s, e);
     const total = e - s;
-    return 1 + (doubled / total);
+    return 1 + (doubled / total) * (doubleMult - 1);
   }
-  return 2;
+  return doubleMult;
 }
 
 function effectivePagerPts(shift, pagerWindow) {
@@ -11032,26 +11038,42 @@ function getMomentContext(shift, m) {
   return { isHol: !!(dayShift && dayShift.isHoliday), isWknd: isWeekend(key) };
 }
 
+// Policy Sandbox hook: when non-null, getARRate() + caseProductionMultiplier()
+// read their tunable constants from this object instead of the hardcoded
+// values. Defaults preserve current prod behavior exactly. The sandbox sets
+// this synchronously around a scoring run and restores in a try/finally so
+// no engine call outside the sandbox can observe overridden values.
+let _engineSandboxOverrides = null;
+
 function getARRate(assignmentType, isHol, isWknd, timeMinutes, siteId) {
   const isDaytime = timeMinutes >= 420 && timeMinutes < 1020;
   const rule = getResolvedShiftRules(siteId)[assignmentType];
   const mode = rule && rule.arRate ? rule.arRate.mode : 'general';
+  const ar = (_engineSandboxOverrides && _engineSandboxOverrides.ar) || {};
+  const _g       = ar.general              != null ? Number(ar.general)              : 20;
+  const _ob      = ar.ob                   != null ? Number(ar.ob)                   : 13;
+  const _sf1Day  = ar.sf1Daytime           != null ? Number(ar.sf1Daytime)           : 13;
+  const _sf1Oth  = ar.sf1Other             != null ? Number(ar.sf1Other)             : 20;
+  const _whDay   = ar.weekendHolidayDayMult  != null ? Number(ar.weekendHolidayDayMult)  : 1.10;
+  const _whEve   = ar.weekendHolidayEveMult  != null ? Number(ar.weekendHolidayEveMult)  : 1.25;
+  const _wdEve   = ar.weekdayEveMult         != null ? Number(ar.weekdayEveMult)         : 1.10;
+  const _wdLate  = ar.weekdayLateMult        != null ? Number(ar.weekdayLateMult)        : 1.25;
   let baseRate;
   if (mode === 'sf1') {
     // SF1: 13/hr during 0700-1700 on non-holiday weekdays only; General rate otherwise
-    baseRate = (!isHol && !isWknd && isDaytime) ? 13 : 20;
+    baseRate = (!isHol && !isWknd && isDaytime) ? _sf1Day : _sf1Oth;
   } else if (mode === 'ob') {
-    baseRate = 13;
+    baseRate = _ob;
   } else {
-    baseRate = 20;
+    baseRate = _g;
   }
   if (isHol || isWknd) {
-    if (isDaytime) return baseRate * 1.10;
-    else return baseRate * 1.25;
+    if (isDaytime) return baseRate * _whDay;
+    else return baseRate * _whEve;
   } else {
     if (isDaytime) return baseRate;
-    else if (timeMinutes >= 1020 && timeMinutes < 1380) return baseRate * 1.10;
-    else return baseRate * 1.25;
+    else if (timeMinutes >= 1020 && timeMinutes < 1380) return baseRate * _wdEve;
+    else return baseRate * _wdLate;
   }
 }
 
