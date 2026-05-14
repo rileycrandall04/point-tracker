@@ -4367,7 +4367,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
       Override engine constants and re-score a snapshot against today&rsquo;s prod engine.
       Per-user / per-site / per-shift-type deltas appear below the editor.
       Blank inputs use prod defaults; any number you type takes effect for this run only.
+      For alternate scoring <em>formulas</em> (not just constants), Claude can drop
+      functions into the <code style="background:var(--surface2);padding:1px 4px;border-radius:3px;">SANDBOX_TEST_RULES.logicHooks</code>
+      block in <code style="background:var(--surface2);padding:1px 4px;border-radius:3px;">index.html</code> &mdash;
+      active hooks show up as accent-bordered chips in the delta summary.
     </p>
+    <div id="sandboxLogicHooksBanner" style="font-size:0.74rem;color:var(--text-dim);margin:0 0 10px 0;"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
       <label style="font-size:0.74rem;color:var(--text-dim);display:flex;flex-direction:column;gap:3px;flex:1;min-width:200px;">
         Snapshot
@@ -10598,7 +10603,11 @@ function caseProductionMultiplier(caseData, shift) {
   return doubleMult;
 }
 
-function effectivePagerPts(shift, pagerWindow) {
+function effectivePagerPts(shift, pagerWindow, _skipSandboxHook) {
+  if (!_skipSandboxHook && _engineSandboxLogicHooks.effectivePagerPts) {
+    return _engineSandboxLogicHooks.effectivePagerPts(shift, pagerWindow,
+      (s, pw) => effectivePagerPts(s, pw, true));
+  }
   // IMC pager-call selection wins over both the unrestricted-call-hours
   // override and the rule's pagerWindow. Force Off carries 0 pager pay.
   const pcType = getPagerCallType(shift);
@@ -11078,6 +11087,57 @@ function getMomentContext(shift, m) {
   return { isHol: !!(dayShift && dayShift.isHoliday), isWknd: isWeekend(key) };
 }
 
+// =====================================================================
+// POLICY SANDBOX SCRATCH SPACE — alternate scoring logic for experiments
+// =====================================================================
+// This block is the "test engine" surface. Edit `logicHooks` to plug
+// experimental scoring formulas into the Policy Sandbox WITHOUT modifying
+// any of the engine functions themselves. Each property maps a hook name
+// to a function that REPLACES the corresponding engine function during a
+// sandbox run only; outside the sandbox (i.e. during normal prod
+// scoring), all hooks are bypassed and the original function bodies run.
+//
+// Each hook receives the original arguments PLUS a trailing `defaultImpl`
+// callback, so you can WRAP the built-in logic rather than fully replace
+// it. Example: scale all case points up 10% but keep the rest of the
+// engine intact:
+//
+//   logicHooks: {
+//     calcCasePoints: (caseData, shift, defaultImpl) =>
+//       defaultImpl(caseData, shift) * 1.10,
+//   }
+//
+// Available hooks (signature → return type):
+//   calcShiftTotal              (shift, defaultImpl)                        → ShiftTotal
+//   calcARBreakdown             (shift, defaultImpl)                        → { ar, call, preCall }
+//   calcCasePoints              (caseData, shift, ignoreManual, defaultImpl) → Number
+//   calcAddOnPoints             (caseData, defaultImpl)                     → Number
+//   getTimeMultiplier           (physicalStatus, isHol, isWknd, caseStartMin, isHighRiskPeds, defaultImpl) → Number
+//   calcSubspecPoints           (shift, defaultImpl)                        → Number
+//   calcSupervisionPoints       (shift, defaultImpl)                        → Number
+//   effectivePagerPts           (shift, pagerWindow, defaultImpl)           → Number
+//   laborEpiduralTierPoints     (fromHrs, toHrs, defaultImpl)               → Number
+//
+// Ship to master with `logicHooks: {}` (no-op for prod). When an
+// experiment is active, the sandbox Run flow copies these hooks into the
+// runtime `_engineSandboxLogicHooks` global for the duration of the run,
+// then restores in a try/finally. The active hook names also appear as
+// chips in the delta summary so the run is self-documenting.
+const SANDBOX_TEST_RULES = {
+  logicHooks: {
+    // Drop experimental hook functions here. Uncomment / edit to try new formulas.
+    // calcCasePoints: (caseData, shift, ignoreManual, defaultImpl) =>
+    //   defaultImpl(caseData, shift, ignoreManual) * 1.10,
+  },
+};
+
+// Runtime hook table installed by the sandbox Run wrapper. Outside the
+// sandbox this is always {}, so the per-call check at the top of each
+// engine function is a single property read on an empty object (falsy,
+// fast). Re-entry from inside a hook (via `defaultImpl(...)`) sets the
+// `_skipSandboxHook` sentinel so the wrapper doesn't recurse infinitely.
+let _engineSandboxLogicHooks = {};
+
 // Policy Sandbox hook: when non-null, every tunable constant in the
 // compensation engine is read through _eo() instead of being bare in
 // the source. The sandbox sets _engineSandboxOverrides synchronously
@@ -11439,7 +11499,11 @@ function getNextShiftStartMin(shiftDate) {
 }
 
 // Separate getter for breakdown display purposes
-function calcARBreakdown(shift) {
+function calcARBreakdown(shift, _skipSandboxHook) {
+  if (!_skipSandboxHook && _engineSandboxLogicHooks.calcARBreakdown) {
+    return _engineSandboxLogicHooks.calcARBreakdown(shift,
+      (s) => calcARBreakdown(s, true));
+  }
   if (shift.assignmentType === 'vacation') return { ar: 0, call: 0, preCall: 0 };
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return { ar: _eo('bonuses.forceOffFlat', 56), call: 0, preCall: 0 };
   const flatRuleBD = getFlatPaymentRule(shift);
@@ -11644,7 +11708,11 @@ function calcARBreakdown(shift) {
   return { ar: round2(arPoints), call: round2(callPoints), preCall: _preCallOverlay };
 }
 
-function getTimeMultiplier(physicalStatus, isHol, isWknd, caseStartMin, isHighRiskPeds) {
+function getTimeMultiplier(physicalStatus, isHol, isWknd, caseStartMin, isHighRiskPeds, _skipSandboxHook) {
+  if (!_skipSandboxHook && _engineSandboxLogicHooks.getTimeMultiplier) {
+    return _engineSandboxLogicHooks.getTimeMultiplier(physicalStatus, isHol, isWknd, caseStartMin, isHighRiskPeds,
+      (a, b, c, d, e) => getTimeMultiplier(a, b, c, d, e, true));
+  }
   const isWeekdayDay = !isHol && !isWknd && caseStartMin >= 420 && caseStartMin < 1020;
   const isWeekdayEve = !isHol && !isWknd && caseStartMin >= 1020 && caseStartMin < 1380;
   const isWeekendDay = (isHol || isWknd) && caseStartMin >= 420 && caseStartMin < 1020;
@@ -11663,7 +11731,11 @@ function getTimeMultiplier(physicalStatus, isHol, isWknd, caseStartMin, isHighRi
   return multiplier;
 }
 
-function calcAddOnPoints(caseData) {
+function calcAddOnPoints(caseData, _skipSandboxHook) {
+  if (!_skipSandboxHook && _engineSandboxLogicHooks.calcAddOnPoints) {
+    return _engineSandboxLogicHooks.calcAddOnPoints(caseData,
+      (cd) => calcAddOnPoints(cd, true));
+  }
   let pts = 0;
   if (caseData.nerveBlock === 'brachial_plexus') pts += _eo('addOn.nerveBlockBrachialPlexus', 3);
   else if (caseData.nerveBlock === 'other') pts += _eo('addOn.nerveBlockOther', 2.6);
@@ -11680,7 +11752,11 @@ function calcAddOnPoints(caseData) {
 
 // Labor epidural tiered billing: calculates points for a time range within the tier schedule
 // fromHrs/toHrs are hours since original placement. Defaults: Tier 1: 0-1hr=6pts/hr, Tier 2: 1-2hr=3pts/hr, Tier 3: 2+hr=1.5pts/hr
-function laborEpiduralTierPoints(fromHrs, toHrs) {
+function laborEpiduralTierPoints(fromHrs, toHrs, _skipSandboxHook) {
+  if (!_skipSandboxHook && _engineSandboxLogicHooks.laborEpiduralTierPoints) {
+    return _engineSandboxLogicHooks.laborEpiduralTierPoints(fromHrs, toHrs,
+      (f, t) => laborEpiduralTierPoints(f, t, true));
+  }
   const _hr1 = _eo('laborEpidural.hr1PerHr', 6);
   const _hr2 = _eo('laborEpidural.hr2PerHr', 3);
   const _hr3 = _eo('laborEpidural.hr3PlusPerHr', 1.5);
@@ -11691,7 +11767,11 @@ function laborEpiduralTierPoints(fromHrs, toHrs) {
   return pts;
 }
 
-function calcCasePoints(caseData, shift, ignoreManual) {
+function calcCasePoints(caseData, shift, ignoreManual, _skipSandboxHook) {
+  if (!_skipSandboxHook && _engineSandboxLogicHooks.calcCasePoints) {
+    return _engineSandboxLogicHooks.calcCasePoints(caseData, shift, ignoreManual,
+      (cd, sh, im) => calcCasePoints(cd, sh, im, true));
+  }
   if (!ignoreManual && caseData.manualPoints != null) return round2(Number(caseData.manualPoints));
   const ct = caseData.caseType;
   if (ct === 'icu_er_lines') return _eo('flat.icu_er_lines', 30);
@@ -11979,7 +12059,11 @@ function getCaseBreakdown(caseData, shift) {
   return bd;
 }
 
-function calcSupervisionPoints(shift) {
+function calcSupervisionPoints(shift, _skipSandboxHook) {
+  if (!_skipSandboxHook && _engineSandboxLogicHooks.calcSupervisionPoints) {
+    return _engineSandboxLogicHooks.calcSupervisionPoints(shift,
+      (s) => calcSupervisionPoints(s, true));
+  }
   const isHol = shift.isHoliday;
   const isWknd = isWeekend(shift.date);
   // Standalone CRNA_supervision type: +7/hr supervision bonus on clocked time.
@@ -12032,7 +12116,11 @@ function calcCallPoints(shift) {
   return 0;
 }
 
-function calcSubspecPoints(shift) {
+function calcSubspecPoints(shift, _skipSandboxHook) {
+  if (!_skipSandboxHook && _engineSandboxLogicHooks.calcSubspecPoints) {
+    return _engineSandboxLogicHooks.calcSubspecPoints(shift,
+      (s) => calcSubspecPoints(s, true));
+  }
   // Cardiac/Liver shifts always include the 45-pt subspecialty bonus
   // as part of their base. The legacy subspecCoverage checkbox is kept
   // as a no-op for backward compatibility but no longer required.
@@ -12072,7 +12160,11 @@ function calcTempCoveragePoints(shift) {
   return { pagerAdj: round2(pagerAdj), ar: round2(ar) };
 }
 
-function calcShiftTotal(shift) {
+function calcShiftTotal(shift, _skipSandboxHook) {
+  if (!_skipSandboxHook && _engineSandboxLogicHooks.calcShiftTotal) {
+    return _engineSandboxLogicHooks.calcShiftTotal(shift,
+      (s) => calcShiftTotal(s, true));
+  }
   const shiftCases = data.cases.filter(c => c.shiftDate === shift.date);
   const breakdown = calcARBreakdown(shift);
   const arPts = breakdown.ar;
@@ -12419,6 +12511,19 @@ function renderSandboxPage() {
   const expHost = document.getElementById('sandboxExperimentEditor');
   if (expHost && !expHost.firstChild) renderSandboxExperimentEditor();
   loadSandboxExperimentSnapshots();
+  // Surface any currently-installed SANDBOX_TEST_RULES.logicHooks so the
+  // user knows the next Run will exercise alternate scoring formulas.
+  const hookBanner = document.getElementById('sandboxLogicHooksBanner');
+  if (hookBanner) {
+    const hooks = _activeSandboxHookNames();
+    if (hooks.length === 0) {
+      hookBanner.innerHTML = '<span style="color:var(--text-dim);">SANDBOX_TEST_RULES.logicHooks: empty (no alternate scoring formulas active).</span>';
+    } else {
+      hookBanner.innerHTML = '<span style="color:var(--accent);font-weight:600;">SANDBOX_TEST_RULES.logicHooks active: ' +
+        hooks.map(h => '<code style="background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:monospace;">' + escapeHtml(h) + '</code>').join(', ') +
+        '</span>';
+    }
+  }
 }
 
 async function loadSandboxUserList() {
@@ -13263,22 +13368,36 @@ function resetSandboxExperimentClick() {
   if (status) status.textContent = '';
 }
 
-// Wraps scoreSnapshotPayloadSync with engine + rule overlay swaps. The inner
-// function already try/finally-restores `data`; this wrapper does the same
-// for both _engineSandboxOverrides (engine constants) and
-// _engineSandboxRuleOverlay (per-rule fields). Synchronous so the engine
-// never observes a half-swapped state.
-function scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay) {
-  const savedEng  = _engineSandboxOverrides;
-  const savedRule = _engineSandboxRuleOverlay;
+// Wraps scoreSnapshotPayloadSync with engine + rule overlay + logic hook
+// swaps. The inner function already try/finally-restores `data`; this
+// wrapper does the same for _engineSandboxOverrides (engine constants),
+// _engineSandboxRuleOverlay (per-rule fields), and _engineSandboxLogicHooks
+// (alternate scoring formulas from SANDBOX_TEST_RULES). Synchronous so
+// the engine never observes a half-swapped state. Pass logicHooks=null
+// for a clean prod-style score (used for the baseline pass).
+function scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay, logicHooks) {
+  const savedEng   = _engineSandboxOverrides;
+  const savedRule  = _engineSandboxRuleOverlay;
+  const savedHooks = _engineSandboxLogicHooks;
   try {
     _engineSandboxOverrides   = overrides   || null;
     _engineSandboxRuleOverlay = ruleOverlay || null;
+    _engineSandboxLogicHooks  = logicHooks  || {};
     return scoreSnapshotPayloadSync(payload);
   } finally {
     _engineSandboxOverrides   = savedEng;
     _engineSandboxRuleOverlay = savedRule;
+    _engineSandboxLogicHooks  = savedHooks;
   }
+}
+
+// Returns the names of currently-defined logic hooks from SANDBOX_TEST_RULES.
+// Used both by runSandboxExperimentClick (to decide whether the Run button
+// has anything to do beyond constant/rule overrides) and by the delta
+// renderer (to show hook.<name> chips so a run is self-documenting).
+function _activeSandboxHookNames() {
+  const h = (SANDBOX_TEST_RULES && SANDBOX_TEST_RULES.logicHooks) || {};
+  return Object.keys(h).filter(k => typeof h[k] === 'function');
 }
 
 // Loads completed snapshots into the experiment picker. Snapshots
@@ -13321,8 +13440,10 @@ async function runSandboxExperimentClick() {
   const snapshotId = sel && sel.value;
   if (!snapshotId) { if (status) status.textContent = 'Pick a snapshot first.'; return; }
   const { engine: overrides, ruleOverlay } = _collectSandboxExperimentOverrides();
-  if (!overrides && !ruleOverlay) {
-    if (status) status.textContent = 'No overrides entered — fill at least one field to see a delta.';
+  const activeHooks = _activeSandboxHookNames();
+  const logicHooks = activeHooks.length > 0 ? SANDBOX_TEST_RULES.logicHooks : null;
+  if (!overrides && !ruleOverlay && !logicHooks) {
+    if (status) status.textContent = 'No overrides entered — fill at least one field (or set a SANDBOX_TEST_RULES.logicHooks function) to see a delta.';
     if (result) result.innerHTML = '';
     return;
   }
@@ -13337,9 +13458,10 @@ async function runSandboxExperimentClick() {
     let totalShifts = 0;
     for (const d of payloadsSnap.docs) {
       const payload = d.data() || {};
-      // Score baseline first (fresh, against today's engine), then with both overlays.
-      const baseline = scoreSnapshotPayloadWithOverridesSync(payload, null, null);
-      const sandbox  = scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay);
+      // Score baseline (fresh, against today's engine — no overlays, no hooks)
+      // then with all three layers installed for the sandbox pass.
+      const baseline = scoreSnapshotPayloadWithOverridesSync(payload, null, null, null);
+      const sandbox  = scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay, logicHooks);
       rows.push({
         userKey: payload.userKey || d.id,
         baseline: baseline.totals, sandbox: sandbox.totals,
@@ -13349,7 +13471,7 @@ async function runSandboxExperimentClick() {
       totalShifts += baseline.totals.scoredShifts || 0;
     }
     if (status) status.textContent = 'Scored ' + rows.length + ' users · ' + totalShifts + ' shifts.';
-    renderSandboxExperimentDelta(result, rows, overrides, ruleOverlay);
+    renderSandboxExperimentDelta(result, rows, overrides, ruleOverlay, activeHooks);
   } catch (e) {
     console.error('runSandboxExperiment failed:', e);
     if (status) status.textContent = 'Run failed: ' + (e.message || String(e));
@@ -13361,7 +13483,7 @@ async function runSandboxExperimentClick() {
 // Renders the delta UI: a top-line summary card, then three sections
 // (per-user, per-site, per-shift-type) of baseline / sandbox / Δ /
 // shifts rows, each sorted by |Δ| desc so the biggest movers come first.
-function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay) {
+function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, activeHooks) {
   if (!host) return;
   if (!rows || rows.length === 0) {
     host.innerHTML = '<em style="color:var(--text-dim);">No data.</em>';
@@ -13420,10 +13542,18 @@ function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay) {
   walk(overrides, 'engine');
   if (ruleOverlay && ruleOverlay.shiftRules) walk(ruleOverlay.shiftRules, 'shiftRule');
   if (ruleOverlay && ruleOverlay.pagerCallTypes) walk(ruleOverlay.pagerCallTypes, 'pagerCall');
-  const overrideChips = flatOverrides.map(o =>
+  let overrideChips = flatOverrides.map(o =>
     '<span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:0.7rem;margin:0 4px 4px 0;font-family:monospace;">' +
     escapeHtml(o.path) + ' = ' + escapeHtml(String(o.value)) + '</span>'
   ).join('');
+  // Logic-hook chips: rendered with an accent border so it's obvious the
+  // run included an alternate scoring formula and not just a tweaked constant.
+  if (activeHooks && activeHooks.length > 0) {
+    overrideChips += activeHooks.map(name =>
+      '<span style="display:inline-block;background:var(--surface2);border:1px solid var(--accent);color:var(--accent);border-radius:10px;padding:2px 8px;font-size:0.7rem;margin:0 4px 4px 0;font-family:monospace;font-weight:600;">' +
+      'hook.' + escapeHtml(name) + '</span>'
+    ).join('');
+  }
 
   const summary = '<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:10px;">' +
     '<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:10px;margin-bottom:8px;">' +
