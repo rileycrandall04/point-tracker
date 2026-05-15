@@ -4386,12 +4386,22 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <button class="btn btn-sm" id="sandboxExperimentExportBtn"
         style="flex:none;" onclick="exportSandboxExperimentXlsxClick()" disabled
         title="Run an experiment first, then download the result as a multi-sheet .xlsx workbook.">Download&nbsp;.xlsx</button>
+      <button class="btn btn-sm" id="sandboxAiBtn"
+        style="flex:none;" onclick="analyzeSandboxWithAiClick()" disabled
+        title="Run an experiment first, then ask Claude to analyze the compensation metrics and suggest changes.">Analyze&nbsp;with&nbsp;AI</button>
       <button class="btn btn-primary btn-sm" id="sandboxExperimentRunBtn"
         style="flex:none;" onclick="runSandboxExperimentClick()">Run</button>
+    </div>
+    <div style="margin-bottom:10px;font-size:0.72rem;color:var(--text-dim);line-height:1.45;">
+      &ldquo;Analyze with AI&rdquo; sends the aggregate compensation metrics (no patient or
+      identifying data &mdash; only the Comp Health numbers) to Anthropic&rsquo;s API for
+      fairness analysis and rule-change ideas. It uses the Anthropic API key from
+      <strong>Settings &rarr; Anthropic API Key</strong>; set it there if you haven&rsquo;t.
     </div>
     <div id="sandboxExperimentEditor" style="font-size:0.78rem;color:var(--text);"></div>
     <div id="sandboxExperimentStatus" style="font-size:0.76rem;color:var(--text-dim);margin:10px 0 0 0;min-height:1em;"></div>
     <div id="sandboxExperimentResult" style="font-size:0.78rem;color:var(--text);margin-top:8px;"></div>
+    <div id="sandboxAiResult" style="font-size:0.82rem;color:var(--text);margin-top:8px;"></div>
   </div>
 </div>
 
@@ -13457,6 +13467,8 @@ function resetSandboxExperimentClick() {
   if (obj) obj.value = '';
   const result = document.getElementById('sandboxExperimentResult');
   if (result) result.innerHTML = '';
+  const aiOut = document.getElementById('sandboxAiResult');
+  if (aiOut) aiOut.innerHTML = '';
   const status = document.getElementById('sandboxExperimentStatus');
   if (status) status.textContent = '';
   _sandboxLastRunState = null;
@@ -13464,6 +13476,11 @@ function resetSandboxExperimentClick() {
   if (exportBtn) {
     exportBtn.disabled = true;
     exportBtn.title = 'Run an experiment first, then download the result as a multi-sheet .xlsx workbook.';
+  }
+  const aiBtn = document.getElementById('sandboxAiBtn');
+  if (aiBtn) {
+    aiBtn.disabled = true;
+    aiBtn.title = 'Run an experiment first, then ask Claude to analyze the compensation metrics and suggest changes.';
   }
 }
 
@@ -13575,6 +13592,8 @@ async function runSandboxExperimentClick() {
   if (btn) btn.disabled = true;
   if (status) status.textContent = 'Scoring ' + snapshotId + '…';
   if (result) result.innerHTML = '';
+  const aiOut = document.getElementById('sandboxAiResult');
+  if (aiOut) aiOut.innerHTML = '';
   try {
     const root = db.collection('users').doc(currentUser.uid)
       .collection('policySandboxSnapshots').doc(snapshotId);
@@ -13650,6 +13669,11 @@ async function runSandboxExperimentClick() {
     if (exportBtn) {
       exportBtn.disabled = false;
       exportBtn.title = 'Download the most recent Run as a multi-sheet .xlsx workbook.';
+    }
+    const aiBtn = document.getElementById('sandboxAiBtn');
+    if (aiBtn) {
+      aiBtn.disabled = false;
+      aiBtn.title = 'Ask Claude to analyze the compensation metrics from this run and suggest rule changes.';
     }
   } catch (e) {
     console.error('runSandboxExperiment failed:', e);
@@ -13806,6 +13830,276 @@ function exportSandboxExperimentXlsxClick() {
   } catch (e) {
     console.error('xlsx export failed:', e);
     if (status) status.textContent = 'Export failed: ' + (e.message || String(e));
+  }
+}
+
+// ===================================================================
+// AI analysis (Policy Sandbox). Single Claude API call: send the
+// computed Compensation Health metrics + objective + overrides, ask
+// for fairness analysis and concrete rule-change experiments. Raw
+// fetch (no SDK) because this is a CDN/vanilla-JS app with no bundler;
+// browser-direct calls need the dangerous-direct-browser-access header.
+// Reuses the existing app-wide Anthropic key from Settings →
+// Anthropic API Key (settings.claudeApiKey, persisted in the
+// mwa_settings localStorage blob). No separate key store.
+// ===================================================================
+function _getSandboxAnthropicKey() {
+  try {
+    if (typeof settings === 'object' && settings && settings.claudeApiKey) {
+      return String(settings.claudeApiKey).trim();
+    }
+  } catch (e) {}
+  // Fallback: read the persisted settings blob directly in case the
+  // global isn't populated yet on this code path.
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) {
+      const k = (JSON.parse(raw) || {}).claudeApiKey;
+      if (k) return String(k).trim();
+    }
+  } catch (e) {}
+  return '';
+}
+
+// Minimal, safe markdown → HTML. Escapes first, then applies a tiny
+// subset (headings, bold, inline code, fenced code, bullet/number
+// lists, paragraphs). No raw HTML from the model is ever trusted.
+function _renderLiteMarkdown(md) {
+  const esc = (s) => escapeHtml(s);
+  const lines = String(md == null ? '' : md).replace(/\r\n/g, '\n').split('\n');
+  let html = '';
+  let inUl = false, inOl = false, inCode = false;
+  const closeLists = () => {
+    if (inUl) { html += '</ul>'; inUl = false; }
+    if (inOl) { html += '</ol>'; inOl = false; }
+  };
+  const inline = (s) => esc(s)
+    .replace(/`([^`]+)`/g, '<code style="background:var(--surface2);padding:1px 4px;border-radius:3px;font-size:0.92em;">$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(?:^|[^*])\*([^*]+)\*/g, (m, g) => m.replace('*' + g + '*', '<em>' + g + '</em>'));
+  for (const raw of lines) {
+    const line = raw;
+    if (/^```/.test(line.trim())) {
+      if (!inCode) { closeLists(); html += '<pre style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;overflow-x:auto;font-size:0.8rem;"><code>'; inCode = true; }
+      else { html += '</code></pre>'; inCode = false; }
+      continue;
+    }
+    if (inCode) { html += esc(line) + '\n'; continue; }
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) {
+      closeLists();
+      const lvl = h[1].length;
+      const size = ['1.05rem', '1rem', '0.95rem', '0.9rem'][lvl - 1];
+      html += '<div style="font-weight:700;font-size:' + size + ';margin:12px 0 4px 0;">' + inline(h[2]) + '</div>';
+      continue;
+    }
+    const ul = line.match(/^\s*[-*]\s+(.*)$/);
+    const ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (ul) {
+      if (inOl) { html += '</ol>'; inOl = false; }
+      if (!inUl) { html += '<ul style="margin:4px 0 4px 18px;padding:0;">'; inUl = true; }
+      html += '<li style="margin:2px 0;">' + inline(ul[1]) + '</li>';
+      continue;
+    }
+    if (ol) {
+      if (inUl) { html += '</ul>'; inUl = false; }
+      if (!inOl) { html += '<ol style="margin:4px 0 4px 20px;padding:0;">'; inOl = true; }
+      html += '<li style="margin:2px 0;">' + inline(ol[1]) + '</li>';
+      continue;
+    }
+    if (line.trim() === '') { closeLists(); continue; }
+    closeLists();
+    html += '<p style="margin:6px 0;line-height:1.5;">' + inline(line) + '</p>';
+  }
+  if (inCode) html += '</code></pre>';
+  closeLists();
+  return html;
+}
+
+// Builds the { system, userJson } pair. The system prompt is static
+// (role + metric glossary + knob vocabulary + output contract) so it
+// gets a cache_control breakpoint; the per-run metrics are the volatile
+// suffix in the user turn.
+function _buildSandboxAiPrompt(st) {
+  const ch = _computeSandboxCompHealthRows(st.shiftsBase, st.shiftsSand, st.usersBase, st.usersSand);
+  // Per-user byArea pts/hr summary (baseline) — the fairness signal.
+  const perUser = {};
+  Object.keys(st.usersBase || {}).forEach(uk => {
+    const u = st.usersBase[uk] || {};
+    const ba = u.byArea || {};
+    const areas = {};
+    Object.keys(ba).forEach(a => {
+      const x = ba[a] || {};
+      areas[a] = { points: x.points || 0, hours: x.hours || 0,
+                   ptsPerHr: x.hours > 0 ? Math.round((x.points / x.hours) * 100) / 100 : null };
+    });
+    perUser[uk] = { totalPts: (u.points && u.points.total) || 0,
+                    totalHours: u.totalHours || 0, byArea: areas };
+  });
+  const flat = [];
+  const walk = (obj, prefix) => {
+    if (!obj) return;
+    Object.keys(obj).forEach(k => {
+      const v = obj[k]; const p = prefix ? prefix + '.' + k : k;
+      if (v && typeof v === 'object' && !Array.isArray(v)) walk(v, p);
+      else flat.push({ path: p, value: v });
+    });
+  };
+  walk(st.overrides, 'engine');
+  if (st.ruleOverlay && st.ruleOverlay.shiftRules) walk(st.ruleOverlay.shiftRules, 'shiftRule');
+  if (st.ruleOverlay && st.ruleOverlay.pagerCallTypes) walk(st.ruleOverlay.pagerCallTypes, 'pagerCall');
+
+  const payload = {
+    snapshot: st.snapshotId,
+    diagnosticMode: !!st.diagnosticOnly,
+    overridesApplied: flat,
+    activeLogicHooks: st.activeHooks || [],
+    objective: st.objective ? {
+      expression: st.objective.expression,
+      baseline: st.objective.baseline, sandbox: st.objective.sandbox
+    } : null,
+    compHealth: ch ? { types: ch.types, profile: ch.profile, fairness: ch.fairness,
+                       thresholds: { minTypeShifts: ch.minTypeShifts, minUserShifts: ch.minUserShifts } } : null,
+    perUserBaseline: perUser
+  };
+
+  const system =
+    'You are a compensation-policy analyst for a physician anesthesiology group (MWA). ' +
+    'You are given aggregate metrics from a points-based compensation engine — no patient data, ' +
+    'no PII, only roll-up numbers. Your job: find fairness problems and propose concrete, testable ' +
+    'rule changes.\n\n' +
+    'METRIC GLOSSARY\n' +
+    '- A "shift type" is an assignment archetype (OR, OR_float, OB_restricted, 1st_call, mole, ' +
+    'cardiac_liver, SF1, SF2, CRNA_supervision, etc.).\n' +
+    '- pts/clocked-hr: total points / hours the physician was clocked in to the shift (includes ' +
+    'required in-house presence even with no active case). Primary same-type fairness measure.\n' +
+    '- pts/work-hr: total points / hours actually inside a case. Pay per active case hour.\n' +
+    '- CV of pts/clocked-hr: stddev/mean across shift instances of a type — case-mix sensitivity ' +
+    '(lower = more predictable).\n' +
+    '- AR share: fraction of points from the hourly attendance rate vs case production.\n' +
+    '- Cross-user fairness: stddev and (max-min)/max spread of each physician\'s mean pts/clocked-hr ' +
+    'within a shift type (users with >= minUserShifts shifts).\n' +
+    '- baseline = today\'s production engine; sandbox = with the listed overrides; identical when ' +
+    'diagnosticMode is true.\n' +
+    '- Restricted-call shifts (e.g. OB_restricted, SF1 weekday) require in-house presence and so are ' +
+    'clocked in for the whole window; pure call shifts are clocked in only for call-backs. Compare ' +
+    'pts/clocked-hr WITHIN a type, and be cautious comparing ACROSS types with different duty profiles.\n\n' +
+    'TUNABLE KNOBS (reference these exact dotted paths in recommendations)\n' +
+    'Engine constants (prefix engine.): ar.general(20) ar.ob(13) ar.sf1Daytime(13) ar.sf1Other(20) ' +
+    'ar.weekdayEveMult(1.10) ar.weekdayLateMult(1.25) ar.weekendHolidayDayMult(1.10) ' +
+    'ar.weekendHolidayEveMult(1.25) prod.doubleMult(2) pager.unrestrictedCallRate(3.5) ' +
+    'supervision.crnaPerHr(7) bonuses.subspecCardiacLiver(45) bonuses.forceOffFlat(56) ' +
+    'bonuses.preCallWeekdayMinimum(80) laborEpidural.hr1PerHr(6) laborEpidural.hr2PerHr(3) ' +
+    'laborEpidural.hr3PlusPerHr(1.5) generic.timePerAdjustedHr(6) generic.baseUnitFactor(0.5) ' +
+    'timeMult.p4WeekdayDay(1.33) timeMult.p5WeekdayDay(1.83) addOn.* flat.* (see editor for full list).\n' +
+    'Per-rule field overlay: shiftRule.<shiftTypeId>.<field> (e.g. shiftRule.OR_float.floatBonus) and ' +
+    'pagerCall.<typeId>.<field> (e.g. pagerCall.14hr_or.pagerPts). Any numeric leaf is tunable.\n\n' +
+    'OUTPUT CONTRACT (markdown; no preamble)\n' +
+    '## Fairness read — 2-4 bullets naming the shift types/users with the widest unjustified spread, ' +
+    'with the numbers that show it.\n' +
+    '## Recommended experiments — 2-3 items. Each: the exact knob path(s) + suggested value(s), the ' +
+    'metric it should move and roughly how much/which direction, and one risk or side effect to watch ' +
+    '(e.g. raises another type, widens a different spread). Prefer single-knob changes that map to a ' +
+    'clear hypothesis; you may stack at most two.\n' +
+    '## Caveats — anything the data can\'t tell you (duty-profile differences, small N, diagnostic ' +
+    'mode means no deltas, etc.).\n' +
+    'Be specific and quantitative. Do not invent knob names outside the vocabulary above.';
+
+  const userText =
+    'Here is the most recent Policy Sandbox run. Analyze it per the output contract.\n\n' +
+    '```json\n' + JSON.stringify(payload, null, 1) + '\n```';
+
+  return { system, userText };
+}
+
+async function analyzeSandboxWithAiClick() {
+  if (!isAppOwner()) return;
+  const st = _sandboxLastRunState;
+  const out = document.getElementById('sandboxAiResult');
+  const status = document.getElementById('sandboxExperimentStatus');
+  const btn = document.getElementById('sandboxAiBtn');
+  if (!st) { if (status) status.textContent = 'Run an experiment first.'; return; }
+  const key = _getSandboxAnthropicKey();
+  if (!key) {
+    if (out) out.innerHTML = '<div style="color:var(--accent2);font-size:0.78rem;">No Anthropic API key found. Set it in Settings → Anthropic API Key, then retry.</div>';
+    return;
+  }
+  let prompt;
+  try { prompt = _buildSandboxAiPrompt(st); }
+  catch (e) {
+    if (out) out.innerHTML = '<div style="color:var(--accent2);">Could not build analysis payload: ' + escapeHtml(e.message || String(e)) + '</div>';
+    return;
+  }
+  if (btn) btn.disabled = true;
+  if (out) out.innerHTML = '<div style="color:var(--text-dim);font-size:0.8rem;">Analyzing with Claude — this can take 30–90s (the model reasons through the metrics)…</div>';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180000);
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-7',
+        max_tokens: 8000,
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'high' },
+        system: [{ type: 'text', text: prompt.system, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: prompt.userText }]
+      })
+    });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      let msg = 'HTTP ' + res.status;
+      try {
+        const errJson = await res.json();
+        const t = errJson && errJson.error && (errJson.error.message || errJson.error.type);
+        if (t) msg += ' — ' + t;
+      } catch (e) {}
+      if (res.status === 401) msg = 'Invalid API key (401). Check the key in AI analysis settings.';
+      else if (res.status === 429) msg = 'Rate limited (429). Wait a moment and try again.';
+      else if (res.status === 529) msg = 'Anthropic API overloaded (529). Retry shortly.';
+      if (out) out.innerHTML = '<div style="color:var(--accent2);">Analysis failed: ' + escapeHtml(msg) + '</div>';
+      return;
+    }
+    const data = await res.json();
+    if (data && data.stop_reason === 'refusal') {
+      if (out) out.innerHTML = '<div style="color:var(--accent2);">The model declined to answer this request.</div>';
+      return;
+    }
+    const text = (data && Array.isArray(data.content) ? data.content : [])
+      .filter(b => b && b.type === 'text').map(b => b.text).join('\n').trim();
+    if (!text) {
+      if (out) out.innerHTML = '<div style="color:var(--accent2);">Empty response from the model.</div>';
+      return;
+    }
+    const usage = (data && data.usage) || {};
+    const meta = 'Claude ' + (data.model || 'opus-4-7') +
+      ' · in ' + (usage.input_tokens || 0) +
+      (usage.cache_read_input_tokens ? ' (+' + usage.cache_read_input_tokens + ' cached)' : '') +
+      ' / out ' + (usage.output_tokens || 0) + ' tok';
+    if (out) {
+      out.innerHTML =
+        '<div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;">' +
+          '<div style="font-weight:700;font-size:0.85rem;margin-bottom:2px;">AI compensation analysis</div>' +
+          '<div style="font-size:0.66rem;color:var(--text-dim);margin-bottom:8px;">' + escapeHtml(meta) +
+          ' · advisory only — verify every suggestion in the sandbox before acting</div>' +
+          _renderLiteMarkdown(text) +
+        '</div>';
+    }
+  } catch (e) {
+    clearTimeout(timeout);
+    const aborted = e && e.name === 'AbortError';
+    if (out) out.innerHTML = '<div style="color:var(--accent2);">' +
+      (aborted ? 'Analysis timed out after 3 minutes. Try again or reduce the snapshot size.'
+               : 'Analysis error: ' + escapeHtml(e.message || String(e))) + '</div>';
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
