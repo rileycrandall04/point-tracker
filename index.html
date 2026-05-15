@@ -13864,6 +13864,17 @@ function _renderSandboxCompHealth(shiftsBase, shiftsSand, usersBase, usersSand) 
     return '<span style="color:' + col + ';">' + (d >= 0 ? '+' : '') + d.toFixed(1) + 'pp</span>';
   };
 
+  // Mobile-friendly tables: the metric grids are 8-14 columns wide and
+  // don't fit on phone screens. Wrap each in an overflow-x:auto scroller
+  // and pin the row-label column (Type / User) via position:sticky so
+  // you keep your bearing while scrolling sideways. `left:-1px` closes
+  // the 1px seam some browsers leave between sticky cell and scrolled
+  // content. Sticky cells need a background color so scrolled content
+  // doesn't bleed through underneath.
+  const stickyFirst = 'position:sticky;left:-1px;background:var(--surface);z-index:1;';
+  const scrollerOpen = '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">';
+  const scrollerClose = '</div>';
+
   // Table A — Comp profile by shift type
   const headA = ['Type', 'N (b/s)',
     'mean pts/clk-hr base', 'sand', 'Δ',
@@ -13873,7 +13884,7 @@ function _renderSandboxCompHealth(shiftsBase, shiftsSand, usersBase, usersSand) 
   ];
   const headColsA = headA.map((h, i) =>
     '<div style="font-size:0.66rem;color:var(--text-dim);font-weight:600;' +
-    (i === 0 ? '' : 'text-align:right;') + '">' + h + '</div>'
+    (i === 0 ? stickyFirst : 'text-align:right;') + '">' + h + '</div>'
   ).join('');
   const bodyA = allTypes.map(t => {
     const b = gBase[t] || { n: 0, sumTotal: 0, sumAr: 0, sumClocked: 0, sumWork: 0, clockedPtsHr: [], workPtsHr: [] };
@@ -13887,7 +13898,7 @@ function _renderSandboxCompHealth(shiftsBase, shiftsSand, usersBase, usersSand) 
     const bAr = b.sumTotal > 0 ? b.sumAr / b.sumTotal : NaN;
     const sAr = s.sumTotal > 0 ? s.sumAr / s.sumTotal : NaN;
     const cells = [
-      '<div style="font-family:monospace;font-size:0.72rem;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(t) + '</div>',
+      '<div style="' + stickyFirst + 'font-family:monospace;font-size:0.72rem;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(t) + '</div>',
       '<div style="text-align:right;color:var(--text-dim);font-size:0.72rem;">' + b.n + '/' + s.n + '</div>',
       '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtN(bMeanClk) + '</div>',
       '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtN(sMeanClk) + '</div>',
@@ -13913,9 +13924,11 @@ function _renderSandboxCompHealth(shiftsBase, shiftsSand, usersBase, usersSand) 
         'CV = case-mix sensitivity (lower = tighter) · AR share = clock-in pay vs production pay · ' +
         'green Δ improves the baseline, red worsens. Types with &lt;' + MIN_TYPE_SHIFTS + ' shifts hidden.' +
       '</div>' +
-      '<div style="display:grid;grid-template-columns:' + colsA + ';gap:3px 10px;align-items:center;">' +
-        headColsA + bodyA +
-      '</div>' +
+      scrollerOpen +
+        '<div style="display:grid;grid-template-columns:' + colsA + ';gap:3px 10px;align-items:center;min-width:max-content;">' +
+          headColsA + bodyA +
+        '</div>' +
+      scrollerClose +
     '</div>';
 
   // Table B — Cross-user fairness within shift type
@@ -13927,7 +13940,7 @@ function _renderSandboxCompHealth(shiftsBase, shiftsSand, usersBase, usersSand) 
     const bSpread = (bMeans.length >= 2) ? ((Math.max(...bMeans) - Math.min(...bMeans)) / Math.max(...bMeans)) : NaN;
     const sSpread = (sMeans.length >= 2) ? ((Math.max(...sMeans) - Math.min(...sMeans)) / Math.max(...sMeans)) : NaN;
     return [
-      '<div style="font-family:monospace;font-size:0.72rem;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(t) + '</div>',
+      '<div style="' + stickyFirst + 'font-family:monospace;font-size:0.72rem;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(t) + '</div>',
       '<div style="text-align:right;color:var(--text-dim);font-size:0.72rem;">' + bN + '/' + sN + '</div>',
       '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtN(bStd) + '</div>',
       '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtN(sStd) + '</div>',
@@ -13953,7 +13966,7 @@ function _renderSandboxCompHealth(shiftsBase, shiftsSand, usersBase, usersSand) 
   const headB = ['Type', 'Users (b/s)', 'stddev base', 'sand', 'Δ', 'spread base', 'sand', 'Δ'];
   const headColsB = headB.map((h, i) =>
     '<div style="font-size:0.66rem;color:var(--text-dim);font-weight:600;' +
-    (i === 0 ? '' : 'text-align:right;') + '">' + h + '</div>'
+    (i === 0 ? stickyFirst : 'text-align:right;') + '">' + h + '</div>'
   ).join('');
   const colsB = '1fr auto auto auto auto auto auto auto';
   const tableB =
@@ -13964,9 +13977,11 @@ function _renderSandboxCompHealth(shiftsBase, shiftsSand, usersBase, usersSand) 
         'stddev = absolute spread · spread = (max&minus;min) / max. ' +
         'Lower = tighter. Green Δ = fairer (lower spread), red = wider.' +
       '</div>' +
-      '<div style="display:grid;grid-template-columns:' + colsB + ';gap:3px 10px;align-items:center;">' +
-        headColsB + bodyB +
-      '</div>' +
+      scrollerOpen +
+        '<div style="display:grid;grid-template-columns:' + colsB + ';gap:3px 10px;align-items:center;min-width:max-content;">' +
+          headColsB + bodyB +
+        '</div>' +
+      scrollerClose +
     '</div>';
 
   return '<details open style="margin-top:14px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">' +
@@ -13992,24 +14007,24 @@ function _renderSandboxPerUserMetrics(usersBase, usersSand) {
       ...Object.keys((usersSand[k] && usersSand[k].byArea) || {})
     ])
   )).sort();
+  // Mobile: pin the first column (User) so you can scroll the wide
+  // metric set sideways without losing your bearing. See the matching
+  // pattern in _renderSandboxCompHealth for the rationale.
+  const stickyFirst = 'position:sticky;left:-1px;background:var(--surface);z-index:1;';
   const headerCols = ['User', 'Pass'].concat(areaKeys.map(a => a + ' pts'))
     .concat(areaKeys.map(a => a + ' hrs'))
     .concat(['Total pts', 'Total hrs']);
-  const headerRow = headerCols.map(c =>
-    '<div style="font-size:0.66rem;color:var(--text-dim);font-weight:600;text-align:right;">' + escapeHtml(c) + '</div>'
+  const headerRow = headerCols.map((c, i) =>
+    '<div style="font-size:0.66rem;color:var(--text-dim);font-weight:600;' +
+      (i === 0 ? stickyFirst : 'text-align:right;') + '">' + escapeHtml(c) + '</div>'
   ).join('');
-  // First user column is left-aligned for readability.
-  const headerRowFixed = headerRow.replace(
-    '<div style="font-size:0.66rem;color:var(--text-dim);font-weight:600;text-align:right;">User</div>',
-    '<div style="font-size:0.66rem;color:var(--text-dim);font-weight:600;">User</div>'
-  );
   const renderRow = (uid, label, u) => {
     const ba = (u && u.byArea) || {};
     const cells = areaKeys.map(a => fmt((ba[a] && ba[a].points) || 0))
       .concat(areaKeys.map(a => fmt((ba[a] && ba[a].hours) || 0)))
       .concat([fmt((u && u.points && u.points.total) || 0),
                fmt((u && u.totalHours) || 0)]);
-    return '<div style="font-family:monospace;overflow:hidden;text-overflow:ellipsis;font-size:0.72rem;">' + escapeHtml(uid) + '</div>' +
+    return '<div style="' + stickyFirst + 'font-family:monospace;overflow:hidden;text-overflow:ellipsis;font-size:0.72rem;">' + escapeHtml(uid) + '</div>' +
       '<div style="text-align:right;color:var(--text-dim);font-size:0.72rem;">' + escapeHtml(label) + '</div>' +
       cells.map(c => '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + c + '</div>').join('');
   };
@@ -14020,8 +14035,10 @@ function _renderSandboxPerUserMetrics(usersBase, usersSand) {
   const cols = '1fr auto' + ' auto'.repeat(areaKeys.length * 2 + 2);
   return '<details style="margin-top:14px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">' +
     '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;">Per-user metrics <span style="font-weight:400;color:var(--text-dim);">&mdash; inputs the Objective expression sees</span></summary>' +
-    '<div style="display:grid;grid-template-columns:' + cols + ';gap:3px 10px;margin-top:6px;align-items:center;">' +
-      headerRowFixed + body +
+    '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:6px;">' +
+      '<div style="display:grid;grid-template-columns:' + cols + ';gap:3px 10px;align-items:center;min-width:max-content;">' +
+        headerRow + body +
+      '</div>' +
     '</div></details>';
 }
 
