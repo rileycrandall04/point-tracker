@@ -12887,23 +12887,28 @@ function scoreSnapshotPayloadSync(payload) {
   };
   const saved = data;
   const totals = { ar: 0, prod: 0, call: 0, subspec: 0, supervision: 0,
-                   floatBonus: 0, forceOffBonus: 0, total: 0, hours: 0 };
-  const bySite = {};       // siteId        -> { ar, prod, total, hours, shiftCount }
-  const byShiftType = {};  // assignmentType -> { ar, prod, total, hours, shiftCount }
-  const byArea = {};       // areaKey       -> { points, hours, shiftCount }
+                   floatBonus: 0, forceOffBonus: 0, total: 0, hours: 0, workHours: 0 };
+  const bySite = {};       // siteId         -> { ar, prod, total, hours, workHours, shiftCount }
+  const byShiftType = {};  // assignmentType -> { ar, prod, total, hours, workHours, shiftCount }
+  const byArea = {};       // areaKey        -> { points, ar, prod, hours, workHours, shiftCount }
+  const perShift = [];     // [{ date, assignmentType, siteId, ar, prod, total, clockedHrs, workHrs }] for 3b.3b dashboards
   let scoredShifts = 0;
-  const bumpBucket = (bucket, key, t, hrs) => {
-    if (!bucket[key]) bucket[key] = { ar: 0, prod: 0, total: 0, hours: 0, shiftCount: 0 };
+  const bumpBucket = (bucket, key, t, hrs, workHrs) => {
+    if (!bucket[key]) bucket[key] = { ar: 0, prod: 0, total: 0, hours: 0, workHours: 0, shiftCount: 0 };
     bucket[key].ar += t.ar || 0;
     bucket[key].prod += t.prod || 0;
     bucket[key].total += t.total || 0;
     bucket[key].hours += hrs || 0;
+    bucket[key].workHours += workHrs || 0;
     bucket[key].shiftCount += 1;
   };
-  const bumpArea = (key, t, hrs) => {
-    if (!byArea[key]) byArea[key] = { points: 0, hours: 0, shiftCount: 0 };
+  const bumpArea = (key, t, hrs, workHrs) => {
+    if (!byArea[key]) byArea[key] = { points: 0, ar: 0, prod: 0, hours: 0, workHours: 0, shiftCount: 0 };
     byArea[key].points += t.total || 0;
+    byArea[key].ar += t.ar || 0;
+    byArea[key].prod += t.prod || 0;
     byArea[key].hours += hrs || 0;
+    byArea[key].workHours += workHrs || 0;
     byArea[key].shiftCount += 1;
   };
   try {
@@ -12924,6 +12929,10 @@ function scoreSnapshotPayloadSync(payload) {
       let hrs = 0;
       try { hrs = calcShiftHours(shiftWithDate) || 0; }
       catch (e) { /* fall through with 0 hours */ }
+      // Work hrs = case-time ∩ shift-entry-time. Same try/swallow pattern.
+      let workHrs = 0;
+      try { workHrs = _calcShiftWorkHours(shiftWithDate, sandboxData.cases) || 0; }
+      catch (e) { /* fall through with 0 work hours */ }
       totals.ar += t.ar || 0;
       totals.prod += t.prod || 0;
       totals.call += t.call || 0;
@@ -12933,10 +12942,18 @@ function scoreSnapshotPayloadSync(payload) {
       totals.forceOffBonus += t.forceOffBonus || 0;
       totals.total += t.total || 0;
       totals.hours += hrs;
+      totals.workHours += workHrs;
       const aType = shift.assignmentType || '_unknown';
-      bumpBucket(bySite, shift.siteId || '_unknown', t, hrs);
-      bumpBucket(byShiftType, aType, t, hrs);
-      bumpArea(_SANDBOX_TYPE_TO_AREA[aType] || '_uncategorized', t, hrs);
+      bumpBucket(bySite, shift.siteId || '_unknown', t, hrs, workHrs);
+      bumpBucket(byShiftType, aType, t, hrs, workHrs);
+      bumpArea(_SANDBOX_TYPE_TO_AREA[aType] || '_uncategorized', t, hrs, workHrs);
+      perShift.push({
+        date: dateStr,
+        assignmentType: aType,
+        siteId: shift.siteId || '_unknown',
+        ar: t.ar || 0, prod: t.prod || 0, total: t.total || 0,
+        clockedHrs: hrs, workHrs
+      });
       scoredShifts += 1;
     }
   } finally {
@@ -12952,7 +12969,7 @@ function scoreSnapshotPayloadSync(payload) {
   for (const k of Object.keys(byShiftType)) round(byShiftType[k]);
   for (const k of Object.keys(byArea)) round(byArea[k]);
   totals.scoredShifts = scoredShifts;
-  return { totals, bySite, byShiftType, byArea };
+  return { totals, bySite, byShiftType, byArea, perShift };
 }
 
 async function runSnapshotBaselineClick(snapshotId) {
@@ -13553,6 +13570,12 @@ async function runSandboxExperimentClick() {
     // renderSandboxExperimentEditor for the documented surface.
     const usersBase = {};
     const usersSand = {};
+    // Flat per-shift records (one row per scored shift), each tagged with
+    // the user that owned the shift. Drives the Compensation Health card's
+    // distribution stats (median, CV, p10/p90) which can't be computed from
+    // aggregates alone. baseline + sandbox tracked separately.
+    const shiftsBase = [];
+    const shiftsSand = [];
     let totalShifts = 0;
     for (const d of payloadsSnap.docs) {
       const payload = d.data() || {};
@@ -13577,6 +13600,8 @@ async function runSandboxExperimentClick() {
       });
       usersBase[userKey] = buildUser(baseline);
       usersSand[userKey] = buildUser(sandbox);
+      (baseline.perShift || []).forEach(ps => shiftsBase.push(Object.assign({ userKey }, ps)));
+      (sandbox.perShift  || []).forEach(ps => shiftsSand.push(Object.assign({ userKey }, ps)));
       totalShifts += baseline.totals.scoredShifts || 0;
     }
     let objective = null;
@@ -13596,7 +13621,7 @@ async function runSandboxExperimentClick() {
       objective = { baseline: valBase, sandbox: valSand, expression: objectiveText };
     }
     if (status) status.textContent = 'Scored ' + rows.length + ' users · ' + totalShifts + ' shifts.';
-    renderSandboxExperimentDelta(result, rows, overrides, ruleOverlay, activeHooks, objective, usersBase, usersSand);
+    renderSandboxExperimentDelta(result, rows, overrides, ruleOverlay, activeHooks, objective, usersBase, usersSand, shiftsBase, shiftsSand);
   } catch (e) {
     console.error('runSandboxExperiment failed:', e);
     if (status) status.textContent = 'Run failed: ' + (e.message || String(e));
@@ -13613,7 +13638,7 @@ async function runSandboxExperimentClick() {
 // `{ _error }` object from a runtime throw in the user expression. When
 // present, the objective row is rendered above the points-total grid and
 // a "Per-user metrics" details block is appended at the end.
-function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, activeHooks, objective, usersBase, usersSand) {
+function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, activeHooks, objective, usersBase, usersSand, shiftsBase, shiftsSand) {
   if (!host) return;
   if (!rows || rows.length === 0) {
     host.innerHTML = '<em style="color:var(--text-dim);">No data.</em>';
@@ -13729,7 +13754,222 @@ function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, active
     renderSandboxDeltaSection('By user', 'User', byUser, true) +
     renderSandboxDeltaSection('By site', 'Site', bySite, false) +
     renderSandboxDeltaSection('By shift type', 'Shift type', byType, false) +
+    _renderSandboxCompHealth(shiftsBase, shiftsSand, usersBase, usersSand) +
     _renderSandboxPerUserMetrics(usersBase, usersSand);
+}
+
+// Policy Sandbox 3b.3b: Compensation Health card. Two tables, one
+// collapsed parent <details>:
+//
+//   Table A — Comp profile by shift type:
+//     mean pts/clocked-hr · mean pts/work-hr · CV of pts/clocked-hr ·
+//     AR share (baseline / sandbox / Δ for each).
+//
+//   Table B — Cross-user fairness within shift type:
+//     stddev of per-user-mean pts/clocked-hr · (max-min)/max spread %
+//     (baseline / sandbox / Δ for each).
+//
+// Both tables filter to shift types with at least MIN_TYPE_SHIFTS scored
+// shifts in either pass. Table B further restricts to users with at
+// least MIN_USER_SHIFTS shifts of that type so a single-shift outlier
+// doesn't dominate the spread. Skips render entirely when no per-shift
+// records were captured (legacy callers).
+function _renderSandboxCompHealth(shiftsBase, shiftsSand, usersBase, usersSand) {
+  if (!Array.isArray(shiftsBase) || !Array.isArray(shiftsSand)) return '';
+  if (shiftsBase.length === 0 && shiftsSand.length === 0) return '';
+  const MIN_TYPE_SHIFTS = 3;
+  const MIN_USER_SHIFTS = 3;
+
+  // Math helpers. mean/median/stddev all operate on a numeric array;
+  // empty array returns NaN so the formatter shows an em-dash.
+  const mean = (xs) => xs.length === 0 ? NaN : xs.reduce((s, x) => s + x, 0) / xs.length;
+  const median = (xs) => {
+    if (xs.length === 0) return NaN;
+    const s = xs.slice().sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+  const stddev = (xs) => {
+    if (xs.length < 2) return NaN;
+    const mu = mean(xs);
+    return Math.sqrt(xs.reduce((s, x) => s + (x - mu) * (x - mu), 0) / (xs.length - 1));
+  };
+
+  // Group per-shift records by assignmentType. Skip shifts with no
+  // clocked hours from the pts/clocked-hr distribution (denominator
+  // zero); same for pts/work-hr. The aggregates (sum totals / sum
+  // hours) still use every shift so the AR/prod-share denominators
+  // include every type's full payout, not just case-active shifts.
+  const groupByType = (shifts) => {
+    const g = {};
+    for (const s of shifts) {
+      const k = s.assignmentType || '_unknown';
+      if (!g[k]) g[k] = { sumTotal: 0, sumAr: 0, sumProd: 0, sumClocked: 0, sumWork: 0,
+                          n: 0, clockedPtsHr: [], workPtsHr: [] };
+      g[k].sumTotal += s.total || 0;
+      g[k].sumAr    += s.ar || 0;
+      g[k].sumProd  += s.prod || 0;
+      g[k].sumClocked += s.clockedHrs || 0;
+      g[k].sumWork    += s.workHrs || 0;
+      g[k].n += 1;
+      if (s.clockedHrs > 0) g[k].clockedPtsHr.push((s.total || 0) / s.clockedHrs);
+      if (s.workHrs > 0)    g[k].workPtsHr.push((s.total || 0) / s.workHrs);
+    }
+    return g;
+  };
+  const gBase = groupByType(shiftsBase);
+  const gSand = groupByType(shiftsSand);
+  const allTypes = Array.from(new Set([...Object.keys(gBase), ...Object.keys(gSand)]))
+    .filter(t => (gBase[t]?.n || 0) >= MIN_TYPE_SHIFTS || (gSand[t]?.n || 0) >= MIN_TYPE_SHIFTS)
+    .sort();
+
+  if (allTypes.length === 0) {
+    return '<details style="margin-top:14px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">' +
+      '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;">Compensation Health</summary>' +
+      '<div style="font-size:0.74rem;color:var(--text-dim);margin-top:6px;">No shift type has at least ' + MIN_TYPE_SHIFTS + ' scored shifts.</div>' +
+    '</details>';
+  }
+
+  // Cross-user spread per shift type: per-user mean pts/clocked-hr from
+  // the user aggregate (byShiftType[type].total / byShiftType[type].hours),
+  // restricted to users with at least MIN_USER_SHIFTS shifts of that type.
+  const userMeansForType = (usersMap, type) => {
+    const out = [];
+    if (!usersMap) return out;
+    for (const uk of Object.keys(usersMap)) {
+      const b = usersMap[uk] && usersMap[uk].byShiftType && usersMap[uk].byShiftType[type];
+      if (!b || (b.shiftCount || 0) < MIN_USER_SHIFTS || !(b.hours > 0)) continue;
+      out.push((b.total || 0) / b.hours);
+    }
+    return out;
+  };
+
+  // Formatters. fmtN: number (1 decimal). fmtPct: percentage (1 decimal).
+  // fmtDelta: signed delta with the same precision as the cell type.
+  const fmtN = (v, dp = 2) => Number.isFinite(v) ? v.toFixed(dp) : '&mdash;';
+  const fmtPct = (v) => Number.isFinite(v) ? (v * 100).toFixed(1) + '%' : '&mdash;';
+  const fmtDeltaN = (b, s, dp = 2) => {
+    if (!Number.isFinite(b) || !Number.isFinite(s)) return '<span style="color:var(--text-dim);">&mdash;</span>';
+    const d = s - b;
+    const col = d === 0 ? 'var(--text-dim)' : (d > 0 ? 'var(--accent)' : 'var(--accent2)');
+    return '<span style="color:' + col + ';">' + (d >= 0 ? '+' : '') + d.toFixed(dp) + '</span>';
+  };
+  const fmtDeltaPct = (b, s) => {
+    if (!Number.isFinite(b) || !Number.isFinite(s)) return '<span style="color:var(--text-dim);">&mdash;</span>';
+    const d = (s - b) * 100;
+    const col = d === 0 ? 'var(--text-dim)' : (d > 0 ? 'var(--accent)' : 'var(--accent2)');
+    return '<span style="color:' + col + ';">' + (d >= 0 ? '+' : '') + d.toFixed(1) + 'pp</span>';
+  };
+
+  // Table A — Comp profile by shift type
+  const headA = ['Type', 'N (b/s)',
+    'mean pts/clk-hr base', 'sand', 'Δ',
+    'mean pts/wrk-hr base', 'sand', 'Δ',
+    'CV pts/clk-hr base', 'sand', 'Δ',
+    'AR share base', 'sand', 'Δ'
+  ];
+  const headColsA = headA.map((h, i) =>
+    '<div style="font-size:0.66rem;color:var(--text-dim);font-weight:600;' +
+    (i === 0 ? '' : 'text-align:right;') + '">' + h + '</div>'
+  ).join('');
+  const bodyA = allTypes.map(t => {
+    const b = gBase[t] || { n: 0, sumTotal: 0, sumAr: 0, sumClocked: 0, sumWork: 0, clockedPtsHr: [], workPtsHr: [] };
+    const s = gSand[t] || { n: 0, sumTotal: 0, sumAr: 0, sumClocked: 0, sumWork: 0, clockedPtsHr: [], workPtsHr: [] };
+    const bMeanClk = b.sumClocked > 0 ? b.sumTotal / b.sumClocked : NaN;
+    const sMeanClk = s.sumClocked > 0 ? s.sumTotal / s.sumClocked : NaN;
+    const bMeanWrk = b.sumWork > 0 ? b.sumTotal / b.sumWork : NaN;
+    const sMeanWrk = s.sumWork > 0 ? s.sumTotal / s.sumWork : NaN;
+    const bCv = (b.clockedPtsHr.length >= 2 && mean(b.clockedPtsHr) > 0) ? stddev(b.clockedPtsHr) / mean(b.clockedPtsHr) : NaN;
+    const sCv = (s.clockedPtsHr.length >= 2 && mean(s.clockedPtsHr) > 0) ? stddev(s.clockedPtsHr) / mean(s.clockedPtsHr) : NaN;
+    const bAr = b.sumTotal > 0 ? b.sumAr / b.sumTotal : NaN;
+    const sAr = s.sumTotal > 0 ? s.sumAr / s.sumTotal : NaN;
+    const cells = [
+      '<div style="font-family:monospace;font-size:0.72rem;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(t) + '</div>',
+      '<div style="text-align:right;color:var(--text-dim);font-size:0.72rem;">' + b.n + '/' + s.n + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtN(bMeanClk) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtN(sMeanClk) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;font-weight:600;">' + fmtDeltaN(bMeanClk, sMeanClk) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtN(bMeanWrk) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtN(sMeanWrk) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;font-weight:600;">' + fmtDeltaN(bMeanWrk, sMeanWrk) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtPct(bCv) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtPct(sCv) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;font-weight:600;">' + fmtDeltaPct(bCv, sCv) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtPct(bAr) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtPct(sAr) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;font-weight:600;">' + fmtDeltaPct(bAr, sAr) + '</div>'
+    ];
+    return cells.join('');
+  }).join('');
+  const colsA = '1fr auto' + ' auto'.repeat(headA.length - 2);
+  const tableA =
+    '<div style="margin-top:6px;">' +
+      '<div style="font-weight:600;font-size:0.78rem;margin-bottom:4px;">Compensation profile by shift type</div>' +
+      '<div style="font-size:0.66rem;color:var(--text-dim);margin-bottom:4px;line-height:1.4;">' +
+        'pts/clocked-hr = active-on-shift fairness · pts/work-hr = pts per active case hour · ' +
+        'CV = case-mix sensitivity (lower = tighter) · AR share = clock-in pay vs production pay · ' +
+        'green Δ improves the baseline, red worsens. Types with &lt;' + MIN_TYPE_SHIFTS + ' shifts hidden.' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:' + colsA + ';gap:3px 10px;align-items:center;">' +
+        headColsA + bodyA +
+      '</div>' +
+    '</div>';
+
+  // Table B — Cross-user fairness within shift type
+  const bodyB = allTypes.map(t => {
+    const bMeans = userMeansForType(usersBase, t);
+    const sMeans = userMeansForType(usersSand, t);
+    const bN = bMeans.length, sN = sMeans.length;
+    const bStd = stddev(bMeans), sStd = stddev(sMeans);
+    const bSpread = (bMeans.length >= 2) ? ((Math.max(...bMeans) - Math.min(...bMeans)) / Math.max(...bMeans)) : NaN;
+    const sSpread = (sMeans.length >= 2) ? ((Math.max(...sMeans) - Math.min(...sMeans)) / Math.max(...sMeans)) : NaN;
+    return [
+      '<div style="font-family:monospace;font-size:0.72rem;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(t) + '</div>',
+      '<div style="text-align:right;color:var(--text-dim);font-size:0.72rem;">' + bN + '/' + sN + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtN(bStd) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtN(sStd) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;font-weight:600;">' +
+        // Stddev: lower is "fairer" so flip the color convention (negative Δ = green = better).
+        ((Number.isFinite(bStd) && Number.isFinite(sStd)) ? (() => {
+          const d = sStd - bStd;
+          const col = d === 0 ? 'var(--text-dim)' : (d < 0 ? 'var(--accent)' : 'var(--accent2)');
+          return '<span style="color:' + col + ';">' + (d >= 0 ? '+' : '') + d.toFixed(2) + '</span>';
+        })() : '<span style="color:var(--text-dim);">&mdash;</span>') +
+      '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtPct(bSpread) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;">' + fmtPct(sSpread) + '</div>',
+      '<div style="text-align:right;font-variant-numeric:tabular-nums;font-size:0.72rem;font-weight:600;">' +
+        ((Number.isFinite(bSpread) && Number.isFinite(sSpread)) ? (() => {
+          const d = (sSpread - bSpread) * 100;
+          const col = d === 0 ? 'var(--text-dim)' : (d < 0 ? 'var(--accent)' : 'var(--accent2)');
+          return '<span style="color:' + col + ';">' + (d >= 0 ? '+' : '') + d.toFixed(1) + 'pp</span>';
+        })() : '<span style="color:var(--text-dim);">&mdash;</span>') +
+      '</div>'
+    ].join('');
+  }).join('');
+  const headB = ['Type', 'Users (b/s)', 'stddev base', 'sand', 'Δ', 'spread base', 'sand', 'Δ'];
+  const headColsB = headB.map((h, i) =>
+    '<div style="font-size:0.66rem;color:var(--text-dim);font-weight:600;' +
+    (i === 0 ? '' : 'text-align:right;') + '">' + h + '</div>'
+  ).join('');
+  const colsB = '1fr auto auto auto auto auto auto auto';
+  const tableB =
+    '<div style="margin-top:14px;">' +
+      '<div style="font-weight:600;font-size:0.78rem;margin-bottom:4px;">Cross-user fairness within shift type</div>' +
+      '<div style="font-size:0.66rem;color:var(--text-dim);margin-bottom:4px;line-height:1.4;">' +
+        'Per-user mean pts/clocked-hr, restricted to users with &ge;' + MIN_USER_SHIFTS + ' shifts of the type. ' +
+        'stddev = absolute spread · spread = (max&minus;min) / max. ' +
+        'Lower = tighter. Green Δ = fairer (lower spread), red = wider.' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:' + colsB + ';gap:3px 10px;align-items:center;">' +
+        headColsB + bodyB +
+      '</div>' +
+    '</div>';
+
+  return '<details open style="margin-top:14px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">' +
+    '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;">Compensation Health</summary>' +
+    tableA + tableB +
+  '</details>';
 }
 
 // Compact per-user metrics dump for sanity-checking the objective
@@ -17786,6 +18026,47 @@ function calcShiftHours(shift) {
   let end = timeToMinutes(shift.endTime);
   if (end <= start) end += 1440;
   return (end - start) / 60;
+}
+
+// Policy Sandbox 3b.3b: Work hours = the time intersection between a
+// shift's timeEntries (when the user was clocked in) and the user's
+// cases (when they were actively delivering anesthesia). Used by the
+// Compensation Health dashboard to expose a pts/work-hr denominator
+// alongside pts/clocked-in-hr, so restricted-call shifts with required
+// presence but no cases don't look identical to active-case work.
+//
+// Implementation: pairwise intersection of every case interval with
+// every shift entry interval. Anesthesia work is typically one case at
+// a time per user, so case-interval overlap is rare; we don't dedupe.
+// Open cases (missing endTime) contribute 0. Overnight cases / entries
+// use the same +1440 fold the engine already uses. Cap is inherited
+// from the shift-entry side since intersection clamps to the shorter.
+function _calcShiftWorkHours(shift, allCases) {
+  if (!shift || !Array.isArray(allCases) || allCases.length === 0) return 0;
+  const entries = (shift.timeEntries || []).filter(e => e && e.start && e.end);
+  if (entries.length === 0) return 0;
+  const nextShiftCap = shift.date ? getNextShiftStartMin(shift.date) : null;
+  const shiftIntervals = entries.map(e => {
+    let s = timeToMinutes(e.start);
+    let en = timeToMinutes(e.end);
+    if (en <= s) en += 1440;
+    if (nextShiftCap != null && en > nextShiftCap) en = nextShiftCap;
+    return [s, en];
+  }).filter(([s, e]) => e > s);
+  if (shiftIntervals.length === 0) return 0;
+  let workMin = 0;
+  for (const c of allCases) {
+    if (!c || c.shiftDate !== shift.date || !c.startTime || !c.endTime) continue;
+    let cs = timeToMinutes(c.startTime);
+    let ce = timeToMinutes(c.endTime);
+    if (ce <= cs) ce += 1440;
+    for (const [ss, se] of shiftIntervals) {
+      const lo = Math.max(cs, ss);
+      const hi = Math.min(ce, se);
+      if (hi > lo) workMin += (hi - lo);
+    }
+  }
+  return workMin / 60;
 }
 
 // ================================================================
