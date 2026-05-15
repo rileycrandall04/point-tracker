@@ -13536,11 +13536,11 @@ async function runSandboxExperimentClick() {
     const el = document.getElementById('sandboxObjectiveExpr');
     return el ? (el.value || '').trim() : '';
   })();
-  if (!overrides && !ruleOverlay && !logicHooks && !objectiveText) {
-    if (status) status.textContent = 'No overrides or objective entered — fill at least one field, set a SANDBOX_TEST_RULES.logicHooks function, or define an objective to see results.';
-    if (result) result.innerHTML = '';
-    return;
-  }
+  // Empty-run is now allowed: with no overrides the sandbox pass is
+  // identical to the baseline pass, every Δ is zero, but the Compensation
+  // Health card (3b.3b) still surfaces the baseline metrics — which is
+  // the useful "what does prod look like right now?" diagnostic.
+  const diagnosticOnly = !overrides && !ruleOverlay && !logicHooks && !objectiveText;
   // Compile the objective once. A syntax error blocks the run with a
   // clear message rather than crashing per-user inside the loop.
   let objectiveFn = null;
@@ -13620,7 +13620,10 @@ async function runSandboxExperimentClick() {
       const valSand = safeEval(usersSand);
       objective = { baseline: valBase, sandbox: valSand, expression: objectiveText };
     }
-    if (status) status.textContent = 'Scored ' + rows.length + ' users · ' + totalShifts + ' shifts.';
+    if (status) {
+      status.textContent = 'Scored ' + rows.length + ' users · ' + totalShifts + ' shifts.' +
+        (diagnosticOnly ? '  Diagnostic mode — no overrides, baseline = sandbox.' : '');
+    }
     renderSandboxExperimentDelta(result, rows, overrides, ruleOverlay, activeHooks, objective, usersBase, usersSand, shiftsBase, shiftsSand);
   } catch (e) {
     console.error('runSandboxExperiment failed:', e);
