@@ -5950,13 +5950,16 @@ async function adminMigRunComparison() {
     const errCount = rows.filter(r => !r.blobOk || !r.subOk).length;
     statusEl.style.color = driftCount > 0 ? 'var(--accent2)' : 'var(--accent)';
     statusEl.textContent = rows.length + ' users · ' + driftCount + ' with drift · ' + errCount + ' read errors';
-    let html = '<table style="width:100%;border-collapse:collapse;font-size:0.74rem;">';
+    // Horizontal-scroll wrapper so the table degrades cleanly on narrow phone
+    // viewports instead of either truncating or forcing the user to zoom.
+    let html = '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.74rem;min-width:420px;">';
     html += '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);">';
-    html += '<th style="padding:4px 6px;">User</th>';
-    html += '<th style="padding:4px 6px;text-align:right;">Blob</th>';
-    html += '<th style="padding:4px 6px;text-align:right;">Sub</th>';
-    html += '<th style="padding:4px 6px;text-align:right;">Δ</th>';
-    html += '<th style="padding:4px 6px;">Status</th>';
+    html += '<th style="padding:4px 6px;white-space:nowrap;">User</th>';
+    html += '<th style="padding:4px 6px;text-align:right;white-space:nowrap;">Blob</th>';
+    html += '<th style="padding:4px 6px;text-align:right;white-space:nowrap;">Sub</th>';
+    html += '<th style="padding:4px 6px;text-align:right;white-space:nowrap;">Δ</th>';
+    html += '<th style="padding:4px 6px;white-space:nowrap;">Status</th>';
     html += '</tr></thead><tbody>';
     for (const r of rows) {
       const email = r.profile.email || '(no email)';
@@ -5984,7 +5987,7 @@ async function adminMigRunComparison() {
       html += '<td style="padding:4px 6px;">' + statusCell + '</td>';
       html += '</tr>';
     }
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     outEl.innerHTML = html;
   } catch (err) {
     statusEl.style.color = 'var(--accent2)';
@@ -6004,12 +6007,15 @@ async function adminMigLoadDiagnostics() {
       outEl.innerHTML = '<span style="color:var(--text-dim);">No fallback events recorded. (That\'s a good sign.)</span>';
       return;
     }
-    let html = '<table style="width:100%;border-collapse:collapse;font-size:0.72rem;">';
+    // Horizontal-scroll wrapper for narrow viewports — the Detail column
+    // can be long enough to overflow a phone screen on its own.
+    let html = '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.72rem;min-width:520px;">';
     html += '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);">';
-    html += '<th style="padding:4px 6px;">When</th>';
-    html += '<th style="padding:4px 6px;">User</th>';
-    html += '<th style="padding:4px 6px;">Type</th>';
-    html += '<th style="padding:4px 6px;">Detail</th>';
+    html += '<th style="padding:4px 6px;white-space:nowrap;">When</th>';
+    html += '<th style="padding:4px 6px;white-space:nowrap;">User</th>';
+    html += '<th style="padding:4px 6px;white-space:nowrap;">Type</th>';
+    html += '<th style="padding:4px 6px;white-space:nowrap;">Detail</th>';
     html += '</tr></thead><tbody>';
     snap.forEach(doc => {
       const d = doc.data() || {};
@@ -6030,7 +6036,7 @@ async function adminMigLoadDiagnostics() {
       html += '<td style="padding:4px 6px;vertical-align:top;color:var(--text-dim);">' + detail + '</td>';
       html += '</tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     outEl.innerHTML = html;
   } catch (err) {
     outEl.innerHTML = '<span style="color:var(--accent2);">Failed: ' + escapeHtml(err.message || String(err)) + '</span>';
