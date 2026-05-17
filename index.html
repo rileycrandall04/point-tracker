@@ -4277,10 +4277,19 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <!-- Admin User Lookup (admin only) -->
   <div class="card hidden" id="adminUserLookupCard" style="margin-top:12px;">
     <h2>User Data Lookup</h2>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
       <input type="email" id="adminLookupEmail" placeholder="user@gmail.com"
         style="flex:1;min-width:200px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
       <button class="btn btn-primary btn-sm" onclick="adminLookupUser()">Lookup</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:0.78rem;color:var(--text-dim);">
+      <span>Optional date range:</span>
+      <input type="date" id="adminLookupFromDate"
+        style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.8rem;">
+      <span>to</span>
+      <input type="date" id="adminLookupToDate"
+        style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.8rem;">
+      <span style="font-size:0.7rem;color:var(--text-dim);">(applies to next Lookup; leave blank to skip)</span>
     </div>
     <div id="adminLookupResults" style="font-size:0.82rem;"></div>
   </div>
@@ -8084,6 +8093,38 @@ async function adminLookupUser() {
       h += '</div>';
     });
     h += '</details>';
+    // Optional date range: shows every case in the user's blob whose shiftDate
+    // falls inside [from, to]. Use for spot-checking historical data (e.g.
+    // verifying drift cases from months ago).
+    var fromVal = (document.getElementById('adminLookupFromDate') || {}).value || '';
+    var toVal = (document.getElementById('adminLookupToDate') || {}).value || '';
+    if (fromVal || toVal) {
+      var ranged = cases.filter(function(c) {
+        var d = c.shiftDate || c.date || '';
+        if (!d) return false;
+        if (fromVal && d < fromVal) return false;
+        if (toVal && d > toVal) return false;
+        return true;
+      }).sort(function(a, b) {
+        var ad = a.shiftDate || a.date || '';
+        var bd = b.shiftDate || b.date || '';
+        if (ad !== bd) return ad.localeCompare(bd);
+        return (a.startTime || '').localeCompare(b.startTime || '');
+      });
+      h += '<details open style="margin-top:10px;"><summary style="cursor:pointer;color:var(--primary);">Cases in ' + escapeHtml(fromVal || '...') + ' &rarr; ' + escapeHtml(toVal || '...') + ' (' + ranged.length + ')</summary>';
+      if (ranged.length === 0) {
+        h += '<p style="color:var(--text-dim);margin:6px 0;">No cases in this range.</p>';
+      } else {
+        ranged.forEach(function(c) {
+          h += '<div style="padding:4px 0;border-bottom:1px solid var(--border);">';
+          h += (c.shiftDate || c.date || '?') + ' | ' + escapeHtml(c.procedure || c.caseType || '?') + ' | ' + (c.startTime || '?') + '&ndash;' + (c.endTime || '?') + ' | ' + (c.totalPoints != null ? c.totalPoints : '?') + ' pts';
+          if (c.notes) h += ' | ' + escapeHtml(String(c.notes).slice(0, 30));
+          if (c.id) h += '<br><span style="font-size:0.66rem;color:var(--text-dim);">ID: ' + escapeHtml(c.id) + '</span>';
+          h += '</div>';
+        });
+      }
+      h += '</details>';
+    }
     out.innerHTML = h;
   } catch (err) {
     out.innerHTML = '<p style="color:var(--accent2);">Error: ' + err.message + '</p>';
