@@ -8754,6 +8754,15 @@ function writeCaseDoc(caseData) {
   payload.updatedAt = new Date().toISOString();
   ref.set(payload).catch(err => {
     console.error('Per-case mirror write error:', err);
+    // Surface to admin diagnostics so silent failures don't go unnoticed —
+    // a successful blob save plus a failed sub write is exactly the kind of
+    // drift that becomes data loss in Phase 3.
+    logScalingDiagnostic('write_case_doc_failed', {
+      error: String((err && err.message) || err),
+      errorCode: (err && err.code) || '',
+      caseId: caseData.id,
+      caller: 'writeCaseDoc'
+    });
   });
 }
 
@@ -8765,6 +8774,12 @@ function deleteCaseDoc(caseId) {
     .collection('cases').doc(caseId);
   ref.delete().catch(err => {
     console.error('Per-case mirror delete error:', err);
+    logScalingDiagnostic('delete_case_doc_failed', {
+      error: String((err && err.message) || err),
+      errorCode: (err && err.code) || '',
+      caseId: caseId,
+      caller: 'deleteCaseDoc'
+    });
   });
 }
 
@@ -9110,6 +9125,44 @@ async function loadCasesPhase2() {
       isDelta: isDelta,
       caller: 'loadCasesPhase2'
     });
+  }
+}
+
+// On-open drift check for migrated users: counts the per-case subcollection
+// via the Firestore count() aggregate (single read regardless of size) and
+// compares to the blob's cases.length. Any mismatch logs a diagnostic so
+// admins see drift the moment it appears, not when it's already accumulated.
+// IMPORTANT: blobCasesLength must be captured BEFORE loadCasesPhase2 runs,
+// otherwise data.cases may already be the subcollection contents and the
+// comparison becomes a no-op.
+async function checkCaseDriftOnOpen(blobCasesLength) {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (!settings || settings.casesBackfilledV1 !== true) return;
+  try {
+    const uid = currentUser.uid;
+    let subCount;
+    try {
+      // count() aggregate — one read regardless of subcollection size.
+      const agg = await db.collection('users').doc(uid).collection('cases').count().get();
+      subCount = agg.data().count;
+    } catch (aggErr) {
+      // Older Firestore SDKs may not support count(). Fall back to a regular
+      // get() — costs N reads but still useful for drift detection.
+      const snap = await db.collection('users').doc(uid).collection('cases').get();
+      subCount = snap.size;
+    }
+    if (blobCasesLength !== subCount) {
+      const diff = subCount - blobCasesLength;
+      logScalingDiagnostic('drift_detected_on_open', {
+        blobCount: blobCasesLength,
+        subCount: subCount,
+        diff: diff,
+        caller: 'checkCaseDriftOnOpen'
+      });
+      console.warn('[scaling] Drift detected on open: blob=' + blobCasesLength + ' sub=' + subCount + ' (diff ' + diff + ')');
+    }
+  } catch (err) {
+    console.error('[scaling] Drift check failed:', err);
   }
 }
 
@@ -32958,7 +33011,15 @@ document.getElementById('scanImportBtn').addEventListener('click', () => {
 // SERVICE WORKER REGISTRATION
 // ================================================================
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // Browsers normally check sw.js for updates on navigation with a 24h
+    // soft cap. Long-running PWA sessions can sit on a stale build for
+    // days. Explicitly request an update check now (right after register)
+    // and again every 30 minutes while the tab stays open, so users self-
+    // heal toward the latest version instead of needing a manual refresh.
+    try { reg.update(); } catch (e) {}
+    setInterval(() => { try { reg.update(); } catch (e) {} }, 30 * 60 * 1000);
+  }).catch(() => {});
 }
 
 // ================================================================
@@ -33376,11 +33437,21 @@ auth.onAuthStateChanged(async (user) => {
       console.warn('Per-case backfill threw:', err);
     });
 
-    // Scaling audit #2 Phase 2: load global flags, then optionally swap
-    // data.cases with subcollection contents. Both no-op when flags are off,
-    // so safe to ship before any rollout. Re-renders any view that's already
-    // showing cases so the swap is visible without a manual refresh.
-    loadGlobalScalingFlags().then(() => loadCasesPhase2()).then(() => {
+    // Scaling audit #2 Phase 2: load global flags, fire a drift check
+    // against the current blob, then optionally swap data.cases with
+    // subcollection contents. The drift check must capture blobCasesLength
+    // BEFORE loadCasesPhase2 — otherwise data.cases may already be sub
+    // contents and the comparison is meaningless. All steps no-op when the
+    // user isn't migrated / flags are off, so safe to ship pre-rollout.
+    // Re-renders any view that's already showing cases so the swap is
+    // visible without a manual refresh.
+    loadGlobalScalingFlags().then(() => {
+      // Snapshot blob count before Phase 2 can overwrite data.cases.
+      const blobCasesLength = (data.cases || []).length;
+      // Fire-and-forget — the diagnostic logger handles errors internally.
+      checkCaseDriftOnOpen(blobCasesLength).catch(() => {});
+      return loadCasesPhase2();
+    }).then(() => {
       if (typeof renderToday === 'function') { try { renderToday(); } catch (e) {} }
       if (typeof renderDECaseList === 'function') { try { renderDECaseList(); } catch (e) {} }
       if (typeof updateDETally === 'function') { try { updateDETally(); } catch (e) {} }
