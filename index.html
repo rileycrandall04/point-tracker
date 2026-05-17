@@ -5343,6 +5343,25 @@ function isAdmin() {
   return isAppOwner() || isSiteAdmin();
 }
 
+// Returns the CACHE_NAME of the currently-active service-worker cache (e.g.
+// 'mwa-tracker-v344'), or null if Cache Storage isn't available / nothing is
+// cached. Stamped onto userProfiles at login so admins can spot users stuck
+// on stale cached builds — a user whose runningVersion is many versions
+// behind the latest is the likely cause of any "blob updated but sub didn't"
+// drift.
+async function getCurrentCacheVersion() {
+  try {
+    if (typeof caches === 'undefined' || !caches.keys) return null;
+    const keys = await caches.keys();
+    // Take the lexicographically-highest mwa-tracker-* entry — if the SW is
+    // mid-update with both old and new caches present, the new one wins.
+    const ours = keys.filter(k => k && k.indexOf('mwa-tracker-') === 0).sort();
+    return ours.length > 0 ? ours[ours.length - 1] : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // Fetch the current user's profile doc into memory. Called on auth state
 // change before isAdmin() needs to be accurate for promoted admins.
 async function loadCurrentUserProfile() {
@@ -6471,6 +6490,10 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
   if (inviteSiteName) {
     html += '<br><span style="font-size:0.78rem;color:var(--accent2);">Pending invite: ' + escapeHtml(inviteSiteName) + ' (sent ' + (inv.invitedAt ? inv.invitedAt.split('T')[0] : '') + ')</span>';
   }
+  // Cache version stamped at user's last sign-in. Helps spot stale-build users.
+  if (viewerIsOwner) {
+    html += '<br>' + _adminMSVersionLine(profile);
+  }
   html += '</div>';
 
   // Invite to site — visible to both owner and siteAdmin (siteAdmin's dropdown
@@ -6612,6 +6635,49 @@ async function adminMSPhase2TogglePerUser(uid, which, checked) {
     if (cb) cb.checked = !checked;
   }
 }
+
+// Renders the running cache version this user last reported at sign-in.
+// Compares against the viewer's own current version (read from CACHE_NAME-
+// style key in Cache Storage) and surfaces how many versions behind they are.
+// Stored on userProfiles.runningVersion / runningVersionAt by the auth listener.
+function _adminMSVersionLine(profile) {
+  const v = profile && profile.runningVersion;
+  const at = profile && profile.runningVersionAt;
+  if (!v) {
+    return '<span style="font-size:0.72rem;color:var(--text-dim);">Running version: <em>unknown — no sign-in since version tracking shipped</em></span>';
+  }
+  // Parse trailing integer from 'mwa-tracker-vNNN' for staleness math.
+  const parseV = (s) => {
+    const m = /v(\d+)$/.exec(s || '');
+    return m ? parseInt(m[1], 10) : null;
+  };
+  const viewerV = parseV(_adminMSViewerCacheVersion || '');
+  const userV = parseV(v);
+  let badge = '';
+  if (viewerV !== null && userV !== null) {
+    const behind = viewerV - userV;
+    if (behind <= 0) {
+      badge = ' <span style="color:var(--accent);font-size:0.7rem;">&check; current</span>';
+    } else if (behind <= 3) {
+      badge = ' <span style="color:var(--text-dim);font-size:0.7rem;">(' + behind + ' behind)</span>';
+    } else if (behind <= 10) {
+      badge = ' <span style="color:var(--accent2);font-size:0.7rem;font-weight:600;">(' + behind + ' behind)</span>';
+    } else {
+      badge = ' <span style="color:var(--accent2);font-size:0.7rem;font-weight:700;background:rgba(239,68,68,0.15);padding:1px 6px;border-radius:6px;">(' + behind + ' behind — stale)</span>';
+    }
+  }
+  let line = '<span style="font-size:0.72rem;color:var(--text-dim);">Running version: <strong style="color:var(--text);">' + escapeHtml(v) + '</strong>' + badge;
+  if (at) line += ' <span style="color:var(--text-dim);">· stamped ' + escapeHtml(new Date(at).toLocaleString()) + '</span>';
+  line += '</span>';
+  return line;
+}
+
+// Module-level cache of the viewer's own running version, populated on first
+// admin user card render. Avoids hitting Cache Storage repeatedly.
+let _adminMSViewerCacheVersion = null;
+(async () => {
+  try { _adminMSViewerCacheVersion = await getCurrentCacheVersion(); } catch (e) {}
+})();
 
 // Arm a "force re-sign-in" signal for a user. Stamps userProfiles.forceSignOutAt
 // with the current timestamp. The auth state listener checks this on every page
@@ -33115,12 +33181,23 @@ auth.onAuthStateChanged(async (user) => {
     // leftover banner flag from an earlier bounced session.
     try { localStorage.removeItem('pt_deletedAccount'); } catch (_) {}
 
-    // Write/update user profile (fire-and-forget)
-    db.collection('userProfiles').doc(user.uid).set({
-      email: user.email || '',
-      displayName: user.displayName || '',
-      lastSignIn: new Date().toISOString()
-    }, { merge: true }).catch(err => console.error('Profile write error:', err));
+    // Write/update user profile (fire-and-forget). Stamps the cache version
+    // this device is currently running so admins can spot users stuck on
+    // stale builds — see getCurrentCacheVersion below.
+    (async () => {
+      const profileWrite = {
+        email: user.email || '',
+        displayName: user.displayName || '',
+        lastSignIn: new Date().toISOString()
+      };
+      const ver = await getCurrentCacheVersion();
+      if (ver) {
+        profileWrite.runningVersion = ver;
+        profileWrite.runningVersionAt = new Date().toISOString();
+      }
+      db.collection('userProfiles').doc(user.uid).set(profileWrite, { merge: true })
+        .catch(err => console.error('Profile write error:', err));
+    })();
 
     // Load this user's profile so isAdmin() / pendingInvite are accurate
     // before the rest of init runs.
