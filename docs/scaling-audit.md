@@ -29,6 +29,32 @@ The **Scaling Test** admin tab runs isolated validation scenarios against shadow
 - [ ] **#7 — `loadUserProfiles` full-collection on startup** ([index.html:8061](../index.html)) — pulls every user to label case rows. Lazy-resolve only referenced uids.
 - [ ] **#8 — Lower priority** — `loadSites` cache TTL ([index.html:8077](../index.html)), `localStorage` blob bloat ([index.html:7707](../index.html)), consider `onSnapshot` instead of polling.
 
+## Phase 3 prerequisite — refactor blob-reading code paths
+
+Every code path below currently reads cases directly from `users/{uid}/data/data` (the blob), not from `data.cases` in-memory. These continue working through Phase 2 because the blob is still being maintained by dual-write. **They break in Phase 3a/3b** when blob writes stop and `cases[]` goes stale / empty. Each needs to be refactored to read from `users/{uid}/cases/` subcollection before Phase 3a ships.
+
+Inventory as of 2026-05-17 (line numbers will drift as the file changes — search by function name):
+
+| # | Function | Where | What it does | Refactor for Phase 3 |
+|---|---|---|---|---|
+| 1 | site-migration cases re-stamp (inside `adminMSSetUserSite`) | [index.html:5640](../index.html) | Re-stamps `siteId` on every case when admin moves user between sites | Iterate target user's `cases/` subcollection, update each doc's `siteId` via batch writes |
+| 2 | `adminMigRunComparison` blob count | [index.html:5934](../index.html) | Reads `blob.cases.length` for the Migration tab comparison | Becomes redundant in Phase 3b. Until then, compare `cases/` count to itself or keep as historical signal of stale blob |
+| 3 | `adminMSLoadActivity` per-user cases | [index.html:6782](../index.html) | Reads every user's blob `.cases[]` to compute totals + recent counts | Switch to per-user `cases/` count + `where('shiftDate', '>=', weekAgo)` query, or use a denormalized `userProfiles.activitySummary` (overlaps with audit item #4) |
+| 4 | `adminLookupUser` (User Data Lookup) | [index.html:8513](../index.html) | Reads blob to display target user's today + 7-day + optional-range cases | Switch to subcollection queries by `shiftDate` |
+| 5 | `adminForceCaseMigrate` blob read | [index.html:9282](../index.html) | Copies blob's cases into target's `cases/` subcollection | Becomes obsolete in Phase 3b when blob is canonical. Keep until then for stuck-user recovery |
+| 6 | `adminInspectCaseDrift` | [index.html:9329](../index.html) | Reads blob + sub side-by-side for drift inspector | Becomes obsolete in Phase 3b. Keep through 3a as last-resort comparison |
+| 7 | `adminReconcileCasesToBlob` (via inspect) | [index.html:9329](../index.html) | Uses inspector to drive write/delete plan | Same as #6 |
+| 8 | `loadFromFirestore` initial cases load | [index.html:10070](../index.html) | Populates `data.cases` from blob on app open. In Phase 2, `loadCasesPhase2` immediately replaces with sub contents | In Phase 3a, blob's `cases[]` is stale → keep populating from sub via `loadCasesPhase2` ONLY (skip the blob fallback for cases). In 3b, ignore the field entirely |
+| 9 | `readUserRangeDataForSandbox` | [index.html:14165](../index.html) | Reads blob for the Policy Sandbox feature | Switch to subcollection range queries by `shiftDate` |
+| 10 | `checkCaseDriftOnOpen` (caller wires `blobCasesLength` in) | [index.html:33xxx](../index.html) | On-open drift detection | Becomes redundant when blob is no longer authoritative. Remove or repurpose to compare sub vs in-memory |
+| 11 | User-deletion blob `.delete()` | [index.html:8255](../index.html), [index.html:8316](../index.html) | Both admin user-delete paths only delete the blob doc + settings | Also delete every doc under `users/{uid}/cases/` (batched) so deleted-user cleanup is complete |
+
+**Process when we approach Phase 3:**
+1. Walk this list, refactor each entry one PR at a time (one entry per PR is best — keeps blast radius small).
+2. For each PR, add a matching scenario to the Scaling Test harness so the refactor is covered.
+3. After all 11 are refactored AND the Cloud Functions server-side dual-write trigger is live + soaked, ship Phase 3a.
+4. After 3a has been clean for an extended period, ship Phase 3b (prune `cases[]` from existing blobs).
+
 ## Workflow
 
 For each item: review pros/cons together → user approves approach → implement → squash-merge → check off.
