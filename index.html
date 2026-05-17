@@ -6420,6 +6420,27 @@ function adminScalingTestInit() {
   _scalingProgress('Idle.', '');
 }
 
+// Wipe the test subcollection + test blob silently. Used by adminScalingRun
+// before each scenario so leftovers from a prior run don't show up as
+// false-positive drift (every scenario tracks an in-memory state.cases as
+// its "expected" set — stale orphans in the sub would appear as a constant
+// offset in the consistency check).
+async function _scalingPurgeSilent() {
+  if (!currentUser) return 0;
+  let total = 0;
+  while (true) {
+    const snap = await _testCasesCollection().limit(400).get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    snap.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+    total += snap.size;
+    if (snap.size < 400) break;
+  }
+  try { await _testBlobRef().delete(); } catch (_) {}
+  return total;
+}
+
 async function adminScalingRun() {
   if (!isAppOwner() && !isLegacyAdmin()) return;
   if (_scalingRunActive) {
@@ -6438,6 +6459,12 @@ async function adminScalingRun() {
   const start = Date.now();
   _scalingLog('--- ' + scenario + ' (n=' + n + ') ---', 'info');
   try {
+    // Always start from a clean slate. Without this, leftover docs from a
+    // previous scenario (e.g. bulkCreate of 31 cases) show up as a constant
+    // offset in subsequent scenarios' drift checks → false positives.
+    _scalingProgress('Purging stale test data…');
+    const purged = await _scalingPurgeSilent();
+    if (purged > 0) _scalingLog('Auto-purged ' + purged + ' leftover test cases before run', 'info');
     if (scenario === 'bulkCreate')      await _scenarioBulkCreate(n, state);
     else if (scenario === 'sequentialEdit') await _scenarioSequentialEdit(state);
     else if (scenario === 'bulkDelete')     await _scenarioBulkDelete(state);
