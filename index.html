@@ -4089,6 +4089,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
         style="border-radius:6px 6px 0 0;background:var(--surface2);">Test cleanup</button>
       <button class="btn btn-sm" id="adminMSTabMigration" onclick="adminMSSetTab('migration')"
         style="border-radius:6px 6px 0 0;background:var(--surface2);">Migration</button>
+      <button class="btn btn-sm" id="adminMSTabScalingTest" onclick="adminMSSetTab('scalingTest')"
+        style="border-radius:6px 6px 0 0;background:var(--surface2);">Scaling Test</button>
     </div>
 
     <!-- Users tab -->
@@ -4270,6 +4272,47 @@ body.hide-monetary .monetary-hide { display: none !important; }
           <button class="btn btn-sm" onclick="adminMigLoadDiagnostics()">Refresh</button>
         </div>
         <div id="adminMigDiagnosticsList" style="font-size:0.78rem;margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <!-- Scaling Test tab (scaling audit #2 validation harness) -->
+    <div id="adminMSScalingTestPane" class="hidden">
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
+        Run automated test sequences against an isolated copy of the dual-write system to validate consistency before advancing rollout stages. Test data lives at <code style="font-size:0.72rem;">users/{yourUid}/scalingTestData/blob</code> and <code style="font-size:0.72rem;">users/{yourUid}/scalingTestCases/{caseId}</code> &mdash; never touches your real cases, never writes to sharedCases / sharedShifts, never affects site averages or any analytics.
+      </p>
+
+      <!-- Run controls -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:14px;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+          <label style="font-size:0.8rem;">Scenario:</label>
+          <select id="adminScalingScenario" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;min-width:200px;">
+            <option value="bulkCreate">Bulk create (N cases in a row)</option>
+            <option value="sequentialEdit">Sequential edit (touch every case)</option>
+            <option value="bulkDelete">Bulk delete (clear all)</option>
+            <option value="randomChurn">Random churn (mixed ops)</option>
+            <option value="rapidFire">Rapid-fire concurrent (no awaits)</option>
+            <option value="driftSim">Drift simulation + reconcile</option>
+            <option value="deltaSync">Delta sync correctness</option>
+          </select>
+          <label style="font-size:0.8rem;">Iterations:</label>
+          <input type="number" id="adminScalingIterations" value="100" min="1" max="2000" style="width:80px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+          <button class="btn btn-primary btn-sm" id="adminScalingRunBtn" onclick="adminScalingRun()">Run</button>
+          <button class="btn btn-sm" onclick="adminScalingPurge()" style="background:var(--accent2);color:#1e293b;">Purge test data</button>
+        </div>
+        <div id="adminScalingScenarioDesc" style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;"></div>
+      </div>
+
+      <!-- Live progress + counts -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:14px;">
+        <div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Progress</div>
+        <div id="adminScalingProgress" style="font-size:0.8rem;">Idle.</div>
+        <div id="adminScalingCounts" style="font-size:0.74rem;color:var(--text-dim);margin-top:4px;"></div>
+      </div>
+
+      <!-- Results -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;">
+        <div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Results</div>
+        <div id="adminScalingResults" style="font-size:0.78rem;">Run a scenario to see results.</div>
       </div>
     </div>
   </div>
@@ -5783,12 +5826,13 @@ function escapeHtml(s) {
 
 function adminMSSetTab(tab) {
   const tabs = [
-    { id: 'users',     btn: 'adminMSTabUsers',     pane: 'adminMSUsersPane'     },
-    { id: 'activity',  btn: 'adminMSTabActivity',  pane: 'adminMSActivityPane'  },
-    { id: 'sites',     btn: 'adminMSTabSites',     pane: 'adminMSSitesPane'     },
-    { id: 'rules',     btn: 'adminMSTabRules',     pane: 'adminMSRulesPane'     },
-    { id: 'test',      btn: 'adminMSTabTest',      pane: 'adminMSTestPane'      },
-    { id: 'migration', btn: 'adminMSTabMigration', pane: 'adminMSMigrationPane' }
+    { id: 'users',       btn: 'adminMSTabUsers',       pane: 'adminMSUsersPane'       },
+    { id: 'activity',    btn: 'adminMSTabActivity',    pane: 'adminMSActivityPane'    },
+    { id: 'sites',       btn: 'adminMSTabSites',       pane: 'adminMSSitesPane'       },
+    { id: 'rules',       btn: 'adminMSTabRules',       pane: 'adminMSRulesPane'       },
+    { id: 'test',        btn: 'adminMSTabTest',        pane: 'adminMSTestPane'        },
+    { id: 'migration',   btn: 'adminMSTabMigration',   pane: 'adminMSMigrationPane'   },
+    { id: 'scalingTest', btn: 'adminMSTabScalingTest', pane: 'adminMSScalingTestPane' }
   ];
   for (const t of tabs) {
     const btn = document.getElementById(t.btn);
@@ -5808,6 +5852,7 @@ function adminMSSetTab(tab) {
   if (tab === 'rules') adminRulesInit();
   if (tab === 'activity') adminMSInitActivity();
   if (tab === 'migration') adminMigInit();
+  if (tab === 'scalingTest') adminScalingTestInit();
 }
 
 // ---- Migration Diagnostics tab (scaling audit #2 Phase 2) ----
@@ -6005,6 +6050,428 @@ async function adminMigPruneOldDiagnostics() {
     console.log('[scaling] Pruned', snap.size, 'diagnostic entries older than', PHASE2_DIAGNOSTIC_PRUNE_DAYS, 'days');
   } catch (err) {
     console.warn('Diagnostic prune error:', err);
+  }
+}
+
+// ================================================================
+// Scaling Test Harness — isolated validation for audit #2 dual-write
+// ================================================================
+//
+// Operates on dedicated paths under the admin's own user namespace, never
+// touching production code paths or any shared collection. Used to gain
+// confidence in the dual-write / Phase 2 read patterns before advancing
+// rollout stages.
+//
+// IMPORTANT — KEEP IN SYNC: every time we change the production code path
+// (writeCaseDoc, deleteCaseDoc, backfillCaseSubcollection, loadCasesPhase2,
+// adminReconcileCasesToBlob), the shadow implementations below should be
+// updated to match. If we advance to a new phase (e.g. Phase 3 Cloud
+// Functions trigger, Phase 3a blob-write removal), add a scenario that
+// exercises that transition. The point of this harness is that it
+// continues to validate the system as it evolves.
+//
+// Test data paths:
+//   users/{uid}/scalingTestData/blob       (test "blob" — { cases: [...] })
+//   users/{uid}/scalingTestCases/{caseId}  (test subcollection)
+
+const SCALING_TEST_BLOB_DOC = 'blob';
+const SCALING_TEST_CASES_COLLECTION = 'scalingTestCases';
+const SCALING_TEST_DATA_COLLECTION = 'scalingTestData';
+
+// ---- Shadow paths (mirror production ones with test prefix) ----
+function _testBlobRef() {
+  return db.collection('users').doc(currentUser.uid)
+    .collection(SCALING_TEST_DATA_COLLECTION).doc(SCALING_TEST_BLOB_DOC);
+}
+function _testCasesCollection() {
+  return db.collection('users').doc(currentUser.uid)
+    .collection(SCALING_TEST_CASES_COLLECTION);
+}
+function _testCaseRef(caseId) {
+  return _testCasesCollection().doc(caseId);
+}
+
+// ---- Shadow implementations of production case operations ----
+// Each mirrors the production function line-by-line, but against test paths.
+// MIRRORS: writeCaseDoc
+async function _testWriteCaseDoc(caseData) {
+  if (!firestoreSyncEnabled || !currentUser) throw new Error('not signed in');
+  if (!caseData || !caseData.id) throw new Error('case has no id');
+  const payload = JSON.parse(JSON.stringify(caseData));
+  payload.updatedAt = new Date().toISOString();
+  await _testCaseRef(caseData.id).set(payload);
+  return payload;
+}
+// MIRRORS: deleteCaseDoc
+async function _testDeleteCaseDoc(caseId) {
+  if (!firestoreSyncEnabled || !currentUser) throw new Error('not signed in');
+  if (!caseId) throw new Error('caseId required');
+  await _testCaseRef(caseId).delete();
+}
+// MIRRORS: saveData → syncToFirestore (for the cases array part only)
+async function _testWriteBlob(testCases) {
+  await _testBlobRef().set({ cases: JSON.parse(JSON.stringify(testCases)) });
+}
+async function _testReadBlobCases() {
+  const doc = await _testBlobRef().get();
+  if (!doc.exists) return [];
+  const d = doc.data() || {};
+  return Array.isArray(d.cases) ? d.cases : [];
+}
+// MIRRORS: drift inspector + count() check
+async function _testCountSubCases() {
+  try {
+    const agg = await _testCasesCollection().count().get();
+    return agg.data().count;
+  } catch (e) {
+    const snap = await _testCasesCollection().get();
+    return snap.size;
+  }
+}
+async function _testListSubCaseIds() {
+  const snap = await _testCasesCollection().get();
+  const ids = [];
+  snap.forEach(d => ids.push(d.id));
+  return ids;
+}
+// MIRRORS: adminReconcileCasesToBlob (used in driftSim scenario)
+async function _testReconcileToBlob() {
+  const blobCases = await _testReadBlobCases();
+  const blobIds = new Set(blobCases.filter(c => c && c.id).map(c => c.id));
+  const subIds = new Set(await _testListSubCaseIds());
+  const onlyInBlob = blobCases.filter(c => c && c.id && !subIds.has(c.id));
+  const onlyInSub = [...subIds].filter(id => !blobIds.has(id));
+  for (const c of onlyInBlob) await _testWriteCaseDoc(c);
+  for (const id of onlyInSub) await _testDeleteCaseDoc(id);
+  return { wrote: onlyInBlob.length, deleted: onlyInSub.length };
+}
+// MIRRORS: loadCasesPhase2 delta sync (returns ids of cases changed since `since`)
+async function _testDeltaQuery(since) {
+  const snap = await _testCasesCollection().where('updatedAt', '>', since).get();
+  const ids = [];
+  snap.forEach(d => ids.push(d.id));
+  return ids;
+}
+
+// ---- Test data generation ----
+function _testGenCase(seq) {
+  const procedures = ['Total Knee', 'Cholecystectomy', 'Appendectomy', 'Hysterectomy', 'EGD', 'Colonoscopy', 'TKA', 'Hernia Repair', 'Carpal Tunnel', 'Cataract'];
+  const surgeons = ['T. Test', 'R. Random', 'F. Fake', 'X. Example'];
+  return {
+    id: 'scltest_' + Date.now().toString(36) + '_' + seq + '_' + Math.random().toString(36).slice(2, 8),
+    caseType: 'standard',
+    procedure: procedures[seq % procedures.length],
+    shiftDate: '2099-01-' + String((seq % 28) + 1).padStart(2, '0'), // year 2099 so it's clearly fake
+    startTime: '09:00',
+    endTime: '10:30',
+    baseUnits: 5,
+    physicalStatus: 'P2',
+    notes: surgeons[seq % surgeons.length],
+    isTestData: true,
+    siteId: '__scaling_test__'
+  };
+}
+
+// ---- Test runner state ----
+let _scalingRunActive = false;
+const _scalingResultLog = [];
+
+function _scalingLog(line, kind) {
+  _scalingResultLog.push({ kind: kind || 'info', line: line, t: new Date().toISOString() });
+  _scalingRenderResults();
+}
+function _scalingRenderResults() {
+  const el = document.getElementById('adminScalingResults');
+  if (!el) return;
+  if (_scalingResultLog.length === 0) {
+    el.textContent = 'No results yet.';
+    return;
+  }
+  const colorFor = k => k === 'fail' ? 'var(--accent2)' : (k === 'pass' ? 'var(--accent)' : 'var(--text-dim)');
+  let html = '';
+  _scalingResultLog.slice(-200).forEach(r => {
+    html += '<div style="padding:2px 0;color:' + colorFor(r.kind) + ';">';
+    html += (r.kind === 'pass' ? '✓ ' : (r.kind === 'fail' ? '✗ ' : '· '));
+    html += escapeHtml(r.line);
+    html += '</div>';
+  });
+  el.innerHTML = html;
+  el.scrollTop = el.scrollHeight;
+}
+function _scalingProgress(line, counts) {
+  const p = document.getElementById('adminScalingProgress');
+  if (p) p.textContent = line || '';
+  const c = document.getElementById('adminScalingCounts');
+  if (c) c.textContent = counts || '';
+}
+async function _scalingAssertConsistent(expectedBlobCases) {
+  const blobCount = expectedBlobCases.length;
+  const subCount = await _testCountSubCases();
+  if (blobCount !== subCount) {
+    _scalingLog('Drift: blob=' + blobCount + ' sub=' + subCount + ' (diff ' + (subCount - blobCount) + ')', 'fail');
+    return false;
+  }
+  return true;
+}
+
+// ---- Scenarios ----
+async function _scenarioBulkCreate(n, state) {
+  const cases = [];
+  for (let i = 0; i < n; i++) {
+    if (!_scalingRunActive) return;
+    const c = _testGenCase(i);
+    cases.push(c);
+    await _testWriteBlob(cases);
+    await _testWriteCaseDoc(c);
+    if (i % 10 === 9 || i === n - 1) {
+      _scalingProgress('Bulk create ' + (i + 1) + ' / ' + n, 'blob=' + cases.length + ' sub=' + (await _testCountSubCases()));
+    }
+  }
+  state.cases = cases;
+  const ok = await _scalingAssertConsistent(cases);
+  _scalingLog('Bulk create: ' + n + ' cases ' + (ok ? 'consistent' : 'INCONSISTENT'), ok ? 'pass' : 'fail');
+}
+
+async function _scenarioSequentialEdit(state) {
+  if (!state.cases || state.cases.length === 0) {
+    state.cases = [];
+    for (let i = 0; i < 20; i++) state.cases.push(_testGenCase(i));
+    await _testWriteBlob(state.cases);
+    for (const c of state.cases) await _testWriteCaseDoc(c);
+  }
+  const startTime = new Date().toISOString();
+  let edited = 0;
+  for (const c of state.cases) {
+    if (!_scalingRunActive) return;
+    c.procedure = (c.procedure || '') + ' (edited)';
+    await _testWriteBlob(state.cases);
+    await _testWriteCaseDoc(c);
+    edited++;
+    if (edited % 10 === 0) _scalingProgress('Edited ' + edited + ' / ' + state.cases.length);
+  }
+  const newer = await _testDeltaQuery(startTime);
+  const ok = newer.length === state.cases.length;
+  _scalingLog('Sequential edit: ' + edited + ' cases, ' + newer.length + ' bumped updatedAt ' + (ok ? '(match)' : '(MISMATCH expected ' + state.cases.length + ')'), ok ? 'pass' : 'fail');
+}
+
+async function _scenarioBulkDelete(state) {
+  if (!state.cases || state.cases.length === 0) {
+    state.cases = [];
+    for (let i = 0; i < 20; i++) state.cases.push(_testGenCase(i));
+    await _testWriteBlob(state.cases);
+    for (const c of state.cases) await _testWriteCaseDoc(c);
+  }
+  let remaining = state.cases.slice();
+  const total = remaining.length;
+  while (remaining.length > 0) {
+    if (!_scalingRunActive) return;
+    const c = remaining.shift();
+    await _testWriteBlob(remaining);
+    await _testDeleteCaseDoc(c.id);
+    if (remaining.length % 10 === 0) _scalingProgress('Deleted ' + (total - remaining.length) + ' / ' + total);
+  }
+  state.cases = [];
+  const ok = await _scalingAssertConsistent([]);
+  _scalingLog('Bulk delete: ' + total + ' cases, both stores empty ' + (ok ? '✓' : 'FAIL'), ok ? 'pass' : 'fail');
+}
+
+async function _scenarioRandomChurn(n, state) {
+  // Warm up to ~10 cases.
+  state.cases = state.cases || [];
+  while (state.cases.length < 10) {
+    const c = _testGenCase(state.cases.length);
+    state.cases.push(c);
+    await _testWriteBlob(state.cases);
+    await _testWriteCaseDoc(c);
+  }
+  let creates = 0, edits = 0, deletes = 0, failures = 0;
+  for (let i = 0; i < n; i++) {
+    if (!_scalingRunActive) return;
+    const op = state.cases.length === 0 ? 'create' : ['create', 'edit', 'delete', 'create'][Math.floor(Math.random() * 4)];
+    try {
+      if (op === 'create') {
+        const c = _testGenCase(1000 + i);
+        state.cases.push(c);
+        await _testWriteBlob(state.cases);
+        await _testWriteCaseDoc(c);
+        creates++;
+      } else if (op === 'edit') {
+        const idx = Math.floor(Math.random() * state.cases.length);
+        state.cases[idx].procedure = (state.cases[idx].procedure || '') + ' e';
+        await _testWriteBlob(state.cases);
+        await _testWriteCaseDoc(state.cases[idx]);
+        edits++;
+      } else {
+        const idx = Math.floor(Math.random() * state.cases.length);
+        const [removed] = state.cases.splice(idx, 1);
+        await _testWriteBlob(state.cases);
+        await _testDeleteCaseDoc(removed.id);
+        deletes++;
+      }
+    } catch (e) {
+      failures++;
+      _scalingLog('Op ' + i + ' (' + op + ') failed: ' + (e.message || e), 'fail');
+    }
+    if (i % 10 === 9) {
+      _scalingProgress('Random churn ' + (i + 1) + ' / ' + n + ' (c=' + creates + ' e=' + edits + ' d=' + deletes + ')', 'blob=' + state.cases.length + ' sub=' + (await _testCountSubCases()));
+      const ok = await _scalingAssertConsistent(state.cases);
+      if (!ok) failures++;
+    }
+  }
+  const finalOk = await _scalingAssertConsistent(state.cases);
+  _scalingLog('Random churn: ' + n + ' ops (' + creates + ' creates, ' + edits + ' edits, ' + deletes + ' deletes), ' + failures + ' failures, final ' + (finalOk ? 'consistent' : 'INCONSISTENT'), failures === 0 && finalOk ? 'pass' : 'fail');
+}
+
+async function _scenarioRapidFire(n, state) {
+  state.cases = [];
+  const promises = [];
+  const fresh = [];
+  for (let i = 0; i < n; i++) {
+    const c = _testGenCase(2000 + i);
+    fresh.push(c);
+    promises.push(_testWriteCaseDoc(c));
+  }
+  // Write blob with all cases in one go (matches saveData's whole-blob semantics).
+  promises.push(_testWriteBlob(fresh));
+  const results = await Promise.allSettled(promises);
+  const failed = results.filter(r => r.status === 'rejected').length;
+  state.cases = fresh;
+  const ok = await _scalingAssertConsistent(fresh);
+  _scalingLog('Rapid-fire: ' + n + ' concurrent ops, ' + failed + ' failed, final ' + (ok ? 'consistent' : 'INCONSISTENT'), failed === 0 && ok ? 'pass' : 'fail');
+}
+
+async function _scenarioDriftSim(state) {
+  // Seed with 20 cases.
+  state.cases = [];
+  for (let i = 0; i < 20; i++) state.cases.push(_testGenCase(3000 + i));
+  await _testWriteBlob(state.cases);
+  for (const c of state.cases) await _testWriteCaseDoc(c);
+  _scalingProgress('Drift sim: seeded 20 cases');
+  // Simulate a stale-client delete: remove from blob only.
+  const removed = state.cases.splice(5, 1)[0];
+  await _testWriteBlob(state.cases);
+  // Verify drift exists.
+  const blobBefore = state.cases.length;
+  const subBefore = await _testCountSubCases();
+  if (subBefore - blobBefore !== 1) {
+    _scalingLog('Drift sim: expected +1 drift after blob-only delete, got ' + (subBefore - blobBefore), 'fail');
+    return;
+  }
+  _scalingLog('Drift sim: induced +1 drift (blob=' + blobBefore + ' sub=' + subBefore + ')', 'info');
+  // Run reconcile.
+  const res = await _testReconcileToBlob();
+  _scalingLog('Drift sim: reconcile wrote=' + res.wrote + ' deleted=' + res.deleted, 'info');
+  const ok = await _scalingAssertConsistent(state.cases);
+  _scalingLog('Drift sim: post-reconcile ' + (ok ? 'consistent ✓' : 'STILL INCONSISTENT'), ok ? 'pass' : 'fail');
+}
+
+async function _scenarioDeltaSync(state) {
+  // Seed with 30 cases.
+  state.cases = [];
+  for (let i = 0; i < 30; i++) state.cases.push(_testGenCase(4000 + i));
+  await _testWriteBlob(state.cases);
+  for (const c of state.cases) await _testWriteCaseDoc(c);
+  // Wait 1.1s so updatedAt of edits is strictly after `since`.
+  await new Promise(r => setTimeout(r, 1100));
+  const since = new Date().toISOString();
+  await new Promise(r => setTimeout(r, 1100));
+  // Edit 7 random cases.
+  const toEdit = [];
+  for (let i = 0; i < 7; i++) toEdit.push(state.cases[i * 4]);
+  for (const c of toEdit) {
+    c.procedure = (c.procedure || '') + ' (delta)';
+    await _testWriteCaseDoc(c);
+  }
+  await _testWriteBlob(state.cases);
+  const newer = await _testDeltaQuery(since);
+  const ok = newer.length === toEdit.length;
+  _scalingLog('Delta sync: edited ' + toEdit.length + ' cases, delta query returned ' + newer.length + ' ' + (ok ? '(match)' : '(MISMATCH)'), ok ? 'pass' : 'fail');
+}
+
+// ---- Public entry points ----
+function adminScalingTestInit() {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  const sel = document.getElementById('adminScalingScenario');
+  const desc = document.getElementById('adminScalingScenarioDesc');
+  const updateDesc = () => {
+    const descs = {
+      bulkCreate: 'Create N cases sequentially. Verify blob count == sub count after each batch.',
+      sequentialEdit: 'Edit every existing test case (auto-seeds 20 if empty). Verify all cases bumped updatedAt within the window.',
+      bulkDelete: 'Delete every existing test case (auto-seeds 20 if empty). Verify both stores end at 0.',
+      randomChurn: 'N random ops from {create, edit, delete}. Consistency check every 10 ops + at end.',
+      rapidFire: 'Fire N writes concurrently without awaiting. Catches race conditions and ordering bugs.',
+      driftSim: 'Seed 20 cases, induce drift by deleting one from blob only, run reconcile-to-blob, verify cleanup.',
+      deltaSync: 'Seed 30 cases, mark a "since" timestamp, edit 7, run delta query, verify exactly 7 returned.'
+    };
+    if (desc) desc.textContent = descs[sel.value] || '';
+  };
+  if (sel) {
+    sel.onchange = updateDesc;
+    updateDesc();
+  }
+  _scalingResultLog.length = 0;
+  _scalingRenderResults();
+  _scalingProgress('Idle.', '');
+}
+
+async function adminScalingRun() {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  if (_scalingRunActive) {
+    _scalingRunActive = false;
+    return;
+  }
+  if (!currentUser) { _scalingLog('Not signed in', 'fail'); return; }
+  const sel = document.getElementById('adminScalingScenario');
+  const itEl = document.getElementById('adminScalingIterations');
+  const btn = document.getElementById('adminScalingRunBtn');
+  const scenario = sel ? sel.value : 'bulkCreate';
+  const n = Math.max(1, Math.min(2000, parseInt((itEl && itEl.value) || '100', 10)));
+  _scalingRunActive = true;
+  if (btn) btn.textContent = 'Stop';
+  const state = {};
+  const start = Date.now();
+  _scalingLog('--- ' + scenario + ' (n=' + n + ') ---', 'info');
+  try {
+    if (scenario === 'bulkCreate')      await _scenarioBulkCreate(n, state);
+    else if (scenario === 'sequentialEdit') await _scenarioSequentialEdit(state);
+    else if (scenario === 'bulkDelete')     await _scenarioBulkDelete(state);
+    else if (scenario === 'randomChurn')    await _scenarioRandomChurn(n, state);
+    else if (scenario === 'rapidFire')      await _scenarioRapidFire(n, state);
+    else if (scenario === 'driftSim')       await _scenarioDriftSim(state);
+    else if (scenario === 'deltaSync')      await _scenarioDeltaSync(state);
+  } catch (e) {
+    _scalingLog('Scenario crashed: ' + (e.message || e), 'fail');
+  }
+  const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+  _scalingLog('Done in ' + elapsed + 's', 'info');
+  _scalingProgress('Done. ' + elapsed + 's', '');
+  _scalingRunActive = false;
+  if (btn) btn.textContent = 'Run';
+}
+
+async function adminScalingPurge() {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  if (!currentUser) return;
+  if (!confirm('Delete all scaling test data (test blob + test cases subcollection)? This only affects test paths; your real cases are untouched.')) return;
+  _scalingLog('Purging test data…', 'info');
+  try {
+    // Delete every case in the test subcollection in batches of 400.
+    let total = 0;
+    while (true) {
+      const snap = await _testCasesCollection().limit(400).get();
+      if (snap.empty) break;
+      const batch = db.batch();
+      snap.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      total += snap.size;
+      _scalingProgress('Purging… ' + total + ' deleted');
+      if (snap.size < 400) break;
+    }
+    try { await _testBlobRef().delete(); } catch (_) {}
+    _scalingLog('Purged ' + total + ' test cases + test blob ✓', 'pass');
+    _scalingProgress('Idle.', '');
+  } catch (err) {
+    _scalingLog('Purge failed: ' + (err.message || err), 'fail');
   }
 }
 
