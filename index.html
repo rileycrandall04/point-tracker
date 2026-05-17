@@ -4087,6 +4087,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
         style="border-radius:6px 6px 0 0;background:var(--surface2);">Shift Rules</button>
       <button class="btn btn-sm" id="adminMSTabTest" onclick="adminMSSetTab('test')"
         style="border-radius:6px 6px 0 0;background:var(--surface2);">Test cleanup</button>
+      <button class="btn btn-sm" id="adminMSTabMigration" onclick="adminMSSetTab('migration')"
+        style="border-radius:6px 6px 0 0;background:var(--surface2);">Migration</button>
     </div>
 
     <!-- Users tab -->
@@ -4219,6 +4221,56 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <button class="btn btn-sm" id="adminMSWipeBtn" onclick="adminMSWipeUser()" disabled
         style="background:var(--accent2);color:#1e293b;width:100%;">Wipe user data</button>
       <div id="adminMSWipeStatus" style="margin-top:10px;font-size:0.82rem;"></div>
+    </div>
+
+    <!-- Migration Diagnostics tab (scaling audit #2 Phase 2) -->
+    <div id="adminMSMigrationPane" class="hidden">
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;">
+        Per-case migration health: comparison of blob vs subcollection counts per user, global rollout flag, and recent fallback events. Run the comparison before flipping the rollout flag to spot any drift.
+      </p>
+
+      <!-- Global rollout flag -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:14px;">
+        <div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Subcollection reads rollout</div>
+        <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;line-height:1.5;">
+          <strong>off</strong>: everyone reads from the blob (safest). <strong>opted-in-only</strong>: only users with the per-profile opt-in read from subcollection — use this to canary one user. <strong>on</strong>: everyone reads from subcollection, except users with the per-user disable flag.
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+          <label style="font-size:0.8rem;">Current state:</label>
+          <select id="adminMigGlobalFlag" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
+            <option value="off">off (safe)</option>
+            <option value="opted-in-only">opted-in-only (canary)</option>
+            <option value="on">on (everyone)</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="adminMigSaveGlobalFlag()">Save</button>
+        </div>
+        <div id="adminMigGlobalFlagStatus" style="font-size:0.78rem;margin-top:6px;"></div>
+      </div>
+
+      <!-- Diagnostic comparison -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <div>
+            <div style="font-size:0.82rem;font-weight:600;">Run comparison</div>
+            <div style="font-size:0.7rem;color:var(--text-dim);">Per user: blob case count vs subcollection count. Spots drift before flipping the flag.</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="adminMigRunComparison()">Run comparison</button>
+        </div>
+        <div id="adminMigComparisonStatus" style="font-size:0.78rem;margin-top:4px;"></div>
+        <div id="adminMigComparisonResult" style="font-size:0.78rem;margin-top:8px;"></div>
+      </div>
+
+      <!-- Recent fallbacks -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <div>
+            <div style="font-size:0.82rem;font-weight:600;">Recent fallbacks</div>
+            <div style="font-size:0.7rem;color:var(--text-dim);">Entries from scalingDiagnostics. Anything older than 30 days is auto-pruned when you load this tab.</div>
+          </div>
+          <button class="btn btn-sm" onclick="adminMigLoadDiagnostics()">Refresh</button>
+        </div>
+        <div id="adminMigDiagnosticsList" style="font-size:0.78rem;margin-top:6px;"></div>
+      </div>
     </div>
   </div>
 
@@ -5703,11 +5755,12 @@ function escapeHtml(s) {
 
 function adminMSSetTab(tab) {
   const tabs = [
-    { id: 'users',    btn: 'adminMSTabUsers',    pane: 'adminMSUsersPane'    },
-    { id: 'activity', btn: 'adminMSTabActivity', pane: 'adminMSActivityPane' },
-    { id: 'sites',    btn: 'adminMSTabSites',    pane: 'adminMSSitesPane'    },
-    { id: 'rules',    btn: 'adminMSTabRules',    pane: 'adminMSRulesPane'    },
-    { id: 'test',     btn: 'adminMSTabTest',     pane: 'adminMSTestPane'     }
+    { id: 'users',     btn: 'adminMSTabUsers',     pane: 'adminMSUsersPane'     },
+    { id: 'activity',  btn: 'adminMSTabActivity',  pane: 'adminMSActivityPane'  },
+    { id: 'sites',     btn: 'adminMSTabSites',     pane: 'adminMSSitesPane'     },
+    { id: 'rules',     btn: 'adminMSTabRules',     pane: 'adminMSRulesPane'     },
+    { id: 'test',      btn: 'adminMSTabTest',      pane: 'adminMSTestPane'      },
+    { id: 'migration', btn: 'adminMSTabMigration', pane: 'adminMSMigrationPane' }
   ];
   for (const t of tabs) {
     const btn = document.getElementById(t.btn);
@@ -5726,6 +5779,205 @@ function adminMSSetTab(tab) {
   if (tab === 'sites') renderAdminMSSitesList();
   if (tab === 'rules') adminRulesInit();
   if (tab === 'activity') adminMSInitActivity();
+  if (tab === 'migration') adminMigInit();
+}
+
+// ---- Migration Diagnostics tab (scaling audit #2 Phase 2) ----
+
+async function adminMigInit() {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  // Populate global flag selector with current value.
+  try {
+    const doc = await db.collection('appConfig').doc('flags').get();
+    const state = doc.exists ? ((doc.data() || {}).subcollectionReads || 'off') : 'off';
+    const sel = document.getElementById('adminMigGlobalFlag');
+    if (sel) sel.value = state;
+    const statusEl = document.getElementById('adminMigGlobalFlagStatus');
+    if (statusEl) {
+      statusEl.style.color = 'var(--text-dim)';
+      statusEl.textContent = 'Loaded from appConfig/flags.';
+    }
+  } catch (err) {
+    const statusEl = document.getElementById('adminMigGlobalFlagStatus');
+    if (statusEl) {
+      statusEl.style.color = 'var(--accent2)';
+      statusEl.textContent = 'Failed to load flag: ' + (err.message || err);
+    }
+  }
+  // Prune ancient diagnostic entries when the admin opens the tab (lazy GC).
+  adminMigPruneOldDiagnostics().catch(err => console.warn('Diagnostics prune failed:', err));
+  // Show recent fallbacks immediately.
+  adminMigLoadDiagnostics();
+}
+
+async function adminMigSaveGlobalFlag() {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  const sel = document.getElementById('adminMigGlobalFlag');
+  if (!sel) return;
+  const state = sel.value || 'off';
+  const statusEl = document.getElementById('adminMigGlobalFlagStatus');
+  if (statusEl) {
+    statusEl.style.color = 'var(--text-dim)';
+    statusEl.textContent = 'Saving…';
+  }
+  try {
+    await db.collection('appConfig').doc('flags').set({
+      subcollectionReads: state,
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser ? currentUser.uid : ''
+    }, { merge: true });
+    // Refresh local cache so this session reflects the new value.
+    globalScalingFlags.subcollectionReads = state;
+    if (statusEl) {
+      statusEl.style.color = 'var(--accent)';
+      statusEl.textContent = 'Saved. New value: ' + state + '. Active for users on their next page load.';
+    }
+    showToast('Rollout flag set to ' + state);
+  } catch (err) {
+    if (statusEl) {
+      statusEl.style.color = 'var(--accent2)';
+      statusEl.textContent = 'Save failed: ' + (err.message || err);
+    }
+  }
+}
+
+async function adminMigRunComparison() {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  const statusEl = document.getElementById('adminMigComparisonStatus');
+  const outEl = document.getElementById('adminMigComparisonResult');
+  if (!statusEl || !outEl) return;
+  statusEl.style.color = 'var(--text-dim)';
+  statusEl.textContent = 'Loading users…';
+  outEl.innerHTML = '';
+  try {
+    const snap = await db.collection('userProfiles').get();
+    const rows = [];
+    snap.forEach(doc => rows.push({ uid: doc.id, profile: doc.data() || {} }));
+    rows.sort((a, b) => (a.profile.email || '').localeCompare(b.profile.email || ''));
+    statusEl.textContent = 'Comparing ' + rows.length + ' user' + (rows.length !== 1 ? 's' : '') + '…';
+    // Read blob count + subcollection count for each user. count() is a single
+    // aggregate read regardless of subcollection size.
+    const checks = rows.map(r => Promise.all([
+      db.collection('users').doc(r.uid).collection('data').doc('data').get()
+        .then(d => { r.blobCount = (d.exists && Array.isArray(d.data().cases)) ? d.data().cases.length : 0; r.blobOk = true; })
+        .catch(() => { r.blobCount = null; r.blobOk = false; }),
+      db.collection('users').doc(r.uid).collection('cases').get()
+        .then(s => { r.subCount = s.size; r.subOk = true; })
+        .catch(() => { r.subCount = null; r.subOk = false; })
+    ]));
+    await Promise.all(checks);
+    // Sort: drift first (worst diff at top), then matches, then errors.
+    rows.sort((a, b) => {
+      const aDrift = (a.blobOk && a.subOk) ? Math.abs((a.blobCount || 0) - (a.subCount || 0)) : -1;
+      const bDrift = (b.blobOk && b.subOk) ? Math.abs((b.blobCount || 0) - (b.subCount || 0)) : -1;
+      if (bDrift !== aDrift) return bDrift - aDrift;
+      return (a.profile.email || '').localeCompare(b.profile.email || '');
+    });
+    const driftCount = rows.filter(r => r.blobOk && r.subOk && (r.blobCount || 0) !== (r.subCount || 0)).length;
+    const errCount = rows.filter(r => !r.blobOk || !r.subOk).length;
+    statusEl.style.color = driftCount > 0 ? 'var(--accent2)' : 'var(--accent)';
+    statusEl.textContent = rows.length + ' users · ' + driftCount + ' with drift · ' + errCount + ' read errors';
+    let html = '<table style="width:100%;border-collapse:collapse;font-size:0.74rem;">';
+    html += '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);">';
+    html += '<th style="padding:4px 6px;">User</th>';
+    html += '<th style="padding:4px 6px;text-align:right;">Blob</th>';
+    html += '<th style="padding:4px 6px;text-align:right;">Sub</th>';
+    html += '<th style="padding:4px 6px;text-align:right;">Δ</th>';
+    html += '<th style="padding:4px 6px;">Status</th>';
+    html += '</tr></thead><tbody>';
+    for (const r of rows) {
+      const email = r.profile.email || '(no email)';
+      let statusCell = '';
+      let diffCell = '';
+      let rowBg = '';
+      if (!r.blobOk || !r.subOk) {
+        statusCell = '<span style="color:var(--accent2);">read error</span>';
+        rowBg = 'background:rgba(245,158,11,0.06);';
+      } else {
+        const d = (r.subCount || 0) - (r.blobCount || 0);
+        diffCell = d === 0 ? '0' : (d > 0 ? '+' + d : String(d));
+        if (d === 0) {
+          statusCell = '<span style="color:var(--accent);">&check; match</span>';
+        } else {
+          statusCell = '<span style="color:var(--accent2);">drift</span>';
+          rowBg = 'background:rgba(239,68,68,0.08);';
+        }
+      }
+      html += '<tr style="border-bottom:1px solid rgba(71,85,105,0.15);' + rowBg + '">';
+      html += '<td style="padding:4px 6px;">' + escapeHtml(email) + '</td>';
+      html += '<td style="padding:4px 6px;text-align:right;">' + (r.blobCount === null ? '—' : r.blobCount) + '</td>';
+      html += '<td style="padding:4px 6px;text-align:right;">' + (r.subCount === null ? '—' : r.subCount) + '</td>';
+      html += '<td style="padding:4px 6px;text-align:right;">' + diffCell + '</td>';
+      html += '<td style="padding:4px 6px;">' + statusCell + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+    outEl.innerHTML = html;
+  } catch (err) {
+    statusEl.style.color = 'var(--accent2)';
+    statusEl.textContent = 'Failed: ' + (err.message || err);
+  }
+}
+
+async function adminMigLoadDiagnostics() {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  const outEl = document.getElementById('adminMigDiagnosticsList');
+  if (!outEl) return;
+  outEl.innerHTML = '<span style="color:var(--text-dim);">Loading…</span>';
+  try {
+    const snap = await db.collection('scalingDiagnostics')
+      .orderBy('timestamp', 'desc').limit(50).get();
+    if (snap.empty) {
+      outEl.innerHTML = '<span style="color:var(--text-dim);">No fallback events recorded. (That\'s a good sign.)</span>';
+      return;
+    }
+    let html = '<table style="width:100%;border-collapse:collapse;font-size:0.72rem;">';
+    html += '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);">';
+    html += '<th style="padding:4px 6px;">When</th>';
+    html += '<th style="padding:4px 6px;">User</th>';
+    html += '<th style="padding:4px 6px;">Type</th>';
+    html += '<th style="padding:4px 6px;">Detail</th>';
+    html += '</tr></thead><tbody>';
+    snap.forEach(doc => {
+      const d = doc.data() || {};
+      const when = d.timestamp ? new Date(d.timestamp).toLocaleString() : '?';
+      const email = escapeHtml(d.email || '(unknown)');
+      const type = escapeHtml(d.type || '?');
+      const detailBits = [];
+      if (d.blobCount !== undefined) detailBits.push('blob=' + d.blobCount);
+      if (d.subCount !== undefined) detailBits.push('sub=' + d.subCount);
+      if (d.error) detailBits.push('err=' + escapeHtml(String(d.error).slice(0, 120)));
+      if (d.isDelta !== undefined) detailBits.push(d.isDelta ? 'delta' : 'full');
+      if (d.caller) detailBits.push('@' + escapeHtml(d.caller));
+      const detail = detailBits.join(' · ');
+      html += '<tr style="border-bottom:1px solid rgba(71,85,105,0.15);">';
+      html += '<td style="padding:4px 6px;vertical-align:top;white-space:nowrap;">' + escapeHtml(when) + '</td>';
+      html += '<td style="padding:4px 6px;vertical-align:top;">' + email + '</td>';
+      html += '<td style="padding:4px 6px;vertical-align:top;">' + type + '</td>';
+      html += '<td style="padding:4px 6px;vertical-align:top;color:var(--text-dim);">' + detail + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    outEl.innerHTML = html;
+  } catch (err) {
+    outEl.innerHTML = '<span style="color:var(--accent2);">Failed: ' + escapeHtml(err.message || String(err)) + '</span>';
+  }
+}
+
+async function adminMigPruneOldDiagnostics() {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  const cutoff = new Date(Date.now() - PHASE2_DIAGNOSTIC_PRUNE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const snap = await db.collection('scalingDiagnostics')
+      .where('timestamp', '<', cutoff).limit(100).get();
+    if (snap.empty) return;
+    const batch = db.batch();
+    snap.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    console.log('[scaling] Pruned', snap.size, 'diagnostic entries older than', PHASE2_DIAGNOSTIC_PRUNE_DAYS, 'days');
+  } catch (err) {
+    console.warn('Diagnostic prune error:', err);
+  }
 }
 
 function _adminMSSiteOptionsHTML(currentSiteId) {
@@ -6292,11 +6544,29 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
       const at = profile.casesBackfilledV1At
         ? new Date(profile.casesBackfilledV1At).toLocaleDateString()
         : '';
-      html += '<p style="font-size:0.78rem;color:var(--accent);margin:0;">&check; Migrated' + (at ? ' on ' + escapeHtml(at) : '') + '</p>';
+      html += '<p style="font-size:0.78rem;color:var(--accent);margin:0 0 10px 0;">&check; Migrated' + (at ? ' on ' + escapeHtml(at) : '') + '</p>';
     } else {
       html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">User has not logged in since the new per-case sync system shipped. Click below to force-migrate their cases from this admin session.</p>';
-      html += '<button class="btn btn-primary btn-sm" onclick="adminMSForceCaseMigrate(\'' + uid + '\')">Migrate now</button>';
+      html += '<button class="btn btn-primary btn-sm" onclick="adminMSForceCaseMigrate(\'' + uid + '\')" style="margin-bottom:10px;">Migrate now</button>';
     }
+    // Phase 2 per-user toggles: opt-in to subcollection reads (canary for one
+    // user even when global flag is 'opted-in-only'), or per-user kill switch
+    // (force this user back to blob even when global flag is 'on').
+    const optedIn = profile.useSubcollectionReads === true;
+    const killed = profile.useSubcollectionReadsDisabled === true;
+    html += '<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px;">';
+    html += '<div style="font-size:0.74rem;color:var(--text-dim);margin-bottom:6px;">Phase 2 read source overrides</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:6px;font-size:0.78rem;">';
+    html += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">';
+    html += '<input type="checkbox" id="adminMSPhase2OptIn_' + uid + '"' + (optedIn ? ' checked' : '') + ' onchange="adminMSPhase2TogglePerUser(\'' + uid + '\', \'optIn\', this.checked)"> ';
+    html += 'Opt-in: read from subcollection (overrides "opted-in-only" mode)';
+    html += '</label>';
+    html += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">';
+    html += '<input type="checkbox" id="adminMSPhase2Kill_' + uid + '"' + (killed ? ' checked' : '') + ' onchange="adminMSPhase2TogglePerUser(\'' + uid + '\', \'kill\', this.checked)"> ';
+    html += '<span style="color:' + (killed ? 'var(--accent2)' : 'inherit') + ';">Kill switch: force this user to read from blob</span>';
+    html += '</label>';
+    html += '</div>';
+    html += '</div>';
     html += '</div>';
   }
 
@@ -6312,6 +6582,27 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
 
   html += '<div id="adminMSUserStatus_' + uid + '" style="margin-top:10px;font-size:0.8rem;"></div>';
   out.innerHTML = html;
+}
+
+// Toggle handler for the Phase 2 per-user override checkboxes on the admin
+// user card. `which` is 'optIn' or 'kill'. Writes the corresponding flag on
+// userProfiles. Idempotent — checkbox already reflects current state so the
+// new value is whatever the checkbox is.
+async function adminMSPhase2TogglePerUser(uid, which, checked) {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  const field = which === 'kill' ? 'useSubcollectionReadsDisabled' : 'useSubcollectionReads';
+  _adminMSSetStatus(uid, 'Saving…', false);
+  try {
+    const payload = {};
+    payload[field] = !!checked;
+    await db.collection('userProfiles').doc(uid).set(payload, { merge: true });
+    _adminMSSetStatus(uid, 'Saved. Active on this user\'s next page load.', false);
+  } catch (err) {
+    _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
+    // Revert checkbox state on failure so UI reflects what's actually stored.
+    const cb = document.getElementById('adminMSPhase2' + (which === 'kill' ? 'Kill' : 'OptIn') + '_' + uid);
+    if (cb) cb.checked = !checked;
+  }
 }
 
 // Click handler for the admin user card's "Migrate now" button. Wraps the
@@ -8371,6 +8662,156 @@ async function backfillCaseSubcollection() {
     console.error('Per-case backfill error:', err);
     showToast('Case sync incomplete — will retry next login');
     // Leave casesBackfilledV1 unset so we retry on next login.
+  }
+}
+
+// ---- Scaling audit #2 Phase 2: subcollection reads + diagnostics ----
+//
+// Global rollout flag lives in appConfig/flags.subcollectionReads, three states:
+//   'off'            — everyone reads from blob (default; safest)
+//   'opted-in-only'  — only users with userProfiles.{uid}.useSubcollectionReads
+//                      read from subcollection; everyone else reads from blob.
+//                      Use for canary rollout (e.g. start with just one user).
+//   'on'             — everyone reads from subcollection, except users with
+//                      userProfiles.{uid}.useSubcollectionReadsDisabled = true.
+//                      Per-user disable acts as a surgical kill switch.
+//
+// Reads are delta-aware: settings.casesLastSyncedAt tracks the last successful
+// reconcile. Subsequent loads query `where('updatedAt', '>', casesLastSyncedAt)`
+// to fetch only changed cases. Every PHASE2_FULL_RECONCILE_DAYS we do a full
+// load to catch deletions (which a delta query can't see).
+//
+// Any failure / drift / fallback writes a doc to the scalingDiagnostics
+// collection with debug context. The Migration Diagnostics admin page lists
+// recent entries and auto-prunes anything older than 30 days when viewed.
+
+let globalScalingFlags = { subcollectionReads: 'off' };
+let globalScalingFlagsLoaded = false;
+const PHASE2_FULL_RECONCILE_DAYS = 7;
+const PHASE2_DIAGNOSTIC_PRUNE_DAYS = 30;
+const PHASE2_SW_VERSION_TAG = 'mwa-tracker'; // matched against CACHE_NAME at log time
+
+async function loadGlobalScalingFlags() {
+  try {
+    const doc = await db.collection('appConfig').doc('flags').get();
+    if (doc.exists) {
+      const d = doc.data() || {};
+      globalScalingFlags = {
+        subcollectionReads: d.subcollectionReads || 'off'
+      };
+    }
+    globalScalingFlagsLoaded = true;
+  } catch (err) {
+    console.error('Failed to load global scaling flags:', err);
+    globalScalingFlagsLoaded = true; // proceed with defaults; safer than blocking
+  }
+}
+
+// Decides whether THIS user reads from the subcollection. Per-user disable
+// trumps everything; otherwise global flag decides.
+function shouldUseSubcollectionReads() {
+  if (currentUserProfile && currentUserProfile.useSubcollectionReadsDisabled === true) return false;
+  const state = (globalScalingFlags && globalScalingFlags.subcollectionReads) || 'off';
+  if (state === 'on') return true;
+  if (state === 'opted-in-only') {
+    return !!(currentUserProfile && currentUserProfile.useSubcollectionReads === true);
+  }
+  return false;
+}
+
+// Append a diagnostic record. Fire-and-forget; errors get console.error'd so
+// they don't cascade into the read path.
+function logScalingDiagnostic(type, payload) {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  try {
+    const doc = Object.assign({
+      uid: currentUser.uid,
+      email: (currentUserProfile && currentUserProfile.email) || '',
+      type: type,
+      timestamp: new Date().toISOString(),
+      userAgent: (navigator && navigator.userAgent) || '',
+      swCacheVersion: PHASE2_SW_VERSION_TAG
+    }, payload || {});
+    db.collection('scalingDiagnostics').add(doc).catch(err => {
+      console.error('logScalingDiagnostic write failed:', err);
+    });
+  } catch (err) {
+    console.error('logScalingDiagnostic build failed:', err);
+  }
+}
+
+// Phase 2 read path: replace blob's cases array with subcollection contents
+// when the user is migrated and the flag says so. Called from the auth flow
+// after settings + profile + global flags are loaded.
+async function loadCasesPhase2() {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (!settings || settings.casesBackfilledV1 !== true) return; // not migrated yet
+  if (!shouldUseSubcollectionReads()) return; // flagged off — blob already in data.cases
+
+  const uid = currentUser.uid;
+  const lastSync = settings.casesLastSyncedAt;
+  const lastSyncMs = lastSync ? new Date(lastSync).getTime() : 0;
+  const fullReconcileMs = PHASE2_FULL_RECONCILE_DAYS * 24 * 60 * 60 * 1000;
+  const isDelta = lastSync && (Date.now() - lastSyncMs) < fullReconcileMs;
+
+  let query = db.collection('users').doc(uid).collection('cases');
+  if (isDelta) query = query.where('updatedAt', '>', lastSync);
+
+  try {
+    const snap = await query.get();
+    if (isDelta) {
+      // Merge incoming changes into existing data.cases
+      const incoming = new Map();
+      snap.forEach(doc => {
+        const d = doc.data();
+        if (d && d.id) incoming.set(d.id, d);
+      });
+      if (incoming.size > 0) {
+        const byId = new Map((data.cases || []).map(c => [c.id, c]));
+        incoming.forEach((newCase, id) => byId.set(id, newCase));
+        data.cases = Array.from(byId.values());
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+      console.log('[scaling] Phase 2 delta:', incoming.size, 'cases updated since', lastSync);
+    } else {
+      // Full reconcile: replace data.cases wholesale (catches deletions)
+      const cases = [];
+      snap.forEach(doc => {
+        const d = doc.data();
+        if (d && d.id) cases.push(d);
+      });
+      const blobCount = (data.cases || []).length;
+      if (cases.length === 0 && blobCount > 0) {
+        // Subcollection unexpectedly empty for a migrated user — keep blob,
+        // log, and DO NOT update casesLastSyncedAt so we retry next session.
+        logScalingDiagnostic('subcollection_empty_but_migrated', {
+          blobCount: blobCount,
+          caller: 'loadCasesPhase2'
+        });
+        console.warn('[scaling] Migrated user has empty subcollection; staying on blob.');
+        return;
+      }
+      if (cases.length !== blobCount && blobCount > 0) {
+        logScalingDiagnostic('count_mismatch', {
+          blobCount: blobCount,
+          subCount: cases.length,
+          caller: 'loadCasesPhase2'
+        });
+        console.warn('[scaling] Subcollection count', cases.length, 'differs from blob', blobCount);
+      }
+      data.cases = cases;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      console.log('[scaling] Phase 2 full reconcile:', cases.length, 'cases loaded');
+    }
+    settings.casesLastSyncedAt = new Date().toISOString();
+    saveSettings(settings);
+  } catch (err) {
+    console.error('[scaling] Subcollection read failed, falling back to blob:', err);
+    logScalingDiagnostic('subcollection_read_failed', {
+      error: String((err && err.message) || err),
+      isDelta: isDelta,
+      caller: 'loadCasesPhase2'
+    });
   }
 }
 
@@ -32587,6 +33028,17 @@ auth.onAuthStateChanged(async (user) => {
     backfillCaseSubcollection().catch(err => {
       console.warn('Per-case backfill threw:', err);
     });
+
+    // Scaling audit #2 Phase 2: load global flags, then optionally swap
+    // data.cases with subcollection contents. Both no-op when flags are off,
+    // so safe to ship before any rollout. Re-renders any view that's already
+    // showing cases so the swap is visible without a manual refresh.
+    loadGlobalScalingFlags().then(() => loadCasesPhase2()).then(() => {
+      if (typeof renderToday === 'function') { try { renderToday(); } catch (e) {} }
+      if (typeof renderDECaseList === 'function') { try { renderDECaseList(); } catch (e) {} }
+      if (typeof updateDETally === 'function') { try { updateDETally(); } catch (e) {} }
+      if (typeof updateHeaderPoints === 'function') { try { updateHeaderPoints(); } catch (e) {} }
+    }).catch(err => console.warn('Phase 2 load threw:', err));
 
     // Load all shared data in parallel — no sequential chaining.
     // Each fetch is independent so one hanging doesn't block the others.
