@@ -6282,6 +6282,24 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
     html += '</div>';
   }
 
+  // Per-case migration status — surfaces a "Migrate now" button for users
+  // who haven't logged in to v299+ yet. Clicking force-runs the backfill
+  // from this admin session so Phase 2 can ship without waiting for them.
+  if (viewerIsOwner) {
+    html += '<div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:8px;">';
+    html += '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Per-case migration</div>';
+    if (profile.casesBackfilledV1) {
+      const at = profile.casesBackfilledV1At
+        ? new Date(profile.casesBackfilledV1At).toLocaleDateString()
+        : '';
+      html += '<p style="font-size:0.78rem;color:var(--accent);margin:0;">&check; Migrated' + (at ? ' on ' + escapeHtml(at) : '') + '</p>';
+    } else {
+      html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">User has not logged in since the new per-case sync system shipped. Click below to force-migrate their cases from this admin session.</p>';
+      html += '<button class="btn btn-primary btn-sm" onclick="adminMSForceCaseMigrate(\'' + uid + '\')">Migrate now</button>';
+    }
+    html += '</div>';
+  }
+
   // Danger zone — strictly app owner (not legacy admin), never offered for
   // self / master / admins.
   if (isAppOwner() && !isMaster && !userIsAdmin && (!currentUser || uid !== currentUser.uid)) {
@@ -6294,6 +6312,24 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
 
   html += '<div id="adminMSUserStatus_' + uid + '" style="margin-top:10px;font-size:0.8rem;"></div>';
   out.innerHTML = html;
+}
+
+// Click handler for the admin user card's "Migrate now" button. Wraps the
+// raw adminForceCaseMigrate() in a confirm + toast UX and refreshes the
+// card so the badge flips to "Migrated" without a manual reload.
+async function adminMSForceCaseMigrate(uid) {
+  if (!confirm('Force-migrate this user\'s cases to the new per-case subcollection? They don\'t need to be logged in. Safe to run.')) return;
+  _adminMSSetStatus(uid, 'Migrating cases…', false);
+  try {
+    const res = await adminForceCaseMigrate(uid);
+    _adminMSSetStatus(uid, 'Migrated ' + res.count + ' case' + (res.count !== 1 ? 's' : '') + '.', false);
+    showToast('Migrated ' + res.count + ' cases for user');
+    // Refresh the card so the green "✓ Migrated" badge appears.
+    setTimeout(() => adminMSOpenUser(uid), 400);
+  } catch (err) {
+    console.error('Force migrate error:', err);
+    _adminMSSetStatus(uid, 'Failed: ' + (err.message || err), true);
+  }
 }
 
 function _adminMSSetStatus(uid, msg, isError) {
@@ -8237,6 +8273,55 @@ function stampCasesBackfilledOnProfile() {
       currentUserProfile.casesBackfilledV1At = ts;
     }
   }).catch(err => console.error('userProfiles backfill stamp error:', err));
+}
+
+// Admin-driven force-migrate: read a target user's blob and populate their
+// per-case subcollection from this admin session. Used for users who haven't
+// logged in to v299+ yet and would otherwise block the Phase 2 read switch.
+// Returns { count, skipped } on success, throws on error. Relies on Firestore
+// rules allowing admins to write to users/{uid}/cases/* (same path admins
+// already read via the activity loader).
+async function adminForceCaseMigrate(uid) {
+  if (!uid) throw new Error('uid required');
+  if (!isSiteAdmin()) throw new Error('not authorized');
+  // Pull the target user's blob doc.
+  const blobDoc = await db.collection('users').doc(uid)
+    .collection('data').doc('data').get();
+  if (!blobDoc.exists) {
+    // No data at all — mark migrated and stamp profile so admin views update.
+    await db.collection('users').doc(uid).collection('data').doc('settings')
+      .set({ casesBackfilledV1: true }, { merge: true });
+    await db.collection('userProfiles').doc(uid).set({
+      casesBackfilledV1: true,
+      casesBackfilledV1At: new Date().toISOString()
+    }, { merge: true });
+    return { count: 0, skipped: 0 };
+  }
+  const cases = ((blobDoc.data() || {}).cases || []).filter(c => c && c.id);
+  // Write each case to the target's subcollection in batches.
+  const batchSize = 400;
+  let written = 0;
+  for (let i = 0; i < cases.length; i += batchSize) {
+    const slice = cases.slice(i, i + batchSize);
+    const batch = db.batch();
+    slice.forEach(c => {
+      const ref = db.collection('users').doc(uid).collection('cases').doc(c.id);
+      const payload = JSON.parse(JSON.stringify(c));
+      payload.updatedAt = new Date().toISOString();
+      batch.set(ref, payload);
+    });
+    await batch.commit();
+    written += slice.length;
+  }
+  // Stamp both flags so subsequent logins skip the user-side backfill and
+  // admin views show the green badge.
+  await db.collection('users').doc(uid).collection('data').doc('settings')
+    .set({ casesBackfilledV1: true }, { merge: true });
+  await db.collection('userProfiles').doc(uid).set({
+    casesBackfilledV1: true,
+    casesBackfilledV1At: new Date().toISOString()
+  }, { merge: true });
+  return { count: written, skipped: 0 };
 }
 
 // One-time backfill: populate users/{uid}/cases from data.cases. Idempotent
