@@ -6549,9 +6549,10 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
       html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">';
       html += '<button class="btn btn-sm" onclick="adminMSInspectDrift(\'' + uid + '\')">Inspect drift</button>';
       html += '<button class="btn btn-sm" onclick="adminMSReconcileToBlob(\'' + uid + '\')" style="background:var(--accent2);color:#1e293b;">Reconcile to blob</button>';
+      html += '<button class="btn btn-sm" onclick="adminMSForceSignOut(\'' + uid + '\')" style="background:var(--surface);color:var(--accent2);">Force re-sign-in</button>';
       html += '</div>';
       html += '<div id="adminMSDriftDetail_' + uid + '" style="font-size:0.72rem;color:var(--text-dim);"></div>';
-      html += '<p style="font-size:0.7rem;color:var(--text-dim);margin:6px 0 10px 0;">Inspect first to see which case IDs differ. Reconcile makes the subcollection an exact mirror of the blob (writes missing, deletes extras).</p>';
+      html += '<p style="font-size:0.7rem;color:var(--text-dim);margin:6px 0 10px 0;">Inspect first to see which case IDs differ. Reconcile makes the subcollection an exact mirror of the blob (writes missing, deletes extras). Force re-sign-in arms a signal that, on the user\'s next app open, signs them out and clears their service worker + caches so they pick up the latest version. Only works if the user has at least v344 cached — users on older code won\'t see the signal.</p>';
     } else {
       html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">User has not logged in since the new per-case sync system shipped. Click below to force-migrate their cases from this admin session.</p>';
       html += '<button class="btn btn-primary btn-sm" onclick="adminMSForceCaseMigrate(\'' + uid + '\')" style="margin-bottom:10px;">Migrate now</button>';
@@ -6609,6 +6610,42 @@ async function adminMSPhase2TogglePerUser(uid, which, checked) {
     // Revert checkbox state on failure so UI reflects what's actually stored.
     const cb = document.getElementById('adminMSPhase2' + (which === 'kill' ? 'Kill' : 'OptIn') + '_' + uid);
     if (cb) cb.checked = !checked;
+  }
+}
+
+// Arm a "force re-sign-in" signal for a user. Stamps userProfiles.forceSignOutAt
+// with the current timestamp. The auth state listener checks this on every page
+// load — if the timestamp is newer than the user's last-responded marker in
+// localStorage, the app signs them out, unregisters the service worker, and
+// clears all Cache Storage entries. Useful for users stuck on a stale cached
+// build. Only takes effect on code that has the check (v344+); users on older
+// code won't see the flag.
+async function adminMSForceSignOut(uid) {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  const msg = 'Arm a force-sign-out for this user?\n\n'
+    + 'On their next app open, they will be signed out, their service worker '
+    + 'will be unregistered, and all cached assets will be cleared. The page '
+    + 'reloads fresh and they will need to sign in again.\n\n'
+    + 'NOTE: This only works if their device has at least v344 cached. Users '
+    + 'on older code won\'t see the signal.';
+  if (!confirm(msg)) return;
+  const detailEl = document.getElementById('adminMSDriftDetail_' + uid);
+  if (detailEl) {
+    detailEl.innerHTML = '<span style="color:var(--text-dim);">Arming…</span>';
+  }
+  try {
+    const ts = new Date().toISOString();
+    await db.collection('userProfiles').doc(uid).set({
+      forceSignOutAt: ts
+    }, { merge: true });
+    if (detailEl) {
+      detailEl.innerHTML = '<span style="color:var(--accent);">&check; Armed at ' + escapeHtml(ts) + '. User will be signed out + reloaded on their next app open.</span>';
+    }
+    showToast('Force sign-out armed');
+  } catch (err) {
+    if (detailEl) {
+      detailEl.innerHTML = '<span style="color:var(--accent2);">Failed: ' + escapeHtml(err.message || String(err)) + '</span>';
+    }
   }
 }
 
@@ -33088,6 +33125,44 @@ auth.onAuthStateChanged(async (user) => {
     // Load this user's profile so isAdmin() / pendingInvite are accurate
     // before the rest of init runs.
     await loadCurrentUserProfile();
+
+    // Admin-armed force sign-out: app owner can stamp forceSignOutAt on a
+    // user's profile when they're stuck on a stale cached build. The next
+    // time the user opens the app and reaches this point, we sign them out,
+    // unregister the service worker, and clear all caches so the next load
+    // is fully fresh. Only fires once per stamp (we record the timestamp in
+    // localStorage and skip if we've already responded to it).
+    if (currentUserProfile && currentUserProfile.forceSignOutAt) {
+      try {
+        const responded = localStorage.getItem('pt_force_signout_responded') || '';
+        if (currentUserProfile.forceSignOutAt > responded) {
+          localStorage.setItem('pt_force_signout_responded', currentUserProfile.forceSignOutAt);
+          // Unregister all service workers so the next load fetches a
+          // fresh sw.js without the cached one intercepting.
+          try {
+            if ('serviceWorker' in navigator) {
+              const regs = await navigator.serviceWorker.getRegistrations();
+              for (const reg of regs) { try { await reg.unregister(); } catch (e) {} }
+            }
+          } catch (e) { console.warn('SW unregister failed:', e); }
+          // Wipe all Cache Storage entries so any pinned asset version is gone.
+          try {
+            if ('caches' in window) {
+              const keys = await caches.keys();
+              for (const key of keys) { try { await caches.delete(key); } catch (e) {} }
+            }
+          } catch (e) { console.warn('Cache clear failed:', e); }
+          await auth.signOut();
+          // Hard reload — `true` is legacy non-standard but still respected by
+          // most browsers. After reload, no service worker is registered, so
+          // the browser fetches index.html + sw.js fresh.
+          window.location.reload(true);
+          return;
+        }
+      } catch (e) {
+        console.warn('Force sign-out check failed; proceeding with sign-in:', e);
+      }
+    }
 
     // Load data from Firestore
     const result = await loadFromFirestore(user.uid);
