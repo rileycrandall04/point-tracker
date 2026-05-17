@@ -6544,7 +6544,14 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
       const at = profile.casesBackfilledV1At
         ? new Date(profile.casesBackfilledV1At).toLocaleDateString()
         : '';
-      html += '<p style="font-size:0.78rem;color:var(--accent);margin:0 0 10px 0;">&check; Migrated' + (at ? ' on ' + escapeHtml(at) : '') + '</p>';
+      html += '<p style="font-size:0.78rem;color:var(--accent);margin:0 0 8px 0;">&check; Migrated' + (at ? ' on ' + escapeHtml(at) : '') + '</p>';
+      // Drift tools for already-migrated users.
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">';
+      html += '<button class="btn btn-sm" onclick="adminMSInspectDrift(\'' + uid + '\')">Inspect drift</button>';
+      html += '<button class="btn btn-sm" onclick="adminMSReconcileToBlob(\'' + uid + '\')" style="background:var(--accent2);color:#1e293b;">Reconcile to blob</button>';
+      html += '</div>';
+      html += '<div id="adminMSDriftDetail_' + uid + '" style="font-size:0.72rem;color:var(--text-dim);"></div>';
+      html += '<p style="font-size:0.7rem;color:var(--text-dim);margin:6px 0 10px 0;">Inspect first to see which case IDs differ. Reconcile makes the subcollection an exact mirror of the blob (writes missing, deletes extras).</p>';
     } else {
       html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">User has not logged in since the new per-case sync system shipped. Click below to force-migrate their cases from this admin session.</p>';
       html += '<button class="btn btn-primary btn-sm" onclick="adminMSForceCaseMigrate(\'' + uid + '\')" style="margin-bottom:10px;">Migrate now</button>';
@@ -6602,6 +6609,76 @@ async function adminMSPhase2TogglePerUser(uid, which, checked) {
     // Revert checkbox state on failure so UI reflects what's actually stored.
     const cb = document.getElementById('adminMSPhase2' + (which === 'kill' ? 'Kill' : 'OptIn') + '_' + uid);
     if (cb) cb.checked = !checked;
+  }
+}
+
+// Render a drift report inline on the user card. Read-only — shows the
+// specific case IDs / dates / procedures in each direction so the admin
+// can review before reconciling.
+async function adminMSInspectDrift(uid) {
+  const detailEl = document.getElementById('adminMSDriftDetail_' + uid);
+  if (!detailEl) return;
+  detailEl.innerHTML = '<span style="color:var(--text-dim);">Inspecting…</span>';
+  try {
+    const drift = await adminInspectCaseDrift(uid);
+    const sum = 'Blob: ' + drift.blobCount + ' · Sub: ' + drift.subCount;
+    const noDrift = drift.onlyInBlob.length === 0 && drift.onlyInSub.length === 0;
+    if (noDrift) {
+      detailEl.innerHTML = '<div style="color:var(--accent);">&check; No drift. ' + sum + '</div>';
+      return;
+    }
+    const renderList = (label, list, color) => {
+      if (list.length === 0) return '';
+      const rows = list.slice(0, 50).map(c => {
+        const date = c.shiftDate || c.date || '(no date)';
+        const proc = c.procedure || c.caseType || '(no procedure)';
+        const surgeon = c.notes || '(no surgeon)';
+        return '<li style="margin:2px 0;">' + escapeHtml(date) + ' · ' + escapeHtml(String(proc).slice(0, 60)) + ' · ' + escapeHtml(String(surgeon).slice(0, 40)) + ' <span style="color:var(--text-dim);font-size:0.66rem;">[' + escapeHtml(String(c.id).slice(0, 12)) + '...]</span></li>';
+      }).join('');
+      const overflow = list.length > 50 ? '<li style="color:var(--text-dim);">…and ' + (list.length - 50) + ' more</li>' : '';
+      return '<div style="margin-top:6px;"><div style="color:' + color + ';font-weight:600;font-size:0.74rem;">' + label + ' (' + list.length + ')</div><ul style="margin:2px 0 0 18px;padding:0;font-size:0.7rem;line-height:1.4;">' + rows + overflow + '</ul></div>';
+    };
+    let html = '<div style="background:var(--surface);padding:8px;border-radius:6px;margin-top:4px;">';
+    html += '<div style="font-size:0.74rem;">' + escapeHtml(sum) + '</div>';
+    html += renderList('In blob but missing from subcollection', drift.onlyInBlob, 'var(--accent2)');
+    html += renderList('In subcollection but missing from blob', drift.onlyInSub, 'var(--accent2)');
+    html += '</div>';
+    detailEl.innerHTML = html;
+  } catch (err) {
+    detailEl.innerHTML = '<span style="color:var(--accent2);">Inspect failed: ' + escapeHtml(err.message || String(err)) + '</span>';
+  }
+}
+
+// Reconcile the subcollection to match the blob exactly. Confirms first
+// (and surfaces the counts so the admin knows what will happen). Refreshes
+// the card after success.
+async function adminMSReconcileToBlob(uid) {
+  const detailEl = document.getElementById('adminMSDriftDetail_' + uid);
+  if (!detailEl) return;
+  detailEl.innerHTML = '<span style="color:var(--text-dim);">Loading drift…</span>';
+  let drift;
+  try {
+    drift = await adminInspectCaseDrift(uid);
+  } catch (err) {
+    detailEl.innerHTML = '<span style="color:var(--accent2);">Inspect failed: ' + escapeHtml(err.message || String(err)) + '</span>';
+    return;
+  }
+  if (drift.onlyInBlob.length === 0 && drift.onlyInSub.length === 0) {
+    detailEl.innerHTML = '<span style="color:var(--accent);">Nothing to reconcile — already in sync.</span>';
+    return;
+  }
+  const msg = 'Reconcile subcollection to match blob?\n\n'
+    + 'Write to subcollection: ' + drift.onlyInBlob.length + ' case(s) (currently missing)\n'
+    + 'Delete from subcollection: ' + drift.onlyInSub.length + ' case(s) (not in blob)\n\n'
+    + 'The blob is left unchanged. This is reversible only by re-creating the deleted cases.';
+  if (!confirm(msg)) return;
+  detailEl.innerHTML = '<span style="color:var(--text-dim);">Reconciling…</span>';
+  try {
+    const res = await adminReconcileCasesToBlob(uid);
+    detailEl.innerHTML = '<span style="color:var(--accent);">&check; Wrote ' + res.wrote + ', deleted ' + res.deleted + ', kept ' + res.kept + '.</span>';
+    showToast('Reconciled: +' + res.wrote + ' / -' + res.deleted);
+  } catch (err) {
+    detailEl.innerHTML = '<span style="color:var(--accent2);">Reconcile failed: ' + escapeHtml(err.message || String(err)) + '</span>';
   }
 }
 
@@ -8613,6 +8690,83 @@ async function adminForceCaseMigrate(uid) {
     casesBackfilledV1At: new Date().toISOString()
   }, { merge: true });
   return { count: written, skipped: 0 };
+}
+
+// Admin-side drift inspector. Reads the target user's blob and subcollection,
+// returns the case IDs that exist in only one side plus details (shiftDate,
+// procedure, surgeon, etc.) so the admin can decide whether to reconcile.
+// Read-only — never mutates either store.
+async function adminInspectCaseDrift(uid) {
+  if (!uid) throw new Error('uid required');
+  if (!isSiteAdmin()) throw new Error('not authorized');
+  const [blobDoc, subSnap] = await Promise.all([
+    db.collection('users').doc(uid).collection('data').doc('data').get(),
+    db.collection('users').doc(uid).collection('cases').get()
+  ]);
+  const blobCases = (blobDoc.exists ? (blobDoc.data() || {}).cases : []) || [];
+  const blobById = new Map();
+  for (const c of blobCases) {
+    if (c && c.id) blobById.set(c.id, c);
+  }
+  const subById = new Map();
+  subSnap.forEach(d => {
+    const data = d.data();
+    if (data && data.id) subById.set(data.id, data);
+  });
+  const onlyInBlob = [];
+  const onlyInSub = [];
+  for (const [id, c] of blobById.entries()) {
+    if (!subById.has(id)) onlyInBlob.push(c);
+  }
+  for (const [id, c] of subById.entries()) {
+    if (!blobById.has(id)) onlyInSub.push(c);
+  }
+  return {
+    blobCount: blobById.size,
+    subCount: subById.size,
+    onlyInBlob: onlyInBlob,
+    onlyInSub: onlyInSub
+  };
+}
+
+// Admin-side reconciliation: makes the user's subcollection an exact mirror
+// of the current blob. Writes cases that are in blob but not sub; deletes
+// cases that are in sub but not blob. Skips cases that already match by id.
+// Idempotent. Returns { wrote, deleted, kept }.
+async function adminReconcileCasesToBlob(uid) {
+  if (!uid) throw new Error('uid required');
+  if (!isSiteAdmin()) throw new Error('not authorized');
+  const drift = await adminInspectCaseDrift(uid);
+  const batchSize = 400;
+  // Write missing-from-sub.
+  for (let i = 0; i < drift.onlyInBlob.length; i += batchSize) {
+    const slice = drift.onlyInBlob.slice(i, i + batchSize);
+    const batch = db.batch();
+    slice.forEach(c => {
+      if (!c || !c.id) return;
+      const ref = db.collection('users').doc(uid).collection('cases').doc(c.id);
+      const payload = JSON.parse(JSON.stringify(c));
+      payload.updatedAt = new Date().toISOString();
+      batch.set(ref, payload);
+    });
+    await batch.commit();
+  }
+  // Delete extras-in-sub.
+  for (let i = 0; i < drift.onlyInSub.length; i += batchSize) {
+    const slice = drift.onlyInSub.slice(i, i + batchSize);
+    const batch = db.batch();
+    slice.forEach(c => {
+      if (!c || !c.id) return;
+      const ref = db.collection('users').doc(uid).collection('cases').doc(c.id);
+      batch.delete(ref);
+    });
+    await batch.commit();
+  }
+  return {
+    wrote: drift.onlyInBlob.length,
+    deleted: drift.onlyInSub.length,
+    kept: drift.blobCount - drift.onlyInBlob.length
+  };
 }
 
 // One-time backfill: populate users/{uid}/cases from data.cases. Idempotent
