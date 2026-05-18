@@ -15486,7 +15486,7 @@ function resetSandboxExperimentClick() {
 // (alternate scoring formulas from SANDBOX_TEST_RULES). Synchronous so
 // the engine never observes a half-swapped state. Pass logicHooks=null
 // for a clean prod-style score (used for the baseline pass).
-function scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay, logicHooks, splitSF1) {
+function scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay, logicHooks, splitSF1, synthSF1) {
   const savedEng   = _engineSandboxOverrides;
   const savedRule  = _engineSandboxRuleOverlay;
   const savedHooks = _engineSandboxLogicHooks;
@@ -15494,7 +15494,10 @@ function scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay, 
     _engineSandboxOverrides   = overrides   || null;
     _engineSandboxRuleOverlay = ruleOverlay || null;
     _engineSandboxLogicHooks  = logicHooks  || {};
-    const pl = splitSF1 ? _transformPayloadSplitSF1(payload) : payload;
+    // splitSF1 → experimental Day/Night; synthSF1 (no split) → reconcilable
+    // baseline that scores the same synthesized single 24h SF 1 universe.
+    const pl = splitSF1 ? _transformPayloadSplitSF1(payload)
+             : (synthSF1 ? _synthesizeSf1Payload(payload) : payload);
     return scoreSnapshotPayloadSync(pl);
   } finally {
     _engineSandboxOverrides   = savedEng;
@@ -15605,11 +15608,16 @@ function _sf1CaseHalf(c) {
 // of how the original was clocked. (Older snapshots captured before the
 // calendarAssignments change won't carry calendar data — re-capture to pick
 // up calendar-only SF 1 dates.)
-function _transformPayloadSplitSF1(payload) {
+// Normalizes every SF 1 date (real shift record OR rotation calendar)
+// into a single 24h SF 1 shift on a fixed 07:00→07:00 clock. Non-SF1
+// shifts pass through untouched. Pure. Shared by the experimental split
+// AND the reconcilable baseline so "before vs after" compare the same
+// shift universe (otherwise the default row scores raw real records and
+// the totals can't be reconciled with the split rows).
+function _synthesizeSf1Payload(payload) {
   const srcShifts = (payload && payload.shifts) || {};
   const cal = (payload && payload.calendarAssignments) || {};
   const fallbackSite = (payload && payload.siteId) || null;
-  // date -> { siteId, isHoliday } for every SF 1 date (shift or calendar).
   const sf1Dates = new Map();
   for (const k of Object.keys(srcShifts)) {
     const sh = srcShifts[k];
@@ -15629,8 +15637,6 @@ function _transformPayloadSplitSF1(payload) {
       isHoliday: !!prev.isHoliday || /holiday/i.test(a.label || '')
     });
   }
-  // Non-SF1 shifts pass through; original SF 1 records are dropped and
-  // replaced by a normalized 24h synthetic shift below.
   const baseShifts = {};
   for (const k of Object.keys(srcShifts)) {
     const sh = srcShifts[k];
@@ -15646,6 +15652,12 @@ function _transformPayloadSplitSF1(payload) {
       timeEntries: [{ start: '07:00', end: '07:00' }]
     };
   }
+  return Object.assign({}, payload, { shifts: baseShifts });
+}
+
+function _transformPayloadSplitSF1(payload) {
+  const syn = _synthesizeSf1Payload(payload);
+  const baseShifts = syn.shifts;
   const outShifts = {};
   for (const key of Object.keys(baseShifts)) {
     const sh = baseShifts[key];
@@ -15952,7 +15964,10 @@ async function runSandboxExperimentClick() {
       const payload = d.data() || {};
       // Score baseline (fresh, against today's engine — no overlays, no hooks)
       // then with all three layers installed for the sandbox pass.
-      const baseline = scoreSnapshotPayloadWithOverridesSync(payload, null, null, null, false);
+      // When the SF 1 split is on, baseline also scores the synthesized
+      // single 24h SF 1 (no split) so default vs after share one shift
+      // universe and the totals reconcile.
+      const baseline = scoreSnapshotPayloadWithOverridesSync(payload, null, null, null, false, sf1DayNightOn);
       const sandbox  = scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay, logicHooks, sf1DayNightOn);
       const userKey = payload.userKey || d.id;
       rows.push({
@@ -16528,8 +16543,8 @@ function _renderSf1ModelComparison(fShiftsBase, fShiftsSand) {
 
   return '<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:10px;">' +
     '<div style="font-weight:600;font-size:0.82rem;margin-bottom:6px;">SF 1 model — before vs after</div>' +
-    '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">' +
-    '<table style="width:100%;min-width:600px;border-collapse:collapse;font-size:0.76rem;">' +
+    '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;-ms-overflow-style:auto;">' +
+    '<table style="border-collapse:collapse;font-size:0.76rem;white-space:nowrap;">' +
       '<thead><tr style="color:var(--text-dim);font-size:0.7rem;">' +
         '<th style="padding:4px 8px;text-align:left;">Role</th>' +
         '<th style="padding:4px 8px;text-align:right;">Shifts</th>' +
@@ -16544,13 +16559,13 @@ function _renderSf1ModelComparison(fShiftsBase, fShiftsSand) {
         '<tr><td colspan="7" style="padding:7px 8px 2px;color:var(--text-dim);font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;">Experimental model</td></tr>' +
         row('SF 1 Day', aftDay, false) +
         row('SF 1 Night', aftNight, false) +
-        row('SF 1 (Fri / holiday / weekend, single 24h)', aftSingle, false) +
+        row('SF 1 (Fri/hol/wknd, 24h)', aftSingle, false) +
         row('SF 1 — combined (after)', aftAll, true) +
         deltaRow +
       '</tbody></table></div>' +
       '<div style="font-size:0.68rem;color:var(--text-dim);margin-top:6px;line-height:1.4;">' +
-        'Default = current single SF 1. Experimental = M&ndash;Th non-holiday split into Day (0700&ndash;1700, 10 clocked hr) + Night (1700&rarr;0700, 14 clocked hr, all pager/call); Fri/holiday/weekend stays one 24&nbsp;hr SF 1. Mean/Median/SD are per-shift total points; SD is the sample standard deviation. ' +
-        '<strong>Day + Night totals do not sum to the default SF 1 total</strong>, and never their medians: (1)&nbsp;the default (baseline) row is scored from the <em>real</em> SF 1 shift records, while the experimental rows are rebuilt on a synthesized fixed 24&nbsp;hr clock from the rotation calendar &mdash; different shift universes; (2)&nbsp;a median is a middle value, not a sum, so median(Day)+median(Night) is meaningless arithmetically even when point totals are conserved; (3)&nbsp;AR is re-rated by time-of-day in the split and pager/call all moves to Night, so totals shift between rows even though production is preserved.' +
+        'Both Default and Experimental now score the <strong>same synthesized SF 1 universe</strong> (every SF 1 rotation date rebuilt on a fixed 24&nbsp;hr clock), so Default <em>= the synthesized single 24&nbsp;hr SF 1</em>, not the raw real records. Experimental = M&ndash;Th non-holiday split into Day (0700&ndash;1700) + Night (1700&rarr;0700, all pager/call); Fri/holiday/weekend stays one 24&nbsp;hr SF 1. Mean/Median/SD are per-shift total points (sample SD). ' +
+        '<strong>SF 1 combined (after) should now reconcile with the Default SF 1 total</strong>; the remaining Δ is the real policy effect: AR is re-rated by time-of-day across the 17:00 split (so Day&rsquo;s 13/hr daytime vs Night&rsquo;s 20/hr&times;multipliers shifts points between rows) and the experimental model removes the SF 1 doubling pre-cutover gate. Per-shift <em>medians</em> still never add up (a median is a middle value, not a sum) &mdash; compare Total pts, not medians, to reconcile.' +
       '</div>' +
   '</div>';
 }
