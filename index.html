@@ -4483,6 +4483,16 @@ body.hide-monetary .monetary-hide { display: none !important; }
       </label>
       <button class="btn btn-primary btn-sm" id="sandboxCaptureBtn" onclick="captureSandboxSnapshotClick()">Capture</button>
     </div>
+    <details id="sandboxSiteFilter" style="margin-bottom:10px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">
+      <summary style="cursor:pointer;font-size:0.8rem;color:var(--text);">
+        <span id="sandboxSiteFilterSummary">Sites: loading&hellip;</span>
+      </summary>
+      <div style="display:flex;gap:10px;margin:8px 0 6px 0;font-size:0.74rem;">
+        <a href="#" onclick="sandboxSelectAllSites(true);return false;" style="color:var(--accent);">All sites</a>
+        <a href="#" onclick="sandboxSelectAllSites(false);return false;" style="color:var(--accent);">None</a>
+      </div>
+      <div id="sandboxSiteChecklist" style="max-height:200px;overflow-y:auto;font-size:0.8rem;"></div>
+    </details>
     <details id="sandboxUserFilter" style="margin-bottom:10px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;">
       <summary style="cursor:pointer;font-size:0.8rem;color:var(--text);">
         <span id="sandboxUserFilterSummary">Users: loading&hellip;</span>
@@ -14429,6 +14439,20 @@ function renderAdminPage() {
 // Reset on every renderSandboxPage() so a fresh load reflects current state.
 let _sandboxProfiles = [];
 let _sandboxExcludedUids = new Set();
+// Empty = all sites. When non-empty, capture is limited to users whose
+// profile.siteId is in the set, and the user checklist is filtered to match.
+let _sandboxIncludedSites = new Set();
+const _SANDBOX_NO_SITE = '__nosite__';
+function _sandboxSiteOf(profile) { return (profile && profile.siteId) || _SANDBOX_NO_SITE; }
+function _sandboxSiteLabel(siteId) {
+  if (siteId === _SANDBOX_NO_SITE) return '(no site)';
+  return (sitesCache[siteId] && sitesCache[siteId].name) || siteId;
+}
+// Profiles visible given the current site filter (empty filter = all).
+function _sandboxVisibleProfiles() {
+  if (_sandboxIncludedSites.size === 0) return _sandboxProfiles;
+  return _sandboxProfiles.filter(p => _sandboxIncludedSites.has(_sandboxSiteOf(p.profile)));
+}
 
 function renderSandboxPage() {
   if (!isAppOwner()) return;
@@ -14441,6 +14465,7 @@ function renderSandboxPage() {
   const status = document.getElementById('sandboxSnapshotsStatus');
   if (status) status.textContent = '';
   _sandboxExcludedUids = new Set();
+  _sandboxIncludedSites = new Set();
   loadSandboxUserList();
   loadSandboxSnapshots();
   // Build experiment editor once (idempotent); refresh snapshot picker.
@@ -14476,6 +14501,7 @@ async function loadSandboxUserList() {
         const bn = (b.profile.displayName || b.profile.email || b.uid).toLowerCase();
         return an < bn ? -1 : an > bn ? 1 : 0;
       });
+    renderSandboxSiteChecklist();
     renderSandboxUserChecklist();
   } catch (e) {
     console.error('loadSandboxUserList failed:', e);
@@ -14484,20 +14510,80 @@ async function loadSandboxUserList() {
   }
 }
 
+function _sandboxUpdateUserSummary() {
+  const summary = document.getElementById('sandboxUserFilterSummary');
+  if (!summary) return;
+  const visible = _sandboxVisibleProfiles();
+  const total = visible.length;
+  const included = visible.filter(p => !_sandboxExcludedUids.has(p.uid)).length;
+  const scoped = _sandboxIncludedSites.size > 0 ? ' (in selected sites)' : '';
+  summary.textContent = included === total
+    ? 'Users: all ' + total + ' included' + scoped
+    : 'Users: ' + included + ' of ' + total + ' included' + scoped;
+}
+
+function renderSandboxSiteChecklist() {
+  const checklist = document.getElementById('sandboxSiteChecklist');
+  const summary = document.getElementById('sandboxSiteFilterSummary');
+  if (!checklist) return;
+  const counts = {};
+  _sandboxProfiles.forEach(p => {
+    const s = _sandboxSiteOf(p.profile);
+    counts[s] = (counts[s] || 0) + 1;
+  });
+  const siteIds = Object.keys(counts).sort((a, b) =>
+    _sandboxSiteLabel(a).toLowerCase().localeCompare(_sandboxSiteLabel(b).toLowerCase()));
+  const realSelected = siteIds.filter(s => _sandboxIncludedSites.has(s)).length;
+  if (summary) {
+    summary.textContent = _sandboxIncludedSites.size === 0
+      ? 'Sites: all ' + siteIds.length + ' included'
+      : 'Sites: ' + realSelected + ' of ' + siteIds.length + ' selected';
+  }
+  checklist.innerHTML = siteIds.map(s => {
+    const checked = (_sandboxIncludedSites.size === 0 || _sandboxIncludedSites.has(s)) ? 'checked' : '';
+    return '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;">' +
+      '<input type="checkbox" data-site="' + escapeHtml(s) + '" ' + checked + ' ' +
+        'onchange="sandboxToggleSite(this)" style="width:13px;height:13px;margin:0;flex:none;">' +
+      '<span style="flex:1;min-width:0;">' + escapeHtml(_sandboxSiteLabel(s)) +
+        ' <span style="color:var(--text-dim);font-size:0.72rem;">(' + counts[s] + ' user' + (counts[s] === 1 ? '' : 's') + ')</span>' +
+      '</span>' +
+    '</label>';
+  }).join('');
+}
+
+function sandboxToggleSite(cb) {
+  const s = cb.dataset.site;
+  if (!s) return;
+  // First explicit pick converts the "empty = all" state into an explicit
+  // set of all sites, so unchecking one leaves the rest selected.
+  if (_sandboxIncludedSites.size === 0) {
+    _sandboxProfiles.forEach(p => _sandboxIncludedSites.add(_sandboxSiteOf(p.profile)));
+  }
+  if (cb.checked) _sandboxIncludedSites.add(s);
+  else _sandboxIncludedSites.delete(s);
+  renderSandboxSiteChecklist();
+  renderSandboxUserChecklist();
+}
+
+function sandboxSelectAllSites(include) {
+  if (include) _sandboxIncludedSites = new Set();
+  else _sandboxIncludedSites = new Set(['__none_selected__']); // explicit empty selection
+  renderSandboxSiteChecklist();
+  renderSandboxUserChecklist();
+}
+
 function renderSandboxUserChecklist() {
   const checklist = document.getElementById('sandboxUserChecklist');
-  const summary = document.getElementById('sandboxUserFilterSummary');
   if (!checklist) return;
-  const total = _sandboxProfiles.length;
-  const included = total - _sandboxExcludedUids.size;
-  if (summary) {
-    summary.textContent = included === total
-      ? 'Users: all ' + total + ' included'
-      : 'Users: ' + included + ' of ' + total + ' included';
+  const visible = _sandboxVisibleProfiles();
+  _sandboxUpdateUserSummary();
+  if (visible.length === 0) {
+    checklist.innerHTML = '<span style="color:var(--text-dim);">No users in the selected sites.</span>';
+    return;
   }
-  checklist.innerHTML = _sandboxProfiles.map(p => {
+  checklist.innerHTML = visible.map(p => {
     const name = escapeHtml(p.profile.displayName || p.profile.email || p.uid);
-    const sub = escapeHtml(p.profile.siteId || p.profile.email || '');
+    const sub = escapeHtml(_sandboxSiteLabel(_sandboxSiteOf(p.profile)));
     const checked = _sandboxExcludedUids.has(p.uid) ? '' : 'checked';
     return '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;">' +
       '<input type="checkbox" data-uid="' + escapeHtml(p.uid) + '" ' + checked + ' ' +
@@ -14514,19 +14600,14 @@ function sandboxToggleUser(cb) {
   if (!uid) return;
   if (cb.checked) _sandboxExcludedUids.delete(uid);
   else _sandboxExcludedUids.add(uid);
-  const summary = document.getElementById('sandboxUserFilterSummary');
-  if (summary) {
-    const total = _sandboxProfiles.length;
-    const included = total - _sandboxExcludedUids.size;
-    summary.textContent = included === total
-      ? 'Users: all ' + total + ' included'
-      : 'Users: ' + included + ' of ' + total + ' included';
-  }
+  _sandboxUpdateUserSummary();
 }
 
 function sandboxSelectAllUsers(include) {
-  if (include) _sandboxExcludedUids = new Set();
-  else _sandboxExcludedUids = new Set(_sandboxProfiles.map(p => p.uid));
+  // Operates only on the currently-visible (site-filtered) users.
+  const visible = _sandboxVisibleProfiles();
+  if (include) visible.forEach(p => _sandboxExcludedUids.delete(p.uid));
+  else visible.forEach(p => _sandboxExcludedUids.add(p.uid));
   renderSandboxUserChecklist();
 }
 
@@ -14608,14 +14689,14 @@ async function captureSandboxSnapshotClick() {
   }
   if (ymStart > ymEnd) { const t = ymStart; ymStart = ymEnd; ymEnd = t; }
   const months = sandboxMonthsInRange(ymStart, ymEnd);
-  const includedCount = _sandboxProfiles.length - _sandboxExcludedUids.size;
+  const includedCount = _sandboxVisibleProfiles().filter(p => !_sandboxExcludedUids.has(p.uid)).length;
   const rangeLabel = ymStart === ymEnd ? ymStart : ymStart + ' → ' + ymEnd + ' (' + months.length + ' months)';
   const label = (labelInput && labelInput.value.trim()) || rangeLabel.replace(/ → /, '_to_');
   if (!confirm('Capture a snapshot of ' + includedCount + ' users’ data for ' + rangeLabel + '?\nReads prod data; nothing is written to anyone else’s account.')) return;
   if (btn) btn.disabled = true;
   if (status) status.textContent = 'Capturing…';
   try {
-    const result = await captureSandboxSnapshot(ymStart, ymEnd, label, _sandboxExcludedUids);
+    const result = await captureSandboxSnapshot(ymStart, ymEnd, label, _sandboxExcludedUids, _sandboxIncludedSites);
     if (status) {
       status.textContent = 'Captured ' + result.userCount + ' users · ' +
         result.shiftCount + ' shifts · ' + result.caseCount + ' cases across ' +
@@ -14631,7 +14712,7 @@ async function captureSandboxSnapshotClick() {
   }
 }
 
-async function captureSandboxSnapshot(ymStart, ymEnd, label, excludedUids) {
+async function captureSandboxSnapshot(ymStart, ymEnd, label, excludedUids, includedSites) {
   if (!isAppOwner()) throw new Error('App owner only');
   if (!currentUser) throw new Error('Not signed in');
   if (!/^\d{4}-\d{2}$/.test(ymStart)) throw new Error('Bad start month: ' + ymStart);
@@ -14639,11 +14720,14 @@ async function captureSandboxSnapshot(ymStart, ymEnd, label, excludedUids) {
   if (ymStart > ymEnd) throw new Error('Start month after end month');
 
   const excluded = excludedUids instanceof Set ? excludedUids : new Set(excludedUids || []);
+  const siteSet = includedSites instanceof Set ? includedSites : new Set(includedSites || []);
+  const siteOf = (profile) => (profile && profile.siteId) || _SANDBOX_NO_SITE;
   const snapshotId = ymStart + (ymStart === ymEnd ? '' : '_to_' + ymEnd) + '_' + Date.now().toString(36);
   const profSnap = await db.collection('userProfiles').get();
   const profiles = profSnap.docs
     .map(d => ({ uid: d.id, profile: d.data() || {} }))
-    .filter(p => !p.profile.deletedAt && !excluded.has(p.uid));
+    .filter(p => !p.profile.deletedAt && !excluded.has(p.uid) &&
+      (siteSet.size === 0 || siteSet.has(siteOf(p.profile))));
 
   const ownerRoot = db.collection('users').doc(currentUser.uid)
     .collection('policySandboxSnapshots').doc(snapshotId);
@@ -15673,6 +15757,123 @@ async function loadSandboxExperimentSnapshots() {
 // stays valid until the next Run starts. UI state only — not engine state.
 let _sandboxLastRunState = null;
 
+// Results display filter (visual only). Empty set = all. Applied to the
+// per-shift records to rebuild the headline totals, By user/site/type, and
+// the SF 1 panel. Comp Health distribution and the Objective stay computed
+// over the full run (by design).
+let _sandboxDeltaFilter = { sites: new Set(), types: new Set() };
+
+function _sandboxShiftSite(ps) { return (ps && ps.siteId) || '_unknown'; }
+function _sandboxShiftType(ps) { return (ps && ps.assignmentType) || '_unknown'; }
+
+function _sandboxShiftPasses(ps) {
+  const f = _sandboxDeltaFilter;
+  if (f.sites.size > 0 && !f.sites.has(_sandboxShiftSite(ps))) return false;
+  if (f.types.size > 0 && !f.types.has(_sandboxShiftType(ps))) return false;
+  return true;
+}
+
+// Rebuilds the `rows`-shaped array the delta renderer expects, but solely
+// from filtered per-shift records so a site×type filter intersects
+// correctly (per-user bySite/byType aggregates can't be intersected).
+function _rowsFromShifts(shiftsBase, shiftsSand) {
+  const users = {};
+  const ensure = (k) => users[k] || (users[k] = {
+    userKey: k,
+    baseline: { total: 0, scoredShifts: 0 },
+    sandbox:  { total: 0, scoredShifts: 0 },
+    baselineBySite: {}, sandboxBySite: {},
+    baselineByType: {}, sandboxByType: {}
+  });
+  const bump = (bucket, key, ps) => {
+    if (!bucket[key]) bucket[key] = { total: 0, hours: 0, shiftCount: 0 };
+    bucket[key].total += ps.total || 0;
+    bucket[key].hours += ps.clockedHrs || 0;
+    bucket[key].shiftCount += 1;
+  };
+  (shiftsBase || []).forEach(ps => {
+    if (!_sandboxShiftPasses(ps)) return;
+    const u = ensure(ps.userKey);
+    u.baseline.total += ps.total || 0;
+    u.baseline.scoredShifts += 1;
+    bump(u.baselineBySite, _sandboxShiftSite(ps), ps);
+    bump(u.baselineByType, _sandboxShiftType(ps), ps);
+  });
+  (shiftsSand || []).forEach(ps => {
+    if (!_sandboxShiftPasses(ps)) return;
+    const u = ensure(ps.userKey);
+    u.sandbox.total += ps.total || 0;
+    u.sandbox.scoredShifts += 1;
+    bump(u.sandboxBySite, _sandboxShiftSite(ps), ps);
+    bump(u.sandboxByType, _sandboxShiftType(ps), ps);
+  });
+  return Object.values(users);
+}
+
+function _sandboxDeltaFilterBar(shiftsBase, shiftsSand) {
+  const siteSet = new Set(), typeSet = new Set();
+  (shiftsBase || []).concat(shiftsSand || []).forEach(ps => {
+    siteSet.add(_sandboxShiftSite(ps));
+    typeSet.add(_sandboxShiftType(ps));
+  });
+  const sites = Array.from(siteSet).sort((a, b) =>
+    _sandboxSiteLabel(a === '_unknown' ? _SANDBOX_NO_SITE : a).toLowerCase()
+      .localeCompare(_sandboxSiteLabel(b === '_unknown' ? _SANDBOX_NO_SITE : b).toLowerCase()));
+  const types = Array.from(typeSet).sort();
+  const f = _sandboxDeltaFilter;
+  const chip = (val, label, on, kind) =>
+    '<label style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;margin:0 5px 5px 0;border:1px solid ' +
+      (on ? 'var(--accent)' : 'var(--border)') + ';border-radius:10px;font-size:0.72rem;cursor:pointer;' +
+      (on ? 'color:var(--accent);' : 'color:var(--text-dim);') + '">' +
+      '<input type="checkbox" ' + (on ? 'checked' : '') + ' data-kind="' + kind + '" ' +
+        'data-val="' + escapeHtml(val) + '" onchange="sandboxDeltaFilterToggle(this)" ' +
+        'style="width:12px;height:12px;margin:0;flex:none;">' + escapeHtml(label) + '</label>';
+  const siteOn = v => f.sites.size === 0 || f.sites.has(v);
+  const typeOn = v => f.types.size === 0 || f.types.has(v);
+  const activeNote = (f.sites.size > 0 || f.types.size > 0)
+    ? ' <span style="color:var(--accent);">(filtered)</span>' : '';
+  return '<details style="border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:10px;"' +
+      ((f.sites.size > 0 || f.types.size > 0) ? ' open' : '') + '>' +
+    '<summary style="cursor:pointer;font-size:0.8rem;color:var(--text);">Filter results' + activeNote + '</summary>' +
+    '<div style="margin-top:8px;">' +
+      '<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:4px;">Sites ' +
+        '<a href="#" onclick="sandboxDeltaFilterAll(\'sites\');return false;" style="color:var(--accent);margin-left:6px;">all</a></div>' +
+      '<div>' + sites.map(s => chip(s, _sandboxSiteLabel(s === '_unknown' ? _SANDBOX_NO_SITE : s), siteOn(s), 'sites')).join('') + '</div>' +
+      '<div style="font-size:0.7rem;color:var(--text-dim);margin:8px 0 4px;">Shift types ' +
+        '<a href="#" onclick="sandboxDeltaFilterAll(\'types\');return false;" style="color:var(--accent);margin-left:6px;">all</a></div>' +
+      '<div>' + types.map(t => chip(t, t, typeOn(t), 'types')).join('') + '</div>' +
+    '</div></details>';
+}
+
+function sandboxDeltaFilterToggle(cb) {
+  const kind = cb.dataset.kind, val = cb.dataset.val;
+  if (kind !== 'sites' && kind !== 'types') return;
+  const set = _sandboxDeltaFilter[kind];
+  const universe = new Set();
+  const st = _sandboxLastRunState;
+  if (st) (st.shiftsBase || []).concat(st.shiftsSand || []).forEach(ps =>
+    universe.add(kind === 'sites' ? _sandboxShiftSite(ps) : _sandboxShiftType(ps)));
+  // First explicit pick converts "empty = all" into an explicit full set.
+  if (set.size === 0) universe.forEach(v => set.add(v));
+  if (cb.checked) set.add(val); else set.delete(val);
+  // Collapsing back to "everything selected" → reset to empty (= all).
+  if (set.size === universe.size) set.clear();
+  _rerenderSandboxDelta();
+}
+
+function sandboxDeltaFilterAll(kind) {
+  if (kind === 'sites' || kind === 'types') _sandboxDeltaFilter[kind] = new Set();
+  _rerenderSandboxDelta();
+}
+
+function _rerenderSandboxDelta() {
+  const st = _sandboxLastRunState;
+  const host = document.getElementById('sandboxExperimentResult');
+  if (!st || !host) return;
+  renderSandboxExperimentDelta(host, st.rows, st.overrides, st.ruleOverlay,
+    st.activeHooks, st.objective, st.usersBase, st.usersSand, st.shiftsBase, st.shiftsSand);
+}
+
 // Orchestrates: collect overrides → fetch payloads → score each user
 // twice (baseline + sandbox) → render delta. Baseline is recomputed on
 // the fly against today's engine so the editor reflects "what would
@@ -15794,6 +15995,7 @@ async function runSandboxExperimentClick() {
       status.textContent = 'Scored ' + rows.length + ' users · ' + totalShifts + ' shifts.' +
         (diagnosticOnly ? '  Diagnostic mode — no overrides, baseline = sandbox.' : '');
     }
+    _sandboxDeltaFilter = { sites: new Set(), types: new Set() }; // fresh run clears the view filter
     renderSandboxExperimentDelta(result, rows, overrides, ruleOverlay, activeHooks, objective, usersBase, usersSand, shiftsBase, shiftsSand);
     // Cache for the .xlsx exporter so the user can download what they just saw.
     _sandboxLastRunState = {
@@ -16331,7 +16533,10 @@ function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, active
     host.innerHTML = '<em style="color:var(--text-dim);">No data.</em>';
     return;
   }
-  const byUser = rows.map(r => ({
+  // Filterable sections are rebuilt from the (optionally filtered) per-shift
+  // records; Comp Health / Objective / per-user metrics stay over the full run.
+  const viewRows = _rowsFromShifts(shiftsBase, shiftsSand);
+  const byUser = viewRows.map(r => ({
     key: r.userKey,
     baseline: r.baseline.total || 0,
     sandbox: r.sandbox.total || 0,
@@ -16341,7 +16546,7 @@ function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, active
 
   const aggBuckets = (baseField, sandField) => {
     const out = {};
-    for (const r of rows) {
+    for (const r of viewRows) {
       const base = r[baseField] || {}, sand = r[sandField] || {};
       const keys = new Set(Object.keys(base).concat(Object.keys(sand)));
       keys.forEach(k => {
@@ -16437,11 +16642,12 @@ function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, active
     objectiveRow +
   '</div>';
 
-  host.innerHTML = summary +
+  host.innerHTML = _sandboxDeltaFilterBar(shiftsBase, shiftsSand) +
+    summary +
     renderSandboxDeltaSection('By user', 'User', byUser, true) +
     renderSandboxDeltaSection('By site', 'Site', bySite, false) +
     renderSandboxDeltaSection('By shift type', 'Shift type', byType, false) +
-    _renderSf1ModelComparison(rows) +
+    _renderSf1ModelComparison(viewRows) +
     _renderSandboxCompHealth(shiftsBase, shiftsSand, usersBase, usersSand) +
     _renderSandboxPerUserMetrics(usersBase, usersSand);
 }
