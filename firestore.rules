@@ -227,20 +227,22 @@ service cloud.firestore {
 
     // -------------------------------------------------------------------------
     // scalingDiagnostics — any signed-in client appends per-write
-    // failure/diagnostic docs (fire-and-forget); only admins read them back.
+    // failure/diagnostic docs (fire-and-forget, create-only); reads are
+    // app_owner-only (operational logs, owner-exclusive visibility).
     // -------------------------------------------------------------------------
     match /scalingDiagnostics/{docId} {
-      allow read: if isAppOwner() || isAnySiteAdmin();
+      allow read: if isAppOwner();
       allow create: if isSignedIn();
       allow update, delete: if isAppOwner();
     }
 
     // -------------------------------------------------------------------------
     // siteRulesAudit/{siteId}/** — append-only audit log written when a site's
-    // scoring rules are saved. Same write scope as sites/{siteId}.
+    // scoring rules are saved. Read app_owner-only (owner-exclusive
+    // visibility); write scope matches sites/{siteId}.
     // -------------------------------------------------------------------------
     match /siteRulesAudit/{siteId}/{document=**} {
-      allow read: if isAppOwner() || isAnySiteAdmin();
+      allow read: if isAppOwner();
       allow write: if isAppOwner() || isSiteAdminOf(siteId);
     }
 
