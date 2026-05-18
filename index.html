@@ -4541,6 +4541,24 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <button class="btn btn-primary btn-sm" id="sandboxExperimentRunBtn"
         style="flex:none;" onclick="runSandboxExperimentClick()">Run</button>
     </div>
+    <div style="margin-bottom:10px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);">
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;font-weight:600;color:var(--text);cursor:pointer;">
+        <input type="checkbox" id="sandboxSf1DayNightToggle" style="width:15px;height:15px;">
+        Day&nbsp;/&nbsp;Night SF&nbsp;1 split
+      </label>
+      <div style="font-size:0.72rem;color:var(--text-dim);margin:5px 0 0 23px;line-height:1.45;">
+        Reshapes the single SF&nbsp;1 shift into two roles with a clean 17:00 break.
+        <strong>Day&nbsp;SF&nbsp;1</strong> works 0700&ndash;1700 and is the <em>only</em> role
+        that gets production doubling (full&nbsp;&times;, assigned by case start time).
+        <strong>Night&nbsp;SF&nbsp;1</strong> covers 1700+ and gets <em>no</em> doubling at all.
+        When on, SF&nbsp;1&rsquo;s default fractional / pre-cutover doubling is fully disabled
+        for this run. AR already splits at 17:00 (13/hr day, 20/hr night) so comp tiers are
+        unchanged; pager pay stays on the shift record (conceptually all to Night&nbsp;SF&nbsp;1).
+        Day/Night are not re-rostered onto separate people and the Night role&rsquo;s optional
+        daytime pre-call work is not synthesized &mdash; those are scheduling concerns outside
+        per-shift point math.
+      </div>
+    </div>
     <div style="margin-bottom:10px;font-size:0.72rem;color:var(--text-dim);line-height:1.45;">
       &ldquo;Analyze with AI&rdquo; sends the aggregate compensation metrics (no patient or
       identifying data &mdash; only the Comp Health numbers) to Anthropic&rsquo;s API for
@@ -12457,7 +12475,11 @@ function _formatProductionMultiplierLabel(mult) {
 //     totals stop counting OB doubling.
 //   - Other doubling shifts: 2x for the whole case.
 //   - Non-doubling shifts: 1x.
-function caseProductionMultiplier(caseData, shift) {
+function caseProductionMultiplier(caseData, shift, _skipSandboxHook) {
+  if (!_skipSandboxHook && _engineSandboxLogicHooks.caseProductionMultiplier) {
+    return _engineSandboxLogicHooks.caseProductionMultiplier(caseData, shift,
+      (cd, sh) => caseProductionMultiplier(cd, sh, true));
+  }
   if (!shiftDoublesProduction(shift)) return 1;
   // Sandbox hook: experiments can replace the doubling factor. Defaults to
   // 2 so non-sandbox callers see identical behavior. SF1 fractional
@@ -15329,6 +15351,8 @@ function resetSandboxExperimentClick() {
   root.querySelectorAll('input[data-sandbox-path]').forEach(inp => { inp.value = ''; });
   const obj = document.getElementById('sandboxObjectiveExpr');
   if (obj) obj.value = '';
+  const sf1Toggle = document.getElementById('sandboxSf1DayNightToggle');
+  if (sf1Toggle) sf1Toggle.checked = false;
   const result = document.getElementById('sandboxExperimentResult');
   if (result) result.innerHTML = '';
   const aiOut = document.getElementById('sandboxAiResult');
@@ -15380,6 +15404,38 @@ function _activeSandboxHookNames() {
   return Object.keys(h).filter(k => typeof h[k] === 'function');
 }
 
+// "Day / Night SF 1 split" — toggled from the Experiments card. Models the
+// proposed reshape of the single SF 1 shift into two roles split at 17:00:
+//   • Day SF 1   — works 0700-1700, is the ONLY role that gets production
+//                  doubling (full ×, assigned by case start time so the
+//                  17:00 break is clean rather than minute-pro-rated).
+//   • Night SF 1 — covers 1700+, gets NO production doubling at all.
+// When on, this fully replaces SF 1's default fractional / pre-cutover
+// doubling (the toggle's "default SF 1 settings default to off"). AR
+// already splits at 17:00 in the engine (13/hr day, 20/hr night), so the
+// Day=lower / Night=higher comp tiers need no change; pager pay stays on
+// the shift record (conceptually all to Night SF 1). The sandbox scores
+// one record per shift, so Day/Night are not re-rostered onto separate
+// people and the Night role's optional daytime pre-call general-OR work is
+// not synthesized — both are scheduling concerns outside per-shift math.
+const SF1_DAYNIGHT_HOOK_LABEL = 'caseProductionMultiplier (Day/Night SF 1)';
+function _sf1DayNightProdHook() {
+  return function (caseData, shift, defaultImpl) {
+    if (!shift || shift.assignmentType !== 'SF1') return defaultImpl(caseData, shift);
+    if (caseData && caseData.isORCase) return 1;          // OR cases never double
+    const s = timeToMinutes(caseData && caseData.startTime);
+    if (s == null || isNaN(s)) return 1;
+    const isHol  = !!shift.isHoliday;
+    const isWknd = isWeekend(shift.date);
+    // Day SF 1 owns the 0700-1700 weekday non-holiday window and is the
+    // only role that doubles; everything else is Night SF 1 → no doubling.
+    const inDayWindow = !isHol && !isWknd && s >= 420 && s < 1020;
+    if (!inDayWindow) return 1;
+    const _po = (_engineSandboxOverrides && _engineSandboxOverrides.prod) || null;
+    return (_po && _po.doubleMult != null) ? Number(_po.doubleMult) : 2;
+  };
+}
+
 // Loads completed snapshots into the experiment picker. Snapshots
 // without baselineComputedAt are still listed (we score baseline on
 // the fly at Run time), but baseline-having snapshots are marked.
@@ -15427,7 +15483,12 @@ async function runSandboxExperimentClick() {
   if (!snapshotId) { if (status) status.textContent = 'Pick a snapshot first.'; return; }
   const { engine: overrides, ruleOverlay } = _collectSandboxExperimentOverrides();
   const activeHooks = _activeSandboxHookNames();
-  const logicHooks = activeHooks.length > 0 ? SANDBOX_TEST_RULES.logicHooks : null;
+  const sf1DayNightOn = !!((document.getElementById('sandboxSf1DayNightToggle') || {}).checked);
+  let logicHooks = activeHooks.length > 0 ? Object.assign({}, SANDBOX_TEST_RULES.logicHooks) : null;
+  if (sf1DayNightOn) {
+    logicHooks = Object.assign({}, logicHooks, { caseProductionMultiplier: _sf1DayNightProdHook() });
+    activeHooks.push(SF1_DAYNIGHT_HOOK_LABEL);
+  }
   const objectiveText = (() => {
     const el = document.getElementById('sandboxObjectiveExpr');
     return el ? (el.value || '').trim() : '';
