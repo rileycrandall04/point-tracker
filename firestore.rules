@@ -100,9 +100,10 @@ service cloud.firestore {
     // userProfiles/{uid}
     // -------------------------------------------------------------------------
     match /userProfiles/{uid} {
-      // Readable by self, any signed-in admin (admin UI looks users up by
-      // email and lists profiles), keeps existing features working.
-      allow read: if isSelf(uid) || isAppOwner() || isAnySiteAdmin();
+      // Readable by self or the app owner ONLY. Site admins are
+      // intentionally NOT granted cross-user profile reads: the owner is
+      // the sole party who can see other users' data system-wide.
+      allow read: if isSelf(uid) || isAppOwner();
 
       // Create own profile on first sign-in, but never with privileged
       // fields pre-set (blocks "sign in already an app_owner").
@@ -137,10 +138,10 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /users/{uid}/{document=**} {
       // Self has full access to own subtree. app_owner has full reach
-      // (admin data tools). siteAdmin gets READ-ONLY cross-user access
-      // (lookups / activity views); cross-user WRITES are app_owner-only
-      // here — destructive batch ops should move to Cloud Functions.
-      allow read: if isSelf(uid) || isAppOwner() || isAnySiteAdmin();
+      // (admin data tools). Cross-user reads AND writes are app_owner-only
+      // — the owner is the sole party able to see/modify other users'
+      // data system-wide; site admins get no cross-user data access.
+      allow read: if isSelf(uid) || isAppOwner();
       allow write: if isSelf(uid) || isAppOwner();
     }
 
