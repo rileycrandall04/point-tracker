@@ -6212,10 +6212,19 @@ function _scalingProgress(line, counts) {
 }
 async function _scalingAssertConsistent(expectedBlobCases) {
   const blobCount = expectedBlobCases.length;
-  const subCount = await _testCountSubCases();
+  let subCount = await _testCountSubCases();
   if (blobCount !== subCount) {
-    _scalingLog('Drift: blob=' + blobCount + ' sub=' + subCount + ' (diff ' + (subCount - blobCount) + ')', 'fail');
-    return false;
+    // count() aggregate can lag a recent write by a few seconds. Re-verify
+    // with a strongly-consistent get() before failing — otherwise scenarios
+    // would flag false-positive drift during fast write loops.
+    try {
+      const snap = await _testCasesCollection().get();
+      subCount = snap.size;
+    } catch (_) {}
+    if (blobCount !== subCount) {
+      _scalingLog('Drift: blob=' + blobCount + ' sub=' + subCount + ' (diff ' + (subCount - blobCount) + ')', 'fail');
+      return false;
+    }
   }
   return true;
 }
@@ -9645,10 +9654,12 @@ async function checkCaseDriftOnOpen(blobCasesLength) {
   try {
     const uid = currentUser.uid;
     let subCount;
+    let usedAggregate = false;
     try {
       // count() aggregate — one read regardless of subcollection size.
       const agg = await db.collection('users').doc(uid).collection('cases').count().get();
       subCount = agg.data().count;
+      usedAggregate = true;
     } catch (aggErr) {
       // Older Firestore SDKs may not support count(). Fall back to a regular
       // get() — costs N reads but still useful for drift detection.
@@ -9656,14 +9667,31 @@ async function checkCaseDriftOnOpen(blobCasesLength) {
       subCount = snap.size;
     }
     if (blobCasesLength !== subCount) {
-      const diff = subCount - blobCasesLength;
-      logScalingDiagnostic('drift_detected_on_open', {
-        blobCount: blobCasesLength,
-        subCount: subCount,
-        diff: diff,
-        caller: 'checkCaseDriftOnOpen'
-      });
-      console.warn('[scaling] Drift detected on open: blob=' + blobCasesLength + ' sub=' + subCount + ' (diff ' + diff + ')');
+      // count() aggregates are eventually-consistent: their index can lag a
+      // recent write by a few seconds. Re-verify suspected drift with a
+      // strongly-consistent get() before logging to avoid false positives
+      // when a user reloads inside the aggregate's catch-up window. Only
+      // pays the N-read cost when drift is suspected, which is rare.
+      if (usedAggregate) {
+        try {
+          const snap = await db.collection('users').doc(uid).collection('cases').get();
+          subCount = snap.size;
+        } catch (snapErr) {
+          console.warn('[scaling] verification get() failed, using count() value:', snapErr);
+        }
+      }
+      if (blobCasesLength !== subCount) {
+        const diff = subCount - blobCasesLength;
+        logScalingDiagnostic('drift_detected_on_open', {
+          blobCount: blobCasesLength,
+          subCount: subCount,
+          diff: diff,
+          caller: 'checkCaseDriftOnOpen'
+        });
+        console.warn('[scaling] Drift detected on open: blob=' + blobCasesLength + ' sub=' + subCount + ' (diff ' + diff + ')');
+      } else {
+        console.log('[scaling] Aggregate suggested drift; strong-consistency get() confirmed match — count() lag artifact, not logged.');
+      }
     }
   } catch (err) {
     console.error('[scaling] Drift check failed:', err);
