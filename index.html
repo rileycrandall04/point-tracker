@@ -635,6 +635,13 @@ textarea { resize: vertical; min-height: 60px; }
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
+/* Multi-line, mobile-friendly banner variant (dismissable notices). */
+.invite-banner.banner-wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+  padding: 10px 14px;
+}
 
 /* ===== DAILY FEATURE TIP BANNER ===== */
 .tip-banner {
@@ -5137,7 +5144,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
 <!-- Site Invite Banner -->
 <div class="invite-banner hidden" id="inviteBanner" onclick="openInviteModal()">&#9993; You've been invited to <span id="inviteBannerSite">a new site</span> &mdash; tap to review</div>
-<div class="invite-banner hidden" id="quarantineBanner" style="cursor:default;">&#9203; Your account is awaiting site assignment by an administrator. You can log shifts and cases now &mdash; they'll move to your site once you're approved.</div>
+<div class="invite-banner banner-wrap hidden" id="quarantineBanner" style="cursor:default;"><span style="display:block;padding-right:28px;">&#9203; Your account is awaiting site assignment by an administrator. You can log shifts and cases now &mdash; they'll move to your site once you're approved.</span><button type="button" aria-label="Dismiss" onclick="dismissQuarantineBanner(event)" style="position:absolute;right:6px;top:6px;background:transparent;border:none;color:#fff;font-size:1.1rem;line-height:1;cursor:pointer;padding:4px 8px;">&times;</button></div>
+<div class="invite-banner banner-wrap hidden" id="ownerWaitingBanner" onclick="goToWaitingRoom()"><span id="ownerWaitingText" style="display:block;padding-right:28px;"></span><button type="button" aria-label="Dismiss" onclick="dismissOwnerWaitingBanner(event)" style="position:absolute;right:6px;top:6px;background:transparent;border:none;color:#fff;font-size:1.1rem;line-height:1;cursor:pointer;padding:4px 8px;">&times;</button></div>
 
 <!-- Daily Feature Tip banner — sticky top, shown at most once per day after
      08:30 local for users who opted in. Deep link, snooze, and dismiss
@@ -5793,14 +5801,68 @@ function getPendingInviteSiteName(siteId) {
   return (sitesCache[siteId] && sitesCache[siteId].name) || siteId;
 }
 
+function _qBannerDismissKey() {
+  return 'pt_qbanner_dismissed_' + ((currentUser && currentUser.uid) || '');
+}
 function renderQuarantineBanner() {
   const b = document.getElementById('quarantineBanner');
   if (!b) return;
-  b.classList.toggle('hidden', !isQuarantined());
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(_qBannerDismissKey()) === '1'; } catch (e) {}
+  b.classList.toggle('hidden', !isQuarantined() || dismissed);
+}
+function dismissQuarantineBanner(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  try { localStorage.setItem(_qBannerDismissKey(), '1'); } catch (e) {}
+  const b = document.getElementById('quarantineBanner');
+  if (b) b.classList.add('hidden');
+}
+
+// Owner-only: in-app notification when users are waiting for approval.
+// Re-shows whenever the pending count changes (e.g., a new arrival) even
+// if previously dismissed at a lower count.
+function _ownerWaitingCount() {
+  let n = 0;
+  const c = userProfilesCache || {};
+  for (const uid in c) {
+    const p = c[uid] || {};
+    if (!p.deletedAt && !p.approvedSiteId) n++;
+  }
+  return n;
+}
+function renderOwnerWaitingNotice() {
+  const b = document.getElementById('ownerWaitingBanner');
+  if (!b) return;
+  if (!isAppOwner()) { b.classList.add('hidden'); return; }
+  const n = _ownerWaitingCount();
+  let dismissedAt = -1;
+  try { dismissedAt = parseInt(localStorage.getItem('pt_ownerwait_dismissed') || '-1', 10); } catch (e) {}
+  if (n > 0 && n !== dismissedAt) {
+    const t = document.getElementById('ownerWaitingText');
+    if (t) t.textContent = '🔔 ' + n + ' user' + (n === 1 ? '' : 's') +
+      ' awaiting site assignment — tap to review in the Waiting Room';
+    b.classList.remove('hidden');
+  } else {
+    b.classList.add('hidden');
+  }
+}
+function dismissOwnerWaitingBanner(ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  try { localStorage.setItem('pt_ownerwait_dismissed', String(_ownerWaitingCount())); } catch (e) {}
+  const b = document.getElementById('ownerWaitingBanner');
+  if (b) b.classList.add('hidden');
+}
+function goToWaitingRoom() {
+  try {
+    const item = document.getElementById('drawerAdminItem');
+    if (item) item.click();
+    setTimeout(() => { try { adminMSSetTab('migration'); } catch (e) {} }, 60);
+  } catch (e) {}
 }
 
 function renderInviteBanner() {
   renderQuarantineBanner();
+  renderOwnerWaitingNotice();
   const banner = document.getElementById('inviteBanner');
   if (!banner) return;
   const invite = currentUserProfile && currentUserProfile.pendingInvite;
@@ -10340,6 +10402,7 @@ async function loadUserProfiles() {
       userProfilesCache[doc.id] = doc.data();
     });
     console.log('Loaded ' + Object.keys(userProfilesCache).length + ' user profiles');
+    try { renderOwnerWaitingNotice(); } catch (e) {}
   } catch (err) {
     console.error('Failed to load user profiles:', err);
     userProfilesCache = {};
