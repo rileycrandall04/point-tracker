@@ -6007,18 +6007,35 @@ async function adminMigLoadDiagnostics() {
       outEl.innerHTML = '<span style="color:var(--text-dim);">No fallback events recorded. (That\'s a good sign.)</span>';
       return;
     }
+    // Separate unread from read so unread surface at the top and admin can
+    // tell new events from already-triaged ones at a glance.
+    const rows = [];
+    snap.forEach(doc => rows.push({ id: doc.id, data: doc.data() || {} }));
+    const unread = rows.filter(r => !r.data.acknowledged);
+    const read = rows.filter(r => r.data.acknowledged);
+    let html = '';
+    // Header: unread count + "Mark all read" affordance.
+    html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;font-size:0.74rem;">';
+    if (unread.length > 0) {
+      html += '<span style="background:var(--accent2);color:#1e293b;padding:2px 8px;border-radius:10px;font-weight:600;">' + unread.length + ' new</span>';
+      html += '<button class="btn btn-sm" onclick="adminMigAcknowledgeAll()" style="padding:3px 10px;font-size:0.74rem;">Mark all read</button>';
+    } else {
+      html += '<span style="color:var(--text-dim);">All ' + read.length + ' entries read.</span>';
+    }
+    html += '</div>';
     // Horizontal-scroll wrapper for narrow viewports — the Detail column
     // can be long enough to overflow a phone screen on its own.
-    let html = '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:0.72rem;min-width:520px;">';
+    html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.72rem;min-width:580px;">';
     html += '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);">';
     html += '<th style="padding:4px 6px;white-space:nowrap;">When</th>';
     html += '<th style="padding:4px 6px;white-space:nowrap;">User</th>';
     html += '<th style="padding:4px 6px;white-space:nowrap;">Type</th>';
     html += '<th style="padding:4px 6px;white-space:nowrap;">Detail</th>';
+    html += '<th style="padding:4px 6px;white-space:nowrap;text-align:center;">Read</th>';
     html += '</tr></thead><tbody>';
-    snap.forEach(doc => {
-      const d = doc.data() || {};
+    const renderRow = (r) => {
+      const d = r.data;
       const when = d.timestamp ? new Date(d.timestamp).toLocaleString() : '?';
       const email = escapeHtml(d.email || '(unknown)');
       const type = escapeHtml(d.type || '?');
@@ -6029,17 +6046,76 @@ async function adminMigLoadDiagnostics() {
       if (d.isDelta !== undefined) detailBits.push(d.isDelta ? 'delta' : 'full');
       if (d.caller) detailBits.push('@' + escapeHtml(d.caller));
       const detail = detailBits.join(' · ');
-      html += '<tr style="border-bottom:1px solid rgba(71,85,105,0.15);">';
-      html += '<td style="padding:4px 6px;vertical-align:top;white-space:nowrap;">' + escapeHtml(when) + '</td>';
-      html += '<td style="padding:4px 6px;vertical-align:top;">' + email + '</td>';
-      html += '<td style="padding:4px 6px;vertical-align:top;">' + type + '</td>';
-      html += '<td style="padding:4px 6px;vertical-align:top;color:var(--text-dim);">' + detail + '</td>';
-      html += '</tr>';
-    });
+      const dim = d.acknowledged ? 'opacity:0.5;' : '';
+      const weight = d.acknowledged ? '400' : '600';
+      let row = '';
+      row += '<tr id="adminMigDiagRow_' + r.id + '" style="border-bottom:1px solid rgba(71,85,105,0.15);' + dim + '">';
+      row += '<td style="padding:4px 6px;vertical-align:top;white-space:nowrap;font-weight:' + weight + ';">' + escapeHtml(when) + '</td>';
+      row += '<td style="padding:4px 6px;vertical-align:top;font-weight:' + weight + ';">' + email + '</td>';
+      row += '<td style="padding:4px 6px;vertical-align:top;font-weight:' + weight + ';">' + type + '</td>';
+      row += '<td style="padding:4px 6px;vertical-align:top;color:var(--text-dim);">' + detail + '</td>';
+      row += '<td style="padding:4px 6px;vertical-align:top;text-align:center;white-space:nowrap;">';
+      if (d.acknowledged) {
+        const at = d.acknowledgedAt ? new Date(d.acknowledgedAt).toLocaleDateString() : '';
+        row += '<span title="Marked read' + (at ? ' on ' + escapeHtml(at) : '') + '" style="color:var(--accent);">&check;</span>';
+      } else {
+        row += '<button class="btn btn-sm" onclick="adminMigAcknowledgeDiagnostic(\'' + r.id + '\')" style="padding:1px 8px;font-size:0.68rem;">Mark read</button>';
+      }
+      row += '</td>';
+      row += '</tr>';
+      return row;
+    };
+    for (const r of unread) html += renderRow(r);
+    for (const r of read) html += renderRow(r);
     html += '</tbody></table></div>';
     outEl.innerHTML = html;
   } catch (err) {
     outEl.innerHTML = '<span style="color:var(--accent2);">Failed: ' + escapeHtml(err.message || String(err)) + '</span>';
+  }
+}
+
+// Mark a single fallback entry as read. Optimistic — dims the row first,
+// writes the acknowledged + acknowledgedAt fields, falls back to a refresh
+// if the write fails.
+async function adminMigAcknowledgeDiagnostic(docId) {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  if (!docId) return;
+  const row = document.getElementById('adminMigDiagRow_' + docId);
+  if (row) row.style.opacity = '0.5';
+  try {
+    await db.collection('scalingDiagnostics').doc(docId).set({
+      acknowledged: true,
+      acknowledgedAt: new Date().toISOString()
+    }, { merge: true });
+    // Refresh so the row re-sorts into the read section + counter updates.
+    adminMigLoadDiagnostics();
+  } catch (err) {
+    if (row) row.style.opacity = '1';
+    showToast('Mark read failed: ' + (err.message || err));
+  }
+}
+
+// Mark every currently-loaded unread entry as read in a single batch.
+async function adminMigAcknowledgeAll() {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  try {
+    const snap = await db.collection('scalingDiagnostics')
+      .orderBy('timestamp', 'desc').limit(50).get();
+    const unread = [];
+    snap.forEach(d => { if (!(d.data() || {}).acknowledged) unread.push(d.ref); });
+    if (unread.length === 0) return;
+    const now = new Date().toISOString();
+    // Firestore batches max out at 500 ops; well under that here (limit:50).
+    const batch = db.batch();
+    unread.forEach(ref => batch.set(ref, {
+      acknowledged: true,
+      acknowledgedAt: now
+    }, { merge: true }));
+    await batch.commit();
+    showToast('Marked ' + unread.length + ' entries read');
+    adminMigLoadDiagnostics();
+  } catch (err) {
+    showToast('Mark all read failed: ' + (err.message || err));
   }
 }
 
