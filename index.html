@@ -16504,7 +16504,8 @@ function _renderSf1ModelComparison(rows) {
 
   return '<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:10px;">' +
     '<div style="font-weight:600;font-size:0.82rem;margin-bottom:6px;">SF 1 model — before vs after</div>' +
-    '<table style="width:100%;border-collapse:collapse;font-size:0.76rem;">' +
+    '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">' +
+    '<table style="width:100%;min-width:440px;border-collapse:collapse;font-size:0.76rem;">' +
       '<thead><tr style="color:var(--text-dim);font-size:0.7rem;">' +
         '<th style="padding:4px 8px;text-align:left;">Role</th>' +
         '<th style="padding:4px 8px;text-align:right;">Shifts</th>' +
@@ -16520,7 +16521,7 @@ function _renderSf1ModelComparison(rows) {
         row('SF 1 (Fri / holiday / weekend, single 24h)', aftSingle, false) +
         row('SF 1 — combined (after)', aftAll, true) +
         deltaRow +
-      '</tbody></table>' +
+      '</tbody></table></div>' +
       '<div style="font-size:0.68rem;color:var(--text-dim);margin-top:6px;line-height:1.4;">' +
         'Default = current single SF 1. Experimental = M&ndash;Th non-holiday split into Day (0700&ndash;1700, 10 clocked hr) + Night (1700&rarr;0700, 14 clocked hr, all pager/call); Fri/holiday/weekend stays one 24&nbsp;hr SF 1. Pts/clocked-hr uses the fixed Day/Night clock.' +
       '</div>' +
@@ -16991,9 +16992,10 @@ function renderSandboxDeltaSection(title, keyLabel, rows, monoKey) {
     '<div style="border-top:1px solid var(--border);padding-top:3px;text-align:right;color:var(--text-dim);">' + totalShifts + '</div>';
   return '<div style="margin-bottom:14px;">' +
     '<div style="font-weight:600;margin-bottom:6px;">' + escapeHtml(title) + '</div>' +
-    '<div style="display:grid;grid-template-columns:1fr repeat(4, auto);gap:3px 10px;align-items:center;">' +
+    '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">' +
+    '<div style="display:grid;grid-template-columns:minmax(110px,1fr) repeat(4, auto);gap:3px 10px;align-items:center;min-width:340px;">' +
     header + body + footer +
-    '</div></div>';
+    '</div></div></div>';
 }
 
 // Lists what the signed-in admin can do, with deeplinks to the page where
