@@ -9929,6 +9929,11 @@ async function loadSurgeonMappings() {
 }
 
 async function loadUserProfiles() {
+  // Firestore rules allow a full userProfiles read for the app owner only.
+  // For everyone else this query is denied by design — skip it so we don't
+  // spam a caught permission error on every startup. Consumers fall back to
+  // anonymized "Contributor N" labels when the cache is empty.
+  if (!isAppOwner()) { userProfilesCache = {}; return; }
   try {
     const snapshot = await db.collection('userProfiles').get();
     userProfilesCache = {};
