@@ -3118,8 +3118,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
         Enter a monthly point target so the pace bar can track how you're tracking against your goal. You can override it for any single month later by clicking the target on this card.
       </p>
       <div style="display:flex;gap:6px;align-items:center;">
-        <input type="number" id="pacePromptInput" min="0" step="1" placeholder="e.g. 800" style="flex:1;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
-        <button class="btn btn-primary btn-sm" id="pacePromptSetBtn" onclick="setDefaultMonthlyGoalFromPrompt()">Set</button>
+        <input type="number" id="pacePromptInput" min="0" step="1" placeholder="e.g. 800" style="flex:1 1 0;min-width:0;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
+        <button class="btn btn-primary btn-sm" id="pacePromptSetBtn" onclick="setDefaultMonthlyGoalFromPrompt()" style="flex:1 1 0;">Set</button>
       </div>
     </div>
   </div>
@@ -29808,6 +29808,15 @@ function renderSiteRow() {
   const el = document.getElementById('settingsSite');
   if (!el) return;
   const currentSid = getCurrentSiteId();
+  // Site switching is app-owner-only. Everyone else sees their current
+  // site as a fixed, disabled field (no self-switch).
+  const canSwitch = (typeof isAppOwner === 'function') && isAppOwner();
+  el.disabled = !canSwitch;
+  if (!canSwitch) {
+    el.innerHTML = `<option value="${escHtml(currentSid)}" selected>${escHtml(getCurrentSiteName())}</option>`;
+    el.dataset.currentSid = currentSid;
+    return;
+  }
   const ids = Object.keys(sitesCache || {}).slice().sort((a, b) => {
     const an = ((sitesCache[a] && sitesCache[a].name) || a).toLowerCase();
     const bn = ((sitesCache[b] && sitesCache[b].name) || b).toLowerCase();
@@ -29837,6 +29846,12 @@ renderSiteRow();
     const oldSid = sel.dataset.currentSid || getCurrentSiteId();
     const newSid = sel.value;
     if (!newSid || newSid === oldSid) return;
+    // App-owner-only: defense-in-depth in case the select is enabled.
+    if (!((typeof isAppOwner === 'function') && isAppOwner())) {
+      sel.value = oldSid;
+      showToast('Only the app owner can switch sites');
+      return;
+    }
     const newName = (sitesCache[newSid] && sitesCache[newSid].name) || newSid;
     const oldName = (sitesCache[oldSid] && sitesCache[oldSid].name) || oldSid;
     const ok = confirm(
