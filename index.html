@@ -5111,6 +5111,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
 <!-- Site Invite Banner -->
 <div class="invite-banner hidden" id="inviteBanner" onclick="openInviteModal()">&#9993; You've been invited to <span id="inviteBannerSite">a new site</span> &mdash; tap to review</div>
+<div class="invite-banner hidden" id="quarantineBanner" style="cursor:default;">&#9203; Your account is awaiting site assignment by an administrator. You can log shifts and cases now &mdash; they'll move to your site once you're approved.</div>
 
 <!-- Daily Feature Tip banner — sticky top, shown at most once per day after
      08:30 local for users who opted in. Deep link, snooze, and dismiss
@@ -5375,6 +5376,19 @@ function isAppOwner() { return getEffectiveRole() === 'app_owner'; }
 function isLegacyAdmin() {
   return !!(currentUserProfile && currentUserProfile.isAdmin === true && !currentUserProfile.role);
 }
+// New-user quarantine helpers (kill switch: appConfig/flags.quarantineEnabled).
+function quarantineActive() {
+  return !!(globalScalingFlags && globalScalingFlags.quarantineEnabled);
+}
+function isApproved() {
+  return !!(currentUserProfile && currentUserProfile.approvedSiteId);
+}
+// True when THIS user is parked in quarantine: switch on, not approved,
+// not the app owner. Drives the waiting banner + shared-pool read skips.
+function isQuarantined() {
+  return quarantineActive() && !isApproved() && !isAppOwner();
+}
+const QUARANTINE_SITE_ID = 'OTHER';
 function getAdminSites() {
   if (isAppOwner() || isLegacyAdmin()) return []; // empty = all
   const list = currentUserProfile && currentUserProfile.adminSites;
@@ -5711,6 +5725,14 @@ async function migrateUserDataToSite(uid, oldSiteId, newSiteId) {
     newSiteId
   );
 
+  // 3b. Re-stamp user's sharedShifts (carry a uid like sharedCases). Without
+  // this, a site move (incl. quarantine approval out of OTHER) would orphan
+  // the user's shifts in the old site's pool.
+  await batchUpdateSiteId(
+    db.collection('sharedShifts').where('uid', '==', uid).where('siteId', '==', oldSiteId),
+    newSiteId
+  );
+
   // 4. Contained surgeon-mapping copy
   await copyUserSurgeonMappings(userCases, oldSiteId, newSiteId);
 }
@@ -5745,7 +5767,14 @@ function getPendingInviteSiteName(siteId) {
   return (sitesCache[siteId] && sitesCache[siteId].name) || siteId;
 }
 
+function renderQuarantineBanner() {
+  const b = document.getElementById('quarantineBanner');
+  if (!b) return;
+  b.classList.toggle('hidden', !isQuarantined());
+}
+
 function renderInviteBanner() {
+  renderQuarantineBanner();
   const banner = document.getElementById('inviteBanner');
   if (!banner) return;
   const invite = currentUserProfile && currentUserProfile.pendingInvite;
@@ -8578,16 +8607,25 @@ async function handleNewUserSiteSelect() {
   status.style.color = 'var(--text-dim)';
   status.textContent = 'Saving...';
   try {
-    settings.siteId = siteId;
+    // Quarantine: a brand-new user's pick is only a REQUEST. They're parked
+    // in OTHER and isolated until an app owner approves them. Their choice is
+    // saved (non-privileged) so the owner sees which site they want.
+    const quarantine = quarantineActive() && !isApproved() && !isAppOwner();
+    const effectiveSite = quarantine ? QUARANTINE_SITE_ID : siteId;
+    settings.siteId = effectiveSite;
     saveSettings(settings);
     await db.collection('users').doc(currentUser.uid).collection('data').doc('settings')
-      .set({ siteId: siteId }, { merge: true });
+      .set({ siteId: effectiveSite }, { merge: true });
     const stamp = new Date().toISOString();
+    const profilePatch = { siteSelectedAt: stamp };
+    if (quarantine) { profilePatch.requestedSite = siteId; profilePatch.requestedAt = stamp; }
     await db.collection('userProfiles').doc(currentUser.uid)
-      .set({ siteSelectedAt: stamp }, { merge: true });
+      .set(profilePatch, { merge: true });
     if (!currentUserProfile) currentUserProfile = {};
     currentUserProfile.siteSelectedAt = stamp;
+    if (quarantine) { currentUserProfile.requestedSite = siteId; currentUserProfile.requestedAt = stamp; }
     document.getElementById('newUserSiteModal').classList.add('hidden');
+    if (typeof renderQuarantineBanner === 'function') renderQuarantineBanner();
     if (typeof renderSiteRow === 'function') renderSiteRow();
     // The shift-type dropdowns and any already-rendered labels were
     // populated against the default (UVH) site. Repopulate now that
@@ -9654,7 +9692,7 @@ async function backfillCaseSubcollection() {
 // collection with debug context. The Migration Diagnostics admin page lists
 // recent entries and auto-prunes anything older than 30 days when viewed.
 
-let globalScalingFlags = { subcollectionReads: 'off' };
+let globalScalingFlags = { subcollectionReads: 'off', quarantineEnabled: false };
 let globalScalingFlagsLoaded = false;
 const PHASE2_FULL_RECONCILE_DAYS = 7;
 const PHASE2_DIAGNOSTIC_PRUNE_DAYS = 30;
@@ -9666,7 +9704,8 @@ async function loadGlobalScalingFlags() {
     if (doc.exists) {
       const d = doc.data() || {};
       globalScalingFlags = {
-        subcollectionReads: d.subcollectionReads || 'off'
+        subcollectionReads: d.subcollectionReads || 'off',
+        quarantineEnabled: d.quarantineEnabled === true
       };
     }
     globalScalingFlagsLoaded = true;
@@ -10006,6 +10045,15 @@ function parseSharedCasesSnapshot(snapshot) {
 
 async function loadSharedCases(retryCount) {
   retryCount = retryCount || 0;
+  // Quarantined users have no pool access by design — skip the read (rules
+  // would deny it) and the retry loop, so we don't spam permission errors
+  // or loop "Auto-retrying community data load" forever.
+  if (isQuarantined()) {
+    sharedCasesCache = [];
+    sharedCasesLoaded = true;
+    try { renderCollectiveCases(); } catch (e) {}
+    return [];
+  }
   try {
     // Use default get() — Firestore handles cache vs server automatically.
     // Forced source:'server' can hang if the WebSocket isn't connected yet.
@@ -10035,6 +10083,7 @@ async function loadSharedCases(retryCount) {
 }
 
 async function loadSharedCaseOverrides() {
+  if (isQuarantined()) { sharedCaseOverridesCache = {}; return; }
   try {
     const snap = await db.collection('sharedCaseOverrides')
       .where('siteId', '==', getCurrentSiteId())
@@ -33984,6 +34033,22 @@ auth.onAuthStateChanged(async (user) => {
     // leftover banner flag from an earlier bounced session.
     try { localStorage.removeItem('pt_deletedAccount'); } catch (_) {}
 
+    // Blocklist check: an app owner who rejected this person added their
+    // email to accessBlocklist. Bounce them the same way as a tombstone.
+    try {
+      const email = user.email || '';
+      if (email) {
+        const bl = await db.collection('accessBlocklist').doc(email).get();
+        if (bl.exists) {
+          try { localStorage.setItem('pt_deletedAccount', user.email || ''); } catch (_) {}
+          await auth.signOut();
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Blocklist check failed; proceeding with sign-in:', e);
+    }
+
     // Write/update user profile (fire-and-forget). Stamps the cache version
     // this device is currently running so admins can spot users stuck on
     // stale builds — see getCurrentCacheVersion below.
@@ -34220,12 +34285,14 @@ auth.onAuthStateChanged(async (user) => {
     // loadSharedCases() call that fails initially works seconds later
     // (which is why the manual Retry button works). This mimics that.
     setTimeout(() => {
+      if (isQuarantined()) return;
       if (!sharedCasesLoaded || sharedCasesCache.length === 0) {
         console.log('Auto-retrying community data load...');
         loadSharedCases().then(() => refreshSharedViews()).catch(() => {});
       }
     }, 3000);
     setTimeout(() => {
+      if (isQuarantined()) return;
       if (!sharedCasesLoaded || sharedCasesCache.length === 0) {
         console.log('Auto-retrying community data load (2nd)...');
         loadSharedCases().then(() => refreshSharedViews()).catch(() => {});
