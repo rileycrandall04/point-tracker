@@ -16247,6 +16247,84 @@ async function analyzeSandboxWithAiClick() {
 // `{ _error }` object from a runtime throw in the user expression. When
 // present, the objective row is rendered above the points-total grid and
 // a "Per-user metrics" details block is appended at the end.
+// Focused SF 1 before/after panel: default model (baseline 'SF1') vs the
+// experimental split (sandbox 'SF1' single + 'SF1_Day' + 'SF1_Night'),
+// with pts/shift and pts/clocked-hr for each. Sums per-type {total,hours,
+// shiftCount} across all users from the byShiftType buckets the scorer
+// already produced. Returns '' when there is no SF 1 activity either side.
+function _renderSf1ModelComparison(rows) {
+  const agg = (field, type) => {
+    let total = 0, hours = 0, n = 0;
+    for (const r of (rows || [])) {
+      const b = (r[field] || {})[type];
+      if (b) { total += b.total || 0; hours += b.hours || 0; n += b.shiftCount || 0; }
+    }
+    return { total, hours, n };
+  };
+  const add = (a, b) => ({ total: a.total + b.total, hours: a.hours + b.hours, n: a.n + b.n });
+
+  const before    = agg('baselineByType', 'SF1');
+  const aftSingle = agg('sandboxByType',  'SF1');
+  const aftDay    = agg('sandboxByType',  'SF1_Day');
+  const aftNight  = agg('sandboxByType',  'SF1_Night');
+  const aftAll    = add(add(aftSingle, aftDay), aftNight);
+
+  if (before.n === 0 && aftAll.n === 0) return '';
+
+  const f1 = n => (Math.round((n || 0) * 10) / 10).toFixed(1);
+  const f2 = n => (Math.round((n || 0) * 100) / 100).toFixed(2);
+  const perShift = g => g.n > 0 ? g.total / g.n : 0;
+  const perHr    = g => g.hours > 0 ? g.total / g.hours : 0;
+  const dCol = n => n === 0 ? 'var(--text-dim)' : (n > 0 ? 'var(--accent)' : 'var(--accent2)');
+  const sgn = n => (n > 0 ? '+' : '') + f2(n);
+
+  const row = (label, g, accent) => {
+    if (g.n === 0) return '';
+    return '<tr>' +
+      '<td style="padding:4px 8px;' + (accent ? 'font-weight:600;' : '') + '">' + label + '</td>' +
+      '<td style="padding:4px 8px;text-align:right;font-variant-numeric:tabular-nums;">' + g.n + '</td>' +
+      '<td style="padding:4px 8px;text-align:right;font-variant-numeric:tabular-nums;">' + f1(g.total) + '</td>' +
+      '<td style="padding:4px 8px;text-align:right;font-variant-numeric:tabular-nums;">' + f2(perShift(g)) + '</td>' +
+      '<td style="padding:4px 8px;text-align:right;font-variant-numeric:tabular-nums;">' + f2(perHr(g)) + '</td>' +
+    '</tr>';
+  };
+
+  // Δ of the combined after-model vs the default model.
+  const dShift = perShift(aftAll) - perShift(before);
+  const dHr    = perHr(aftAll)    - perHr(before);
+  const deltaRow = (before.n > 0 && aftAll.n > 0) ?
+    '<tr style="border-top:1px dashed var(--border);">' +
+      '<td style="padding:4px 8px;color:var(--text-dim);">&Delta; after vs default (SF 1 combined)</td>' +
+      '<td style="padding:4px 8px;"></td><td style="padding:4px 8px;"></td>' +
+      '<td style="padding:4px 8px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:' + dCol(dShift) + ';">' + sgn(dShift) + '</td>' +
+      '<td style="padding:4px 8px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:' + dCol(dHr) + ';">' + sgn(dHr) + '</td>' +
+    '</tr>' : '';
+
+  return '<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:10px;">' +
+    '<div style="font-weight:600;font-size:0.82rem;margin-bottom:6px;">SF 1 model — before vs after</div>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:0.76rem;">' +
+      '<thead><tr style="color:var(--text-dim);font-size:0.7rem;">' +
+        '<th style="padding:4px 8px;text-align:left;">Role</th>' +
+        '<th style="padding:4px 8px;text-align:right;">Shifts</th>' +
+        '<th style="padding:4px 8px;text-align:right;">Total pts</th>' +
+        '<th style="padding:4px 8px;text-align:right;">Pts/shift</th>' +
+        '<th style="padding:4px 8px;text-align:right;">Pts/clocked-hr</th>' +
+      '</tr></thead><tbody>' +
+        '<tr><td colspan="5" style="padding:5px 8px 2px;color:var(--text-dim);font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;">Default model</td></tr>' +
+        row('SF 1', before, true) +
+        '<tr><td colspan="5" style="padding:7px 8px 2px;color:var(--text-dim);font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;">Experimental model</td></tr>' +
+        row('SF 1 Day', aftDay, false) +
+        row('SF 1 Night', aftNight, false) +
+        row('SF 1 (Fri / holiday / weekend, single 24h)', aftSingle, false) +
+        row('SF 1 — combined (after)', aftAll, true) +
+        deltaRow +
+      '</tbody></table>' +
+      '<div style="font-size:0.68rem;color:var(--text-dim);margin-top:6px;line-height:1.4;">' +
+        'Default = current single SF 1. Experimental = M&ndash;Th non-holiday split into Day (0700&ndash;1700, 10 clocked hr) + Night (1700&rarr;0700, 14 clocked hr, all pager/call); Fri/holiday/weekend stays one 24&nbsp;hr SF 1. Pts/clocked-hr uses the fixed Day/Night clock.' +
+      '</div>' +
+  '</div>';
+}
+
 function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, activeHooks, objective, usersBase, usersSand, shiftsBase, shiftsSand) {
   if (!host) return;
   if (!rows || rows.length === 0) {
@@ -16363,6 +16441,7 @@ function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, active
     renderSandboxDeltaSection('By user', 'User', byUser, true) +
     renderSandboxDeltaSection('By site', 'Site', bySite, false) +
     renderSandboxDeltaSection('By shift type', 'Shift type', byType, false) +
+    _renderSf1ModelComparison(rows) +
     _renderSandboxCompHealth(shiftsBase, shiftsSand, usersBase, usersSand) +
     _renderSandboxPerUserMetrics(usersBase, usersSand);
 }
