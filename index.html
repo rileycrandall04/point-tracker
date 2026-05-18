@@ -4285,6 +4285,19 @@ body.hide-monetary .monetary-hide { display: none !important; }
         </div>
         <div id="adminBackfillApprovedStatus" style="font-size:0.78rem;margin-top:6px;"></div>
       </div>
+
+      <!-- New-user Waiting Room (quarantine approvals) -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <div>
+            <div style="font-size:0.82rem;font-weight:600;">Waiting Room <span id="adminWaitingCount" style="color:var(--accent2);font-weight:700;"></span></div>
+            <div style="font-size:0.7rem;color:var(--text-dim);max-width:560px;line-height:1.5;">New users awaiting site assignment. Approve to move them (and any data they logged in OTHER) into the site you pick; reject to block their email.</div>
+          </div>
+          <button class="btn btn-sm" onclick="adminLoadWaitingRoom()">Refresh</button>
+        </div>
+        <div id="adminWaitingRoomStatus" style="font-size:0.78rem;margin-top:4px;"></div>
+        <div id="adminWaitingRoomList" style="font-size:0.8rem;margin-top:8px;"></div>
+      </div>
     </div>
 
     <!-- Scaling Test tab (scaling audit #2 validation harness) -->
@@ -5892,7 +5905,7 @@ function adminMSSetTab(tab) {
   if (tab === 'sites') renderAdminMSSitesList();
   if (tab === 'rules') adminRulesInit();
   if (tab === 'activity') adminMSInitActivity();
-  if (tab === 'migration') adminMigInit();
+  if (tab === 'migration') { adminMigInit(); adminLoadWaitingRoom(); }
   if (tab === 'scalingTest') adminScalingTestInit();
 }
 
@@ -6007,6 +6020,118 @@ async function adminBackfillApprovedSites() {
   } catch (err) {
     setStatus('Backfill failed: ' + (err && err.message || err), 'var(--accent2)');
     console.error('adminBackfillApprovedSites error:', err);
+  }
+}
+
+// ---- New-user Waiting Room (quarantine approvals) ----
+let _waitingRoom = {}; // uid -> { email, displayName, requestedSite }
+
+function _siteOptionsHtml(selectedId) {
+  const ids = Object.keys(sitesCache || {}).filter(id => id !== QUARANTINE_SITE_ID)
+    .sort((a, b) => ((sitesCache[a] && sitesCache[a].name) || a)
+      .localeCompare((sitesCache[b] && sitesCache[b].name) || b));
+  if (selectedId && !ids.includes(selectedId)) ids.unshift(selectedId);
+  return ids.map(id => {
+    const name = (sitesCache[id] && sitesCache[id].name) || id;
+    const sel = id === selectedId ? ' selected' : '';
+    return '<option value="' + escapeHtml(id) + '"' + sel + '>' + escapeHtml(name) + ' (' + escapeHtml(id) + ')</option>';
+  }).join('');
+}
+
+async function adminLoadWaitingRoom() {
+  const listEl = document.getElementById('adminWaitingRoomList');
+  const statusEl = document.getElementById('adminWaitingRoomStatus');
+  const countEl = document.getElementById('adminWaitingCount');
+  if (!listEl) return;
+  if (!isAppOwner()) { listEl.innerHTML = ''; if (statusEl) statusEl.textContent = 'App owner only.'; return; }
+  if (statusEl) { statusEl.style.color = 'var(--text-dim)'; statusEl.textContent = 'Loading…'; }
+  try {
+    const snap = await db.collection('userProfiles').get();
+    _waitingRoom = {};
+    snap.forEach(doc => {
+      const d = doc.data() || {};
+      if (d.deletedAt) return;
+      if (d.approvedSiteId) return;
+      _waitingRoom[doc.id] = {
+        email: d.email || '(no email)',
+        displayName: d.displayName || '',
+        requestedSite: d.requestedSite || ''
+      };
+    });
+    const uids = Object.keys(_waitingRoom);
+    if (countEl) countEl.textContent = uids.length ? '(' + uids.length + ')' : '';
+    if (statusEl) statusEl.textContent = '';
+    if (uids.length === 0) { listEl.innerHTML = '<div style="color:var(--text-dim);">No users waiting.</div>'; return; }
+    listEl.innerHTML = uids.map(uid => {
+      const u = _waitingRoom[uid];
+      const reqName = u.requestedSite
+        ? ((sitesCache[u.requestedSite] && sitesCache[u.requestedSite].name) || u.requestedSite)
+        : '(none)';
+      return '<div style="border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:8px;">' +
+        '<div style="font-weight:600;">' + escapeHtml(u.displayName || u.email) + '</div>' +
+        '<div style="font-size:0.72rem;color:var(--text-dim);">' + escapeHtml(u.email) +
+          ' &middot; requested: ' + escapeHtml(reqName) + '</div>' +
+        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;">' +
+          '<select id="wrSite_' + escapeHtml(uid) + '" style="padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.8rem;">' +
+            _siteOptionsHtml(u.requestedSite) + '</select>' +
+          '<button class="btn btn-primary btn-sm" onclick="adminApproveUser(\'' + escapeHtml(uid) + '\')">Approve</button>' +
+          '<button class="btn btn-sm" onclick="adminRejectUser(\'' + escapeHtml(uid) + '\')" style="background:var(--surface);color:var(--accent2);">Reject</button>' +
+        '</div></div>';
+    }).join('');
+  } catch (err) {
+    if (statusEl) { statusEl.style.color = 'var(--accent2)'; statusEl.textContent = 'Load failed: ' + (err && err.message || err); }
+    console.error('adminLoadWaitingRoom error:', err);
+  }
+}
+
+async function adminApproveUser(uid) {
+  if (!isAppOwner() || !uid) return;
+  const u = _waitingRoom[uid];
+  const sel = document.getElementById('wrSite_' + uid);
+  const siteId = sel && sel.value;
+  if (!siteId) { showToast('Pick a site'); return; }
+  const siteName = (sitesCache[siteId] && sitesCache[siteId].name) || siteId;
+  if (!confirm('Approve ' + (u && u.email || uid) + ' into ' + siteName +
+    '? Their data logged in OTHER will be moved into that site and its shared pool.')) return;
+  try {
+    await db.collection('userProfiles').doc(uid).set({
+      approvedSiteId: siteId,
+      approvedAt: new Date().toISOString(),
+      approvedBy: currentUser ? currentUser.uid : 'owner'
+    }, { merge: true });
+    // Move any data they logged while parked in OTHER into the assigned site
+    // (re-stamps data doc + sharedCases/sharedShifts/overrides + surgeon maps).
+    await migrateUserDataToSite(uid, QUARANTINE_SITE_ID, siteId);
+    showToast('Approved into ' + siteName);
+    delete _waitingRoom[uid];
+    adminLoadWaitingRoom();
+  } catch (err) {
+    console.error('Approve failed:', err);
+    showToast('Approve failed: ' + (err && err.message || err));
+  }
+}
+
+async function adminRejectUser(uid) {
+  if (!isAppOwner() || !uid) return;
+  const u = _waitingRoom[uid];
+  const email = u && u.email;
+  if (!confirm('Reject ' + (email || uid) + '? Their account is tombstoned and the email is blocked from signing in again.')) return;
+  try {
+    const ts = new Date().toISOString();
+    await db.collection('userProfiles').doc(uid).set({
+      deletedAt: ts, deletedBy: currentUser ? currentUser.uid : 'owner', rejected: true
+    }, { merge: true });
+    if (email && email.indexOf('@') > 0) {
+      await db.collection('accessBlocklist').doc(email).set({
+        email: email, rejectedAt: ts, rejectedBy: currentUser ? currentUser.uid : 'owner'
+      }, { merge: true });
+    }
+    showToast('Rejected and blocked');
+    delete _waitingRoom[uid];
+    adminLoadWaitingRoom();
+  } catch (err) {
+    console.error('Reject failed:', err);
+    showToast('Reject failed: ' + (err && err.message || err));
   }
 }
 
