@@ -4559,7 +4559,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
         (13/hr day, 20/hr night). <em>Modeling notes:</em> a whole case is assigned to the
         Day or Night row by its start time (the doubling itself is still minute-pro-rated to
         0700&ndash;1700); the SF&nbsp;1 OR-rate AR override is not re-applied to the split
-        rows. Toggle on &rarr; these rules; off &rarr; engine defaults.
+        rows. A date counts as SF&nbsp;1 if a shift record <em>or</em> the captured
+        rotation calendar says SF&nbsp;1; each SF&nbsp;1 date is rebuilt on a fixed
+        24&nbsp;hr clock (Day&nbsp;=&nbsp;10&nbsp;hr, Night&nbsp;=&nbsp;14&nbsp;hr).
+        <strong>Re-capture the snapshot</strong> after this update so calendar-only
+        SF&nbsp;1 dates are included (older snapshots have no calendar data).
+        Toggle on &rarr; these rules; off &rarr; engine defaults.
       </div>
     </div>
     <div style="margin-bottom:10px;font-size:0.72rem;color:var(--text-dim);line-height:1.45;">
@@ -13255,7 +13260,7 @@ function calcARPoints(shift) {
     return round2(effectivePagerPts(shift, pagerWindow) + preCallPts);
   }
 
-  const isSF = ['SF1','SF2'].includes(shift.assignmentType);
+  const isSF = ['SF1','SF2','SF1_Day','SF1_Night'].includes(shift.assignmentType);
 
   // Build OR-case time ranges for SF1/SF2
   let orRanges = [];
@@ -13346,7 +13351,7 @@ function calcARPoints(shift) {
     }
     // Evening minimum: based on evening assignment type (mole/SF1/SF2: no minimum;
     // also skipped when force-off pager-call is selected).
-    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && !_pagerCallSuppressesAR(shift)) {
+    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && shift.assignmentType !== 'SF1_Day' && shift.assignmentType !== 'SF1_Night' && !_pagerCallSuppressesAR(shift)) {
       const isOBRate = shiftIsOBStyle(shift);
       const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
       eveningAR = Math.max(eveningAR, eveningMin);
@@ -13401,7 +13406,7 @@ function calcARPoints(shift) {
   // Skipped when force-off pager-call is selected (which suppresses AR
   // entirely). Other pager-call selections keep the 80-pt minimum so that
   // partial clock-in still gets the 4-hr floor on top of the pager pay.
-  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && !_pagerCallSuppressesAR(shift)) {
+  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && shift.assignmentType !== 'SF1_Day' && shift.assignmentType !== 'SF1_Night' && !_pagerCallSuppressesAR(shift)) {
     const isOBRate = shiftIsOBStyle(shift);
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     arPoints = Math.max(arPoints, minPoints);
@@ -13480,7 +13485,7 @@ function calcARBreakdown(shift, _skipSandboxHook) {
     return { ar: round2(tcAdj.ar), call: round2(callPts), preCall: _preCallOverlay };
   }
 
-  const isSF = ['SF1','SF2'].includes(shift.assignmentType);
+  const isSF = ['SF1','SF2','SF1_Day','SF1_Night'].includes(shift.assignmentType);
 
   let orRanges = [];
   if (isSF) {
@@ -13579,7 +13584,7 @@ function calcARBreakdown(shift, _skipSandboxHook) {
     }
     // Evening minimum: based on evening assignment type (mole/SF1/SF2: no minimum;
     // also skipped when force-off pager-call is selected).
-    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && !_pagerCallSuppressesAR(shift)) {
+    if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && shift.assignmentType !== 'SF1_Day' && shift.assignmentType !== 'SF1_Night' && !_pagerCallSuppressesAR(shift)) {
       const isOBRate = shiftIsOBStyle(shift);
       const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
       eveningAR = Math.max(eveningAR, eveningMin);
@@ -13628,7 +13633,7 @@ function calcARBreakdown(shift, _skipSandboxHook) {
   // SF1/SF2: no AR minimum — accrues at actual rate from start. All others get
   // a 4-hr minimum (80 pts general / 52 pts OB-style), except when force-off
   // pager-call is selected — that suppresses AR entirely so the floor is moot.
-  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && !_pagerCallSuppressesAR(shift)) {
+  if (!isHol && !isWknd && shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && shift.assignmentType !== 'SF1_Day' && shift.assignmentType !== 'SF1_Night' && !_pagerCallSuppressesAR(shift)) {
     const isOBRate = shiftIsOBStyle(shift);
     const minPoints = isOBRate ? 13 * 4 : 20 * 4;
     arPoints = Math.max(arPoints, minPoints);
@@ -14653,9 +14658,10 @@ async function captureSandboxSnapshot(ymStart, ymEnd, label, excludedUids) {
       console.warn('Sandbox: skipping uid', uid, 'read failed:', e);
       continue;
     }
-    const { shifts, cases } = rangeData;
+    const { shifts, cases, calendarAssignments } = rangeData;
     const shiftCount = Object.keys(shifts).length;
-    if (shiftCount === 0 && cases.length === 0) continue;
+    const calCount = Object.keys(calendarAssignments || {}).length;
+    if (shiftCount === 0 && cases.length === 0 && calCount === 0) continue;
 
     const userKey = await sandboxHashId(uid, snapshotId);
     await ownerRoot.collection('userPayloads').doc(userKey).set({
@@ -14664,6 +14670,7 @@ async function captureSandboxSnapshot(ymStart, ymEnd, label, excludedUids) {
       year: profile.year || null,
       shifts,
       cases,
+      calendarAssignments: calendarAssignments || {},
       shiftCount,
       caseCount: cases.length
     });
@@ -14712,7 +14719,8 @@ async function readUserRangeDataForSandbox(uid, ymStart, ymEnd) {
   const dataSnap = await db.collection('users').doc(uid).collection('data').doc('data').get();
   const shifts = {};
   const cases = [];
-  if (!dataSnap.exists) return { shifts, cases };
+  const calendarAssignments = {};
+  if (!dataSnap.exists) return { shifts, cases, calendarAssignments };
   const d = dataSnap.data() || {};
   // YYYY-MM strings compare lexically; date YYYY-MM-DD compares the same way.
   const startBound = ymStart + '-01';
@@ -14721,6 +14729,16 @@ async function readUserRangeDataForSandbox(uid, ymStart, ymEnd) {
     for (const k of Object.keys(d.shifts)) {
       if (typeof k === 'string' && k >= startBound && k <= endBound) {
         shifts[k] = d.shifts[k];
+      }
+    }
+  }
+  // Calendar (rotation) assignments — SF 1 is often a calendar assignment
+  // with no materialized shift record, so the Day/Night split needs this
+  // to know which dates were SF 1. Captured in-range only.
+  if (d.calendarAssignments && typeof d.calendarAssignments === 'object') {
+    for (const k of Object.keys(d.calendarAssignments)) {
+      if (typeof k === 'string' && k >= startBound && k <= endBound) {
+        calendarAssignments[k] = d.calendarAssignments[k];
       }
     }
   }
@@ -14737,7 +14755,7 @@ async function readUserRangeDataForSandbox(uid, ymStart, ymEnd) {
       }
     }
   }
-  return { shifts, cases };
+  return { shifts, cases, calendarAssignments };
 }
 
 async function sandboxHashId(input, salt) {
@@ -15494,11 +15512,59 @@ function _sf1CaseHalf(c) {
 // entries (Day under the date key, Night under date+suffix). Friday /
 // holiday / weekend SF 1 is left as a single entry. Non-SF1 shifts and
 // cases pass through untouched. Pure — clones, never mutates the input.
+//
+// SF 1 synthesis: SF 1 is frequently a rotation/calendar assignment with
+// no materialized shift record, so a date counts as SF 1 if EITHER a shift
+// record says assignmentType 'SF1' OR the captured calendarAssignments say
+// so. Every SF 1 date is (re)built with a fixed 24h clock (07:00→07:00) so
+// the split clips to a uniform Day 0700-1700 / Night 1700-0700 regardless
+// of how the original was clocked. (Older snapshots captured before the
+// calendarAssignments change won't carry calendar data — re-capture to pick
+// up calendar-only SF 1 dates.)
 function _transformPayloadSplitSF1(payload) {
   const srcShifts = (payload && payload.shifts) || {};
+  const cal = (payload && payload.calendarAssignments) || {};
+  const fallbackSite = (payload && payload.siteId) || null;
+  // date -> { siteId, isHoliday } for every SF 1 date (shift or calendar).
+  const sf1Dates = new Map();
+  for (const k of Object.keys(srcShifts)) {
+    const sh = srcShifts[k];
+    if (sh && sh.assignmentType === 'SF1') {
+      const date = sh.date || k;
+      sf1Dates.set(date, { siteId: sh.siteId, isHoliday: !!sh.isHoliday });
+    }
+  }
+  for (const date of Object.keys(cal)) {
+    const a = cal[date];
+    if (!a) continue;
+    const isSf1 = a.type === 'SF1' || /\bSF\s*1\b/i.test(a.label || '');
+    if (!isSf1) continue;
+    const prev = sf1Dates.get(date) || {};
+    sf1Dates.set(date, {
+      siteId: prev.siteId != null ? prev.siteId : fallbackSite,
+      isHoliday: !!prev.isHoliday || /holiday/i.test(a.label || '')
+    });
+  }
+  // Non-SF1 shifts pass through; original SF 1 records are dropped and
+  // replaced by a normalized 24h synthetic shift below.
+  const baseShifts = {};
+  for (const k of Object.keys(srcShifts)) {
+    const sh = srcShifts[k];
+    if (sh && sh.assignmentType === 'SF1') continue;
+    baseShifts[k] = sh;
+  }
+  for (const [date, meta] of sf1Dates) {
+    baseShifts[date] = {
+      date: date,
+      assignmentType: 'SF1',
+      siteId: meta.siteId != null ? meta.siteId : fallbackSite,
+      isHoliday: !!meta.isHoliday,
+      timeEntries: [{ start: '07:00', end: '07:00' }]
+    };
+  }
   const outShifts = {};
-  for (const key of Object.keys(srcShifts)) {
-    const sh = srcShifts[key];
+  for (const key of Object.keys(baseShifts)) {
+    const sh = baseShifts[key];
     if (!sh) continue;
     const date = sh.date || key;
     if (sh.assignmentType !== 'SF1' || !_sf1DateIsSplit(date, sh.isHoliday)) {
@@ -20950,7 +21016,7 @@ function getShiftPayBreakdown(shift) {
     }
     return [];
   }
-  const isSF = ['SF1','SF2'].includes(shift.assignmentType);
+  const isSF = ['SF1','SF2','SF1_Day','SF1_Night'].includes(shift.assignmentType);
 
   let orRanges = [];
   if (isSF) {
@@ -21241,7 +21307,7 @@ function getShiftPayBreakdown(shift) {
       }
 
       let eveningResult = eveningRows;
-      if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && !_pagerCallSuppressesAR(shift)) {
+      if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && shift.assignmentType !== 'SF1_Day' && shift.assignmentType !== 'SF1_Night' && !_pagerCallSuppressesAR(shift)) {
         const eveningTotal = eveningRows.reduce((sum, r) => sum + r.amount, 0);
         const isOBRate = shiftIsOBStyle(shift);
         const eveningMin = isOBRate ? 13 * 4 : 20 * 4;
@@ -21259,7 +21325,7 @@ function getShiftPayBreakdown(shift) {
       preCallResult.forEach(r => consolidated.push(r));
       eveningResult.forEach(r => consolidated.push(r));
       pagerRows.forEach(r => consolidated.push(r));
-    } else if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && !_pagerCallSuppressesAR(shift)) {
+    } else if (shift.assignmentType !== 'mole' && shift.assignmentType !== 'SF1' && shift.assignmentType !== 'SF2' && shift.assignmentType !== 'SF1_Day' && shift.assignmentType !== 'SF1_Night' && !_pagerCallSuppressesAR(shift)) {
       // Non-pre-call: single 4hr minimum (SF1/SF2 excluded — no minimum;
       // also skipped when force-off pager-call is selected).
       const isOBRate = shiftIsOBStyle(shift);
