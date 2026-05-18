@@ -191,6 +191,45 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // Global reference/config docs the scoring engine reads on every app load
+    // (loadAsaCodes / loadAsaCodeProcedures / loadProcedureMappings). Single
+    // global docs, admin-managed — same posture as appConfig: any signed-in
+    // user reads, only app_owner writes. WITHOUT these, the default-deny below
+    // breaks scoring for every user.
+    // -------------------------------------------------------------------------
+    match /asaCodes/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAppOwner();
+    }
+    match /asaCodeProcedures/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAppOwner();
+    }
+    match /procedureMappings/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAppOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // scalingDiagnostics — any signed-in client appends per-write
+    // failure/diagnostic docs (fire-and-forget); only admins read them back.
+    // -------------------------------------------------------------------------
+    match /scalingDiagnostics/{docId} {
+      allow read: if isAppOwner() || isAnySiteAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAppOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // siteRulesAudit/{siteId}/** — append-only audit log written when a site's
+    // scoring rules are saved. Same write scope as sites/{siteId}.
+    // -------------------------------------------------------------------------
+    match /siteRulesAudit/{siteId}/{document=**} {
+      allow read: if isAppOwner() || isAnySiteAdmin();
+      allow write: if isAppOwner() || isSiteAdminOf(siteId);
+    }
+
+    // -------------------------------------------------------------------------
     // Default deny everything not matched above.
     // -------------------------------------------------------------------------
     match /{document=**} {
