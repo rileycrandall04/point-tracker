@@ -4273,6 +4273,18 @@ body.hide-monetary .monetary-hide { display: none !important; }
         </div>
         <div id="adminMigDiagnosticsList" style="font-size:0.78rem;margin-top:6px;"></div>
       </div>
+
+      <!-- One-time: stamp approvedSiteId on all existing users (quarantine prereq) -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <div>
+            <div style="font-size:0.82rem;font-weight:600;">Approve all existing users (one-time)</div>
+            <div style="font-size:0.7rem;color:var(--text-dim);max-width:560px;line-height:1.5;">Stamps <code>approvedSiteId</code> on every existing, non-deleted user from their current site, so they keep full access when the new-user quarantine ships. Idempotent &mdash; safe to run more than once; only fills users that are missing it.</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="adminBackfillApprovedSites()">Run backfill</button>
+        </div>
+        <div id="adminBackfillApprovedStatus" style="font-size:0.78rem;margin-top:6px;"></div>
+      </div>
     </div>
 
     <!-- Scaling Test tab (scaling audit #2 validation harness) -->
@@ -5911,6 +5923,61 @@ async function adminMigSaveGlobalFlag() {
       statusEl.style.color = 'var(--accent2)';
       statusEl.textContent = 'Save failed: ' + (err.message || err);
     }
+  }
+}
+
+// One-time: stamp approvedSiteId on every existing, non-deleted user so they
+// retain full access once the new-user quarantine ships. Idempotent — only
+// fills profiles that are missing the field. App-owner only. Runs entirely
+// under the owner's cross-user read/write reach; no rule change required.
+async function adminBackfillApprovedSites() {
+  const statusEl = document.getElementById('adminBackfillApprovedStatus');
+  const setStatus = (msg, color) => {
+    if (!statusEl) return;
+    statusEl.style.color = color || 'var(--text-dim)';
+    statusEl.textContent = msg;
+  };
+  if (!isAppOwner()) { setStatus('App owner only.', 'var(--accent2)'); return; }
+  if (!confirm('Stamp approvedSiteId on all existing users who are missing it? Safe and idempotent.')) return;
+  setStatus('Loading user profiles…');
+  try {
+    const snap = await db.collection('userProfiles').get();
+    const toStamp = [];
+    let skippedApproved = 0, skippedDeleted = 0;
+    snap.forEach(doc => {
+      const d = doc.data() || {};
+      if (d.deletedAt) { skippedDeleted++; return; }
+      if (d.approvedSiteId) { skippedApproved++; return; }
+      toStamp.push(doc.id);
+    });
+    if (toStamp.length === 0) {
+      setStatus('Nothing to do. ' + skippedApproved + ' already approved, ' + skippedDeleted + ' deleted/skipped.', 'var(--accent)');
+      return;
+    }
+    let done = 0, failed = 0;
+    for (const uid of toStamp) {
+      setStatus('Stamping ' + (done + 1) + ' / ' + toStamp.length + '…');
+      let siteId = DEFAULT_SITE_ID;
+      try {
+        const s = await db.collection('users').doc(uid).collection('data').doc('settings').get();
+        if (s.exists && s.data() && s.data().siteId) siteId = s.data().siteId;
+      } catch (e) { /* fall back to DEFAULT_SITE_ID */ }
+      try {
+        await db.collection('userProfiles').doc(uid)
+          .set({ approvedSiteId: siteId, approvedAt: new Date().toISOString(), approvedBy: 'backfill' }, { merge: true });
+        done++;
+      } catch (e) {
+        failed++;
+        console.error('Backfill approve failed for ' + uid + ':', e);
+      }
+    }
+    setStatus('Done. Approved ' + done + ' user(s)' + (failed ? ', ' + failed + ' failed (see console)' : '') +
+      '. Skipped ' + skippedApproved + ' already-approved, ' + skippedDeleted + ' deleted.',
+      failed ? 'var(--accent2)' : 'var(--accent)');
+    showToast('Backfill complete: ' + done + ' approved' + (failed ? ', ' + failed + ' failed' : ''));
+  } catch (err) {
+    setStatus('Backfill failed: ' + (err && err.message || err), 'var(--accent2)');
+    console.error('adminBackfillApprovedSites error:', err);
   }
 }
 
