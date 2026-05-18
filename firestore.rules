@@ -201,9 +201,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAppOwner();
     }
+    // asaCodeProcedures: crowd-sourced procedure<->ASA learning. Every case
+    // save calls autoLearnProcedureMapping (index.html), and any signed-in
+    // user can add a procedure from the ASA codes page — so writes must stay
+    // open to any signed-in user to preserve current functionality. (Long
+    // term this shared doc is a Cloud Function candidate; see header note.)
     match /asaCodeProcedures/{doc} {
       allow read: if isSignedIn();
-      allow write: if isAppOwner();
+      allow write: if isSignedIn();
     }
     match /procedureMappings/{doc} {
       allow read: if isSignedIn();
