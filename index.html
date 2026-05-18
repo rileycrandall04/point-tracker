@@ -15908,6 +15908,47 @@ function _rerenderSandboxDelta() {
     st.activeHooks, st.objective, st.usersBase, st.usersSand, st.shiftsBase, st.shiftsSand);
 }
 
+// Copy helper for the result panels. The TSV lives in the button's
+// data-copy attribute (survives filter re-renders, no global state).
+// Tries the async clipboard API, falls back to a hidden textarea for
+// insecure contexts. Briefly flips the label to confirm.
+function _sandboxFallbackCopy(text, done) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (done) done(true);
+  } catch (e) { if (done) done(false); }
+}
+function sandboxCopyFromBtn(btn) {
+  if (!btn) return;
+  const text = btn.getAttribute('data-copy') || '';
+  const orig = btn.textContent;
+  const flash = (ok) => {
+    btn.textContent = ok ? 'Copied' : 'Copy failed';
+    setTimeout(() => { btn.textContent = orig; }, 1300);
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => flash(true))
+        .catch(() => _sandboxFallbackCopy(text, flash));
+    } else {
+      _sandboxFallbackCopy(text, flash);
+    }
+  } catch (e) { _sandboxFallbackCopy(text, flash); }
+}
+function _sandboxCopyBtn(tsv) {
+  return '<button onclick="sandboxCopyFromBtn(this)" data-copy="' + escapeHtml(tsv) + '" ' +
+    'style="float:right;font-size:0.68rem;padding:2px 8px;border:1px solid var(--border);' +
+    'border-radius:6px;background:var(--surface2);color:var(--text);cursor:pointer;">Copy</button>';
+}
+
 // Orchestrates: collect overrides → fetch payloads → score each user
 // twice (baseline + sandbox) → render delta. Baseline is recomputed on
 // the fly against today's engine so the editor reflects "what would
@@ -16551,20 +16592,30 @@ function _renderShiftTypeDistribution(fShiftsBase, fShiftsSand) {
     '</tr>';
   };
 
+  const tnum = (v, dp) => Number.isFinite(v) ? (Math.round(v * Math.pow(10, dp)) / Math.pow(10, dp)).toFixed(dp) : '';
+  const tsvRows = [['Type', 'Model', 'Shifts', 'Total pts', 'Mean/shift', 'Median/shift', 'SD/shift', 'Pts/clocked-hr'].join('\t')];
+
   const body = types.map(t => {
     const b = _shiftDistStats(fShiftsBase, t);
     const s = _shiftDistStats(fShiftsSand, t);
+    const tline = (model, g) => [t, model, g.n, tnum(g.total, 1), tnum(g.mean, 2),
+      tnum(g.median, 2), tnum(g.sd, 2), tnum(g.perHr, 2)].join('\t');
+    tsvRows.push(tline('Default', b));
+    tsvRows.push(tline('Experimental', s));
     return '<tr><td colspan="7" style="padding:7px 8px 2px;color:var(--text-dim);font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;">' +
         escapeHtml(t) + '</td></tr>' +
       sideRow('Default (baseline)', b, false) +
       sideRow('Experimental (sandbox)', s, true);
   }).join('');
+  const tsvText = tsvRows.join('\n');
 
   return '<details open style="margin-top:14px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:10px;">' +
     '<summary style="cursor:pointer;font-weight:600;font-size:0.82rem;">Shift-type distribution — before vs after</summary>' +
     '<div style="font-size:0.68rem;color:var(--text-dim);margin:6px 0;line-height:1.4;">' +
+      _sandboxCopyBtn(tsvText) +
       'Total-points distribution per shift type (Mean/Median/SD are per-shift; sample SD). ' +
-      'Use the <strong>Filter results</strong> control above to choose which shift types appear here &mdash; check the ones you want.' +
+      'Use the <strong>Filter results</strong> control above to choose which shift types appear here &mdash; check the ones you want. ' +
+      '<em>Copy</em> yields tab-separated rows (paste into Sheets/Excel or a message).' +
     '</div>' +
     '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">' +
     '<table style="border-collapse:collapse;font-size:0.76rem;white-space:nowrap;">' +
@@ -16654,8 +16705,21 @@ function _renderSf1ModelComparison(fShiftsBase, fShiftsSand) {
       '<td style="padding:4px 8px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:' + dCol(dHr) + ';">' + sgn(dHr) + '</td>' +
     '</tr>' : '';
 
+  const tnum = (v, dp) => Number.isFinite(v) ? (Math.round(v * Math.pow(10, dp)) / Math.pow(10, dp)).toFixed(dp) : '';
+  const tline = (label, g) => [label, g.n, tnum(g.total, 1), tnum(meanOf(g), 2),
+    tnum(medianOf(g), 2), tnum(sdOf(g), 2), tnum(perHr(g), 2)].join('\t');
+  const tsvText = [
+    ['Role', 'Shifts', 'Total pts', 'Mean/shift', 'Median/shift', 'SD/shift', 'Pts/clocked-hr'].join('\t'),
+    tline('SF 1 (default)', before),
+    tline('SF 1 Day', aftDay),
+    tline('SF 1 Night', aftNight),
+    tline('SF 1 (Fri/hol/wknd, 24h)', aftSingle),
+    tline('SF 1 combined (after)', aftAll)
+  ].join('\n');
+
   return '<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:10px;">' +
-    '<div style="font-weight:600;font-size:0.82rem;margin-bottom:6px;">SF 1 model — before vs after</div>' +
+    '<div style="font-weight:600;font-size:0.82rem;margin-bottom:6px;">' +
+      _sandboxCopyBtn(tsvText) + 'SF 1 model — before vs after</div>' +
     '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;-ms-overflow-style:auto;">' +
     '<table style="border-collapse:collapse;font-size:0.76rem;white-space:nowrap;">' +
       '<thead><tr style="color:var(--text-dim);font-size:0.7rem;">' +
