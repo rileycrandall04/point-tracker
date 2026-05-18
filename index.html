@@ -4547,19 +4547,19 @@ body.hide-monetary .monetary-hide { display: none !important; }
         Day&nbsp;/&nbsp;Night SF&nbsp;1 split
       </label>
       <div style="font-size:0.72rem;color:var(--text-dim);margin:5px 0 0 23px;line-height:1.45;">
-        Sandbox-only SF&nbsp;1 reshape (prod is never touched). M&ndash;Th non-holiday
-        becomes <strong>SF&nbsp;1&nbsp;Day</strong> (0700&ndash;1700, the <em>only</em> role
-        that doubles) + <strong>SF&nbsp;1&nbsp;Night</strong> (1700&rarr;0700, no doubling);
-        Friday / holiday / weekend stays a single 24&nbsp;hr SF&nbsp;1. Doubling rule:
-        each case is doubled only for the share of its minutes inside 0700&ndash;1700
-        (boundary- and midnight-crossing cases pro-rated), weekdays&nbsp;M&ndash;F only,
-        never weekends/holidays; the SF&nbsp;1 pre-cutover gate is removed for this set.
-        AR already splits at 17:00 (13/hr day, 20/hr night) so comp tiers are unchanged.
-        <em>Note:</em> the snapshot keys one shift per date, so this does not re-roster
-        Day vs Night onto separate people or split the row in two &mdash; pager pay stays
-        on the single SF&nbsp;1 record (aggregate unchanged), and the Night role&rsquo;s
-        optional daytime pre-call work is not synthesized. A true two-row split is a
-        larger change &mdash; ask if you want it.
+        Sandbox-only SF&nbsp;1 reshape (prod is never touched). Each M&ndash;Th non-holiday
+        SF&nbsp;1 date is scored as <strong>two</strong> shifts: <strong>SF&nbsp;1&nbsp;Day</strong>
+        (0700&ndash;1700, the <em>only</em> role that doubles, <em>no</em> pager) and
+        <strong>SF&nbsp;1&nbsp;Night</strong> (1700&rarr;0700, <em>no</em> doubling, gets
+        <em>all</em> pager/call pay) &mdash; they appear as separate rows in Comp&nbsp;Health.
+        Friday / holiday / weekend stays a single 24&nbsp;hr SF&nbsp;1 (keeps the pager and
+        still doubles its 0700&ndash;1700 portion). Doubling is pro-rated to the share of
+        each case&rsquo;s minutes inside 0700&ndash;1700, weekdays&nbsp;M&ndash;F only, never
+        weekends/holidays; no SF&nbsp;1 pre-cutover gate in this set. AR uses SF&nbsp;1 rates
+        (13/hr day, 20/hr night). <em>Modeling notes:</em> a whole case is assigned to the
+        Day or Night row by its start time (the doubling itself is still minute-pro-rated to
+        0700&ndash;1700); the SF&nbsp;1 OR-rate AR override is not re-applied to the split
+        rows. Toggle on &rarr; these rules; off &rarr; engine defaults.
       </div>
     </div>
     <div style="margin-bottom:10px;font-size:0.72rem;color:var(--text-dim);line-height:1.45;">
@@ -12092,7 +12092,9 @@ function getResolvedShiftRules(siteId) {
   }
   if (_engineSandboxRuleOverlay && _engineSandboxRuleOverlay.shiftRules) {
     for (const [type, layer] of Object.entries(_engineSandboxRuleOverlay.shiftRules)) {
-      if (merged[type]) merged[type] = _deepMerge(merged[type], layer);
+      // Sandbox only: layer onto an existing rule, or define a brand-new
+      // synthetic type (e.g. SF1_Day / SF1_Night) when the key is unknown.
+      merged[type] = _deepMerge(merged[type] || {}, layer);
     }
   }
   if (!_engineSandboxRuleOverlay) _resolvedRulesCache.set(siteId, merged);
@@ -15382,7 +15384,7 @@ function resetSandboxExperimentClick() {
 // (alternate scoring formulas from SANDBOX_TEST_RULES). Synchronous so
 // the engine never observes a half-swapped state. Pass logicHooks=null
 // for a clean prod-style score (used for the baseline pass).
-function scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay, logicHooks) {
+function scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay, logicHooks, splitSF1) {
   const savedEng   = _engineSandboxOverrides;
   const savedRule  = _engineSandboxRuleOverlay;
   const savedHooks = _engineSandboxLogicHooks;
@@ -15390,7 +15392,8 @@ function scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay, 
     _engineSandboxOverrides   = overrides   || null;
     _engineSandboxRuleOverlay = ruleOverlay || null;
     _engineSandboxLogicHooks  = logicHooks  || {};
-    return scoreSnapshotPayloadSync(payload);
+    const pl = splitSF1 ? _transformPayloadSplitSF1(payload) : payload;
+    return scoreSnapshotPayloadSync(pl);
   } finally {
     _engineSandboxOverrides   = savedEng;
     _engineSandboxRuleOverlay = savedRule;
@@ -15407,38 +15410,158 @@ function _activeSandboxHookNames() {
   return Object.keys(h).filter(k => typeof h[k] === 'function');
 }
 
-// "Day / Night SF 1 split" — toggled from the Experiments card (sandbox
-// only; prod is never touched). Models the proposed SF 1 reshape:
-//   • M–Th non-holiday  → two roles, SF 1 Day (0700-1700) + SF 1 Night
-//                          (1700→0700). Day is the only role that doubles.
-//   • Friday / holiday / weekend → single 24 hr SF 1 (no day/night split).
-// Production-doubling rule under the toggle (clarifications 1–4):
-//   1. A case is doubled only for the portion of its minutes that fall
-//      inside 0700-1700; boundary- and midnight-crossing cases are
-//      pro-rated minute-by-minute.
-//   2. Doubling applies on weekdays (M–F) only — never weekends.
-//   3. Holidays get no doubling; Friday's single 24 hr SF 1 still doubles
-//      its own 0700-1700 portion (Friday is a weekday).
-//   4. All of the above is bundled under the toggle: on → these rules;
-//      off → engine defaults. No SF 1 pre-cutover gate in the sandbox set.
-// `_sf1DoubledMinutes` already computes exactly "minutes in [s,e) that
-// fall in 0700-1700 on a non-weekend, non-holiday(day-0) day", pro-rated
-// across boundaries/midnight — so the rule is just that fraction with no
-// cutover gate. AR already splits at 17:00 in the engine (13/hr day,
-// 20/hr night). NOTE: the snapshot keys one shift per date, so this does
-// not re-roster Day vs Night onto separate people or split the per-shift
-// row in two; pager pay therefore stays on the single SF 1 record (its
-// aggregate is unchanged whether attributed to "Night" or the shift).
-const SF1_DAYNIGHT_HOOK_LABEL = 'caseProductionMultiplier (Day/Night SF 1)';
+// =================================================================
+// "Day / Night SF 1 split" — toggled from the Experiments card.
+// Sandbox only; prod is never touched. Models the proposed SF 1 reshape:
+//   • M–Th non-holiday  → TWO real synthetic shifts on that date:
+//       SF 1 Day  (0700-1700, the only role that doubles, NO pager)
+//       SF 1 Night(1700→0700, NO doubling, ALL pager/call pay)
+//   • Friday / holiday / weekend → single 24 hr SF 1 (gets the pager
+//       1700→0700 and still doubles its own 0700-1700 portion).
+// Doubling rule (clarifications 1–4): a case is doubled only for the
+// share of its minutes inside 0700-1700, weekdays M–F only, never
+// weekends/holidays, boundary/midnight pro-rated (via _sf1DoubledMinutes);
+// no SF 1 pre-cutover gate in this set; on → these rules, off → defaults.
+//
+// Implementation: a payload transform replaces each split-eligible SF 1
+// shift with two date-keyed entries carrying clipped timeEntries and a
+// _sf1Half tag, plus SF1_Day/SF1_Night rule-overlay definitions (AR mode
+// 'sf1' → 13/hr day, 20/hr night; pager only on Night). A calcShiftTotal
+// hook partitions that date's cases between the halves by case start time
+// (so production isn't double-counted) and reuses the full engine for
+// each half. Modeling simplifications (documented in the toggle text):
+// whole cases are assigned to a half by start time (the doubling itself
+// is still minute-pro-rated to 0700-1700); the SF1 OR-rate AR override is
+// not re-applied to the synthetic halves.
+// =================================================================
+const SF1_DAYNIGHT_HOOK_LABEL = 'SF 1 Day/Night split';
+const NIGHT_KEY_SUFFIX = ' night';
+
+// SF1_Day / SF1_Night resolved-rule definitions, injected via the sandbox
+// rule overlay. Day = sf1 AR, no pager. Night = sf1 AR + the full SF 1
+// pager/unrestricted-call window (so all call pay lands on Night).
+const SF1_SPLIT_RULES = {
+  SF1_Day: {
+    label: 'SF 1 Day',
+    pagerWindow: null,
+    unrestrictedCall: null,
+    arRate: { mode: 'sf1' }
+  },
+  SF1_Night: {
+    label: 'SF 1 Night',
+    pagerWindow:      { weekday: { start: 1020, end: 1860 }, weekend: { start: 420, end: 1860 } },
+    unrestrictedCall: { weekday: { afterMin: 1020 },          weekend: 'all' },
+    arRate: { mode: 'sf1' }
+  }
+};
+
+// True only for SF 1 dates that get the two-person Day/Night split:
+// Mon–Thu, not a holiday, not a weekend.
+function _sf1DateIsSplit(dateStr, isHoliday) {
+  if (!dateStr || isHoliday) return false;
+  const d = new Date(dateStr + 'T12:00:00');
+  const dow = d.getDay();          // 0=Sun … 6=Sat
+  return dow >= 1 && dow <= 4;     // Mon–Thu only (Fri = single 24h)
+}
+
+// Intersect [w0,w1) (absolute minutes from shift midnight) with each
+// timeEntry, returning clipped {start,end} HH:MM entries. Day window =
+// [420,1020); Night window = [1020,1860) (17:00 → 07:00 next day).
+function _sf1ClipEntries(entries, w0, w1) {
+  const out = [];
+  (entries || []).forEach(e => {
+    if (!e || !e.start || !e.end) return;
+    let s = timeToMinutes(e.start);
+    let en = timeToMinutes(e.end);
+    if (en <= s) en += 1440;
+    const os = Math.max(s, w0);
+    const oe = Math.min(en, w1);
+    if (oe > os) out.push({ start: minutesToTimeStr(os), end: minutesToTimeStr(oe) });
+  });
+  return out;
+}
+
+// Which half a case belongs to on a split SF 1 date: by case start time
+// (0700-1700 → day, otherwise night). Cases with no start time (flat
+// call-in / lines bonuses) go to Night, which carries the call pay.
+function _sf1CaseHalf(c) {
+  if (!c || !c.startTime) return 'night';
+  const st = timeToMinutes(c.startTime);
+  return (st >= 420 && st < 1020) ? 'day' : 'night';
+}
+
+// Rebuilds payload.shifts so each split-eligible SF 1 date becomes two
+// entries (Day under the date key, Night under date+suffix). Friday /
+// holiday / weekend SF 1 is left as a single entry. Non-SF1 shifts and
+// cases pass through untouched. Pure — clones, never mutates the input.
+function _transformPayloadSplitSF1(payload) {
+  const srcShifts = (payload && payload.shifts) || {};
+  const outShifts = {};
+  for (const key of Object.keys(srcShifts)) {
+    const sh = srcShifts[key];
+    if (!sh) continue;
+    const date = sh.date || key;
+    if (sh.assignmentType !== 'SF1' || !_sf1DateIsSplit(date, sh.isHoliday)) {
+      outShifts[key] = sh;
+      continue;
+    }
+    const entries = sh.timeEntries || [];
+    const dayShift = Object.assign({}, sh, {
+      assignmentType: 'SF1_Day',
+      date: date,
+      _sf1Half: 'day',
+      timeEntries: _sf1ClipEntries(entries, 420, 1020),
+      preCallTimeEntries: _sf1ClipEntries(sh.preCallTimeEntries, 420, 1020)
+    });
+    const nightShift = Object.assign({}, sh, {
+      assignmentType: 'SF1_Night',
+      date: date,
+      _sf1Half: 'night',
+      timeEntries: _sf1ClipEntries(entries, 1020, 1860),
+      preCallTimeEntries: []
+    });
+    // Drop the legacy single start/end so calcShiftHours can't fall back
+    // to the unclipped full-shift span when an entry list is empty.
+    delete dayShift.startTime;   delete dayShift.endTime;
+    delete nightShift.startTime; delete nightShift.endTime;
+    outShifts[date] = dayShift;
+    outShifts[date + NIGHT_KEY_SUFFIX] = nightShift;
+  }
+  return Object.assign({}, payload, { shifts: outShifts });
+}
+
+// calcShiftTotal hook: for the synthetic SF1_Day / SF1_Night shifts,
+// restrict that date's cases to the half (so the two shifts don't both
+// count every case) and reuse the full engine for the rest.
+function _sf1SplitShiftTotalHook() {
+  return function (shift, defaultImpl) {
+    const at = shift && shift.assignmentType;
+    if (at !== 'SF1_Day' && at !== 'SF1_Night') return defaultImpl(shift);
+    const half = shift._sf1Half || (at === 'SF1_Day' ? 'day' : 'night');
+    const savedCases = data.cases;
+    try {
+      data.cases = (savedCases || []).filter(c =>
+        c.shiftDate === shift.date ? _sf1CaseHalf(c) === half : false);
+      return defaultImpl(shift);
+    } finally {
+      data.cases = savedCases;
+    }
+  };
+}
+
+// Production multiplier hook covering the single SF 1 (Fri/hol/wknd) and
+// the synthetic SF 1 Day shift; SF 1 Night never doubles.
 function _sf1DayNightProdHook() {
   return function (caseData, shift, defaultImpl) {
-    if (!shift || shift.assignmentType !== 'SF1') return defaultImpl(caseData, shift);
-    if (caseData && caseData.isORCase) return 1;          // OR cases never double
+    const at = shift && shift.assignmentType;
+    if (at !== 'SF1' && at !== 'SF1_Day' && at !== 'SF1_Night') return defaultImpl(caseData, shift);
+    if (at === 'SF1_Night') return 1;                      // night: no doubling
+    if (caseData && caseData.isORCase) return 1;           // OR cases never double
     if (!caseData || !caseData.startTime || !caseData.endTime) return 1;
     let s = timeToMinutes(caseData.startTime);
     let e = timeToMinutes(caseData.endTime);
     if (isNaN(s) || isNaN(e)) return 1;
-    if (e <= s) e += 1440;                                 // cross-midnight
+    if (e <= s) e += 1440;                                  // cross-midnight
     if (e <= s) return 1;
     // Minutes of [s,e) inside 0700-1700 on weekday (M–F) non-holiday days,
     // pro-rated across the 1700/0700 boundary and midnight. Weekends and
@@ -15497,12 +15620,18 @@ async function runSandboxExperimentClick() {
   const btn = document.getElementById('sandboxExperimentRunBtn');
   const snapshotId = sel && sel.value;
   if (!snapshotId) { if (status) status.textContent = 'Pick a snapshot first.'; return; }
-  const { engine: overrides, ruleOverlay } = _collectSandboxExperimentOverrides();
+  const { engine: overrides, ruleOverlay: collectedRuleOverlay } = _collectSandboxExperimentOverrides();
+  let ruleOverlay = collectedRuleOverlay;
   const activeHooks = _activeSandboxHookNames();
   const sf1DayNightOn = !!((document.getElementById('sandboxSf1DayNightToggle') || {}).checked);
   let logicHooks = activeHooks.length > 0 ? Object.assign({}, SANDBOX_TEST_RULES.logicHooks) : null;
   if (sf1DayNightOn) {
-    logicHooks = Object.assign({}, logicHooks, { caseProductionMultiplier: _sf1DayNightProdHook() });
+    logicHooks = Object.assign({}, logicHooks, {
+      caseProductionMultiplier: _sf1DayNightProdHook(),
+      calcShiftTotal: _sf1SplitShiftTotalHook()
+    });
+    ruleOverlay = ruleOverlay || {};
+    ruleOverlay.shiftRules = Object.assign({}, ruleOverlay.shiftRules, SF1_SPLIT_RULES);
     activeHooks.push(SF1_DAYNIGHT_HOOK_LABEL);
   }
   const objectiveText = (() => {
@@ -15556,8 +15685,8 @@ async function runSandboxExperimentClick() {
       const payload = d.data() || {};
       // Score baseline (fresh, against today's engine — no overlays, no hooks)
       // then with all three layers installed for the sandbox pass.
-      const baseline = scoreSnapshotPayloadWithOverridesSync(payload, null, null, null);
-      const sandbox  = scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay, logicHooks);
+      const baseline = scoreSnapshotPayloadWithOverridesSync(payload, null, null, null, false);
+      const sandbox  = scoreSnapshotPayloadWithOverridesSync(payload, overrides, ruleOverlay, logicHooks, sf1DayNightOn);
       const userKey = payload.userKey || d.id;
       rows.push({
         userKey,
