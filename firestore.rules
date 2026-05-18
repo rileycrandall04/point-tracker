@@ -80,10 +80,15 @@ service cloud.firestore {
       );
     }
 
-    // Privileged profile fields a user must never set on themselves.
+    // Privileged profile fields a user must never set on themselves —
+    // the genuine authorization boundary. NOTE: adminPromotionNotice and
+    // casesBackfilledV1 are intentionally NOT here: the app legitimately
+    // self-writes them on every user (consumeAdminPromotionNotice clears
+    // its own one-shot toast; stampCasesBackfilledOnProfile stamps the
+    // backfill bookkeeping flag). They grant no privilege, so keeping them
+    // privileged would break those everyday flows for no security gain.
     function privilegedProfileKeys() {
-      return ['role', 'isAdmin', 'adminSites', 'deletedAt',
-              'forceSignOutAt', 'adminPromotionNotice', 'casesBackfilledV1'];
+      return ['role', 'isAdmin', 'adminSites', 'deletedAt', 'forceSignOutAt'];
     }
 
     function touchesPrivilegedKeys() {
@@ -151,11 +156,15 @@ service cloud.firestore {
       allow update, delete: if (isSignedIn() && resource.data.uid == request.auth.uid)
                                || isAppOwner();
     }
+    // sharedCaseOverrides is the exception to the uid-owned pattern above:
+    // override docs are keyed by the shared case's docId and the writer
+    // (index.html ~28333) does NOT stamp a uid — they're community
+    // corrections to surgeon/procedure on shared cases, editable by any
+    // signed-in user (same crowd-sourced posture as asaCodeProcedures).
+    // Requiring uid here would block every normal shared-case edit.
     match /sharedCaseOverrides/{docId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if (isSignedIn() && resource.data.uid == request.auth.uid)
-                               || isAppOwner();
+      allow write: if isSignedIn();
     }
     match /sharedShifts/{docId} {
       allow read: if isSignedIn();
