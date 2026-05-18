@@ -4547,16 +4547,19 @@ body.hide-monetary .monetary-hide { display: none !important; }
         Day&nbsp;/&nbsp;Night SF&nbsp;1 split
       </label>
       <div style="font-size:0.72rem;color:var(--text-dim);margin:5px 0 0 23px;line-height:1.45;">
-        Reshapes the single SF&nbsp;1 shift into two roles with a clean 17:00 break.
-        <strong>Day&nbsp;SF&nbsp;1</strong> works 0700&ndash;1700 and is the <em>only</em> role
-        that gets production doubling (full&nbsp;&times;, assigned by case start time).
-        <strong>Night&nbsp;SF&nbsp;1</strong> covers 1700+ and gets <em>no</em> doubling at all.
-        When on, SF&nbsp;1&rsquo;s default fractional / pre-cutover doubling is fully disabled
-        for this run. AR already splits at 17:00 (13/hr day, 20/hr night) so comp tiers are
-        unchanged; pager pay stays on the shift record (conceptually all to Night&nbsp;SF&nbsp;1).
-        Day/Night are not re-rostered onto separate people and the Night role&rsquo;s optional
-        daytime pre-call work is not synthesized &mdash; those are scheduling concerns outside
-        per-shift point math.
+        Sandbox-only SF&nbsp;1 reshape (prod is never touched). M&ndash;Th non-holiday
+        becomes <strong>SF&nbsp;1&nbsp;Day</strong> (0700&ndash;1700, the <em>only</em> role
+        that doubles) + <strong>SF&nbsp;1&nbsp;Night</strong> (1700&rarr;0700, no doubling);
+        Friday / holiday / weekend stays a single 24&nbsp;hr SF&nbsp;1. Doubling rule:
+        each case is doubled only for the share of its minutes inside 0700&ndash;1700
+        (boundary- and midnight-crossing cases pro-rated), weekdays&nbsp;M&ndash;F only,
+        never weekends/holidays; the SF&nbsp;1 pre-cutover gate is removed for this set.
+        AR already splits at 17:00 (13/hr day, 20/hr night) so comp tiers are unchanged.
+        <em>Note:</em> the snapshot keys one shift per date, so this does not re-roster
+        Day vs Night onto separate people or split the row in two &mdash; pager pay stays
+        on the single SF&nbsp;1 record (aggregate unchanged), and the Night role&rsquo;s
+        optional daytime pre-call work is not synthesized. A true two-row split is a
+        larger change &mdash; ask if you want it.
       </div>
     </div>
     <div style="margin-bottom:10px;font-size:0.72rem;color:var(--text-dim);line-height:1.45;">
@@ -15404,35 +15407,48 @@ function _activeSandboxHookNames() {
   return Object.keys(h).filter(k => typeof h[k] === 'function');
 }
 
-// "Day / Night SF 1 split" — toggled from the Experiments card. Models the
-// proposed reshape of the single SF 1 shift into two roles split at 17:00:
-//   • Day SF 1   — works 0700-1700, is the ONLY role that gets production
-//                  doubling (full ×, assigned by case start time so the
-//                  17:00 break is clean rather than minute-pro-rated).
-//   • Night SF 1 — covers 1700+, gets NO production doubling at all.
-// When on, this fully replaces SF 1's default fractional / pre-cutover
-// doubling (the toggle's "default SF 1 settings default to off"). AR
-// already splits at 17:00 in the engine (13/hr day, 20/hr night), so the
-// Day=lower / Night=higher comp tiers need no change; pager pay stays on
-// the shift record (conceptually all to Night SF 1). The sandbox scores
-// one record per shift, so Day/Night are not re-rostered onto separate
-// people and the Night role's optional daytime pre-call general-OR work is
-// not synthesized — both are scheduling concerns outside per-shift math.
+// "Day / Night SF 1 split" — toggled from the Experiments card (sandbox
+// only; prod is never touched). Models the proposed SF 1 reshape:
+//   • M–Th non-holiday  → two roles, SF 1 Day (0700-1700) + SF 1 Night
+//                          (1700→0700). Day is the only role that doubles.
+//   • Friday / holiday / weekend → single 24 hr SF 1 (no day/night split).
+// Production-doubling rule under the toggle (clarifications 1–4):
+//   1. A case is doubled only for the portion of its minutes that fall
+//      inside 0700-1700; boundary- and midnight-crossing cases are
+//      pro-rated minute-by-minute.
+//   2. Doubling applies on weekdays (M–F) only — never weekends.
+//   3. Holidays get no doubling; Friday's single 24 hr SF 1 still doubles
+//      its own 0700-1700 portion (Friday is a weekday).
+//   4. All of the above is bundled under the toggle: on → these rules;
+//      off → engine defaults. No SF 1 pre-cutover gate in the sandbox set.
+// `_sf1DoubledMinutes` already computes exactly "minutes in [s,e) that
+// fall in 0700-1700 on a non-weekend, non-holiday(day-0) day", pro-rated
+// across boundaries/midnight — so the rule is just that fraction with no
+// cutover gate. AR already splits at 17:00 in the engine (13/hr day,
+// 20/hr night). NOTE: the snapshot keys one shift per date, so this does
+// not re-roster Day vs Night onto separate people or split the per-shift
+// row in two; pager pay therefore stays on the single SF 1 record (its
+// aggregate is unchanged whether attributed to "Night" or the shift).
 const SF1_DAYNIGHT_HOOK_LABEL = 'caseProductionMultiplier (Day/Night SF 1)';
 function _sf1DayNightProdHook() {
   return function (caseData, shift, defaultImpl) {
     if (!shift || shift.assignmentType !== 'SF1') return defaultImpl(caseData, shift);
     if (caseData && caseData.isORCase) return 1;          // OR cases never double
-    const s = timeToMinutes(caseData && caseData.startTime);
-    if (s == null || isNaN(s)) return 1;
-    const isHol  = !!shift.isHoliday;
-    const isWknd = isWeekend(shift.date);
-    // Day SF 1 owns the 0700-1700 weekday non-holiday window and is the
-    // only role that doubles; everything else is Night SF 1 → no doubling.
-    const inDayWindow = !isHol && !isWknd && s >= 420 && s < 1020;
-    if (!inDayWindow) return 1;
+    if (!caseData || !caseData.startTime || !caseData.endTime) return 1;
+    let s = timeToMinutes(caseData.startTime);
+    let e = timeToMinutes(caseData.endTime);
+    if (isNaN(s) || isNaN(e)) return 1;
+    if (e <= s) e += 1440;                                 // cross-midnight
+    if (e <= s) return 1;
+    // Minutes of [s,e) inside 0700-1700 on weekday (M–F) non-holiday days,
+    // pro-rated across the 1700/0700 boundary and midnight. Weekends and
+    // holidays contribute 0 → multiplier collapses to 1 (no doubling).
+    const doubled = _sf1DoubledMinutes(shift, s, e);
+    if (doubled <= 0) return 1;
+    const total = e - s;
     const _po = (_engineSandboxOverrides && _engineSandboxOverrides.prod) || null;
-    return (_po && _po.doubleMult != null) ? Number(_po.doubleMult) : 2;
+    const doubleMult = (_po && _po.doubleMult != null) ? Number(_po.doubleMult) : 2;
+    return 1 + (doubled / total) * (doubleMult - 1);
   };
 }
 
