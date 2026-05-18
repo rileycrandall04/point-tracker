@@ -16608,6 +16608,25 @@ function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, active
   };
   const bySite = aggBuckets('baselineBySite', 'sandboxBySite');
   const byType = aggBuckets('baselineByType', 'sandboxByType');
+  // When the split is active, SF1 (baseline) maps to three sandbox rows
+  // (SF1 + SF1_Day + SF1_Night). Showing them separately makes the SF1
+  // row look like a huge negative Δ that's actually offset by Day/Night.
+  // Collapse the trio into one reconciled "SF 1 (all)" row so the By
+  // shift type section adds up to the headline (sums are preserved, so
+  // the section Total is unchanged).
+  const _mergeSf1Rows = (arr) => {
+    if (!arr.some(r => r.key === 'SF1_Day' || r.key === 'SF1_Night')) return arr;
+    let b = 0, s = 0, n = 0;
+    const rest = [];
+    for (const r of arr) {
+      if (r.key === 'SF1' || r.key === 'SF1_Day' || r.key === 'SF1_Night') {
+        b += r.baseline; s += r.sandbox; n += r.shiftCount;
+      } else rest.push(r);
+    }
+    rest.push({ key: 'SF 1 (all: single + Day + Night)', baseline: b, sandbox: s, delta: s - b, shiftCount: n });
+    return rest.sort((a, c) => Math.abs(c.delta) - Math.abs(a.delta));
+  };
+  const byTypeView = _mergeSf1Rows(byType);
 
   const totalBase = byUser.reduce((s, r) => s + r.baseline, 0);
   const totalSand = byUser.reduce((s, r) => s + r.sandbox, 0);
@@ -16691,7 +16710,7 @@ function renderSandboxExperimentDelta(host, rows, overrides, ruleOverlay, active
     summary +
     renderSandboxDeltaSection('By user', 'User', byUser, true) +
     renderSandboxDeltaSection('By site', 'Site', bySite, false) +
-    renderSandboxDeltaSection('By shift type', 'Shift type', byType, false) +
+    renderSandboxDeltaSection('By shift type', 'Shift type', byTypeView, false) +
     _renderSf1ModelComparison(fShiftsBase, fShiftsSand) +
     _renderSandboxCompHealth(shiftsBase, shiftsSand, usersBase, usersSand) +
     _renderSandboxPerUserMetrics(usersBase, usersSand);
