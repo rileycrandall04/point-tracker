@@ -6523,7 +6523,7 @@ function _adminMSSiteOptionsHTML(currentSiteId) {
   for (const id of ids) {
     const name = (sitesCache[id] && sitesCache[id].name) || id;
     const sel = id === currentSiteId ? ' selected' : '';
-    html += '<option value="' + id + '"' + sel + '>' + name + ' (' + id + ')</option>';
+    html += '<option value="' + escapeHtml(String(id)) + '"' + sel + '>' + escapeHtml(String(name)) + ' (' + escapeHtml(String(id)) + ')</option>';
   }
   // Defensive: if there are no options (sitesCache hadn't loaded or the
   // user is a siteAdmin with no scope), surface a disabled placeholder
@@ -8540,27 +8540,27 @@ async function adminLookupUser() {
   out.innerHTML = '<p>Looking up...</p>';
   try {
     const snap = await db.collection('userProfiles').where('email', '==', email).get();
-    if (snap.empty) { out.innerHTML = '<p style="color:var(--accent2);">No user found with email: ' + email + '</p>'; return; }
+    if (snap.empty) { out.innerHTML = '<p style="color:var(--accent2);">No user found with email: ' + escapeHtml(email) + '</p>'; return; }
     const uid = snap.docs[0].id;
     const profile = snap.docs[0].data();
     const dataDoc = await db.collection('users').doc(uid).collection('data').doc('data').get();
-    if (!dataDoc.exists) { out.innerHTML = '<p style="color:var(--accent2);">User found (UID: ' + uid + ') but no data document exists.</p>'; return; }
+    if (!dataDoc.exists) { out.innerHTML = '<p style="color:var(--accent2);">User found (UID: ' + escapeHtml(uid) + ') but no data document exists.</p>'; return; }
     const d = dataDoc.data();
     const cases = Array.isArray(d.cases) ? d.cases : [];
     const shifts = d.shifts || {};
     const today = new Date().toISOString().split('T')[0];
     let h = '<div style="background:var(--surface);padding:12px;border-radius:8px;margin-bottom:10px;">';
-    h += '<strong>' + (profile.displayName || 'N/A') + '</strong> &mdash; ' + email;
-    h += '<br><span style="color:var(--text-dim);font-size:0.75rem;">UID: ' + uid + ' | Last sign-in: ' + (profile.lastSignIn || 'N/A') + '</span>';
+    h += '<strong>' + escapeHtml(profile.displayName || 'N/A') + '</strong> &mdash; ' + escapeHtml(email);
+    h += '<br><span style="color:var(--text-dim);font-size:0.75rem;">UID: ' + escapeHtml(uid) + ' | Last sign-in: ' + escapeHtml(String(profile.lastSignIn || 'N/A')) + '</span>';
     h += '<br><span style="color:var(--text-dim);font-size:0.75rem;">Total: ' + cases.length + ' cases, ' + Object.keys(shifts).length + ' shifts</span></div>';
     // Today's shift
     h += '<h3 style="margin:10px 0 6px;">Shift for ' + today + '</h3>';
     if (shifts[today]) {
       const s = shifts[today];
       h += '<div style="background:var(--surface);padding:10px;border-radius:6px;">';
-      h += '<strong>' + (s.assignmentType || '?') + '</strong>';
+      h += '<strong>' + escapeHtml(String(s.assignmentType || '?')) + '</strong>';
       if (s.timeEntries && s.timeEntries.length > 0) {
-        s.timeEntries.forEach(function(te, i) { h += '<br>Entry ' + (i + 1) + ': ' + (te.start || '?') + ' &ndash; ' + (te.end || '(no end)'); });
+        s.timeEntries.forEach(function(te, i) { h += '<br>Entry ' + (i + 1) + ': ' + escapeHtml(String(te.start || '?')) + ' &ndash; ' + escapeHtml(String(te.end || '(no end)')); });
       }
       h += '</div>';
     } else {
@@ -8572,11 +8572,11 @@ async function adminLookupUser() {
     if (todayCases.length > 0) {
       todayCases.forEach(function(c) {
         h += '<div style="background:var(--surface);padding:8px 10px;border-radius:6px;margin-bottom:4px;">';
-        h += '<strong>' + (c.procedure || c.caseType || 'Unknown') + '</strong>';
-        h += ' | ' + (c.startTime || '?') + '&ndash;' + (c.endTime || '?');
-        h += ' | ' + (c.totalPoints != null ? c.totalPoints : '?') + ' pts';
-        if (c.asaCode) h += ' | ASA: ' + c.asaCode;
-        if (c.id) h += '<br><span style="font-size:0.7rem;color:var(--text-dim);">ID: ' + c.id + '</span>';
+        h += '<strong>' + escapeHtml(String(c.procedure || c.caseType || 'Unknown')) + '</strong>';
+        h += ' | ' + escapeHtml(String(c.startTime || '?')) + '&ndash;' + escapeHtml(String(c.endTime || '?'));
+        h += ' | ' + (c.totalPoints != null ? escapeHtml(String(c.totalPoints)) : '?') + ' pts';
+        if (c.asaCode) h += ' | ASA: ' + escapeHtml(String(c.asaCode));
+        if (c.id) h += '<br><span style="font-size:0.7rem;color:var(--text-dim);">ID: ' + escapeHtml(String(c.id)) + '</span>';
         h += '</div>';
       });
     } else {
@@ -8589,7 +8589,7 @@ async function adminLookupUser() {
     h += '<details style="margin-top:10px;"><summary style="cursor:pointer;color:var(--primary);">Recent cases (7 days: ' + recent.length + ')</summary>';
     recent.forEach(function(c) {
       h += '<div style="padding:4px 0;border-bottom:1px solid var(--border);">';
-      h += (c.shiftDate || c.date || '?') + ' | ' + (c.procedure || c.caseType || '?') + ' | ' + (c.startTime || '?') + '&ndash;' + (c.endTime || '?') + ' | ' + (c.totalPoints != null ? c.totalPoints : '?') + ' pts';
+      h += escapeHtml(String(c.shiftDate || c.date || '?')) + ' | ' + escapeHtml(String(c.procedure || c.caseType || '?')) + ' | ' + escapeHtml(String(c.startTime || '?')) + '&ndash;' + escapeHtml(String(c.endTime || '?')) + ' | ' + (c.totalPoints != null ? escapeHtml(String(c.totalPoints)) : '?') + ' pts';
       h += '</div>';
     });
     h += '</details>';
@@ -8627,7 +8627,7 @@ async function adminLookupUser() {
     }
     out.innerHTML = h;
   } catch (err) {
-    out.innerHTML = '<p style="color:var(--accent2);">Error: ' + err.message + '</p>';
+    out.innerHTML = '<p style="color:var(--accent2);">Error: ' + escapeHtml(String(err && err.message || err)) + '</p>';
   }
 }
 
@@ -9168,7 +9168,11 @@ function loadSettings() {
 
 function saveSettings(s) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-  syncToFirestore('settings', s);
+  // API keys are user-supplied billable secrets — keep them local-only.
+  // Never write them to Firestore (readable by admin code paths / anyone
+  // with project access). Sync a redacted copy.
+  const { claudeApiKey, visionApiKey, ...syncable } = s || {};
+  syncToFirestore('settings', syncable);
 }
 
 function syncToFirestore(docName, payload) {
@@ -10139,6 +10143,11 @@ async function loadSettingsFromFirestore(uid) {
     const doc = await db.collection('users').doc(uid).collection('data').doc('settings').get();
     if (doc.exists) {
       const s = doc.data();
+      // API keys are local-only (never synced — see saveSettings). Preserve
+      // any locally-held keys so a keyless remote doc doesn't wipe them.
+      const local = loadSettings();
+      if (local && local.claudeApiKey && !s.claudeApiKey) s.claudeApiKey = local.claudeApiKey;
+      if (local && local.visionApiKey && !s.visionApiKey) s.visionApiKey = local.visionApiKey;
       settings = s;
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } else {
@@ -11546,6 +11555,7 @@ function _deepMerge(base, override) {
   if (base === null || typeof base !== 'object' || Array.isArray(base)) return override;
   const out = { ...base };
   for (const k of Object.keys(override)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
     out[k] = _deepMerge(base[k], override[k]);
   }
   return out;
@@ -30471,8 +30481,8 @@ function renderQgendaRecon() {
     if (dd.qDay.length > 0) {
       dd.qDay.forEach(entry => {
         const entryType = mapTaskToAssignmentType(entry.task || '', dd.date);
-        const entryTimes = entry.clockInTime ? `${entry.clockInTime}-${entry.clockOutTime || '?'}` : '\u2014';
-        html += `<tr><td style="color:var(--primary)">QGenda</td><td>${getAssignmentTypeName(entryType)}<br><small style="color:var(--muted)">${entry.task || ''}</small></td><td>${entryTimes}</td><td>${entry.duration.toFixed(1)}h</td></tr>`;
+        const entryTimes = entry.clockInTime ? `${escapeHtml(String(entry.clockInTime))}-${escapeHtml(String(entry.clockOutTime || '?'))}` : '\u2014';
+        html += `<tr><td style="color:var(--primary)">QGenda</td><td>${escapeHtml(String(getAssignmentTypeName(entryType)))}<br><small style="color:var(--muted)">${escapeHtml(String(entry.task || ''))}</small></td><td>${entryTimes}</td><td>${entry.duration.toFixed(1)}h</td></tr>`;
       });
       html += `<tr style="border-top:1px solid var(--border)"><td></td><td style="color:var(--primary);font-weight:600">QGenda Total</td><td></td><td style="font-weight:600">${dd.qHours.toFixed(1)}h (${dd.qPoints.toFixed(1)} pts)</td></tr>`;
     } else {
@@ -30484,7 +30494,7 @@ function renderQgendaRecon() {
     }
     if (dd.tShift) {
       const shiftTotals = calcShiftTotal(dd.tShift);
-      html += `<tr><td style="color:var(--accent)">App</td><td>${getAssignmentTypeName(dd.tAssignType)}</td><td>${tTimes}</td><td>${dd.tHours.toFixed(1)}h (${shiftTotals.total.toFixed(1)} pts)</td></tr>`;
+      html += `<tr><td style="color:var(--accent)">App</td><td>${escapeHtml(String(getAssignmentTypeName(dd.tAssignType)))}</td><td>${escapeHtml(tTimes)}</td><td>${dd.tHours.toFixed(1)}h (${shiftTotals.total.toFixed(1)} pts)</td></tr>`;
     } else {
       html += '<tr><td style="color:var(--accent)">App</td><td colspan="3"><span style="color:var(--danger)">No shift</span></td></tr>';
     }
@@ -30616,13 +30626,13 @@ function renderShiftReconFlagged() {
   let html = '<div class="card"><h2>Flagged Issues (' + allFlagged.length + ')</h2>';
   html += '<ul class="flagged-list">';
   allFlagged.forEach(f => {
-    const qTimes = f.qgendaEntries.map(e => `${e.clockInTime || '?'}-${e.clockOutTime || '?'}`).join(', ');
+    const qTimes = f.qgendaEntries.map(e => `${escapeHtml(String(e.clockInTime || '?'))}-${escapeHtml(String(e.clockOutTime || '?'))}`).join(', ');
     if (f.type === 'missing_tracker') {
       html += `<li>${formatDateShort(f.date)} — Missing from Tracker (QGenda: ${f.qgendaHours.toFixed(1)}h, ${qTimes})</li>`;
     } else if (f.type === 'missing_qgenda') {
-      html += `<li>${formatDateShort(f.date)} — Missing from QGenda (App: ${getAssignmentTypeName(f.trackerAssignmentType)}, ${f.trackerHours.toFixed(1)}h)</li>`;
+      html += `<li>${formatDateShort(f.date)} — Missing from QGenda (App: ${escapeHtml(String(getAssignmentTypeName(f.trackerAssignmentType)))}, ${f.trackerHours.toFixed(1)}h)</li>`;
     } else if (f.type === 'type_mismatch') {
-      html += `<li>${formatDateShort(f.date)} — Type mismatch: QGenda=${getAssignmentTypeName(f.qgendaAssignmentType)}, App=${getAssignmentTypeName(f.trackerAssignmentType)}</li>`;
+      html += `<li>${formatDateShort(f.date)} — Type mismatch: QGenda=${escapeHtml(String(getAssignmentTypeName(f.qgendaAssignmentType)))}, App=${escapeHtml(String(getAssignmentTypeName(f.trackerAssignmentType)))}</li>`;
     } else {
       html += `<li>${formatDateShort(f.date)} — QGenda: ${f.qgendaHours.toFixed(1)}h, App: ${f.trackerHours.toFixed(1)}h (${f.hourDiff.toFixed(1)}h diff)</li>`;
     }
@@ -31302,7 +31312,7 @@ document.getElementById('importShiftsBtn').addEventListener('click', () => {
   body.innerHTML = `<p>Import <strong>${toImport}</strong> shift${toImport > 1 ? 's' : ''} from QGenda?</p>` +
     (toSkip > 0 ? `<p style="font-size:0.8rem;color:var(--text-dim);">${toSkip} date${toSkip > 1 ? 's' : ''} already have shifts and will be skipped.</p>` : '') +
     `<div style="max-height:200px;overflow-y:auto;margin-top:8px;font-size:0.8rem;">` +
-    shiftsToCreate.map(s => `<div style="padding:4px 0;border-bottom:1px solid var(--border);">${formatDateShort(s.date)} &mdash; ${getAssignmentTypeName(s.assignmentType, s.siteId)}${s.startTime ? ` (${s.startTime}-${s.endTime})` : ' (pager only)'}</div>`).join('') +
+    shiftsToCreate.map(s => `<div style="padding:4px 0;border-bottom:1px solid var(--border);">${formatDateShort(s.date)} &mdash; ${escapeHtml(String(getAssignmentTypeName(s.assignmentType, s.siteId)))}${s.startTime ? ` (${escapeHtml(String(s.startTime))}-${escapeHtml(String(s.endTime))})` : ' (pager only)'}</div>`).join('') +
     `</div>`;
   document.getElementById('importConfirmTitle').textContent = 'Import Shifts';
 

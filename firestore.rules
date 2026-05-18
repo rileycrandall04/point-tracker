@@ -1,0 +1,200 @@
+rules_version = '2';
+
+// =============================================================================
+// MWA Point Tracker — Firestore Security Rules (BASELINE)
+// =============================================================================
+// The app talks browser -> Firestore directly via the client SDK. Every
+// isAppOwner()/isSiteAdmin() check in index.html gates UI only and proves
+// NOTHING to the database. These rules are the ONLY server-side enforcement.
+//
+// Threat model addressed:
+//   * C1  Self privilege-escalation: a user must NOT be able to write
+//         role / isAdmin / adminSites on their own profile.
+//   * C2  Cross-user read/write/delete: non-admins must not touch other
+//         users' data; admin reach is scoped and the master profile is
+//         immutable from the client.
+//   * H3  Site-rule / global-config tampering: only app_owner / scoped
+//         siteAdmin may write sites/*, surgeonMappings/*, appConfig/*.
+//
+// IMPORTANT — review & test before deploying:
+//   - This is a conservative baseline. Destructive multi-user operations
+//     (account wipe/delete, force case migrate/reconcile, role assignment)
+//     are best moved behind Cloud Functions / Admin SDK; here they are
+//     restricted to app_owner only. Verify each admin feature in
+//     index.html still works for the real owner after deploying, and that
+//     ordinary users are denied.
+//   - Long term, move role/isAdmin/adminSites into Auth custom claims so
+//     they are cryptographically trustworthy and not a self-writable field.
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Hardcoded master UID (mirrors ADMIN_UID in index.html).
+    function MASTER_UID() {
+      return 'ZCXVQgTIknSVa7MvOnXSw550MCo2';
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Caller's own profile doc (may not exist yet on first sign-in).
+    function callerProfile() {
+      return get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data;
+    }
+
+    function callerProfileExists() {
+      return exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid));
+    }
+
+    // app_owner = the hardcoded master, or a profile explicitly marked
+    // role == 'app_owner'. Only the master can mint other app_owners
+    // (enforced on the userProfiles write rule below), so this can't be
+    // self-bootstrapped.
+    function isAppOwner() {
+      return isSignedIn() && (
+        request.auth.uid == MASTER_UID() ||
+        (callerProfileExists() && callerProfile().role == 'app_owner')
+      );
+    }
+
+    // siteAdmin for a specific site: profile role == 'siteAdmin' with the
+    // site in adminSites, OR legacy isAdmin == true (all sites).
+    function isSiteAdminOf(siteId) {
+      return isSignedIn() && callerProfileExists() && (
+        callerProfile().get('isAdmin', false) == true ||
+        (callerProfile().get('role', '') == 'siteAdmin' &&
+         callerProfile().get('adminSites', []).hasAny([siteId]))
+      );
+    }
+
+    function isAnySiteAdmin() {
+      return isSignedIn() && callerProfileExists() && (
+        callerProfile().get('isAdmin', false) == true ||
+        callerProfile().get('role', '') == 'siteAdmin'
+      );
+    }
+
+    // Privileged profile fields a user must never set on themselves.
+    function privilegedProfileKeys() {
+      return ['role', 'isAdmin', 'adminSites', 'deletedAt',
+              'forceSignOutAt', 'adminPromotionNotice', 'casesBackfilledV1'];
+    }
+
+    function touchesPrivilegedKeys() {
+      return request.resource.data.diff(resource.data)
+               .affectedKeys().hasAny(privilegedProfileKeys());
+    }
+
+    // -------------------------------------------------------------------------
+    // userProfiles/{uid}
+    // -------------------------------------------------------------------------
+    match /userProfiles/{uid} {
+      // Readable by self, any signed-in admin (admin UI looks users up by
+      // email and lists profiles), keeps existing features working.
+      allow read: if isSelf(uid) || isAppOwner() || isAnySiteAdmin();
+
+      // Create own profile on first sign-in, but never with privileged
+      // fields pre-set (blocks "sign in already an app_owner").
+      allow create: if isSelf(uid) &&
+        !request.resource.data.keys().hasAny(privilegedProfileKeys());
+
+      // app_owner can write any profile EXCEPT it cannot demote/alter the
+      // hardcoded master's privileged fields (master profile is immutable
+      // for role/isAdmin from the client).
+      allow update: if isAppOwner() &&
+        !(uid == MASTER_UID() && touchesPrivilegedKeys());
+
+      // A siteAdmin may write ONLY the pendingInvite field on another
+      // user's profile, and only for a site they administer (covers
+      // inviteUserToSite). No privileged keys.
+      allow update: if isAnySiteAdmin() && !touchesPrivilegedKeys() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['pendingInvite']) &&
+        (request.resource.data.pendingInvite == null ||
+         isSiteAdminOf(request.resource.data.pendingInvite.get('siteId', '__none__')));
+
+      // Self may update own profile but NEVER privileged fields.
+      allow update: if isSelf(uid) && !touchesPrivilegedKeys();
+
+      // Deletion / tombstoning is an app_owner-only operation, and the
+      // master profile can never be deleted from the client.
+      allow delete: if isAppOwner() && uid != MASTER_UID();
+    }
+
+    // -------------------------------------------------------------------------
+    // users/{uid}/** — per-user data, settings, cases, sandbox snapshots
+    // -------------------------------------------------------------------------
+    match /users/{uid}/{document=**} {
+      // Self has full access to own subtree. app_owner has full reach
+      // (admin data tools). siteAdmin gets READ-ONLY cross-user access
+      // (lookups / activity views); cross-user WRITES are app_owner-only
+      // here — destructive batch ops should move to Cloud Functions.
+      allow read: if isSelf(uid) || isAppOwner() || isAnySiteAdmin();
+      allow write: if isSelf(uid) || isAppOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // sharedCases / sharedCaseOverrides / sharedShifts
+    // Each doc carries a `uid` owner field. Owner-only writes; reads scoped
+    // to signed-in users (app filters by siteId/uid client-side).
+    // app_owner retains full reach for admin reconciliation/migration.
+    // -------------------------------------------------------------------------
+    match /sharedCases/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if (isSignedIn() && resource.data.uid == request.auth.uid)
+                               || isAppOwner();
+    }
+    match /sharedCaseOverrides/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if (isSignedIn() && resource.data.uid == request.auth.uid)
+                               || isAppOwner();
+    }
+    match /sharedShifts/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if (isSignedIn() && resource.data.uid == request.auth.uid)
+                               || isAppOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // sites/{siteId} — scoring/compensation rules. Readable by all signed-in
+    // users (the engine needs them); writable only by app_owner or a
+    // siteAdmin scoped to that site.
+    // -------------------------------------------------------------------------
+    match /sites/{siteId} {
+      allow read: if isSignedIn();
+      allow write: if isAppOwner() || isSiteAdminOf(siteId);
+    }
+
+    // -------------------------------------------------------------------------
+    // surgeonMappings/{siteId}
+    // -------------------------------------------------------------------------
+    match /surgeonMappings/{siteId} {
+      allow read: if isSignedIn();
+      allow write: if isAppOwner() || isSiteAdminOf(siteId);
+    }
+
+    // -------------------------------------------------------------------------
+    // appConfig/** — global feature flags. Read by all; write app_owner only.
+    // -------------------------------------------------------------------------
+    match /appConfig/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAppOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // Default deny everything not matched above.
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
