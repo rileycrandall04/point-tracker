@@ -6218,6 +6218,16 @@ async function adminApproveUser(uid) {
     // Move any data they logged while parked in OTHER into the assigned site
     // (re-stamps data doc + sharedCases/sharedShifts/overrides + surgeon maps).
     await migrateUserDataToSite(uid, QUARANTINE_SITE_ID, siteId);
+    // Point their app at the new site. getCurrentSiteId() reads
+    // data/settings.siteId — migrate only re-stamps shifts/cases, NOT this,
+    // so without it an approved user stays stuck viewing OTHER.
+    await db.collection('users').doc(uid).collection('data').doc('settings')
+      .set({ siteId: siteId }, { merge: true });
+    // Arm the existing force-resignin signal so their (stale) open session
+    // refreshes cleanly on next app open: it clears caches + re-reads the
+    // now-approved profile and corrected settings instead of staying parked.
+    await db.collection('userProfiles').doc(uid)
+      .set({ forceSignOutAt: new Date().toISOString() }, { merge: true });
     showToast('Approved into ' + siteName);
     delete _waitingRoom[uid];
     adminLoadWaitingRoom();
