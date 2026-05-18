@@ -88,12 +88,33 @@ service cloud.firestore {
     // backfill bookkeeping flag). They grant no privilege, so keeping them
     // privileged would break those everyday flows for no security gain.
     function privilegedProfileKeys() {
-      return ['role', 'isAdmin', 'adminSites', 'deletedAt', 'forceSignOutAt'];
+      return ['role', 'isAdmin', 'adminSites', 'deletedAt', 'forceSignOutAt',
+              'approvedSiteId'];
     }
 
     function touchesPrivilegedKeys() {
       return request.resource.data.diff(resource.data)
                .affectedKeys().hasAny(privilegedProfileKeys());
+    }
+
+    // New-user quarantine. Enforced only when appConfig/flags.quarantineEnabled
+    // == true (kill switch). isApproved() = an app-owner has stamped the
+    // owner-only approvedSiteId on the caller's profile. canPool() gates all
+    // community/crowd collections: open to everyone when the switch is off
+    // (current behavior), owner always, otherwise approved users only.
+    function quarantineEnabled() {
+      return exists(/databases/$(database)/documents/appConfig/flags) &&
+        get(/databases/$(database)/documents/appConfig/flags)
+          .data.get('quarantineEnabled', false) == true;
+    }
+
+    function isApproved() {
+      return callerProfileExists() &&
+        callerProfile().get('approvedSiteId', '') != '';
+    }
+
+    function canPool() {
+      return isAppOwner() || !quarantineEnabled() || isApproved();
     }
 
     // -------------------------------------------------------------------------
@@ -151,8 +172,12 @@ service cloud.firestore {
     // to signed-in users (app filters by siteId/uid client-side).
     // app_owner retains full reach for admin reconciliation/migration.
     // -------------------------------------------------------------------------
+    // Reads gated by canPool() (quarantine). Create stays uid-owned and is
+    // NOT quarantine-gated: a quarantined user may write their own
+    // OTHER-tagged shared docs, which migrateUserDataToSite re-stamps into
+    // the assigned site's pool on approval. They still can't READ the pool.
     match /sharedCases/{docId} {
-      allow read: if isSignedIn();
+      allow read: if canPool();
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if (isSignedIn() && resource.data.uid == request.auth.uid)
                                || isAppOwner();
@@ -164,11 +189,11 @@ service cloud.firestore {
     // signed-in user (same crowd-sourced posture as asaCodeProcedures).
     // Requiring uid here would block every normal shared-case edit.
     match /sharedCaseOverrides/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
+      allow read: if canPool();
+      allow write: if canPool();
     }
     match /sharedShifts/{docId} {
-      allow read: if isSignedIn();
+      allow read: if canPool();
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if (isSignedIn() && resource.data.uid == request.auth.uid)
                                || isAppOwner();
@@ -211,14 +236,13 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAppOwner();
     }
-    // asaCodeProcedures: crowd-sourced procedure<->ASA learning. Every case
-    // save calls autoLearnProcedureMapping (index.html), and any signed-in
-    // user can add a procedure from the ASA codes page — so writes must stay
-    // open to any signed-in user to preserve current functionality. (Long
-    // term this shared doc is a Cloud Function candidate; see header note.)
+    // asaCodeProcedures: crowd-sourced procedure<->ASA learning. Reads stay
+    // open (engine needs them). Writes are quarantine-gated via canPool() so
+    // an unapproved new user can't pollute the global learning doc; their
+    // case-save auto-learn just no-ops (caught) until approved.
     match /asaCodeProcedures/{doc} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn();
+      allow write: if canPool();
     }
     match /procedureMappings/{doc} {
       allow read: if isSignedIn();
@@ -244,6 +268,17 @@ service cloud.firestore {
     match /siteRulesAudit/{siteId}/{document=**} {
       allow read: if isAppOwner();
       allow write: if isAppOwner() || isSiteAdminOf(siteId);
+    }
+
+    // -------------------------------------------------------------------------
+    // accessBlocklist/{emailKey} — rejected users. Owner-only. The sign-in
+    // path may also check this for the caller's own email; allow a signed-in
+    // user to read ONLY their own blocklist doc (docId is their email key).
+    // -------------------------------------------------------------------------
+    match /accessBlocklist/{emailKey} {
+      allow read: if isAppOwner() ||
+        (isSignedIn() && emailKey == request.auth.token.email);
+      allow write: if isAppOwner();
     }
 
     // -------------------------------------------------------------------------
