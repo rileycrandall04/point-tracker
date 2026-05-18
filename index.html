@@ -4286,6 +4286,19 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div id="adminBackfillApprovedStatus" style="font-size:0.78rem;margin-top:6px;"></div>
       </div>
 
+      <!-- New-user quarantine kill switch -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
+        <div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">New-user quarantine</div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:8px;max-width:560px;line-height:1.5;">
+          When ON, every <strong>new</strong> sign-up is parked in OTHER with no community access until you approve them in the Waiting Room below. Existing users are unaffected. Reversible anytime &mdash; takes effect on each user's next page load.
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;">
+          <input type="checkbox" id="adminQuarantineToggle" onchange="adminSaveQuarantineFlag()" style="width:16px;height:16px;cursor:pointer;">
+          Enable new-user quarantine
+        </label>
+        <div id="adminQuarantineStatus" style="font-size:0.78rem;margin-top:6px;"></div>
+      </div>
+
       <!-- New-user Waiting Room (quarantine approvals) -->
       <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
@@ -5919,6 +5932,14 @@ async function adminMigInit() {
     const state = doc.exists ? ((doc.data() || {}).subcollectionReads || 'off') : 'off';
     const sel = document.getElementById('adminMigGlobalFlag');
     if (sel) sel.value = state;
+    const qEnabled = doc.exists && (doc.data() || {}).quarantineEnabled === true;
+    const qCb = document.getElementById('adminQuarantineToggle');
+    if (qCb) qCb.checked = qEnabled;
+    const qStatus = document.getElementById('adminQuarantineStatus');
+    if (qStatus) {
+      qStatus.style.color = 'var(--text-dim)';
+      qStatus.textContent = 'Currently ' + (qEnabled ? 'ON — new users are quarantined.' : 'OFF — open sign-up (current behavior).');
+    }
     const statusEl = document.getElementById('adminMigGlobalFlagStatus');
     if (statusEl) {
       statusEl.style.color = 'var(--text-dim)';
@@ -5965,6 +5986,39 @@ async function adminMigSaveGlobalFlag() {
       statusEl.style.color = 'var(--accent2)';
       statusEl.textContent = 'Save failed: ' + (err.message || err);
     }
+  }
+}
+
+// Kill switch for the new-user quarantine. App-owner only. Confirms before
+// turning ON since it changes behavior for every new sign-up.
+async function adminSaveQuarantineFlag() {
+  if (!isAppOwner()) return;
+  const cb = document.getElementById('adminQuarantineToggle');
+  if (!cb) return;
+  const on = !!cb.checked;
+  const statusEl = document.getElementById('adminQuarantineStatus');
+  if (on && !confirm('Turn the new-user quarantine ON?\n\nEvery NEW sign-up will be parked in OTHER with no community access until you approve them in the Waiting Room. Existing users are unaffected. You can turn this off anytime.')) {
+    cb.checked = false;
+    return;
+  }
+  if (statusEl) { statusEl.style.color = 'var(--text-dim)'; statusEl.textContent = 'Saving…'; }
+  try {
+    await db.collection('appConfig').doc('flags').set({
+      quarantineEnabled: on,
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser ? currentUser.uid : ''
+    }, { merge: true });
+    globalScalingFlags.quarantineEnabled = on;
+    if (statusEl) {
+      statusEl.style.color = on ? 'var(--accent2)' : 'var(--accent)';
+      statusEl.textContent = on
+        ? 'ON — new users are quarantined until approved. Active on each user’s next page load.'
+        : 'OFF — open sign-up (current behavior). Active on each user’s next page load.';
+    }
+    showToast('Quarantine ' + (on ? 'ENABLED' : 'disabled'));
+  } catch (err) {
+    if (statusEl) { statusEl.style.color = 'var(--accent2)'; statusEl.textContent = 'Save failed: ' + (err.message || err); }
+    if (cb) cb.checked = !on;
   }
 }
 
