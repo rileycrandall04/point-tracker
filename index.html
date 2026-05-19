@@ -21847,7 +21847,27 @@ function getPayCodeName(normalizedMin, assignmentType, isWknd, isHol) {
   return isOB ? 'Restricted OB Night' : 'Night Diff';
 }
 
+// Public entry: core breakdown + the rule-driven subspecialty bonus row.
+// Non-IMC CV/Liver sites (UVH cardiac_liver, MD CV, SG Heart Call) earn the
+// flat +45 subspecialty bonus via calcSubspecPoints, but the core breakdown
+// never emits a row for it — so the Data-tab rows wouldn't sum to the shift
+// total on those sites. IMC pager-call shifts already get this through
+// _pagerCallBreakdownRows, so skip when a pager-call type is active to avoid
+// double-counting. Gate mirrors the subspec branch in calcShiftTotal.
 function getShiftPayBreakdown(shift) {
+  const rows = _shiftPayBreakdownCore(shift);
+  if (getPagerCallType(shift)) return rows;
+  const _ssRule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
+  const _hasSubspec = (shift.assignmentType === 'cardiac_liver')
+    || !!(_ssRule && (_ssRule.cardiacBonus || _ssRule.liverBonus));
+  if (!_hasSubspec) return rows;
+  const _ssPts = calcSubspecPoints(shift);
+  if (!(_ssPts > 0)) return rows;
+  rows.push({ clockIn: '', clockOut: '', payCode: 'Subspecialty Call', durationMin: 0, payRate: 0, amount: _ssPts, isPager: true, isSubRow: false });
+  return rows;
+}
+
+function _shiftPayBreakdownCore(shift) {
   if (shift.assignmentType === 'vacation') return [];
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return [{ clockIn: '', clockOut: '', payCode: 'Forced Off', durationMin: 0, payRate: 0, amount: 56 }];
   const flatRulePB = getFlatPaymentRule(shift);
