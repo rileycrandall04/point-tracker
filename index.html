@@ -4306,6 +4306,19 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div id="adminQuarantineStatus" style="font-size:0.78rem;margin-top:6px;"></div>
       </div>
 
+      <!-- Shared-data health dashboard -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <div>
+            <div style="font-size:0.82rem;font-weight:600;">Shared-data health</div>
+            <div style="font-size:0.7rem;color:var(--text-dim);max-width:560px;line-height:1.5;">Are users actually getting shared data? Combines the authoritative profile audit (who lacks <code>approvedSiteId</code>) with failure beacons from the last 24h. &ldquo;Healthy&rdquo; is <em>inferred</em> from the absence of a failure beacon &mdash; not positively confirmed.</div>
+          </div>
+          <button class="btn btn-sm" onclick="adminLoadSharedHealth()">Refresh</button>
+        </div>
+        <div id="adminSharedHealthStatus" style="font-size:0.78rem;margin-top:4px;"></div>
+        <div id="adminSharedHealthList" style="font-size:0.8rem;margin-top:8px;"></div>
+      </div>
+
       <!-- New-user Waiting Room (quarantine approvals) -->
       <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
@@ -6384,6 +6397,117 @@ async function adminMigRunComparison() {
   } catch (err) {
     statusEl.style.color = 'var(--accent2)';
     statusEl.textContent = 'Failed: ' + (err.message || err);
+  }
+}
+
+// Owner-only shared-data health dashboard. The exception-only beacon
+// (logSharedHealth) records ONLY unhealthy/at-risk sessions, so "healthy"
+// can't be read off the beacons alone — it's derived: the authoritative
+// userProfiles audit (who lacks approvedSiteId — the deterministic
+// quarantine-cutoff predictor) combined with ok:false failure beacons from
+// the last 24h. Absence of a failure beacon is treated as healthy
+// (inferred, not positively confirmed) — stated plainly in the UI.
+async function adminLoadSharedHealth() {
+  const statusEl = document.getElementById('adminSharedHealthStatus');
+  const listEl = document.getElementById('adminSharedHealthList');
+  const setStatus = (msg, color) => {
+    if (statusEl) { statusEl.style.color = color || 'var(--text-dim)'; statusEl.textContent = msg; }
+  };
+  if (!isAppOwner()) { setStatus('App owner only.', 'var(--accent2)'); if (listEl) listEl.innerHTML = ''; return; }
+  setStatus('Loading…');
+  if (listEl) listEl.innerHTML = '';
+  try {
+    // 1. Authoritative profile audit — fresh full read, not userProfilesCache
+    //    (the cache can under-report; this number is the go/no-go).
+    const profSnap = await db.collection('userProfiles').get();
+    const profiles = {};
+    let totalActive = 0;
+    const atRisk = [];
+    profSnap.forEach(doc => {
+      const d = doc.data() || {};
+      const rec = {
+        email: d.email || '', name: d.displayName || '',
+        approvedSiteId: d.approvedSiteId || '', deleted: !!d.deletedAt
+      };
+      profiles[doc.id] = rec;
+      if (rec.deleted) return;
+      totalActive++;
+      if (!rec.approvedSiteId) atRisk.push({ uid: doc.id, email: rec.email, name: rec.name });
+    });
+
+    // 2. Failure beacons in the last 24h.
+    const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
+    const diagSnap = await db.collection('scalingDiagnostics')
+      .orderBy('timestamp', 'desc').limit(400).get();
+    const failedReads = {};
+    let flagUnloaded = 0;
+    diagSnap.forEach(doc => {
+      const d = doc.data() || {};
+      const t = d.timestamp ? new Date(d.timestamp).getTime() : 0;
+      if (!t || t < cutoffMs) return;
+      if (d.type === 'quarantine_flag_unloaded') { flagUnloaded++; return; }
+      if (d.type !== 'shared_health') return;
+      // ok:false = genuine delivery failure. At-risk beacons are already
+      // covered by the authoritative audit above — don't double-count.
+      if (d.ok === false && d.uid && !failedReads[d.uid]) {
+        failedReads[d.uid] = {
+          email: d.email || (profiles[d.uid] && profiles[d.uid].email) || '',
+          siteId: d.siteId || '', when: d.timestamp || '', err: d.errorCode || ''
+        };
+      }
+    });
+
+    // 3. Reconcile: a failed-read uid that is ALSO at-risk is reported once,
+    //    under at-risk (the more actionable root cause).
+    const atRiskUids = new Set(atRisk.map(u => u.uid));
+    const failedOnly = Object.keys(failedReads).filter(uid => !atRiskUids.has(uid));
+    const problemCount = atRisk.length + failedOnly.length;
+    const healthyInferred = Math.max(0, totalActive - problemCount);
+
+    const qOn = !!(globalScalingFlags && globalScalingFlags.quarantineEnabled);
+    setStatus(healthyInferred + ' of ' + totalActive +
+      ' active users healthy (inferred — no failure beacon in 24h).',
+      problemCount === 0 ? 'var(--accent)' : 'var(--accent2)');
+
+    let html = '<div style="font-size:0.74rem;color:var(--text-dim);margin-bottom:8px;">'
+      + 'Quarantine is currently <strong>' + (qOn ? 'ON' : 'OFF') + '</strong>. '
+      + 'At-risk = non-deleted profile with no <code>approvedSiteId</code> '
+      + (qOn ? '(cut off from shared data right now).'
+             : '(will be cut off the moment you enable quarantine — run the backfill first).')
+      + '</div>';
+    if (problemCount === 0 && flagUnloaded === 0) {
+      html += '<div style="color:var(--accent);">No at-risk users and no failure beacons in the last 24h.</div>';
+    } else {
+      if (atRisk.length > 0) {
+        html += '<div style="font-weight:600;margin:6px 0 4px;">Missing approvedSiteId ('
+          + atRisk.length + ') — backfill or approve:</div><ul style="margin:0 0 8px 16px;padding:0;">';
+        atRisk.slice(0, 100).forEach(u => {
+          html += '<li>' + escapeHtml(u.email || u.name || u.uid) + '</li>';
+        });
+        if (atRisk.length > 100) html += '<li>…and ' + (atRisk.length - 100) + ' more</li>';
+        html += '</ul>';
+      }
+      if (failedOnly.length > 0) {
+        html += '<div style="font-weight:600;margin:6px 0 4px;">Shared read failed in last 24h ('
+          + failedOnly.length + ') — has approvedSiteId but delivery failed:</div><ul style="margin:0 0 8px 16px;padding:0;">';
+        failedOnly.slice(0, 100).forEach(uid => {
+          const f = failedReads[uid];
+          html += '<li>' + escapeHtml(f.email || uid) + ' — site ' + escapeHtml(f.siteId || '?')
+            + (f.err ? ' — ' + escapeHtml(f.err) : '') + ' (' + escapeHtml(f.when) + ')</li>';
+        });
+        html += '</ul>';
+      }
+      if (flagUnloaded > 0) {
+        html += '<div style="color:var(--accent2);font-size:0.76rem;margin-top:4px;">⚠ '
+          + flagUnloaded + ' session(s) where the quarantine flag had not loaded when a '
+          + 'new user picked a site — a new user may have onboarded without the OTHER gate. '
+          + 'Check the Waiting Room / user list.</div>';
+      }
+    }
+    if (listEl) listEl.innerHTML = html;
+  } catch (err) {
+    setStatus('Failed: ' + (err && err.message || err), 'var(--accent2)');
+    console.error('adminLoadSharedHealth error:', err);
   }
 }
 
