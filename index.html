@@ -8946,8 +8946,23 @@ async function handleNewUserSiteSelect() {
 //   - Has any shifts/cases? this is a legacy user — silently mark them as
 //     "selected" so we never prompt.
 //   - Otherwise: brand-new user, show picker.
-function maybeShowNewUserSiteSelector() {
+function maybeShowNewUserSiteSelector(_flagWaitTries) {
   if (!currentUser) return;
+  // Race guard: handleNewUserSiteSelect decides quarantine on/off by reading
+  // globalScalingFlags, which loads on a SEPARATE async chain than this one
+  // (loadSites().then -> here vs. loadGlobalScalingFlags()). If the picker is
+  // shown and acted on before flags resolve, quarantineActive() reads the
+  // in-memory default (false) and the user is written straight into a real
+  // site, bypassing the OTHER waiting room. Defer until flags are known.
+  if (!globalScalingFlagsLoaded) {
+    const tries = (_flagWaitTries || 0) + 1;
+    if (tries <= 50) { setTimeout(() => maybeShowNewUserSiteSelector(tries), 200); return; }
+    // ~10s elapsed and flags still unknown (loadGlobalScalingFlags normally
+    // resolves in <1s, even on error). Proceed on defaults so the picker
+    // isn't hung forever, but record it so the owner can see a new user may
+    // have onboarded without the quarantine gate.
+    logScalingDiagnostic('quarantine_flag_unloaded', { context: 'newUserSiteSelector' });
+  }
   if (currentUserProfile && currentUserProfile.siteSelectedAt) return;
   // Legacy user with existing data → silently mark as settled
   const hasData = !!(data && (
@@ -10042,6 +10057,32 @@ function logScalingDiagnostic(type, payload) {
   } catch (err) {
     console.error('logScalingDiagnostic build failed:', err);
   }
+}
+
+// Shared-data delivery beacon. Emits a scalingDiagnostics entry ONLY when
+// something is wrong or at-risk, so the diagnostics tab stays a clean
+// "problem list" (silence = every session is getting shared data):
+//   - ok === false        : the shared-cases read failed outright
+//   - quarantine on but    : this user has no approvedSiteId, so once the
+//     no approvedSiteId       flag is live they'd be cut off from the pool
+// A healthy approved user produces nothing. Never throws into the read path.
+function logSharedHealth(ok, err) {
+  try {
+    const hasApprovedSite = !!(currentUserProfile && currentUserProfile.approvedSiteId);
+    const quarantineOn = !!(globalScalingFlags && globalScalingFlags.quarantineEnabled);
+    if (ok && !(quarantineOn && !hasApprovedSite)) return; // healthy — stay silent
+    logScalingDiagnostic('shared_health', {
+      ok: !!ok,
+      siteId: (typeof getCurrentSiteId === 'function')
+        ? getCurrentSiteId() : ((settings && settings.siteId) || ''),
+      approvedSiteId: (currentUserProfile && currentUserProfile.approvedSiteId) || '',
+      hasApprovedSite: hasApprovedSite,
+      quarantineEnabled: quarantineOn,
+      sharedCasesCount: Array.isArray(sharedCasesCache) ? sharedCasesCache.length : -1,
+      errorCode: (err && (err.code || err.message))
+        ? String(err.code || err.message).slice(0, 120) : ''
+    });
+  } catch (e) { /* a monitoring beacon must never break the read path */ }
 }
 
 // Phase 2 read path: replace blob's cases array with subcollection contents
@@ -35350,6 +35391,14 @@ auth.onAuthStateChanged(async (user) => {
         loadSharedCases().then(() => refreshSharedViews()).catch(() => {});
       }
     }, 8000);
+
+    // Final shared-data delivery verdict, after the retry window above has
+    // had time to complete a Firestore round trip. logSharedHealth() stays
+    // silent for healthy approved sessions and only records failures /
+    // at-risk users, so the diagnostics tab reads as a clean problem list.
+    setTimeout(() => {
+      logSharedHealth(sharedCasesLoaded === true);
+    }, 12000);
 
     // Auto-sync calendar if last sync was >24 hours ago
     const lastSync = data.calendarLastSync ? new Date(data.calendarLastSync).getTime() : 0;
