@@ -3490,6 +3490,17 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </p>
   </div>
 
+  <!-- Demo data (test account only; visibility gated by email in JS) -->
+  <div class="card hidden" id="demoSeedCard" style="margin-top:12px;">
+    <h2>Demo data (test account)</h2>
+    <p style="font-size:0.74rem;color:var(--text-dim);margin:0 0 10px 0;line-height:1.5;">
+      One-shot generator + cleanup for board-demo material. Both actions are blocked unless &ldquo;Contribute case data to shared pool&rdquo; above is <strong>OFF</strong> &mdash; that guarantees nothing seeded here ever reaches the shared pool.
+    </p>
+    <button class="btn btn-primary btn-sm" id="seedDemoDataBtn" onclick="seedDemoData()" style="width:100%;margin-bottom:6px;">Seed 6 months of demo data</button>
+    <button class="btn btn-sm" id="deleteSeedDataBtn" onclick="deleteSeededDemoData()" style="background:var(--accent2);color:#1e293b;width:100%;">Delete all seeded demo data</button>
+    <div id="demoSeedStatus" style="margin-top:8px;font-size:0.78rem;color:var(--text-dim);"></div>
+  </div>
+
   <div class="card" style="margin-top:12px;">
     <h2>Display</h2>
     <label class="toggle-row">
@@ -10090,6 +10101,7 @@ function buildSharedCase(caseData, shift) {
 function writeSharedCase(caseData, shift) {
   if (!firestoreSyncEnabled || !currentUser) return;
   if (settings.shareData === false) return;
+  if (caseData && caseData.demoSeed === true) return; // never share seeded demo data
   if (!caseData.id) return;
   const docId = currentUser.uid + '_' + caseData.id;
   const shared = buildSharedCase(caseData, shift);
@@ -10602,6 +10614,7 @@ function syncAllSharedCases() {
     const chunk = data.cases.slice(i, i + batchSize);
     chunk.forEach(c => {
       if (!c.id) return;
+      if (c.demoSeed === true) return; // never share seeded demo data
       const docId = currentUser.uid + '_' + c.id;
       const shift = data.shifts[c.shiftDate];
       batch.set(db.collection('sharedCases').doc(docId), buildSharedCase(c, shift));
@@ -10655,6 +10668,7 @@ function buildSharedShift(shift) {
 function writeSharedShift(shift) {
   if (!firestoreSyncEnabled || !currentUser) return;
   if (settings.shareData === false) return;
+  if (shift && shift.demoSeed === true) return; // never share seeded demo data
   if (!shift || !shift.date) return;
   const docId = currentUser.uid + '_' + shift.date;
   const payload = buildSharedShift(shift);
@@ -10684,6 +10698,7 @@ function syncAllSharedShifts() {
     const changed = []; // [{ date, payload, fingerprint }]
     for (let i = 0; i < dates.length; i++) {
       const d = dates[i];
+      if (data.shifts[d] && data.shifts[d].demoSeed === true) continue; // never share seeded demo data
       const payload = buildSharedShift(data.shifts[d]);
       if (!payload) continue;
       const fp = _shiftFingerprint(payload);
@@ -31701,7 +31716,217 @@ shareToggle.addEventListener('change', () => {
     deleteAllUserSharedShifts();
     showToast('Data sharing disabled — shared cases & shifts removed');
   }
+  if (typeof _refreshDemoSeedCardVisibility === 'function') _refreshDemoSeedCardVisibility();
 });
+if (typeof _refreshDemoSeedCardVisibility === 'function') _refreshDemoSeedCardVisibility();
+
+// ================================================================
+// DEMO DATA SEED (test account only)
+// ================================================================
+// Generates ~6 months of plausible cases + minimal shifts for the
+// board-demo account. Both buttons are hard-gated to one email and
+// require "Contribute case data to shared pool" to be OFF, so seeded
+// records never reach the shared pool. Every seeded record is tagged
+// demoSeed:true so cleanup is surgical and the shared-write paths
+// short-circuit on it as belt-and-suspenders insurance.
+
+const _DEMO_SEED_EMAIL = 'rileytestcrandall@gmail.com';
+
+function _isDemoSeedUser() {
+  return !!(currentUser && (currentUser.email || '').toLowerCase() === _DEMO_SEED_EMAIL);
+}
+
+function _refreshDemoSeedCardVisibility() {
+  const card = document.getElementById('demoSeedCard');
+  if (!card) return;
+  const show = _isDemoSeedUser();
+  card.classList.toggle('hidden', !show);
+  if (!show) return;
+  const sharingOff = !!(settings && settings.shareData === false);
+  const seedBtn = document.getElementById('seedDemoDataBtn');
+  const delBtn = document.getElementById('deleteSeedDataBtn');
+  const status = document.getElementById('demoSeedStatus');
+  if (seedBtn) seedBtn.disabled = !sharingOff;
+  if (delBtn) delBtn.disabled = !sharingOff;
+  if (status) {
+    if (!sharingOff) {
+      status.style.color = 'var(--accent2)';
+      status.textContent = 'Turn "Contribute case data to shared pool" OFF to enable these buttons.';
+    } else if (status.textContent.startsWith('Turn "Contribute')) {
+      status.style.color = 'var(--text-dim)';
+      status.textContent = '';
+    }
+  }
+}
+
+function _demoSeedGuard() {
+  if (!_isDemoSeedUser()) { alert('This control is only available on the test account.'); return false; }
+  if (!(settings && settings.shareData === false)) {
+    alert('Turn "Contribute case data to shared pool" OFF first. Seeded data must never reach the shared pool.');
+    return false;
+  }
+  return true;
+}
+
+const _DEMO_PROCEDURES = [
+  { name: 'Lap Cholecystectomy',      baseUnits: 7,  durMin: 75,  durMax: 130 },
+  { name: 'Total Knee Arthroplasty',  baseUnits: 7,  durMin: 90,  durMax: 160 },
+  { name: 'Total Hip Arthroplasty',   baseUnits: 8,  durMin: 90,  durMax: 170 },
+  { name: 'Lap Appendectomy',         baseUnits: 5,  durMin: 45,  durMax: 95  },
+  { name: 'EGD',                      baseUnits: 5,  durMin: 20,  durMax: 35  },
+  { name: 'Colonoscopy',              baseUnits: 5,  durMin: 25,  durMax: 45  },
+  { name: 'Inguinal Hernia Repair',   baseUnits: 6,  durMin: 55,  durMax: 100 },
+  { name: 'TURP',                     baseUnits: 6,  durMin: 60,  durMax: 110 },
+  { name: 'Carpal Tunnel Release',    baseUnits: 4,  durMin: 25,  durMax: 50  },
+  { name: 'Cataract Extraction',      baseUnits: 4,  durMin: 20,  durMax: 40  },
+  { name: 'Lap Hysterectomy',         baseUnits: 8,  durMin: 90,  durMax: 170 },
+  { name: 'Rotator Cuff Repair',      baseUnits: 6,  durMin: 75,  durMax: 140 },
+  { name: 'Spine Fusion L4-L5',       baseUnits: 12, durMin: 180, durMax: 280 },
+  { name: 'Cesarean Section',         baseUnits: 7,  durMin: 45,  durMax: 80  },
+  { name: 'Mastectomy',               baseUnits: 6,  durMin: 90,  durMax: 160 },
+  { name: 'Thyroidectomy',            baseUnits: 6,  durMin: 90,  durMax: 150 },
+  { name: 'AV Fistula Creation',      baseUnits: 5,  durMin: 75,  durMax: 120 },
+  { name: 'ACL Reconstruction',       baseUnits: 5,  durMin: 90,  durMax: 140 }
+];
+const _DEMO_SURGEONS = [
+  'Anderson, K.', 'Brooks, J.', 'Chen, L.', 'Davis, M.', 'Evans, R.',
+  'Garcia, S.', 'Hassan, T.', 'Iverson, P.', 'Johnson, A.', 'Kim, H.',
+  'Lopez, D.', 'Martinez, C.', 'Nguyen, V.', 'Patel, R.'
+];
+const _DEMO_ASA_CODES = ['00790','00840','00400','00100','00810','00860','00350','00865','01402','01464','00942','01230','00170'];
+
+function _demoRand(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); }
+function _demoPick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function _demoFmtYMD(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function _demoFmtHM(totalMin) {
+  const h = Math.floor(totalMin/60) % 24;
+  const m = totalMin % 60;
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+}
+
+async function seedDemoData() {
+  if (!_demoSeedGuard()) return;
+  const status = document.getElementById('demoSeedStatus');
+  const seedBtn = document.getElementById('seedDemoDataBtn');
+  const delBtn = document.getElementById('deleteSeedDataBtn');
+  if (!confirm('Seed ~6 months (~150 cases) of demo data into THIS account? Existing demo seed records will be added to, not replaced — use "Delete all seeded demo data" first if you want a clean reset.')) return;
+  if (seedBtn) seedBtn.disabled = true;
+  if (delBtn) delBtn.disabled = true;
+  if (status) { status.style.color = 'var(--text-dim)'; status.textContent = 'Generating cases & shifts…'; }
+  try {
+    const siteId = (typeof getCurrentSiteId === 'function') ? getCurrentSiteId() : ((settings && settings.siteId) || '');
+    const today = new Date(); today.setHours(0,0,0,0);
+    const startDate = new Date(today); startDate.setDate(startDate.getDate() - 180);
+    // Eligible workdays: Mon-Fri always, ~15% of Saturdays, no Sundays.
+    const workdays = [];
+    for (let d = new Date(startDate); d <= today; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay();
+      if (dow === 0) continue;
+      if (dow === 6 && Math.random() > 0.15) continue;
+      workdays.push(_demoFmtYMD(d));
+    }
+    const TARGET = 150;
+    let created = 0;
+    const newShiftDates = new Set();
+    for (let i = 0; i < TARGET; i++) {
+      const day = _demoPick(workdays);
+      if (!data.shifts[day]) {
+        data.shifts[day] = {
+          date: day, assignmentType: 'OR', siteId: siteId,
+          startTime: '07:00', endTime: '17:00',
+          timeEntries: [{ start: '07:00', end: '17:00' }],
+          isHoliday: false, forcedOff: false,
+          pagerCallTypes: [], subspecCoverage: false,
+          teeCount: 0, unrestrictedCallHours: 0,
+          supervisionStart: '', supervisionEnd: '',
+          demoSeed: true
+        };
+        newShiftDates.add(day);
+      }
+      const proc = _demoPick(_DEMO_PROCEDURES);
+      const surgeon = _demoPick(_DEMO_SURGEONS);
+      const asa = _demoPick(_DEMO_ASA_CODES);
+      const existingOnDay = data.cases.filter(c => c.shiftDate === day).length;
+      const startBase = 7*60 + 30 + existingOnDay * 90;
+      const startMin = Math.min(startBase, 19*60);
+      const dur = _demoRand(proc.durMin, proc.durMax);
+      const endMin = Math.min(startMin + dur, 23*60 + 30);
+      const ps = (Math.random() < 0.55) ? 'P2' : (Math.random() < 0.75 ? 'P3' : 'P1');
+      data.cases.push({
+        id: 'demoseed_' + Date.now().toString(36) + '_' + i + '_' + Math.random().toString(36).slice(2,8),
+        caseType: 'standard',
+        procedure: proc.name,
+        asaCode: asa,
+        baseUnits: proc.baseUnits,
+        physicalStatus: ps,
+        startTime: _demoFmtHM(startMin),
+        endTime: _demoFmtHM(endMin),
+        isEmergency: Math.random() < 0.06,
+        isMedicalProc: false, medicalUnits: 0,
+        isAcutePain: false, acutePainUnits: 0,
+        isHighRiskPeds: false,
+        isORCase: true,
+        isSharedCase: false, sharedStartupPct: 50,
+        nerveBlock: 'none',
+        hasCentralLine: false, hasArterialLine: Math.random() < 0.12,
+        hasPAC: false, hasTEEAddOn: false, hasTEEExam: false,
+        hasITMorphine: false, hasThoracicEpidural: false,
+        epiduralRounds: 0, painRounds: 0,
+        isSharedLabor: false, laborInitialStart: '',
+        notes: surgeon, caseNotes: '',
+        shiftDate: day, siteId: siteId,
+        timestamp: new Date().toISOString(),
+        demoSeed: true
+      });
+      created++;
+    }
+    saveData(data);
+    if (status) {
+      status.style.color = 'var(--accent)';
+      status.textContent = 'Seeded ' + created + ' cases across ' + newShiftDates.size + ' new shifts. Shared pool was NOT written to.';
+    }
+  } catch (err) {
+    console.error('Demo seed failed:', err);
+    if (status) { status.style.color = 'var(--accent2)'; status.textContent = 'Failed: ' + (err.message || err); }
+  } finally {
+    _refreshDemoSeedCardVisibility();
+  }
+}
+
+async function deleteSeededDemoData() {
+  if (!_demoSeedGuard()) return;
+  const status = document.getElementById('demoSeedStatus');
+  const seedBtn = document.getElementById('seedDemoDataBtn');
+  const delBtn = document.getElementById('deleteSeedDataBtn');
+  const caseCount = data.cases.filter(c => c.demoSeed === true).length;
+  const shiftCount = Object.values(data.shifts).filter(s => s && s.demoSeed === true).length;
+  if (caseCount === 0 && shiftCount === 0) {
+    if (status) { status.style.color = 'var(--text-dim)'; status.textContent = 'No seeded records to delete.'; }
+    return;
+  }
+  if (!confirm('Delete ' + caseCount + ' seeded case(s) and ' + shiftCount + ' seeded shift(s)? Only records tagged demoSeed:true are affected — your own real entries are untouched.')) return;
+  if (seedBtn) seedBtn.disabled = true;
+  if (delBtn) delBtn.disabled = true;
+  if (status) { status.style.color = 'var(--text-dim)'; status.textContent = 'Deleting seeded records…'; }
+  try {
+    data.cases = data.cases.filter(c => c.demoSeed !== true);
+    for (const day of Object.keys(data.shifts)) {
+      if (data.shifts[day] && data.shifts[day].demoSeed === true) delete data.shifts[day];
+    }
+    saveData(data);
+    if (status) {
+      status.style.color = 'var(--accent)';
+      status.textContent = 'Removed ' + caseCount + ' case(s) and ' + shiftCount + ' shift(s).';
+    }
+  } catch (err) {
+    console.error('Demo cleanup failed:', err);
+    if (status) { status.style.color = 'var(--accent2)'; status.textContent = 'Failed: ' + (err.message || err); }
+  } finally {
+    _refreshDemoSeedCardVisibility();
+  }
+}
 
 // Hide monetary values toggle (demo mode)
 const hideMonetaryToggle = document.getElementById('hideMonetaryToggle');
@@ -35504,6 +35729,7 @@ function updateAccountUI(user) {
   photo.style.display = user.photoURL ? '' : 'none';
   name.textContent = user.displayName || 'User';
   email.textContent = user.email || '';
+  if (typeof _refreshDemoSeedCardVisibility === 'function') _refreshDemoSeedCardVisibility();
 }
 
 // ================================================================
