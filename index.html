@@ -6752,6 +6752,10 @@ async function adminMigLoadDiagnostics() {
       if (d.error) detailBits.push('err=' + escapeHtml(String(d.error).slice(0, 120)));
       if (d.isDelta !== undefined) detailBits.push(d.isDelta ? 'delta' : 'full');
       if (d.caller) detailBits.push('@' + escapeHtml(d.caller));
+      // Surface the logging device's cache version so stale-client false
+      // positives (e.g. count()-lag drift from a device that predates the
+      // verify-before-log fix) are diagnosable at a glance.
+      if (d.swCacheVersion) detailBits.push('v=' + escapeHtml(String(d.swCacheVersion)));
       const detail = detailBits.join(' · ');
       const dim = d.acknowledged ? 'opacity:0.5;' : '';
       const weight = d.acknowledged ? '400' : '600';
@@ -10364,7 +10368,13 @@ function logScalingDiagnostic(type, payload) {
       type: type,
       timestamp: new Date().toISOString(),
       userAgent: (navigator && navigator.userAgent) || '',
-      swCacheVersion: PHASE2_SW_VERSION_TAG
+      // Record the device's ACTUAL running cache version (resolved at page
+      // load into _adminMSViewerCacheVersion). Lets us tell at a glance
+      // whether a diagnostic came from a stale-cache client — e.g. a
+      // count()-lag false positive logged by a device that predates the
+      // verify-before-log fix. Falls back to the static tag only if the
+      // Cache API was unavailable when the version was resolved.
+      swCacheVersion: _adminMSViewerCacheVersion || PHASE2_SW_VERSION_TAG
     }, payload || {});
     db.collection('scalingDiagnostics').add(doc).catch(err => {
       console.error('logScalingDiagnostic write failed:', err);
