@@ -11843,6 +11843,9 @@ function getPagerCallType(shift) {
 
 // Build pay-breakdown rows from a pager-call summary (multi-select). Emits
 // one row per selected non-bonus type with the type's pager-pay amount,
+// a "Subspecialty Call" row for any type carrying a subspec bonus (CV /
+// liver specialty call — already baked into calcShiftTotal's subspec, so
+// it must appear here too or the Data-tab rows won't sum to the total),
 // then a separate "Force Off Bonus" row whenever the +56 bonus is in play.
 function _pagerCallBreakdownRows(summary) {
   if (!summary || !summary.types) return [];
@@ -11850,6 +11853,9 @@ function _pagerCallBreakdownRows(summary) {
   summary.types.forEach(t => {
     if ((t.pagerPts || 0) > 0) {
       out.push({ clockIn: '', clockOut: '', payCode: t.label, durationMin: 0, payRate: 0, amount: t.pagerPts, isPager: true, isSubRow: false });
+    }
+    if ((t.subspecPts || 0) > 0) {
+      out.push({ clockIn: '', clockOut: '', payCode: 'Subspecialty Call', durationMin: 0, payRate: 0, amount: t.subspecPts, isPager: true, isSubRow: false });
     }
   });
   if (summary.forceOffBonusPts > 0) {
