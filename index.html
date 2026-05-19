@@ -4319,6 +4319,19 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div id="adminSharedHealthList" style="font-size:0.8rem;margin-top:8px;"></div>
       </div>
 
+      <!-- Users by version & site status -->
+      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <div>
+            <div style="font-size:0.82rem;font-weight:600;">Users by version &amp; site status</div>
+            <div style="font-size:0.7rem;color:var(--text-dim);max-width:600px;line-height:1.5;">Every user's running build and whether they're <strong>stranded</strong> (approved to a site but still parked in OTHER &mdash; the pre-v376 approval bug). Force sign-out clears their cache so they reload fresh &amp; re-read settings &mdash; but a stranded user must be re-assigned <em>first</em> (Fix &amp; re-sync), or they'll just reload back into OTHER. Remote sign-out only reaches devices on v344+.</div>
+          </div>
+          <button class="btn btn-sm" onclick="adminLoadUserVersions()">Scan users</button>
+        </div>
+        <div id="adminUserVersionsStatus" style="font-size:0.78rem;margin-top:4px;"></div>
+        <div id="adminUserVersionsList" style="font-size:0.78rem;margin-top:8px;"></div>
+      </div>
+
       <!-- New-user Waiting Room (quarantine approvals) -->
       <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
@@ -6397,6 +6410,184 @@ async function adminMigRunComparison() {
   } catch (err) {
     statusEl.style.color = 'var(--accent2)';
     statusEl.textContent = 'Failed: ' + (err.message || err);
+  }
+}
+
+// Owner-only "Users by version & site status" panel. Aggregates the
+// per-user runningVersion (stamped by the auth listener) with a per-user
+// settings.siteId read so the owner can spot (a) users stuck on stale
+// cached builds and (b) "stranded" users — approved to a site but still
+// parked in OTHER, the pre-v376 approval bug. Read-only except the
+// explicit force-sign-out / fix actions; all app-owner gated.
+let _adminUserVersions = []; // last scan: [{uid,email,name,ver,verNum,behind,approvedSiteId,settingsSite,stranded}]
+
+function _adminParseVerNum(s) {
+  const m = /v(\d+)$/.exec(s || '');
+  return m ? parseInt(m[1], 10) : null;
+}
+
+async function adminLoadUserVersions() {
+  const statusEl = document.getElementById('adminUserVersionsStatus');
+  const listEl = document.getElementById('adminUserVersionsList');
+  const setStatus = (msg, color) => {
+    if (statusEl) { statusEl.style.color = color || 'var(--text-dim)'; statusEl.textContent = msg; }
+  };
+  if (!isAppOwner()) { setStatus('App owner only.', 'var(--accent2)'); if (listEl) listEl.innerHTML = ''; return; }
+  setStatus('Scanning…');
+  if (listEl) listEl.innerHTML = '';
+  try {
+    let viewerNum = _adminParseVerNum(_adminMSViewerCacheVersion || '');
+    if (viewerNum === null) {
+      try { viewerNum = _adminParseVerNum(await getCurrentCacheVersion()); } catch (e) {}
+    }
+    const profSnap = await db.collection('userProfiles').get();
+    const users = [];
+    profSnap.forEach(doc => {
+      const d = doc.data() || {};
+      if (d.deletedAt) return;
+      users.push({
+        uid: doc.id,
+        email: d.email || '', name: d.displayName || '',
+        ver: d.runningVersion || '', verAt: d.runningVersionAt || '',
+        approvedSiteId: d.approvedSiteId || ''
+      });
+    });
+    // Per-user settings.siteId for the stranded check (owner can read all).
+    await Promise.all(users.map(async u => {
+      try {
+        const s = await db.collection('users').doc(u.uid).collection('data').doc('settings').get();
+        u.settingsSite = (s.exists && s.data() && s.data().siteId) || '';
+      } catch (e) { u.settingsSite = ''; }
+      u.verNum = _adminParseVerNum(u.ver);
+      u.behind = (viewerNum !== null && u.verNum !== null) ? (viewerNum - u.verNum) : null;
+      u.stranded = !!(u.approvedSiteId && u.settingsSite === QUARANTINE_SITE_ID);
+      u.mismatch = !!(u.approvedSiteId && u.settingsSite &&
+        u.settingsSite !== QUARANTINE_SITE_ID && u.settingsSite !== u.approvedSiteId);
+    }));
+    users.sort((a, b) => {
+      if (a.stranded !== b.stranded) return a.stranded ? -1 : 1;
+      const ab = a.behind === null ? -1 : a.behind, bb = b.behind === null ? -1 : b.behind;
+      return bb - ab;
+    });
+    _adminUserVersions = users;
+
+    const total = users.length;
+    const strandedN = users.filter(u => u.stranded).length;
+    const behindN = users.filter(u => u.behind !== null && u.behind > 0).length;
+    const kickableN = users.filter(u => u.verNum !== null && u.verNum >= 344 && u.behind > 0).length;
+    const unknownN = users.filter(u => u.verNum === null).length;
+    setStatus(total + ' users · ' + strandedN + ' stranded · ' + behindN +
+      ' behind current · ' + unknownN + ' version unknown',
+      (strandedN || behindN) ? 'var(--accent2)' : 'var(--accent)');
+
+    let html = '';
+    if (kickableN > 0) {
+      html += '<div style="margin-bottom:8px;">'
+        + '<button class="btn btn-sm" style="background:var(--accent2);color:#1e293b;" '
+        + 'onclick="adminBulkForceSignOutStale()">Force sign-out all ' + kickableN
+        + ' behind &amp; on v344+</button>'
+        + '<span style="font-size:0.7rem;color:var(--text-dim);margin-left:8px;">'
+        + 'Non-destructive — they re-auth onto the latest build. Stranded users still need Fix &amp; re-sync first.</span></div>';
+    }
+    html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">'
+      + '<table style="width:100%;border-collapse:collapse;font-size:0.72rem;min-width:560px;">'
+      + '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);">'
+      + '<th style="padding:4px 6px;">User</th><th style="padding:4px 6px;">Version</th>'
+      + '<th style="padding:4px 6px;">Site status</th><th style="padding:4px 6px;">Actions</th>'
+      + '</tr></thead><tbody>';
+    users.forEach(u => {
+      const who = escapeHtml(u.email || u.name || u.uid);
+      let vCell;
+      if (u.verNum === null) vCell = '<span style="color:var(--text-dim);">unknown</span>';
+      else if (u.behind !== null && u.behind > 10)
+        vCell = '<span style="color:var(--accent2);font-weight:700;">' + escapeHtml(u.ver) + ' (' + u.behind + ' behind)</span>';
+      else if (u.behind > 0)
+        vCell = '<span style="color:var(--accent2);">' + escapeHtml(u.ver) + ' (' + u.behind + ' behind)</span>';
+      else vCell = '<span style="color:var(--accent);">' + escapeHtml(u.ver) + ' &check;</span>';
+      let site;
+      if (u.stranded) site = '<span style="color:var(--accent2);font-weight:700;">STRANDED — approved ' + escapeHtml(u.approvedSiteId) + ', in OTHER</span>';
+      else if (u.mismatch) site = '<span style="color:var(--accent2);">mismatch — approved ' + escapeHtml(u.approvedSiteId) + ', in ' + escapeHtml(u.settingsSite) + '</span>';
+      else site = '<span style="color:var(--text-dim);">' + escapeHtml(u.settingsSite || '?') + '</span>';
+      let actions = '';
+      const canKick = u.verNum !== null && u.verNum >= 344;
+      if (u.stranded) {
+        actions += '<button class="btn btn-sm" style="background:var(--accent2);color:#1e293b;padding:2px 8px;" '
+          + 'onclick="adminFixStrandedUser(\'' + u.uid + '\')">Fix &amp; re-sync</button> ';
+      }
+      actions += '<button class="btn btn-sm" style="padding:2px 8px;" '
+        + (canKick ? '' : 'disabled title="Device too old (<v344) — must clear manually" ')
+        + 'onclick="adminForceSignOutOne(\'' + u.uid + '\')">Force sign-out</button>';
+      html += '<tr style="border-bottom:1px solid var(--border);">'
+        + '<td style="padding:4px 6px;">' + who + '</td>'
+        + '<td style="padding:4px 6px;">' + vCell + '</td>'
+        + '<td style="padding:4px 6px;">' + site + '</td>'
+        + '<td style="padding:4px 6px;white-space:nowrap;">' + actions + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    if (listEl) listEl.innerHTML = html;
+  } catch (err) {
+    setStatus('Scan failed: ' + (err && err.message || err), 'var(--accent2)');
+    console.error('adminLoadUserVersions error:', err);
+  }
+}
+
+async function adminForceSignOutOne(uid) {
+  if (!isAppOwner() || !uid) return;
+  const u = _adminUserVersions.find(x => x.uid === uid);
+  if (!confirm('Force sign-out ' + (u && (u.email || u.name) || uid) + '?\n\n'
+    + 'On their next app open they are signed out, the service worker is '
+    + 'unregistered, and caches are cleared so they reload on the latest '
+    + 'build. No data is lost — they sign back in.')) return;
+  try {
+    await db.collection('userProfiles').doc(uid)
+      .set({ forceSignOutAt: new Date().toISOString() }, { merge: true });
+    showToast('Force sign-out armed');
+    adminLoadUserVersions();
+  } catch (err) {
+    showToast('Failed: ' + (err && err.message || err));
+    console.error('adminForceSignOutOne error:', err);
+  }
+}
+
+async function adminBulkForceSignOutStale() {
+  if (!isAppOwner()) return;
+  const targets = _adminUserVersions.filter(u => u.verNum !== null && u.verNum >= 344 && u.behind > 0);
+  if (targets.length === 0) { showToast('Nobody eligible'); return; }
+  if (!confirm('Force sign-out ' + targets.length + ' user(s) behind the current '
+    + 'build (v344+ only)?\n\nEach is signed out + cache-cleared on their next '
+    + 'app open and reloads on the latest build. No data is lost. Stranded '
+    + 'users are NOT fixed by this — re-assign them first.')) return;
+  try {
+    const ts = new Date().toISOString();
+    const batch = db.batch();
+    targets.forEach(u => batch.set(
+      db.collection('userProfiles').doc(u.uid), { forceSignOutAt: ts }, { merge: true }));
+    await batch.commit();
+    showToast('Armed force sign-out for ' + targets.length + ' user(s)');
+    adminLoadUserVersions();
+  } catch (err) {
+    showToast('Bulk failed: ' + (err && err.message || err));
+    console.error('adminBulkForceSignOutStale error:', err);
+  }
+}
+
+async function adminFixStrandedUser(uid) {
+  if (!isAppOwner() || !uid) return;
+  const u = _adminUserVersions.find(x => x.uid === uid);
+  if (!u || !u.approvedSiteId) { showToast('No approvedSiteId on this user'); return; }
+  if (!confirm('Re-assign ' + (u.email || u.name || uid) + ' from OTHER into their '
+    + 'approved site "' + u.approvedSiteId + '", migrate any OTHER-tagged data, '
+    + 'and arm a force sign-out so they reload with corrected settings?\n\n'
+    + 'Idempotent — safe if their data was already moved.')) return;
+  try {
+    await adminSetUserSite(uid, u.approvedSiteId, true);
+    await db.collection('userProfiles').doc(uid)
+      .set({ forceSignOutAt: new Date().toISOString() }, { merge: true });
+    showToast('Fixed → ' + u.approvedSiteId + ' + sign-out armed');
+    adminLoadUserVersions();
+  } catch (err) {
+    showToast('Fix failed: ' + (err && err.message || err));
+    console.error('adminFixStrandedUser error:', err);
   }
 }
 
