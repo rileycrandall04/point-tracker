@@ -203,6 +203,20 @@ header h1 { font-size: 1.1rem; font-weight: 700; color: var(--primary); min-widt
 .card-collapse-header .arrow.open { transform: rotate(180deg); }
 .card-collapse-body { overflow: hidden; transition: max-height 0.3s ease; }
 
+/* ===== ADMIN COLLAPSIBLES ===== */
+.adm-fold { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; background: var(--surface2); }
+.adm-fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; min-height: 44px; font-weight: 600; color: var(--text); -webkit-user-select: none; user-select: none; font-size: 0.85rem; }
+.adm-fold > summary::-webkit-details-marker { display: none; }
+.adm-fold > summary::after { content: '\25BC'; font-size: 0.7rem; color: var(--text-dim); transition: transform 0.2s; flex-shrink: 0; }
+.adm-fold[open] > summary::after { transform: rotate(180deg); }
+.adm-fold > summary h2, .adm-fold > summary h3 { margin: 0; }
+.adm-fold-body { padding: 10px 12px 12px; }
+.adm-card-fold { border: none; background: transparent; margin: 0; }
+.adm-card-fold > summary { padding: 0; }
+.adm-card-fold > .adm-fold-body { padding: 14px 0 0; }
+.adm-site-compact { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid rgba(71,85,105,0.15); font-size: 0.78rem; }
+.adm-site-compact:last-child { border-bottom: none; }
+
 /* ===== FORMS ===== */
 .form-group { margin-bottom: 12px; }
 
@@ -4050,15 +4064,21 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
   <!-- Privileges list — populated by renderAdminPage() -->
   <div class="card" id="adminPrivilegesCard" style="margin-top:12px;">
-    <h3 style="margin:0 0 6px 0;font-size:0.95rem;">Your privileges</h3>
-    <p style="font-size:0.75rem;color:var(--text-dim);margin:0 0 10px 0;">
-      What you can do based on your role &mdash; tap any link to jump to the page where you exercise that privilege.
-    </p>
-    <ul id="adminPrivilegesList" style="margin:0;padding-left:18px;font-size:0.8rem;line-height:1.7;color:var(--text);"></ul>
+    <details class="adm-fold adm-card-fold">
+      <summary><h3 style="margin:0;font-size:0.95rem;">Your privileges</h3></summary>
+      <div class="adm-fold-body">
+        <p style="font-size:0.75rem;color:var(--text-dim);margin:0 0 10px 0;">
+          What you can do based on your role &mdash; tap any link to jump to the page where you exercise that privilege.
+        </p>
+        <ul id="adminPrivilegesList" style="margin:0;padding-left:18px;font-size:0.8rem;line-height:1.7;color:var(--text);"></ul>
+      </div>
+    </details>
   </div>
   <!-- Claude AI Settings (admin only) -->
   <div class="card hidden" id="claudeAISettingsCard" style="margin-top:12px;">
-    <h2>AI Analysis (Claude API)</h2>
+    <details class="adm-fold adm-card-fold">
+      <summary><h2 style="margin:0;">AI Analysis (Claude API)</h2></summary>
+      <div class="adm-fold-body">
     <div style="margin-bottom:12px;">
       <label for="settingsClaudeKey" style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:6px;">Anthropic API Key</label>
       <input type="password" id="settingsClaudeKey" placeholder="sk-ant-..."
@@ -4078,11 +4098,15 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <li>Add credits to your account under <strong>Billing</strong></li>
       </ol>
     </details>
+      </div>
+    </details>
   </div>
 
   <!-- Admin Multi-Site Management (admin only) -->
   <div class="card hidden" id="adminMultiSiteCard" style="margin-top:12px;">
-    <h2>Multi-Site Admin</h2>
+    <details class="adm-fold adm-card-fold">
+      <summary><h2 style="margin:0;">Multi-Site Admin</h2></summary>
+      <div class="adm-fold-body">
     <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0;flex-wrap:wrap;">
       <button class="btn btn-sm" id="adminMSTabUsers" onclick="adminMSSetTab('users')"
         style="border-radius:6px 6px 0 0;background:var(--primary);color:#fff;">Users</button>
@@ -4165,40 +4189,46 @@ body.hide-monetary .monetary-hide { display: none !important; }
       </details>
 
       <!-- Shift type list -->
-      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:10px;">
+      <details class="adm-fold">
+        <summary>Site shift types</summary>
+        <div class="adm-fold-body">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
-          <strong style="font-size:0.85rem;">Site shift types</strong>
+          <p style="font-size:0.72rem;color:var(--text-dim);margin:0;">
+            Override entries for this site. Inherited rules show their UVH base in italics.
+          </p>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="btn btn-sm hidden" id="adminRulesDeleteSelectedBtn" onclick="adminRulesDeleteSelected()" style="background:var(--surface2);color:var(--accent2);">Delete selected</button>
             <button class="btn btn-primary btn-sm" onclick="adminRulesOpenModal(null)">+ Add shift type</button>
           </div>
         </div>
-        <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px 0;">
-          Override entries for this site. Inherited rules show their UVH base in italics.
-        </p>
         <div id="adminRulesTypeList" style="font-size:0.84rem;"></div>
-      </div>
+        </div>
+      </details>
 
       <!-- Visible shift types -->
-      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:10px;">
-        <div style="margin-bottom:6px;"><strong style="font-size:0.85rem;">Shifts visible in dropdowns</strong></div>
+      <details class="adm-fold">
+        <summary>Shifts visible in dropdowns</summary>
+        <div class="adm-fold-body">
         <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px 0;">
           Controls which shift types this site's users see when adding a shift. Leave all unchecked to fall back to every UVH default.
         </p>
         <div id="adminRulesVisibleList"></div>
-      </div>
+        </div>
+      </details>
 
       <!-- otherMigrationMap (app owner only) -->
-      <div id="adminRulesMigrationCard" class="hidden" style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:10px;">
+      <details id="adminRulesMigrationCard" class="adm-fold hidden">
+        <summary>Migration map (legacy &rarr; site shift)</summary>
+        <div class="adm-fold-body">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
-          <strong style="font-size:0.85rem;">Migration map (legacy &rarr; site shift)</strong>
+          <p style="font-size:0.72rem;color:var(--text-dim);margin:0;">
+            When a user moves to this site, shifts tagged with the legacy key are remapped to the chosen site shift.
+          </p>
           <button class="btn btn-sm" onclick="adminRulesAddMigrationEntry()" style="background:var(--surface);color:var(--text);">+ Add row</button>
         </div>
-        <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px 0;">
-          When a user moves to this site, shifts tagged with the legacy key are remapped to the chosen site shift.
-        </p>
         <div id="adminRulesMigrationList" style="font-size:0.82rem;"></div>
-      </div>
+        </div>
+      </details>
 
       <div style="display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap;">
         <button class="btn btn-sm" onclick="adminRulesDiscard()" style="background:var(--surface);color:var(--text-dim);">Discard</button>
@@ -4239,8 +4269,9 @@ body.hide-monetary .monetary-hide { display: none !important; }
       </p>
 
       <!-- Global rollout flag -->
-      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:14px;">
-        <div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Subcollection reads rollout</div>
+      <details class="adm-fold">
+        <summary>Subcollection reads rollout</summary>
+        <div class="adm-fold-body">
         <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;line-height:1.5;">
           <strong>off</strong>: everyone reads from the blob (safest). <strong>opted-in-only</strong>: only users with the per-profile opt-in read from subcollection — use this to canary one user. <strong>on</strong>: everyone reads from subcollection, except users with the per-user disable flag.
         </div>
@@ -4254,48 +4285,50 @@ body.hide-monetary .monetary-hide { display: none !important; }
           <button class="btn btn-primary btn-sm" onclick="adminMigSaveGlobalFlag()">Save</button>
         </div>
         <div id="adminMigGlobalFlagStatus" style="font-size:0.78rem;margin-top:6px;"></div>
-      </div>
+        </div>
+      </details>
 
       <!-- Diagnostic comparison -->
-      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-bottom:14px;">
+      <details class="adm-fold">
+        <summary>Run comparison</summary>
+        <div class="adm-fold-body">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-          <div>
-            <div style="font-size:0.82rem;font-weight:600;">Run comparison</div>
-            <div style="font-size:0.7rem;color:var(--text-dim);">Per user: blob case count vs subcollection count. Spots drift before flipping the flag.</div>
-          </div>
+          <div style="font-size:0.7rem;color:var(--text-dim);">Per user: blob case count vs subcollection count. Spots drift before flipping the flag.</div>
           <button class="btn btn-primary btn-sm" onclick="adminMigRunComparison()">Run comparison</button>
         </div>
         <div id="adminMigComparisonStatus" style="font-size:0.78rem;margin-top:4px;"></div>
         <div id="adminMigComparisonResult" style="font-size:0.78rem;margin-top:8px;"></div>
-      </div>
+        </div>
+      </details>
 
       <!-- Recent fallbacks -->
-      <div style="background:var(--surface2);padding:10px;border-radius:8px;">
+      <details class="adm-fold">
+        <summary>Recent fallbacks</summary>
+        <div class="adm-fold-body">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-          <div>
-            <div style="font-size:0.82rem;font-weight:600;">Recent fallbacks</div>
-            <div style="font-size:0.7rem;color:var(--text-dim);">Entries from scalingDiagnostics. Anything older than 30 days is auto-pruned when you load this tab.</div>
-          </div>
+          <div style="font-size:0.7rem;color:var(--text-dim);">Entries from scalingDiagnostics. Anything older than 30 days is auto-pruned when you load this tab.</div>
           <button class="btn btn-sm" onclick="adminMigLoadDiagnostics()">Refresh</button>
         </div>
         <div id="adminMigDiagnosticsList" style="font-size:0.78rem;margin-top:6px;"></div>
-      </div>
+        </div>
+      </details>
 
       <!-- One-time: stamp approvedSiteId on all existing users (quarantine prereq) -->
-      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
+      <details class="adm-fold">
+        <summary>Approve all existing users (one-time)</summary>
+        <div class="adm-fold-body">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-          <div>
-            <div style="font-size:0.82rem;font-weight:600;">Approve all existing users (one-time)</div>
-            <div style="font-size:0.7rem;color:var(--text-dim);max-width:560px;line-height:1.5;">Stamps <code>approvedSiteId</code> on every existing, non-deleted user from their current site, so they keep full access when the new-user quarantine ships. Idempotent &mdash; safe to run more than once; only fills users that are missing it.</div>
-          </div>
+          <div style="font-size:0.7rem;color:var(--text-dim);max-width:560px;line-height:1.5;">Stamps <code>approvedSiteId</code> on every existing, non-deleted user from their current site, so they keep full access when the new-user quarantine ships. Idempotent &mdash; safe to run more than once; only fills users that are missing it.</div>
           <button class="btn btn-primary btn-sm" onclick="adminBackfillApprovedSites()">Run backfill</button>
         </div>
         <div id="adminBackfillApprovedStatus" style="font-size:0.78rem;margin-top:6px;"></div>
-      </div>
+        </div>
+      </details>
 
       <!-- New-user quarantine kill switch -->
-      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
-        <div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">New-user quarantine</div>
+      <details class="adm-fold">
+        <summary>New-user quarantine</summary>
+        <div class="adm-fold-body">
         <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:8px;max-width:560px;line-height:1.5;">
           When ON, every <strong>new</strong> sign-up is parked in OTHER with no community access until you approve them in the Waiting Room below. Existing users are unaffected. Reversible anytime &mdash; takes effect on each user's next page load.
         </div>
@@ -4304,46 +4337,47 @@ body.hide-monetary .monetary-hide { display: none !important; }
           Enable new-user quarantine
         </label>
         <div id="adminQuarantineStatus" style="font-size:0.78rem;margin-top:6px;"></div>
-      </div>
+        </div>
+      </details>
 
       <!-- Shared-data health dashboard -->
-      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
+      <details class="adm-fold">
+        <summary>Shared-data health</summary>
+        <div class="adm-fold-body">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-          <div>
-            <div style="font-size:0.82rem;font-weight:600;">Shared-data health</div>
-            <div style="font-size:0.7rem;color:var(--text-dim);max-width:560px;line-height:1.5;">Are users actually getting shared data? Combines the authoritative profile audit (who lacks <code>approvedSiteId</code>) with failure beacons from the last 24h. &ldquo;Healthy&rdquo; is <em>inferred</em> from the absence of a failure beacon &mdash; not positively confirmed.</div>
-          </div>
+          <div style="font-size:0.7rem;color:var(--text-dim);max-width:560px;line-height:1.5;">Are users actually getting shared data? Combines the authoritative profile audit (who lacks <code>approvedSiteId</code>) with failure beacons from the last 24h. &ldquo;Healthy&rdquo; is <em>inferred</em> from the absence of a failure beacon &mdash; not positively confirmed.</div>
           <button class="btn btn-sm" onclick="adminLoadSharedHealth()">Refresh</button>
         </div>
         <div id="adminSharedHealthStatus" style="font-size:0.78rem;margin-top:4px;"></div>
         <div id="adminSharedHealthList" style="font-size:0.8rem;margin-top:8px;"></div>
-      </div>
+        </div>
+      </details>
 
       <!-- Users by version & site status -->
-      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
+      <details class="adm-fold">
+        <summary>Users by version &amp; site status</summary>
+        <div class="adm-fold-body">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-          <div>
-            <div style="font-size:0.82rem;font-weight:600;">Users by version &amp; site status</div>
-            <div style="font-size:0.7rem;color:var(--text-dim);max-width:600px;line-height:1.5;">Every user's running build and whether they're <strong>stranded</strong> (approved to a site but still parked in OTHER &mdash; the pre-v376 approval bug). Force sign-out clears their cache so they reload fresh &amp; re-read settings &mdash; but a stranded user must be re-assigned <em>first</em> (Fix &amp; re-sync), or they'll just reload back into OTHER. Remote sign-out only reaches devices on v344+.</div>
-          </div>
+          <div style="font-size:0.7rem;color:var(--text-dim);max-width:600px;line-height:1.5;">Every user's running build and whether they're <strong>stranded</strong> (approved to a site but still parked in OTHER &mdash; the pre-v376 approval bug). Force sign-out clears their cache so they reload fresh &amp; re-read settings &mdash; but a stranded user must be re-assigned <em>first</em> (Fix &amp; re-sync), or they'll just reload back into OTHER. Remote sign-out only reaches devices on v344+.</div>
           <button class="btn btn-sm" onclick="adminLoadUserVersions()">Scan users</button>
         </div>
         <div id="adminUserVersionsStatus" style="font-size:0.78rem;margin-top:4px;"></div>
         <div id="adminUserVersionsList" style="font-size:0.78rem;margin-top:8px;"></div>
-      </div>
+        </div>
+      </details>
 
       <!-- New-user Waiting Room (quarantine approvals) -->
-      <div style="background:var(--surface2);padding:10px;border-radius:8px;margin-top:14px;">
+      <details class="adm-fold">
+        <summary>Waiting Room <span id="adminWaitingCount" style="color:var(--accent2);font-weight:700;"></span></summary>
+        <div class="adm-fold-body">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-          <div>
-            <div style="font-size:0.82rem;font-weight:600;">Waiting Room <span id="adminWaitingCount" style="color:var(--accent2);font-weight:700;"></span></div>
-            <div style="font-size:0.7rem;color:var(--text-dim);max-width:560px;line-height:1.5;">New users awaiting site assignment. Approve to move them (and any data they logged in OTHER) into the site you pick; reject to block their email.</div>
-          </div>
+          <div style="font-size:0.7rem;color:var(--text-dim);max-width:560px;line-height:1.5;">New users awaiting site assignment. Approve to move them (and any data they logged in OTHER) into the site you pick; reject to block their email.</div>
           <button class="btn btn-sm" onclick="adminLoadWaitingRoom()">Refresh</button>
         </div>
         <div id="adminWaitingRoomStatus" style="font-size:0.78rem;margin-top:4px;"></div>
         <div id="adminWaitingRoomList" style="font-size:0.8rem;margin-top:8px;"></div>
-      </div>
+        </div>
+      </details>
     </div>
 
     <!-- Scaling Test tab (scaling audit #2 validation harness) -->
@@ -4386,11 +4420,15 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div id="adminScalingResults" style="font-size:0.78rem;">Run a scenario to see results.</div>
       </div>
     </div>
+      </div>
+    </details>
   </div>
 
   <!-- Admin User Lookup (admin only) -->
   <div class="card hidden" id="adminUserLookupCard" style="margin-top:12px;">
-    <h2>User Data Lookup</h2>
+    <details class="adm-fold adm-card-fold">
+      <summary><h2 style="margin:0;">User Data Lookup</h2></summary>
+      <div class="adm-fold-body">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
       <input type="email" id="adminLookupEmail" placeholder="user@gmail.com"
         style="flex:1;min-width:200px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem;">
@@ -4406,6 +4444,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <span style="font-size:0.7rem;color:var(--text-dim);">(applies to next Lookup; leave blank to skip)</span>
     </div>
     <div id="adminLookupResults" style="font-size:0.82rem;"></div>
+      </div>
+    </details>
   </div>
 
   <!-- Procedure Mappings (app owner only) — single global config doc shared
@@ -4444,11 +4484,15 @@ body.hide-monetary .monetary-hide { display: none !important; }
        back without touching code. No editor; tip changes ship via code
        updates. -->
   <div class="card hidden" id="adminTipViewerCard" style="margin-top:12px;">
-    <h2>Daily Tips</h2>
+    <details class="adm-fold adm-card-fold">
+      <summary><h2 style="margin:0;">Daily Tips</h2></summary>
+      <div class="adm-fold-body">
     <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;line-height:1.5;">
       Every tip in the catalog. Read-only here &mdash; share suggested wording back through the dev workflow and they'll be deployed in code.
     </p>
     <div id="adminTipViewerList" style="font-size:0.85rem;"></div>
+      </div>
+    </details>
   </div>
 </div>
 
@@ -7433,8 +7477,11 @@ async function adminMSListUsers() {
       for (const sid of orderedSiteIds) {
         const sname = (sitesCache[sid] && sitesCache[sid].name) || sid;
         const bucket = buckets[sid];
-        html += '<div style="margin:10px 0 4px 0;font-size:0.85rem;font-weight:600;color:var(--text);">' + escapeHtml(sname) + ' <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400;">(' + bucket.length + ')</span></div>';
+        html += '<details class="adm-fold"><summary>' + escapeHtml(sname)
+          + ' <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400;">('
+          + bucket.length + ')</span></summary><div class="adm-fold-body">';
         for (const r of bucket) html += _adminMSRenderUserRow(r);
+        html += '</div></details>';
       }
       listOut.innerHTML = html;
       return;
@@ -7679,13 +7726,14 @@ async function adminMSLoadActivity() {
         const bucket = buckets[sid];
         const bcases = bucket.reduce((a, r) => a + r.total, 0);
         const bactive = bucket.filter(r => r.recent > 0).length;
-        html += '<div style="margin:10px 0 4px 0;font-size:0.85rem;font-weight:600;color:var(--text);">'
+        html += '<details class="adm-fold"><summary>'
           + escapeHtml(sname)
           + ' <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400;">('
           + bucket.length + ' user' + (bucket.length !== 1 ? 's' : '')
           + ' • ' + bcases + ' case' + (bcases !== 1 ? 's' : '')
-          + ' • ' + bactive + ' active)</span></div>';
+          + ' • ' + bactive + ' active)</span></summary><div class="adm-fold-body">';
         for (const r of bucket) html += _adminMSRenderActivityRow(r);
+        html += '</div></details>';
       }
     } else {
       for (const r of visible) html += _adminMSRenderActivityRow(r);
@@ -8208,21 +8256,24 @@ async function renderAdminMSSitesList() {
     snap.forEach(doc => rows.push({ id: doc.id, data: doc.data() || {} }));
     rows.sort((a, b) => a.id.localeCompare(b.id));
     let html = '';
+    html += '<div style="background:var(--surface);border-radius:8px;overflow:hidden;">';
     for (const row of rows) {
       const name = row.data.name || row.id;
       const unlocked = row.data.unlocked === true;
-      html += '<div style="background:var(--surface);padding:10px 12px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">';
-      html += '<div><strong>' + escapeHtml(name) + '</strong>';
-      html += ' <span style="font-size:0.72rem;color:var(--text-dim);">(' + row.id + ')</span>';
-      html += '<br><span style="font-size:0.75rem;color:' + (unlocked ? 'var(--accent)' : 'var(--text-dim)') + ';">' + (unlocked ? 'Unlocked for new-user signups' : 'Locked (admin invite only)') + '</span>';
-      html += '</div>';
+      html += '<div class="adm-site-compact">';
+      html += '<div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+        + '<strong>' + escapeHtml(name) + '</strong>'
+        + ' <span style="color:var(--text-dim);">(' + escapeHtml(row.id) + ')</span>'
+        + ' <span style="color:' + (unlocked ? 'var(--accent)' : 'var(--text-dim)') + ';">'
+        + (unlocked ? '• unlocked' : '• locked') + '</span></div>';
       // Lock/unlock is app-owner only.
       if (isAppOwner() || isLegacyAdmin()) {
-        html += '<button class="btn btn-sm" onclick="adminMSToggleSiteUnlock(\'' + row.id + '\', ' + (!unlocked) + ')" style="background:' + (unlocked ? 'var(--surface2)' : 'var(--primary)') + ';color:' + (unlocked ? 'var(--text)' : '#fff') + ';">';
+        html += '<button class="btn btn-sm" onclick="adminMSToggleSiteUnlock(\'' + row.id + '\', ' + (!unlocked) + ')" style="flex-shrink:0;padding:2px 8px;font-size:0.72rem;background:' + (unlocked ? 'var(--surface2)' : 'var(--primary)') + ';color:' + (unlocked ? 'var(--text)' : '#fff') + ';">';
         html += (unlocked ? 'Lock' : 'Unlock') + '</button>';
       }
       html += '</div>';
     }
+    html += '</div>';
     if (rows.length === 0) html = '<p style="color:var(--text-dim);">No sites configured.</p>';
     out.innerHTML = html;
   } catch (err) {
@@ -14806,6 +14857,13 @@ function renderAdminPage() {
   }
 
   renderAdminPrivilegesList(isOwner, isSAdmin);
+
+  // Every admin section starts collapsed on each visit to the page,
+  // regardless of how it was left last time.
+  const adminPage = document.getElementById('page-admin');
+  if (adminPage) {
+    adminPage.querySelectorAll('details').forEach(d => { d.open = false; });
+  }
 }
 
 // ================================================================
@@ -17690,7 +17748,12 @@ function renderAdminPrivilegesList(isOwner, isSAdmin) {
 
 function _adminPrivScrollTo(cardId) {
   const el = document.getElementById(cardId);
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!el) return;
+  // Admin sections default collapsed — expand the target so the jump
+  // actually lands on usable controls instead of a closed header.
+  if (el.tagName === 'DETAILS') el.open = true;
+  el.querySelectorAll('details').forEach(d => { d.open = true; });
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function _adminPrivOpenCalendarMappings() {
