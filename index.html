@@ -2889,9 +2889,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div id="dailyCalendarContainer" style="margin-top:12px;"></div>
     <div id="dailyMonthSummary" style="margin-top:12px;font-size:0.85rem;color:var(--text-dim);text-align:center;"></div>
 
-    <!-- Calendar Sync (collapsible) + Edit Assignments on the same row -->
-    <div style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;">
-      <div class="card" id="calendarSyncCard" style="margin:0;flex:1;min-width:0;padding:10px 14px;">
+    <!-- Edit Assignments + Calendar Sync (collapsible) stacked, full-width -->
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
+      <button class="edit-assignments-btn" id="editAssignmentsBtn" onclick="toggleAssignmentEditor()" style="margin:0;display:block;width:100%;">&#9998; Edit Assignments</button>
+      <div class="card" id="calendarSyncCard" style="margin:0;padding:10px 14px;">
         <details id="calendarSyncDetails">
           <summary style="cursor:pointer;font-weight:600;font-size:0.9rem;color:var(--text);list-style:revert;">Calendar Sync</summary>
           <p style="font-size:0.8rem;color:var(--text-dim);margin:10px 0;">
@@ -2923,7 +2924,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
           </details>
         </details>
       </div>
-      <button class="edit-assignments-btn" id="editAssignmentsBtn" onclick="toggleAssignmentEditor()" style="margin:0;flex-shrink:0;">&#9998; Edit Assignments</button>
     </div>
     <div id="assignEditorContainer" class="hidden"></div>
 
