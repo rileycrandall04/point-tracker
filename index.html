@@ -23156,26 +23156,18 @@ function _renderAnnualBreakdownRow(row, monthNames) {
   const workLabel = monthNames[row.wMonth] + ' ' + row.wYear;
   let detailHtml = '';
   if (c.mode === 'actual') {
-    let formula = _fmtMoney(c.compTotal) + ' compTotal' +
-      ' &nbsp;+&nbsp; ' + _fmtMoney(c.posStip) + ' positive stipends';
-    if ((c.ret || 0) > 0) formula += ' &nbsp;+&nbsp; ' + _fmtMoney(c.ret) + ' retirement';
-    formula += ' &nbsp;=&nbsp; <strong>' + _fmtMoney(row.amt) + '</strong>';
-    let note = 'From comp summary report entered for ' + workLabel + '.';
-    if ((c.ret || 0) === 0) note += ' Retirement not added — no value entered for this month yet (Step 3 of Paycheck Entry).';
+    const formula = _fmtMoney(c.compTotal) + ' compTotal' +
+      ' &nbsp;+&nbsp; ' + _fmtMoney(c.posStip) + ' positive stipends' +
+      ' &nbsp;=&nbsp; <strong>' + _fmtMoney(row.amt) + '</strong>';
+    const note = 'From comp summary report entered for ' + workLabel + '. Retirement is a post-gross deduction and is not included.';
     detailHtml = '<div class="abr-formula">' + formula + '</div>' +
       '<div class="abr-source">' + note + '</div>';
   } else if (c.mode === 'estimate') {
     const pvStr = (c.pv || 0).toFixed(2);
-    let formula = (c.pts || 0).toFixed(1) + ' pts &times; $' + pvStr + '/pt = ' + _fmtMoney(c.prodEst) +
-      ' &nbsp;+&nbsp; ' + _fmtMoney(c.posStip) + ' positive stipends';
-    if ((c.ret || 0) > 0) formula += ' &nbsp;+&nbsp; ' + _fmtMoney(c.ret) + ' retirement';
-    formula += ' &nbsp;=&nbsp; <strong>' + _fmtMoney(row.amt) + '</strong>';
-    let note = 'Estimate from tracked ' + workLabel + ' points.';
-    if ((c.ret || 0) === 0) {
-      note += ' Retirement not added — no value entered for this month yet (Step 3 of Paycheck Entry).';
-    } else {
-      note += ' Retirement added back to correct for the deduction taken in the running paycheck calc.';
-    }
+    const formula = (c.pts || 0).toFixed(1) + ' pts &times; $' + pvStr + '/pt = ' + _fmtMoney(c.prodEst) +
+      ' &nbsp;+&nbsp; ' + _fmtMoney(c.posStip) + ' positive stipends' +
+      ' &nbsp;=&nbsp; <strong>' + _fmtMoney(row.amt) + '</strong>';
+    const note = 'Estimate from tracked ' + workLabel + ' points. Retirement is a post-gross deduction and is not included.';
     detailHtml = '<div class="abr-formula">' + formula + '</div>' +
       '<div class="abr-source">' + note + '</div>';
   } else if (c.mode === 'avg') {
@@ -27224,7 +27216,7 @@ function renderStabilization() {
 // PROJECTED ANNUAL INCOME
 // ================================================================
 
-// "Gross" for a given work month = production/comp total + positive stipends
+// "Gross" for a given work month = production/comp total + positive stipends.
 // + retirement contributions. Negative stipend rows are ignored entirely:
 // they're a mix of practice overhead (MWA Overhead, malpractice, chargebacks,
 // surgery-center investments) and personal deductions (dental, vision), and
@@ -27233,11 +27225,7 @@ function renderStabilization() {
 // them. Matches the Annual Tax Breakdown's "AR+Production + positive stipends
 // + retirement contributions" formula.
 //
-// Retirement is read directly from data.retirement[workKey] — NO carryover.
-// The add-back exists to correct for the retirement deduction taken in the
-// running paycheck calc (Step 3 of Paycheck Entry). Until the user actually
-// enters retirement for the work month, there's nothing to correct for, so
-// b.ret stays at 0 instead of inheriting a prior month's value.
+// Retirement is a deduction taken from gross; it is NOT added in here.
 function _ppGrossBreakdown(workKey) {
   const stipEntries = (data.stipends && data.stipends[workKey]) || [];
   let posStip = 0;
@@ -27245,8 +27233,7 @@ function _ppGrossBreakdown(workKey) {
     const a = e.amount || 0;
     if (a > 0) posStip += a;
   }
-  const ret = (data.retirement && data.retirement[workKey]) || 0;
-  return { posStip, ret };
+  return { posStip };
 }
 
 // Returns the "gross" actual for a work month (compTotal-based) or null if no
@@ -27255,24 +27242,18 @@ function _ppGrossActualFromOverride(workKey) {
   const ov = data.overrides && data.overrides[workKey];
   if (!ov || ov.compTotal == null) return null;
   const b = _ppGrossBreakdown(workKey);
-  return round2(ov.compTotal + b.posStip + b.ret);
+  return round2(ov.compTotal + b.posStip);
 }
 
-// Returns the "gross" estimate from tracked points + $/pt + positive stipends
-// (+ retirement once it's been entered for the work month), or null when we
-// don't have enough signal.
-//
-// b.ret is 0 until the user reaches Step 3 of Paycheck Entry and saves a
-// retirement value, so before that the estimate is just the pre-deduction
-// production figure. Once retirement is entered (and therefore deducted from
-// the running paycheck calc), it's added back here so the gross figure stays
-// accurate.
+// Returns the "gross" estimate from tracked points + $/pt + positive stipends,
+// or null when we don't have enough signal. Retirement is a post-gross
+// deduction and is intentionally excluded.
 function _ppGrossEstimateFromPoints(workKey, monthlyTotalsMap) {
   const pts = (monthlyTotalsMap && monthlyTotalsMap[workKey]) || 0;
   const pv = (typeof getPointValueForMonth === 'function') ? (getPointValueForMonth(workKey) || 0) : 0;
   if (pts <= 0 || pv <= 0) return null;
   const b = _ppGrossBreakdown(workKey);
-  return round2(pts * pv + b.posStip + b.ret);
+  return round2(pts * pv + b.posStip);
 }
 
 // Pure data builder for the Annual Projection. Walks every paycheck month
@@ -27324,7 +27305,7 @@ function _computeAnnualProjection() {
           const b = _ppGrossBreakdown(workKey);
           amt = grossActual;
           source = 'actual gross';
-          components = { mode: 'actual', compTotal: ov.compTotal, posStip: b.posStip, ret: b.ret };
+          components = { mode: 'actual', compTotal: ov.compTotal, posStip: b.posStip };
         } else if (deposit != null) {
           amt = deposit; source = 'actual (deposit)'; components = { mode: 'deposit', deposit };
         } else {
@@ -27367,7 +27348,7 @@ function _computeAnnualProjection() {
         const b = _ppGrossBreakdown(f.workKey);
         amt = ovActual;
         source = 'actual gross';
-        components = { mode: 'actual', compTotal: ov.compTotal, posStip: b.posStip, ret: b.ret };
+        components = { mode: 'actual', compTotal: ov.compTotal, posStip: b.posStip };
       } else if (deposit != null) {
         amt = deposit;
         source = 'actual (deposit)';
@@ -27381,7 +27362,7 @@ function _computeAnnualProjection() {
           const b = _ppGrossBreakdown(f.workKey);
           amt = est;
           source = 'est. gross (' + monthNames[f.wMonth] + ')';
-          components = { mode: 'estimate', pts, pv, prodEst: round2(pts * pv), posStip: b.posStip, ret: b.ret };
+          components = { mode: 'estimate', pts, pv, prodEst: round2(pts * pv), posStip: b.posStip };
         } else {
           amt = avgComp; source = 'avg';
           components = { mode: 'avg', avgComp };
