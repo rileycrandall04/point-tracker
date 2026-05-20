@@ -3395,18 +3395,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <label>Name</label>
       <input type="text" id="settingsName" placeholder="Your name (labels exports)">
     </div>
-    <div class="monetary-hide" style="margin-top:12px;padding:8px 12px;background:rgba(59,130,246,0.08);border-radius:8px;">
-      <div style="font-size:0.82rem;font-weight:600;">Point Value ($/pt)</div>
-      <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
-        Set on the <strong>Compensation</strong> page (Paycheck Projection card). Saved per month and used for every monetary estimate across the app.
-      </p>
-    </div>
-    <div style="margin-top:12px;padding:8px 12px;background:rgba(59,130,246,0.08);border-radius:8px;">
-      <div style="font-size:0.82rem;font-weight:600;">December Bonus Paycheck</div>
-      <p style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;">
-        December includes a 2nd bonus paycheck estimated from the year's average. Enter bonus stipends and non-guaranteed payments in the December Paycheck Projection breakdown.
-      </p>
-    </div>
     <div style="margin-top:12px;padding:10px 12px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
       <div style="flex:1;min-width:0;">
         <div style="font-size:0.82rem;font-weight:600;">Daily feature tips</div>
@@ -3423,8 +3411,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
   </div>
 
-  <!-- Scan Settings -->
-  <div class="card" style="margin-top:12px;">
+  <!-- Scan Settings (hidden) -->
+  <div class="card hidden" style="margin-top:12px;">
     <h2>Scan Settings</h2>
     <div style="margin-bottom:12px;">
       <label for="settingsVisionKey" style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:6px;">Google Cloud Vision API Key</label>
@@ -3513,15 +3501,23 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
   <!-- Export / Import -->
   <div class="card">
-    <h2>Data Management</h2>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn btn-outline btn-sm" id="exportAllBtn">Export JSON</button>
-      <label class="btn btn-outline btn-sm" style="cursor:pointer;">
-        Import JSON
-        <input type="file" id="importFile" accept=".json" style="display:none;">
-      </label>
-      <button class="btn btn-danger btn-sm" id="clearAllBtn">Clear All Data</button>
-    </div>
+    <details class="adm-fold adm-card-fold">
+      <summary><h2 style="margin:0;">Data Management</h2></summary>
+      <div class="adm-fold-body">
+        <div style="background:rgba(239,68,68,0.12);border:1px solid var(--accent2);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.78rem;line-height:1.55;color:var(--text);">
+          <div style="font-weight:700;color:var(--accent2);margin-bottom:4px;">&#9888; Destructive operations &mdash; use with caution.</div>
+          <strong>Import JSON</strong> replaces every shift, case, and setting on this account with the contents of the imported file. <strong>Clear All Data</strong> wipes the same set permanently. Neither action is reversible. Always run <strong>Export JSON</strong> first and save the file somewhere safe if you want a rollback path. Synced accounts: the destructive write propagates to your cloud copy as well.
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" id="exportAllBtn">Export JSON</button>
+          <label class="btn btn-outline btn-sm" style="cursor:pointer;">
+            Import JSON
+            <input type="file" id="importFile" accept=".json" style="display:none;">
+          </label>
+          <button class="btn btn-danger btn-sm" id="clearAllBtn">Clear All Data</button>
+        </div>
+      </div>
+    </details>
   </div>
 </div>
 
