@@ -1437,7 +1437,7 @@ input.mil-time.invalid {
 .sl-col-check, .sl-col-paycode { } /* desktop: visible */
 .sl-col-clockin, .sl-col-clockout { } /* desktop: visible as separate cols */
 .sl-col-inout { display: none; } /* desktop: hidden combined col */
-.sl-col-flag, .sl-col-unbilled, .sl-col-del { } /* desktop: visible as separate cols */
+.sl-col-flag, .sl-col-del { } /* desktop: visible as separate cols */
 .sl-col-actions { display: none; } /* desktop: hidden combined col */
 .sl-expand-toggle { display: none; margin-bottom: 8px; }
 
@@ -1451,7 +1451,6 @@ input.mil-time.invalid {
   .shift-log-table:not(.sl-expanded) .sl-col-clockout { display: none !important; }
   .shift-log-table:not(.sl-expanded) .sl-col-inout { display: table-cell !important; }
   .shift-log-table:not(.sl-expanded) .sl-col-flag { display: none !important; }
-  .shift-log-table:not(.sl-expanded) .sl-col-unbilled { display: none !important; }
   .shift-log-table:not(.sl-expanded) .sl-col-del { display: none !important; }
   .shift-log-table:not(.sl-expanded) .sl-col-actions { display: table-cell !important; }
   .shift-log-table:not(.sl-expanded) .sl-badge { font-size: 0.52rem; padding: 1px 3px; }
@@ -2803,6 +2802,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div style="margin:6px 0 8px;text-align:center;">
       <button class="btn btn-outline btn-sm" id="exportCSVBtn">Download Case Log CSV</button>
     </div>
+    <div id="caseLogWatchingBox"></div>
     <input type="text" class="case-log-search" id="caseLogSearch" placeholder="Search cases...">
     <button id="clDeleteSelectedBtn" class="hidden">Delete Selected (<span id="clDeleteSelectedCount">0</span>)</button>
     <div style="text-align:right;margin:4px 0 2px;">
@@ -2846,15 +2846,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
   <!-- Analytics Tab -->
   <div id="dtab-analytics" class="hidden">
-    <!-- Top Producing Cases -->
-    <div class="card" style="position:relative;">
-      <button class="dollar-toggle monetary-hide" id="caseMixDollarToggle" onclick="toggleCaseMixDollars()" style="position:absolute;top:16px;right:16px;">Show $</button>
-      <h2>Top Producing Cases</h2>
-      <div id="caseMixContent">
-        <div class="empty-state"><p>No case data.</p></div>
-      </div>
-    </div>
-
     <!-- Procedure Efficiency -->
     <div class="card" style="position:relative;">
       <button class="dollar-toggle monetary-hide" id="procEffDollarToggle" onclick="toggleCaseMixDollars()" style="position:absolute;top:16px;right:16px;">Show $</button>
@@ -5110,16 +5101,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div id="dayDetailBody"></div>
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" id="closeDayDetail">Close</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay hidden" id="caseBreakdownModal" onclick="if(event.target===this)this.classList.add('hidden')">
-  <div class="modal" style="max-width:420px;">
-    <h2 id="caseBreakdownTitle">Case Breakdown</h2>
-    <div id="caseBreakdownBody"></div>
-    <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="document.getElementById('caseBreakdownModal').classList.add('hidden')">Close</button>
     </div>
   </div>
 </div>
@@ -21784,12 +21765,14 @@ function renderCaseLogTable() {
     });
     watchHtml += '</div>';
   }
+  const watchBox = document.getElementById('caseLogWatchingBox');
+  if (watchBox) watchBox.innerHTML = watchHtml;
 
   if (monthCases.length === 0) {
-    container.innerHTML = watchHtml + '<div class="empty-state"><p>No cases for this month.</p></div>';
+    container.innerHTML = '<div class="empty-state"><p>No cases for this month.</p></div>';
     return;
   }
-  let html = watchHtml + '<table class="case-log-table" id="caseLogTable"><thead><tr>';
+  let html = '<table class="case-log-table" id="caseLogTable"><thead><tr>';
   html += '<th><input type="checkbox" class="cl-cb" id="clSelectAll" onclick="clToggleSelectAll(this)"></th>';
   html += '<th>Date</th><th>Case</th><th>Start</th><th>Stop</th><th>Pts</th><th></th><th></th><th></th>';
   html += '</tr></thead><tbody>';
@@ -22481,7 +22464,7 @@ function renderShiftLogTable() {
   html += '<th class="sl-col-clockin">Clock In</th><th class="sl-col-clockout">Clock Out</th>';
   html += '<th class="sl-col-inout">In/Out</th>';
   html += '<th class="sl-col-paycode">Pay Code</th><th>Hours</th><th>Pay Rate</th><th>Amount</th>';
-  html += '<th class="sl-col-flag"></th><th class="sl-col-unbilled"></th><th class="sl-del-cell sl-col-del"></th>';
+  html += '<th class="sl-col-flag"></th><th class="sl-del-cell sl-col-del"></th>';
   html += '<th class="sl-col-actions"></th>';
   html += '</tr></thead><tbody>';
 
@@ -22513,9 +22496,8 @@ function renderShiftLogTable() {
     const checkboxCell = `<td class="sl-check sl-col-check"><input type="checkbox" class="sl-shift-cb" data-date="${shift.date}" onclick="event.stopPropagation();slUpdateDeleteBar()"></td>`;
     const deleteCell = `<td class="sl-del-cell sl-col-del"><button class="sl-del-btn" title="Delete shift" onclick="event.stopPropagation();deleteShiftFromLog('${shift.date}')">&times;</button></td>`;
     const flagBtn = `<button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button>`;
-    const unbilledBtn = `<button class="unbilled-btn ${shift.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleShiftUnbilled('${shift.date}')">$</button>`;
     const delBtn = `<button class="sl-del-btn" title="Delete" onclick="event.stopPropagation();deleteShiftFromLog('${shift.date}')">&times;</button>`;
-    const actionsCell = `<td class="sl-col-actions sl-actions-cell">${flagBtn}${unbilledBtn}${delBtn}</td>`;
+    const actionsCell = `<td class="sl-col-actions sl-actions-cell">${flagBtn}${delBtn}</td>`;
     if (shift.assignmentType === 'vacation') {
       const altClass = shiftIdx % 2 === 1 ? ' sl-alt' : '';
       const fClass = shift.flagged ? ' flagged-row' : '';
@@ -22530,9 +22512,8 @@ function renderShiftLogTable() {
       html += `<td class="sl-col-inout">-</td>`;
       html += `<td class="sl-col-paycode">Vacation</td><td>-</td><td>-</td><td>0.0</td>`;
       html += `<td class="sl-col-flag"><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>`;
-      html += `<td class="sl-col-unbilled"><button class="unbilled-btn ${shift.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleShiftUnbilled('${shift.date}')">$</button></td>`;
       html += `<td class="sl-del-cell sl-col-del"><button class="sl-del-btn" title="Delete shift" onclick="event.stopPropagation();deleteShiftFromLog('${shift.date}')">&times;</button></td>`;
-      html += `<td class="sl-col-actions sl-actions-cell"><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button><button class="unbilled-btn ${shift.unbilled ? 'active' : ''}" onclick="event.stopPropagation();toggleShiftUnbilled('${shift.date}')">$</button><button class="sl-del-btn" title="Delete" onclick="event.stopPropagation();deleteShiftFromLog('${shift.date}')">&times;</button></td>`;
+      html += `<td class="sl-col-actions sl-actions-cell"><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button><button class="sl-del-btn" title="Delete" onclick="event.stopPropagation();deleteShiftFromLog('${shift.date}')">&times;</button></td>`;
       html += '</tr>';
       return;
     }
@@ -22551,7 +22532,6 @@ function renderShiftLogTable() {
       html += `<td class="sl-col-inout">-</td>`;
       html += `<td class="sl-col-paycode">-</td><td>-</td><td>-</td><td>0.0</td>`;
       html += `<td class="sl-col-flag">${flagBtn}</td>`;
-      html += `<td class="sl-col-unbilled">${unbilledBtn}</td>`;
       html += deleteCell;
       html += actionsCell;
       html += '</tr>';
@@ -22605,9 +22585,8 @@ function renderShiftLogTable() {
           html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
           html += buildAmountCell(shift, r._ri, r.amount);
           html += `<td class="sl-col-flag">${i === 0 ? flagBtn : ''}</td>`;
-          html += `<td class="sl-col-unbilled">${i === 0 ? unbilledBtn : ''}</td>`;
           html += i === 0 ? deleteCell : '<td class="sl-col-del"></td>';
-          html += `<td class="sl-col-actions sl-actions-cell">${i === 0 ? flagBtn + unbilledBtn + delBtn : ''}</td>`;
+          html += `<td class="sl-col-actions sl-actions-cell">${i === 0 ? flagBtn + delBtn : ''}</td>`;
           html += '</tr>';
         });
       } else {
@@ -22620,7 +22599,6 @@ function renderShiftLogTable() {
         html += `<td class="sl-col-inout">-</td>`;
         html += `<td class="sl-col-paycode">-</td><td>-</td><td>-</td><td>0.0</td>`;
         html += `<td class="sl-col-flag">${flagBtn}</td>`;
-        html += `<td class="sl-col-unbilled">${unbilledBtn}</td>`;
         html += deleteCell;
         html += actionsCell;
         html += '</tr>';
@@ -22648,7 +22626,6 @@ function renderShiftLogTable() {
           html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
           html += buildAmountCell(shift, r._ri, r.amount);
           html += '<td class="sl-col-flag"></td>';
-          html += '<td class="sl-col-unbilled"></td>';
           html += '<td class="sl-col-del"></td>';
           html += '<td class="sl-col-actions"></td>';
           html += '</tr>';
@@ -22663,7 +22640,6 @@ function renderShiftLogTable() {
         html += `<td class="sl-col-inout">-</td>`;
         html += `<td class="sl-col-paycode">-</td><td>-</td><td>-</td><td>0.0</td>`;
         html += '<td class="sl-col-flag"></td>';
-        html += '<td class="sl-col-unbilled"></td>';
         html += '<td class="sl-col-del"></td>';
         html += '<td class="sl-col-actions"></td>';
         html += '</tr>';
@@ -22697,9 +22673,8 @@ function renderShiftLogTable() {
       html += `<td>${r.payRate.toFixed(1)}/hr</td>`;
       html += buildAmountCell(shift, i, r.amount);
       html += `<td class="sl-col-flag">${i === 0 ? flagBtn : ''}</td>`;
-      html += `<td class="sl-col-unbilled">${i === 0 ? unbilledBtn : ''}</td>`;
       html += i === 0 ? deleteCell : '<td class="sl-col-del"></td>';
-      html += `<td class="sl-col-actions sl-actions-cell">${i === 0 ? flagBtn + unbilledBtn + delBtn : ''}</td>`;
+      html += `<td class="sl-col-actions sl-actions-cell">${i === 0 ? flagBtn + delBtn : ''}</td>`;
       html += '</tr>';
     });
 
@@ -22748,7 +22723,7 @@ function buildShiftTotalRow(shift, shiftTotal, altClass) {
   const isManual = hasRowOverrides || shift.manualTotal != null;
   const manualClass = isManual ? ' pts-manual' : '';
   const resetHtml = isManual ? `<span class="pts-reset" onclick="event.stopPropagation();resetShiftPoints('${shift.date}')">reset</span>` : '';
-  return `<tr class="sl-sub-row${altClass} sl-total-row" data-shiftdate="${shift.date}"><td data-blank class="sl-col-check"></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank class="sl-col-clockin"></td><td data-blank class="sl-col-clockout"></td><td data-blank class="sl-col-inout"></td><td data-blank class="sl-col-paycode"></td><td colspan="3" style="text-align:right;font-size:0.72rem;color:var(--text-dim);font-weight:600;">Shift Total</td><td class="pts-cell${manualClass}" onclick="event.stopPropagation();editShiftPoints('${shift.date}',this)"><strong>${round2(shiftTotal).toFixed(1)}</strong>${resetHtml}</td><td class="sl-col-flag"></td><td class="sl-col-unbilled"></td><td class="sl-col-del"></td><td class="sl-col-actions"></td></tr>`;
+  return `<tr class="sl-sub-row${altClass} sl-total-row" data-shiftdate="${shift.date}"><td data-blank class="sl-col-check"></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank></td><td data-blank class="sl-col-clockin"></td><td data-blank class="sl-col-clockout"></td><td data-blank class="sl-col-inout"></td><td data-blank class="sl-col-paycode"></td><td colspan="3" style="text-align:right;font-size:0.72rem;color:var(--text-dim);font-weight:600;">Shift Total</td><td class="pts-cell${manualClass}" onclick="event.stopPropagation();editShiftPoints('${shift.date}',this)"><strong>${round2(shiftTotal).toFixed(1)}</strong>${resetHtml}</td><td class="sl-col-flag"></td><td class="sl-col-del"></td><td class="sl-col-actions"></td></tr>`;
 }
 
 function editShiftPoints(dateStr, td) {
@@ -29834,7 +29809,6 @@ document.getElementById('dayDetailModal').addEventListener('click', (e) => {
 // ================================================================
 
 function renderAnalyticsTab() {
-  renderCaseMix();
   renderTopProcedures();
   renderSurgeonEfficiency();
   renderCollectiveCases();
@@ -30683,92 +30657,6 @@ function calcCaseARContribution(c, shift) {
   return round2(ar);
 }
 
-function renderCaseMix() {
-  if (data.cases.length === 0) {
-    document.getElementById('caseMixContent').innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No cases logged yet.</p>';
-    return;
-  }
-  const ranked = data.cases.map(c => {
-    const shift = data.shifts[c.shiftDate] || {};
-    const prodPts = calcCasePoints(c, shift);
-    const arPts = calcCaseARContribution(c, shift);
-    const totalPts = prodPts + arPts;
-    const procedure = c.procedure || c.notes || c.caseType;
-    const monthKey = (c.shiftDate || '').slice(0, 7);
-    const pv = getPointValueForMonth(monthKey);
-    const totalDollars = totalPts * pv;
-    return { id: c.id, procedure, prodPts, arPts, totalPts, totalDollars, pv, date: c.shiftDate || '' };
-  }).sort((a, b) => b.totalPts - a.totalPts).slice(0, 8);
-  let html = '';
-  ranked.forEach(item => {
-    const display = showDollars ? '$' + item.totalDollars.toFixed(2) : item.totalPts.toFixed(1);
-    const detail = showDollars
-      ? 'AR $' + (item.arPts * item.pv).toFixed(0) + ' + Prod $' + (item.prodPts * item.pv).toFixed(0)
-      : 'AR ' + item.arPts.toFixed(1) + ' + Prod ' + item.prodPts.toFixed(1);
-    html += `<div class="efficiency-item" onclick="showCaseBreakdown('${item.id}')" style="cursor:pointer;"><span class="eff-label">${escHtml(item.procedure)}<br><span style="font-size:0.7rem;color:var(--text-dim);">${detail} &middot; ${escHtml(item.date)}</span></span><span class="eff-value"><span class="point-badge">${display}</span></span></div>`;
-  });
-  document.getElementById('caseMixContent').innerHTML = html;
-}
-
-function showCaseBreakdown(caseId) {
-  const c = data.cases.find(x => x.id === caseId);
-  if (!c) return;
-  const shift = data.shifts[c.shiftDate] || {};
-  const breakdown = getCaseBreakdown(c, shift);
-  const prodPts = calcCasePoints(c, shift);
-  const arPts = calcCaseARContribution(c, shift);
-  const totalPts = prodPts + arPts;
-  const monthKey = (c.shiftDate || '').slice(0, 7);
-  const pv = getPointValueForMonth(monthKey);
-
-  const procName = c.caseType === 'standard' ? (c.procedure || 'Standard Case') : getCaseTypeName(c.caseType, c);
-  const timeStr = c.startTime && c.endTime ? c.startTime + ' – ' + c.endTime : (c.startTime || '');
-  const shiftType = shift.assignmentType ? shift.assignmentType.replace(/_/g, ' ') : 'Unknown';
-
-  document.getElementById('caseBreakdownTitle').textContent = procName;
-
-  let html = '<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:14px;">';
-  html += escHtml(c.shiftDate || '') + (timeStr ? ' &middot; ' + escHtml(timeStr) : '');
-  html += ' &middot; ' + escHtml(shiftType);
-  if (c.asaCode) html += ' &middot; ASA ' + escHtml(c.asaCode);
-  html += '</div>';
-
-  // Production breakdown
-  html += '<div style="font-size:0.78rem;font-weight:600;color:var(--primary);margin-bottom:6px;">Production Points</div>';
-  breakdown.forEach(row => {
-    html += `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.8rem;border-bottom:1px solid rgba(71,85,105,0.15);"><span style="color:var(--text);">${escHtml(row.label)}</span><span style="font-weight:600;color:var(--text);min-width:50px;text-align:right;">${row.pts.toFixed(1)}</span></div>`;
-  });
-  html += `<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:0.82rem;font-weight:700;border-top:1px solid var(--border);margin-top:2px;"><span>Production Subtotal</span><span>${prodPts.toFixed(1)}</span></div>`;
-
-  // AR contribution
-  html += '<div style="font-size:0.78rem;font-weight:600;color:var(--primary);margin:12px 0 6px;">AR Contribution</div>';
-  if (arPts > 0) {
-    let durMin = 0;
-    if (c.startTime && c.endTime) {
-      let s = timeToMinutes(c.startTime), e = timeToMinutes(c.endTime);
-      if (e <= s) e += 1440;
-      durMin = e - s;
-    }
-    const durHrs = round2(durMin / 60);
-    const avgRate = durHrs > 0 ? round2(arPts / durHrs) : 0;
-    html += `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.8rem;border-bottom:1px solid rgba(71,85,105,0.15);"><span style="color:var(--text);">AR for ${durHrs}h (avg ${avgRate} pts/hr)</span><span style="font-weight:600;color:var(--text);min-width:50px;text-align:right;">${arPts.toFixed(1)}</span></div>`;
-  } else {
-    html += '<div style="font-size:0.8rem;color:var(--text-dim);padding:3px 0;">No AR (missing times or shift data)</div>';
-  }
-
-  // Grand total
-  html += `<div style="display:flex;justify-content:space-between;padding:8px 0 4px;font-size:0.9rem;font-weight:700;border-top:2px solid var(--primary);margin-top:8px;"><span>Total Points</span><span class="point-badge large">${totalPts.toFixed(1)}</span></div>`;
-
-  // Dollar value
-  if (pv > 0) {
-    const totalDollars = totalPts * pv;
-    html += `<div class="monetary-hide" style="display:flex;justify-content:space-between;padding:4px 0;font-size:0.82rem;color:var(--accent);"><span>Dollar Value (${pv.toFixed(2)}/pt)</span><span style="font-weight:700;">$${totalDollars.toFixed(2)}</span></div>`;
-  }
-
-  document.getElementById('caseBreakdownBody').innerHTML = html;
-  document.getElementById('caseBreakdownModal').classList.remove('hidden');
-}
-
 let procEffData = { ranked: [], unranked: [] };
 let activeProcTab = 'top';
 let showDollars = false;
@@ -30777,12 +30665,9 @@ function toggleCaseMixDollars() {
   if (settings.hideMonetary) return;
   showDollars = !showDollars;
   const label = showDollars ? 'Show Pts' : 'Show $';
-  document.getElementById('caseMixDollarToggle').textContent = label;
-  document.getElementById('caseMixDollarToggle').classList.toggle('active', showDollars);
   document.getElementById('procEffDollarToggle').textContent = label;
   document.getElementById('procEffDollarToggle').classList.toggle('active', showDollars);
   document.getElementById('procEffHeading').textContent = showDollars ? 'Procedure Efficiency ($/hr)' : 'Procedure Efficiency (pts/hr)';
-  renderCaseMix();
   renderProcTabContent();
 }
 
@@ -31938,7 +31823,7 @@ hideMonetaryToggle.addEventListener('change', () => {
     document.getElementById('demoBanner').classList.remove('hidden');
     // Reset dollar toggles to points mode
     if (weeklyShowDollars) { weeklyShowDollars = false; document.getElementById('weeklyToggleBtn').textContent = '$'; renderWeeklyChart(); }
-    if (showDollars) { showDollars = false; renderCaseMix(); renderProcTabContent(); }
+    if (showDollars) { showDollars = false; renderProcTabContent(); }
     renderHistoricalTrends();
     showToast('Monetary values hidden');
   } else {
