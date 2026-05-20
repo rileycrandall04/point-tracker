@@ -3079,17 +3079,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
   </div>
 
-  <!-- Collapsible: Weekend vs Weekday -->
-  <div class="card collapse-section">
-    <div class="collapse-header" onclick="toggleCollapse('timeWknd')">
-      <h3>Weekend vs Weekday</h3>
-      <span class="arrow" id="timeWkndArrow">&#9660;</span>
-    </div>
-    <div class="collapse-body" id="timeWkndBody">
-      <div id="wkndContent" style="padding-top:12px;"></div>
-    </div>
-  </div>
-
   <!-- Collapsible: Night & Call Frequency -->
   <div class="card collapse-section">
     <div class="collapse-header" onclick="toggleCollapse('timeNight')">
@@ -3237,7 +3226,9 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
   <!-- 4. Historical Trends (with annual income stats above chart) -->
   <div class="card">
-    <h2>Historical Trends</h2>
+    <details class="adm-fold adm-card-fold" id="historicalTrendsCollapse" ontoggle="if (this.open && typeof monthlyChart !== 'undefined' && monthlyChart) monthlyChart.resize();">
+      <summary><h2 style="margin:0;">Historical Trends</h2></summary>
+      <div class="adm-fold-body">
     <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 4px;text-align:center;line-height:1.45;">
       Monthly production &times; $/pt &mdash; <strong>actual</strong> gross from the comp summary report when entered, <strong>blended estimate</strong> otherwise. Production-only; does not include stipends or retirement.
     </p>
@@ -3258,6 +3249,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <canvas id="monthlyChart"></canvas>
     </div>
     <div id="monthlyChartSummary" style="margin-top:10px; font-size:0.82rem; color:var(--text-dim); text-align:center;"></div>
+      </div>
+    </details>
   </div>
 
   <!-- 5. Historical Compensation — prior month data -->
@@ -21602,7 +21595,7 @@ function updateDashStickyHeaderSpacer() {
 function toggleCollapse(sectionId) {
   const bodyMap = {
     deScan: 'deScanBody',
-    timeWknd: 'timeWkndBody', timeNight: 'timeNightBody',
+    timeNight: 'timeNightBody',
     histComp: 'histCompBody',
     importScan: 'importScanBody',
     earningsEst: 'earningsEstBody',
@@ -21611,7 +21604,7 @@ function toggleCollapse(sectionId) {
   };
   const arrowMap = {
     deScan: 'deScanArrow',
-    timeWknd: 'timeWkndArrow', timeNight: 'timeNightArrow',
+    timeNight: 'timeNightArrow',
     histComp: 'histCompArrow',
     importScan: 'importScanArrow',
     earningsEst: 'earningsEstArrow',
@@ -28645,7 +28638,6 @@ function renderTimeTab() {
   if (assignTitleEl) assignTitleEl.textContent = _userName ? (_userName + "'s Personal Assignment Data") : 'Personal Assignment Data';
   renderTimeSummary();
   renderProductionTrend();
-  renderWeekendVsWeekday();
   renderAssignData();
   renderNightCallFreq();
   renderVacationTracker();
@@ -28735,6 +28727,8 @@ function renderTimeSummary() {
   }
 }
 
+let _vacTrackerSelectedYear = null;
+
 function renderVacationTracker() {
   const container = document.getElementById('vacationTrackerContent');
   const today = effectiveWorkDate();
@@ -28744,7 +28738,6 @@ function renderVacationTracker() {
   Object.values(data.shifts).forEach(s => {
     if (s.assignmentType === 'vacation' && s.date) vacDates.add(s.date);
   });
-  // Include future calendar-assigned vacation that may not have shifts yet
   if (data.calendarAssignments) {
     Object.entries(data.calendarAssignments).forEach(([dateStr, cal]) => {
       if (cal && cal.type === 'vacation') vacDates.add(dateStr);
@@ -28756,41 +28749,50 @@ function renderVacationTracker() {
     return;
   }
 
-  // Group by year, split into taken vs scheduled
   const byYear = {};
   vacDates.forEach(dateStr => {
     const year = dateStr.substring(0, 4);
-    if (!byYear[year]) byYear[year] = { taken: 0, scheduled: 0, dates: [] };
-    if (dateStr <= today) {
-      byYear[year].taken++;
-    } else {
-      byYear[year].scheduled++;
-    }
-    byYear[year].dates.push(dateStr);
+    if (!byYear[year]) byYear[year] = { taken: 0, scheduled: 0 };
+    if (dateStr <= today) byYear[year].taken++;
+    else byYear[year].scheduled++;
   });
 
-  const years = Object.keys(byYear).sort().reverse();
-  let html = '';
+  const years = Object.keys(byYear).sort(); // ascending so chips read oldest → newest
+  // Default selection: current year if it has data, else the most recent year.
+  if (!_vacTrackerSelectedYear || !byYear[_vacTrackerSelectedYear]) {
+    const currentYear = String(new Date().getFullYear());
+    _vacTrackerSelectedYear = byYear[currentYear] ? currentYear : years[years.length - 1];
+  }
 
-  years.forEach(year => {
-    const y = byYear[year];
-    const totalDays = y.taken + y.scheduled;
-    const totalWeeks = (totalDays / 5).toFixed(1);
+  const y = byYear[_vacTrackerSelectedYear];
+  const totalDays = y.taken + y.scheduled;
+  const totalWeeks = (totalDays / 5).toFixed(1);
 
-    html += `<div style="margin-bottom:14px;">`;
-    html += `<div style="font-weight:600;font-size:0.85rem;margin-bottom:6px;">${year}</div>`;
-    html += `<div class="summary-grid" style="margin-bottom:4px;">`;
-    html += `<div class="summary-item"><div class="label">Days</div><div class="value blue">${totalDays}</div></div>`;
-    html += `<div class="summary-item"><div class="label">Weeks</div><div class="value green">${totalWeeks}</div></div>`;
-    html += `</div>`;
+  let html = '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:8px;">';
+  for (const yr of years) {
+    const active = yr === _vacTrackerSelectedYear;
+    html += '<button onclick="_vacTrackerSelectYear(\'' + yr + '\')" style="padding:3px 10px;border-radius:14px;border:1px solid '
+      + (active ? 'var(--primary)' : 'var(--border)') + ';background:'
+      + (active ? 'var(--primary)' : 'var(--surface2)') + ';color:'
+      + (active ? '#fff' : 'var(--text)') + ';font-size:0.72rem;cursor:pointer;font-weight:'
+      + (active ? '600' : '400') + ';">' + yr + '</button>';
+  }
+  html += '</div>';
 
-    if (y.scheduled > 0) {
-      html += `<div style="font-size:0.7rem;color:var(--text-dim);text-align:center;">${y.taken} taken &middot; ${y.scheduled} scheduled</div>`;
-    }
-    html += `</div>`;
-  });
+  html += '<div style="display:flex;justify-content:center;align-items:baseline;gap:14px;font-size:0.82rem;flex-wrap:wrap;">';
+  html += '<span><strong style="color:var(--primary);font-size:1.05rem;">' + totalDays + '</strong> <span style="color:var(--text-dim);font-size:0.7rem;">days</span></span>';
+  html += '<span><strong style="color:var(--accent);font-size:1.05rem;">' + totalWeeks + '</strong> <span style="color:var(--text-dim);font-size:0.7rem;">weeks</span></span>';
+  if (y.scheduled > 0) {
+    html += '<span style="color:var(--text-dim);font-size:0.7rem;">' + y.taken + ' taken &middot; ' + y.scheduled + ' scheduled</span>';
+  }
+  html += '</div>';
 
   container.innerHTML = html;
+}
+
+function _vacTrackerSelectYear(year) {
+  _vacTrackerSelectedYear = year;
+  renderVacationTracker();
 }
 
 function renderProductionTrend() {
@@ -28894,24 +28896,6 @@ function buildDayOfWeek() {
     </div>`;
   }
   return html || '<p style="color:var(--text-dim);font-size:0.85rem;">No data.</p>';
-}
-
-function renderWeekendVsWeekday() {
-  let wdHrs = 0, wdPts = 0, wdN = 0, weHrs = 0, wePts = 0, weN = 0;
-  Object.values(data.shifts).forEach(s => {
-    if (!s.assignmentType || s.assignmentType === 'vacation' || s.assignmentType === 'forced_off' || s.forcedOff) return;
-    if (isFuturePagerOnly(s)) return;
-    const hrs = calcShiftHours(s);
-    const pts = calcShiftTotal(s).total;
-    if (isWeekend(s.date)) { weHrs += hrs; wePts += pts; weN++; }
-    else { wdHrs += hrs; wdPts += pts; wdN++; }
-  });
-  let html = '<div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:2px 12px;align-items:center;font-size:0.8rem;">';
-  html += '<div style="font-size:0.62rem;color:var(--text-dim);"></div><div style="font-size:0.62rem;color:var(--text-dim);text-align:center;text-transform:uppercase;">Avg Pts</div><div style="font-size:0.62rem;color:var(--text-dim);text-align:center;text-transform:uppercase;">Avg Hrs</div><div style="font-size:0.62rem;color:var(--text-dim);text-align:center;text-transform:uppercase;">Shifts</div>';
-  html += `<div style="font-weight:600;color:var(--primary);">Weekday</div><div style="text-align:center;color:var(--primary);">${wdN > 0 ? (wdPts/wdN).toFixed(1) : '0'}</div><div style="text-align:center;color:var(--primary);">${wdN > 0 ? (wdHrs/wdN).toFixed(1) : '0'}</div><div style="text-align:center;color:var(--primary);">${wdN}</div>`;
-  html += `<div style="font-weight:600;color:var(--accent);">Weekend</div><div style="text-align:center;color:var(--accent);">${weN > 0 ? (wePts/weN).toFixed(1) : '0'}</div><div style="text-align:center;color:var(--accent);">${weN > 0 ? (weHrs/weN).toFixed(1) : '0'}</div><div style="text-align:center;color:var(--accent);">${weN}</div>`;
-  html += '</div>';
-  document.getElementById('wkndContent').innerHTML = html;
 }
 
 function renderNightCallFreq() {
