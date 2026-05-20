@@ -27336,16 +27336,20 @@ function _computeAnnualProjection() {
       amt = round2(avgComp * 2); source = 'avg \u00d7 2 (incl. bonus)';
       components = { mode: 'dec', avgComp, value: amt };
     } else {
-      // Prefer the user's entered actuals over any estimate. The paycheck
-      // for a given work month often closes well before the paycheck
-      // cutoff date \u2014 if the user has already filled in the comp summary
-      // (overrides[workKey].compTotal) or recorded the deposit, use that
-      // instead of continuing to display the points-based prediction.
-      const ovActual = _ppGrossActualFromOverride(f.workKey);
-      const ov = data.overrides && data.overrides[f.workKey];
+      // Prefer the user's entered actuals over any estimate. The Paycheck
+      // Entry UI stores compTotal under the calendar-month key the user
+      // sees when entering (data.overrides[payKey]) \u2014 e.g., the value
+      // they enter while looking at their May paycheck stub lives under
+      // the May payKey, even though that paycheck represents April work.
+      // Match that mental model here: a user-entered override or deposit
+      // for THIS paycheck month wins over the points estimate for the
+      // prior work month. Otherwise fall back to the points estimate
+      // (if the work month has ended) or the rolling avg.
+      const ovActual = _ppGrossActualFromOverride(f.payKey);
+      const ov = data.overrides && data.overrides[f.payKey];
       const deposit = data.paychecks && data.paychecks[f.payKey];
       if (ovActual != null) {
-        const b = _ppGrossBreakdown(f.workKey);
+        const b = _ppGrossBreakdown(f.payKey);
         amt = ovActual;
         source = 'actual gross';
         components = { mode: 'actual', compTotal: ov.compTotal, posStip: b.posStip };
