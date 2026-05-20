@@ -27226,20 +27226,31 @@ function renderStabilization() {
 // + retirement contributions" formula.
 //
 // Retirement is a deduction taken from gross; it is NOT added in here.
-function _ppGrossBreakdown(workKey) {
-  const stipEntries = (data.stipends && data.stipends[workKey]) || [];
+//
+// Accepts one or more month keys and unions positive amounts across all of
+// them. This is intentional: the stipend/NG entry flow stores under
+// `stabMonthKey()` (a work-month key) but the user may have entered some
+// items under the work-month-keyed "[Month] Paycheck" view and others
+// under the paycheck-month-keyed default view. Summing both lookups lets
+// us catch everything the user entered without forcing a re-entry; the
+// rare case of a user double-entering the same item under both keys is
+// the user's data issue, not a math issue.
+function _ppGrossBreakdown(...keys) {
   let posStip = 0;
-  for (const e of stipEntries) {
-    const a = e.amount || 0;
-    if (a > 0) posStip += a;
-  }
-  // Class B Margin / CRNA Distribution / Surgical Center Dist are stored
-  // separately in data.nonGuaranteed (they're entered on Step 3 of Paycheck
-  // Entry), but they're positive income and belong in the gross figure too.
-  const ng = (data.nonGuaranteed && data.nonGuaranteed[workKey]) || {};
-  for (const k of Object.keys(ng)) {
-    const a = ng[k] || 0;
-    if (a > 0) posStip += a;
+  for (const key of keys) {
+    if (!key) continue;
+    const stipEntries = (data.stipends && data.stipends[key]) || [];
+    for (const e of stipEntries) {
+      const a = e.amount || 0;
+      if (a > 0) posStip += a;
+    }
+    // Class B Margin / CRNA Distribution / Surgical Center Dist live in
+    // data.nonGuaranteed (Step 3 of Paycheck Entry).
+    const ng = (data.nonGuaranteed && data.nonGuaranteed[key]) || {};
+    for (const k of Object.keys(ng)) {
+      const a = ng[k] || 0;
+      if (a > 0) posStip += a;
+    }
   }
   return { posStip };
 }
@@ -27346,35 +27357,33 @@ function _computeAnnualProjection() {
     } else {
       // Prefer the user's entered actuals over any estimate. The Paycheck
       // Entry UI stores compTotal under the calendar-month key the user
-      // sees when entering (data.overrides[payKey]) \u2014 e.g., the value
-      // they enter while looking at their May paycheck stub lives under
-      // the May payKey, even though that paycheck represents April work.
-      // Match that mental model here: a user-entered override or deposit
-      // for THIS paycheck month wins over the points estimate for the
-      // prior work month. Otherwise fall back to the points estimate
-      // (if the work month has ended) or the rolling avg.
-      const ovActual = _ppGrossActualFromOverride(f.payKey);
-      const ov = data.overrides && data.overrides[f.payKey];
+      // sees when entering \u2014 they may have used the paycheck-month view
+      // OR the work-month-keyed "[Month] Paycheck" view. Look for
+      // overrides + stipends + distributions under BOTH keys so neither
+      // entry path gets dropped.
+      const bUnion = _ppGrossBreakdown(f.payKey, f.workKey);
+      const ovPay = data.overrides && data.overrides[f.payKey];
+      const ovWork = data.overrides && data.overrides[f.workKey];
+      const ovComp = (ovPay && ovPay.compTotal != null) ? ovPay.compTotal
+        : (ovWork && ovWork.compTotal != null ? ovWork.compTotal : null);
       const deposit = data.paychecks && data.paychecks[f.payKey];
-      if (ovActual != null) {
-        const b = _ppGrossBreakdown(f.payKey);
-        amt = ovActual;
+      if (ovComp != null) {
+        amt = round2(ovComp + bUnion.posStip);
         source = 'actual gross';
-        components = { mode: 'actual', compTotal: ov.compTotal, posStip: b.posStip };
+        components = { mode: 'actual', compTotal: ovComp, posStip: bUnion.posStip };
       } else if (deposit != null) {
         amt = deposit;
         source = 'actual (deposit)';
         components = { mode: 'deposit', deposit };
       } else {
         const workMonthEnded = (f.wYear < thisYear) || (f.wYear === thisYear && f.wMonth < thisMonthIdx);
-        const est = workMonthEnded ? _ppGrossEstimateFromPoints(f.workKey, mt) : null;
-        if (est != null && est > 0) {
-          const pts = mt[f.workKey] || 0;
-          const pv = (typeof getPointValueForMonth === 'function') ? (getPointValueForMonth(f.workKey) || 0) : 0;
-          const b = _ppGrossBreakdown(f.workKey);
-          amt = est;
+        const pts = workMonthEnded ? (mt[f.workKey] || 0) : 0;
+        const pv = (typeof getPointValueForMonth === 'function') ? (getPointValueForMonth(f.workKey) || 0) : 0;
+        if (workMonthEnded && pts > 0 && pv > 0) {
+          const prodEst = round2(pts * pv);
+          amt = round2(prodEst + bUnion.posStip);
           source = 'est. gross (' + monthNames[f.wMonth] + ')';
-          components = { mode: 'estimate', pts, pv, prodEst: round2(pts * pv), posStip: b.posStip };
+          components = { mode: 'estimate', pts, pv, prodEst, posStip: bUnion.posStip };
         } else {
           amt = avgComp; source = 'avg';
           components = { mode: 'avg', avgComp };
