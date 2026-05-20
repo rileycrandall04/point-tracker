@@ -27355,17 +27355,17 @@ function _computeAnnualProjection() {
       amt = round2(avgComp * 2); source = 'avg \u00d7 2 (incl. bonus)';
       components = { mode: 'dec', avgComp, value: amt };
     } else {
-      // Prefer the user's entered actuals over any estimate. The Paycheck
-      // Entry UI stores compTotal under the calendar-month key the user
-      // sees when entering \u2014 they may have used the paycheck-month view
-      // OR the work-month-keyed "[Month] Paycheck" view. Look for
-      // overrides + stipends + distributions under BOTH keys so neither
-      // entry path gets dropped.
+      // Prefer the user's entered actuals over any estimate. compTotal is
+      // looked up by paycheck-month key only \u2014 otherwise the same entered
+      // value attributes to two adjacent paycheck rows (e.g., the May entry
+      // would also paint the June row, since June's workKey == May's
+      // payKey). The breakdown still unions payKey + workKey because
+      // stipends/CRNA/Surg Center/Class B can have been entered under
+      // either the default Paycheck Entry view or the older
+      // "[Month] Paycheck" view.
       const bUnion = _ppGrossBreakdown(f.payKey, f.workKey);
       const ovPay = data.overrides && data.overrides[f.payKey];
-      const ovWork = data.overrides && data.overrides[f.workKey];
-      const ovComp = (ovPay && ovPay.compTotal != null) ? ovPay.compTotal
-        : (ovWork && ovWork.compTotal != null ? ovWork.compTotal : null);
+      const ovComp = (ovPay && ovPay.compTotal != null) ? ovPay.compTotal : null;
       const deposit = data.paychecks && data.paychecks[f.payKey];
       if (ovComp != null) {
         amt = round2(ovComp + bUnion.posStip);
