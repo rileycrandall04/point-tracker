@@ -3050,13 +3050,17 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
   <!-- Assignment Data (combined) -->
   <div class="card">
-    <h2 id="assignDataTitle">Assignment Data</h2>
+    <details class="adm-fold adm-card-fold">
+      <summary><h2 id="assignDataTitle" style="margin:0;">Personal Assignment Data</h2></summary>
+      <div class="adm-fold-body">
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
       <button class="tab-btn active" id="adTabTotals" onclick="switchAssignDataTab('totals')">Average Shift Totals</button>
       <button class="tab-btn" id="adTabDOW" onclick="switchAssignDataTab('dow')">Day of Week</button>
       <button class="tab-btn" id="adTabEfficiency" onclick="switchAssignDataTab('efficiency')">Shift Efficiency</button>
     </div>
     <div id="assignDataContent"></div>
+      </div>
+    </details>
   </div>
 
   <!-- Procedure Time Lookup -->
@@ -3197,7 +3201,9 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
   <!-- 3. Production Pipeline -->
   <div class="card monetary-hide">
-    <h2>Production Pipeline</h2>
+    <details class="adm-fold adm-card-fold" id="pipelineCollapse" ontoggle="if (this.open && typeof pipelineChart !== 'undefined' && pipelineChart) pipelineChart.resize();">
+      <summary><h2 style="margin:0;">Production Pipeline</h2></summary>
+      <div class="adm-fold-body">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:0 0 12px;padding:10px 12px;background:var(--surface2);border-radius:8px;">
       <div style="text-align:center;">
         <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;">YTD Earnings</div>
@@ -3225,6 +3231,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
     <div id="pipelineSummary" style="margin-top:8px; font-size:0.78rem; color:var(--text-dim); text-align:center;"></div>
     <div id="pipelineUnreceived" style="margin-top:8px; text-align:center;"></div>
+      </div>
+    </details>
   </div>
 
   <!-- 4. Historical Trends (with annual income stats above chart) -->
@@ -28634,7 +28642,7 @@ function renderTimeTab() {
   const timeTitleEl = document.getElementById('timeSummaryTitle');
   if (timeTitleEl) timeTitleEl.textContent = _userName ? (_userName + "'s Time Summary") : 'Time Summary';
   const assignTitleEl = document.getElementById('assignDataTitle');
-  if (assignTitleEl) assignTitleEl.textContent = _userName ? (_userName + "'s Assignment Data") : 'Assignment Data';
+  if (assignTitleEl) assignTitleEl.textContent = _userName ? (_userName + "'s Personal Assignment Data") : 'Personal Assignment Data';
   renderTimeSummary();
   renderProductionTrend();
   renderWeekendVsWeekday();
