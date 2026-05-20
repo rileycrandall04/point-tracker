@@ -23157,7 +23157,7 @@ function _renderAnnualBreakdownRow(row, monthNames) {
   let detailHtml = '';
   if (c.mode === 'actual') {
     const formula = _fmtMoney(c.compTotal) + ' compTotal' +
-      ' &nbsp;+&nbsp; ' + _fmtMoney(c.posStip) + ' positive stipends' +
+      ' &nbsp;+&nbsp; ' + _fmtMoney(c.posStip) + ' positive stipends &amp; distributions' +
       ' &nbsp;=&nbsp; <strong>' + _fmtMoney(row.amt) + '</strong>';
     const note = 'From comp summary report entered for ' + workLabel + '. Retirement is a post-gross deduction and is not included.';
     detailHtml = '<div class="abr-formula">' + formula + '</div>' +
@@ -23165,7 +23165,7 @@ function _renderAnnualBreakdownRow(row, monthNames) {
   } else if (c.mode === 'estimate') {
     const pvStr = (c.pv || 0).toFixed(2);
     const formula = (c.pts || 0).toFixed(1) + ' pts &times; $' + pvStr + '/pt = ' + _fmtMoney(c.prodEst) +
-      ' &nbsp;+&nbsp; ' + _fmtMoney(c.posStip) + ' positive stipends' +
+      ' &nbsp;+&nbsp; ' + _fmtMoney(c.posStip) + ' positive stipends &amp; distributions' +
       ' &nbsp;=&nbsp; <strong>' + _fmtMoney(row.amt) + '</strong>';
     const note = 'Estimate from tracked ' + workLabel + ' points. Retirement is a post-gross deduction and is not included.';
     detailHtml = '<div class="abr-formula">' + formula + '</div>' +
@@ -27231,6 +27231,14 @@ function _ppGrossBreakdown(workKey) {
   let posStip = 0;
   for (const e of stipEntries) {
     const a = e.amount || 0;
+    if (a > 0) posStip += a;
+  }
+  // Class B Margin / CRNA Distribution / Surgical Center Dist are stored
+  // separately in data.nonGuaranteed (they're entered on Step 3 of Paycheck
+  // Entry), but they're positive income and belong in the gross figure too.
+  const ng = (data.nonGuaranteed && data.nonGuaranteed[workKey]) || {};
+  for (const k of Object.keys(ng)) {
+    const a = ng[k] || 0;
     if (a > 0) posStip += a;
   }
   return { posStip };
