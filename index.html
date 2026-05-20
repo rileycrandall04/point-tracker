@@ -14615,8 +14615,23 @@ function getShiftPointsForDate(dateStr, estimate) {
     const cloneEntries = clone.timeEntries || [];
     const now = new Date();
     const nowStr = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+    // Substitute "now" as the end of the open entry. Guard against the
+    // case where the user just set start to the current minute (or typed
+    // a start a few minutes in the future): the cloned entry would have
+    // end <= start, and the downstream overnight wrap in calcShiftTotal
+    // (if (en <= s) en += 1440) would treat it as a 24-hour shift and
+    // produce a momentary spike of ~600 pts that "fixes itself" once the
+    // wall clock ticks past the start minute. Only substitute when now
+    // is genuinely past start, or when start is more than 12 hours after
+    // now (genuine cross-midnight: started late yesterday, currently
+    // early today). Otherwise leave the end empty so this entry
+    // contributes 0 elapsed time until the clock advances.
     if (cloneEntries.length > 0) {
-      cloneEntries[cloneEntries.length - 1].end = nowStr;
+      const lastClone = cloneEntries[cloneEntries.length - 1];
+      const startMin = timeToMinutes(lastClone.start);
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const isSmallForwardGap = nowMin <= startMin && (startMin - nowMin) <= 720;
+      lastClone.end = isSmallForwardGap ? '' : nowStr;
     }
     clone.timeEntries = cloneEntries;
     const totals = calcShiftTotal(clone);
