@@ -13099,28 +13099,37 @@ function todayStr() {
 function effectiveWorkDate() {
   const now = new Date();
   const currentMin = now.getHours() * 60 + now.getMinutes();
-  if (currentMin < 420) { // Before 07:00
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayKey = yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
-    // At 06:40+ after a call shift, advance to today for the post-call shift
-    // Stay on call shift if user clocked in at 06:30 or earlier and is still clocked in
-    // Advance to today if user clocks in after 06:30 (new post-call shift)
-    if (currentMin >= 400) {
-      const prevShift = data.shifts[yesterdayKey];
-      if (prevShift && ['1st_call','2nd_call','3rd_call','4th_call'].includes(prevShift.assignmentType)) {
-        const entries = prevShift.timeEntries || [];
-        const clockedInEarly = entries.some(e => {
-          if (!e.start || e.end) return false;
-          const s = timeToMinutes(e.start);
-          // Clock-in at 06:30 or earlier (including overnight starts like 17:00+)
-          return s <= 390 || s >= 420;
-        });
-        if (!clockedInEarly) return todayStr();
-      }
-    }
-    return yesterdayKey;
-  }
+  if (currentMin >= 420) return todayStr(); // 07:00 or later → today
+
+  // Before 07:00 — are we still inside YESTERDAY's work day, or has today's
+  // begun? Default is "today": same-day shifts (General OR, etc.) end the
+  // evening they start, so an early-morning start (e.g. a 06:45 OR clock-in)
+  // belongs to today. We only stay on yesterday when work genuinely spans
+  // the boundary.
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
+  const prevShift = data.shifts[yesterdayKey];
+  if (!prevShift) return todayStr();
+
+  const entries = prevShift.timeEntries || [];
+  // Still clocked in on yesterday's shift across midnight (an overnight case
+  // running). The 06:31–06:59 window is excluded so a fresh early-morning
+  // clock-in counts as today's work, not a continuation of yesterday.
+  const overnightOpen = entries.some(e => {
+    if (!e.start || e.end) return false;
+    const s = timeToMinutes(e.start);
+    return s <= 390 || s >= 420;
+  });
+  if (overnightOpen) return yesterdayKey;
+
+  // On-call shifts cover the patient overnight even while clocked out between
+  // cases, so before the post-call hour (06:40) the early-morning hours still
+  // belong to yesterday's call shift. From 06:40 on, a clean clocked-out state
+  // means today's (post-call) day has started.
+  const isCallShift = ['1st_call','2nd_call','3rd_call','4th_call'].includes(prevShift.assignmentType);
+  if (isCallShift && currentMin < 400) return yesterdayKey;
+
   return todayStr();
 }
 
