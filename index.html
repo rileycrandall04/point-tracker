@@ -9931,6 +9931,10 @@ function backfillSiteIds(d) {
   return d;
 }
 
+function _emptyData() {
+  return { shifts: {}, cases: [], overrides: {}, stipends: {}, calendarAssignments: {}, paychecks: {}, retirement: {}, nonGuaranteed: {} };
+}
+
 function loadData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -11091,10 +11095,19 @@ async function loadFromFirestore(uid) {
         data = localData;
         return 'migrated';
       }
+      // Genuinely new account with nothing to migrate. Reset to a clean
+      // empty dataset so we never leave a previously signed-in account's
+      // data in memory (which migrateData/saveData would then write to THIS
+      // account's doc, clobbering it).
+      data = _emptyData();
       return 'empty';
     }
   } catch(err) {
     console.error('Firestore load error:', err);
+    // Don't leave a prior account's in-memory data around on a failed read.
+    // The caller must NOT enable sync or run a migrate-save on 'error', or
+    // it could overwrite cloud data we simply failed to fetch.
+    data = _emptyData();
     return 'error';
   }
 }
@@ -20693,6 +20706,10 @@ async function performSignOut() {
   firestoreSyncEnabled = false;
   currentUser = null;
   [STORAGE_KEY, SETTINGS_KEY, QGENDA_KEY, PROD_KEY, RECON_DECISIONS_KEY, SHIFT_RECON_DECISIONS_KEY].forEach(k => localStorage.removeItem(k));
+  // Drop the signed-out account's data from memory so it can't carry over
+  // into the next account (which would otherwise display it and, worse, let
+  // a migrate/save write it under the new account's UID).
+  data = _emptyData();
   await auth.signOut();
   document.getElementById('authOverlay').classList.remove('hidden');
 }
@@ -35838,7 +35855,12 @@ auth.onAuthStateChanged(async (user) => {
     const result = await loadFromFirestore(user.uid);
     await loadSettingsFromFirestore(user.uid);
 
-    firestoreSyncEnabled = true;
+    // If the data read failed, keep sync OFF and skip the migrate pass.
+    // migrateData() ends with saveData(), and loadFromFirestore has reset
+    // `data` to empty on error — saving that would clobber the cloud doc we
+    // simply couldn't fetch. A reload retries the read.
+    const loadFailed = (result === 'error');
+    firestoreSyncEnabled = !loadFailed;
     // Seed the shared-shifts diff cache once per session so subsequent
     // saves only write what changed. Fire-and-forget; sync functions
     // await this promise before running.
@@ -35848,8 +35870,9 @@ auth.onAuthStateChanged(async (user) => {
     document.getElementById('authOverlay').classList.add('hidden');
 
     // Re-run migration & init with cloud data
-    migrateData(data);
+    if (!loadFailed) migrateData(data);
     initApp();
+    if (loadFailed) showToast('Could not load your data — reload to retry. Nothing was saved.');
 
     // Admin cards live on the dedicated Admin page (renderAdminPage()).
     // Pre-fill the Claude API key so when the app_owner opens the Admin
