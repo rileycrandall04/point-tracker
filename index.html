@@ -4489,6 +4489,21 @@ body.hide-monetary .monetary-hide { display: none !important; }
           <div id="adminProcMapStatus" style="font-size:0.72rem;margin-top:6px;"></div>
         </div>
         <div id="adminProcMapList" style="font-size:0.85rem;"></div>
+
+        <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;">
+          <div style="font-size:0.85rem;font-weight:600;margin-bottom:6px;">Reassign procedure code</div>
+          <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 8px 0;line-height:1.5;">
+            Bulk-fix the ASA code &amp; base units for a procedure across your own cases and the community pool. Your cases are rewritten; other users' cases are corrected with an override (their private records aren't touched). Name match is case-insensitive. Leave <em>current code</em> blank to change every matching case, or set it to only fix the wrong-coded ones. Blank base units = use the master value for the new code.
+          </p>
+          <input type="text" id="reassignProcName" placeholder="Procedure name (e.g. TURBT)" style="width:100%;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;margin-bottom:6px;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <input type="text" id="reassignOldCode" placeholder="Current code (optional)" style="flex:1;min-width:120px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
+            <input type="text" id="reassignNewCode" placeholder="New ASA code" style="flex:1;min-width:110px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
+            <input type="text" id="reassignNewUnits" inputmode="numeric" placeholder="New base units" style="flex:1;min-width:110px;padding:7px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.85rem;">
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="adminReassignProcedureCode()" style="margin-top:8px;">Preview &amp; reassign</button>
+          <div id="reassignProcStatus" style="font-size:0.72rem;margin-top:6px;"></div>
+        </div>
       </div>
     </details>
   </div>
@@ -9906,6 +9921,72 @@ async function deleteAdminProcedureMapping(variant) {
   }
 }
 
+// Owner-only: bulk-correct the ASA code + base units for a procedure across
+// the owner's own cases (rewritten directly) and the community pool (other
+// users' cases corrected via sharedCaseOverrides — their private records are
+// never modified). Matches the procedure name case-insensitively; an optional
+// current-code filter limits the change to only wrong-coded cases.
+async function adminReassignProcedureCode() {
+  if (!isAppOwner()) { alert('App owner only.'); return; }
+  const statusEl = document.getElementById('reassignProcStatus');
+  const setStatus = (m, e) => { if (statusEl) { statusEl.textContent = m; statusEl.style.color = e ? 'var(--accent2)' : 'var(--text-dim)'; } };
+  const name = (document.getElementById('reassignProcName').value || '').trim();
+  const oldCode = (document.getElementById('reassignOldCode').value || '').trim();
+  const newCode = (document.getElementById('reassignNewCode').value || '').trim();
+  let newUnits = (document.getElementById('reassignNewUnits').value || '').trim();
+  if (!name) { setStatus('Enter a procedure name.', true); return; }
+  if (!newCode) { setStatus('Enter the new ASA code.', true); return; }
+  if (newUnits === '' && typeof getAsaBU === 'function') {
+    const bu = getAsaBU(newCode);
+    if (bu !== undefined && bu !== null) newUnits = String(bu);
+  }
+  const nameLc = name.toLowerCase();
+  const matches = (proc, code) => {
+    if (!proc || proc.trim().toLowerCase() !== nameLc) return false;
+    if (oldCode && (code || '').trim() !== oldCode) return false;
+    return true;
+  };
+  const myUid = currentUser ? currentUser.uid : '';
+  const personal = (data.cases || []).filter(c => c && c.caseType === 'standard' && matches(c.procedure, c.asaCode));
+  const shared = (sharedCasesLoaded ? sharedCasesCache : []).filter(sc => sc && sc.uid !== myUid && sc.caseType === 'standard' && sc._docId && matches(sc.procedure, sc.asaCode));
+  if (personal.length === 0 && shared.length === 0) { setStatus('No matching cases found for "' + name + '"' + (oldCode ? ' with code ' + oldCode : '') + '.', true); return; }
+  const msg = 'Reassign ' + (personal.length + shared.length) + ' case(s) named "' + name + '"'
+    + (oldCode ? ' with code ' + oldCode : '') + ' to ASA ' + newCode + (newUnits !== '' ? ' / ' + newUnits + 'u' : '') + '?\n\n'
+    + personal.length + ' of yours (rewritten) + ' + shared.length + ' community case(s) (corrected via override).';
+  if (!confirm(msg)) { setStatus('Cancelled.'); return; }
+  setStatus('Reassigning…');
+  try {
+    for (const c of personal) {
+      c.asaCode = newCode;
+      if (newUnits !== '') c.baseUnits = newUnits;
+      const shift = data.shifts[c.shiftDate];
+      writeSharedCase(c, shift);
+      writeCaseDoc(c);
+    }
+    if (personal.length > 0) saveData(data);
+    let sharedOk = 0, sharedFail = 0;
+    for (const sc of shared) {
+      const overrideObj = { siteId: getCurrentSiteId(), updatedAt: new Date().toISOString(), asaCode: newCode };
+      if (newUnits !== '') overrideObj.baseUnits = newUnits;
+      sharedCaseOverridesCache[sc._docId] = Object.assign(sharedCaseOverridesCache[sc._docId] || {}, overrideObj);
+      sc.asaCode = newCode;
+      if (newUnits !== '') sc.baseUnits = newUnits;
+      try {
+        await db.collection('sharedCaseOverrides').doc(sc._docId).set(overrideObj, { merge: true });
+        sharedOk++;
+      } catch (err) { console.error('Override write failed for ' + sc._docId, err); sharedFail++; }
+    }
+    let msg2 = 'Done: ' + personal.length + ' of yours + ' + sharedOk + ' community case(s) updated.';
+    if (sharedFail > 0) msg2 += ' ' + sharedFail + ' community write(s) were denied (check sharedCaseOverrides rules).';
+    msg2 += ' Reload to refresh suggestions.';
+    setStatus(msg2, sharedFail > 0);
+    if (typeof updateHeaderPoints === 'function') updateHeaderPoints();
+  } catch (err) {
+    console.error('Reassign failed:', err);
+    setStatus('Failed: ' + ((err && err.message) || err), true);
+  }
+}
+
 async function _persistProcedureMappings() {
   await db.collection('procedureMappings').doc('config').set({
     mappings: procedureMappingsCache,
@@ -10905,6 +10986,8 @@ function applySharedCaseOverrides() {
     if (override) {
       if (override.surgeon !== undefined) sc.surgeon = override.surgeon;
       if (override.procedure !== undefined) sc.procedure = override.procedure;
+      if (override.asaCode !== undefined) sc.asaCode = override.asaCode;
+      if (override.baseUnits !== undefined) sc.baseUnits = override.baseUnits;
     }
   });
 }
