@@ -3519,6 +3519,18 @@ body.hide-monetary .monetary-hide { display: none !important; }
       </div>
     </details>
   </div>
+
+  <!-- Owner-only: restore data doc from a restored backup database -->
+  <div class="card hidden" id="ownerRecoveryCard" style="margin-top:12px;">
+    <h2>Restore from backup database</h2>
+    <p style="font-size:0.76rem;color:var(--text-dim);margin:0 0 10px 0;line-height:1.5;">
+      Reads <code>users/&lt;your-uid&gt;/data/data</code> out of a separate restored database and replaces this account's current data with it. Use after restoring a Firestore backup into a new database via the console. Your current data here will be overwritten.
+    </p>
+    <label style="display:block;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Recovery database ID</label>
+    <input type="text" id="recoveryDbId" placeholder="recovery" style="width:100%;font-size:0.85rem;margin-bottom:8px;">
+    <button class="btn btn-primary btn-sm" id="ownerRecoveryBtn" onclick="restoreFromRecoveryDb()" style="width:100%;">Preview &amp; Restore</button>
+    <div id="recoveryStatus" style="margin-top:8px;font-size:0.78rem;color:var(--text-dim);"></div>
+  </div>
 </div>
 
 <!-- HISTORY PAGE -->
@@ -35739,6 +35751,60 @@ function updateAccountUI(user) {
   name.textContent = user.displayName || 'User';
   email.textContent = user.email || '';
   if (typeof _refreshDemoSeedCardVisibility === 'function') _refreshDemoSeedCardVisibility();
+  const recCard = document.getElementById('ownerRecoveryCard');
+  if (recCard) recCard.classList.toggle('hidden', !(typeof isAppOwner === 'function' && isAppOwner()));
+}
+
+// Owner-only: pull this account's data blob out of a separately-restored
+// Firestore backup database and write it back to the live account. Reuses
+// the modular SDK (10.8.0) to read a named database without disturbing the
+// compat connection used everywhere else. The recovery database needs read
+// rules that allow this owner (publish a temporary allow-read rule on it).
+async function restoreFromRecoveryDb() {
+  if (typeof isAppOwner === 'function' && !isAppOwner()) { alert('Owner only.'); return; }
+  if (!currentUser) { alert('Not signed in.'); return; }
+  const dbId = (document.getElementById('recoveryDbId').value || '').trim();
+  const statusEl = document.getElementById('recoveryStatus');
+  const setStatus = (msg, isErr) => { if (statusEl) { statusEl.textContent = msg; statusEl.style.color = isErr ? 'var(--accent2)' : 'var(--text-dim)'; } };
+  if (!dbId) { setStatus('Enter the recovery database ID.', true); return; }
+  setStatus('Loading recovery reader…');
+  try {
+    const appMod = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js');
+    const fsMod = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+    const app = appMod.getApp();
+    const recDb = fsMod.getFirestore(app, dbId);
+    setStatus('Reading users/' + currentUser.uid + '/data/data from "' + dbId + '"…');
+    const ref = fsMod.doc(recDb, 'users', currentUser.uid, 'data', 'data');
+    const snap = await fsMod.getDoc(ref);
+    if (!snap.exists()) { setStatus('No data doc found at users/' + currentUser.uid + '/data/data in "' + dbId + '".', true); return; }
+    const recovered = snap.data();
+    if (!recovered || !recovered.shifts || !Array.isArray(recovered.cases)) {
+      setStatus('That document is missing shifts/cases — does not look like a valid data blob. Aborting.', true);
+      return;
+    }
+    const caseCount = recovered.cases.length;
+    const shiftCount = Object.keys(recovered.shifts).length;
+    if (!confirm('Found ' + caseCount + ' cases and ' + shiftCount + ' shifts in "' + dbId + '".\n\nReplace this account\'s current data with it? Current (test) data will be overwritten.')) {
+      setStatus('Cancelled.');
+      return;
+    }
+    if (!recovered.overrides) recovered.overrides = {};
+    if (!recovered.stipends) recovered.stipends = {};
+    if (!recovered.calendarAssignments) recovered.calendarAssignments = {};
+    if (!recovered.paychecks) recovered.paychecks = {};
+    if (!recovered.retirement) recovered.retirement = {};
+    if (!recovered.nonGuaranteed) recovered.nonGuaranteed = {};
+    data = recovered;
+    migrateData(data);
+    saveData(data);
+    if (typeof syncAllSharedCases === 'function') syncAllSharedCases();
+    if (typeof updateHeaderPoints === 'function') updateHeaderPoints();
+    if (typeof renderHistory === 'function') renderHistory();
+    setStatus('Restored ' + caseCount + ' cases and ' + shiftCount + ' shifts. Reload the app to see everything.');
+  } catch (err) {
+    console.error('Recovery failed:', err);
+    setStatus('Failed: ' + ((err && err.message) || err), true);
+  }
 }
 
 // ================================================================
