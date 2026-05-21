@@ -4683,6 +4683,21 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 </div>
 
+<!-- Share App link -->
+<div class="modal-overlay hidden" id="shareAppModal" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal" style="max-width:420px;">
+    <h2>Share the App</h2>
+    <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:12px;">Send this link to a colleague so they can open and install the tracker.</p>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input type="text" id="shareAppUrl" readonly onclick="this.select();" style="flex:1;min-width:0;font-size:0.82rem;">
+      <button class="btn btn-primary btn-sm" id="shareAppCopyBtn" onclick="copyShareAppUrl()" style="white-space:nowrap;flex-shrink:0;">Copy</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('shareAppModal').classList.add('hidden')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Community Stats drill-down (app owner only) -->
 <div class="modal-overlay hidden" id="communityStatsDetailModal">
   <div class="modal" style="max-width:520px;max-height:85vh;overflow-y:auto;">
@@ -5460,6 +5475,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="drawer-item" data-page="asacodes">
     <span class="drawer-icon">&#128209;</span>
     <span>ASA Code Reference</span>
+  </div>
+  <div class="drawer-item" onclick="closeDrawer();openShareModal();">
+    <span class="drawer-icon">&#128279;</span>
+    <span>Share App</span>
   </div>
 </div>
 
@@ -14774,6 +14793,29 @@ function toggleDrawer() {
   const panel = document.getElementById('drawerPanel');
   if (panel.classList.contains('open')) closeDrawer();
   else openDrawer();
+}
+
+function openShareModal() {
+  const input = document.getElementById('shareAppUrl');
+  if (input) input.value = window.location.origin + window.location.pathname;
+  const btn = document.getElementById('shareAppCopyBtn');
+  if (btn) btn.textContent = 'Copy';
+  document.getElementById('shareAppModal').classList.remove('hidden');
+}
+
+function copyShareAppUrl() {
+  const input = document.getElementById('shareAppUrl');
+  if (!input) return;
+  const flagCopied = () => {
+    const btn = document.getElementById('shareAppCopyBtn');
+    if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); }
+  };
+  const fallback = () => { input.focus(); input.select(); try { document.execCommand('copy'); } catch (_) {} flagCopied(); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(input.value).then(flagCopied).catch(fallback);
+  } else {
+    fallback();
+  }
 }
 
 document.getElementById('moreNavBtn').addEventListener('click', toggleDrawer);
