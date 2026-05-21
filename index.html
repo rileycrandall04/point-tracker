@@ -35755,11 +35755,33 @@ function updateAccountUI(user) {
   if (recCard) recCard.classList.toggle('hidden', !(typeof isAppOwner === 'function' && isAppOwner()));
 }
 
+// Convert a Firestore REST API "Value" into a plain JS value.
+function _firestoreRestToPlain(v) {
+  if (v == null) return null;
+  if ('nullValue' in v) return null;
+  if ('stringValue' in v) return v.stringValue;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return v.doubleValue;
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('mapValue' in v) {
+    const out = {};
+    const f = (v.mapValue && v.mapValue.fields) || {};
+    for (const k of Object.keys(f)) out[k] = _firestoreRestToPlain(f[k]);
+    return out;
+  }
+  if ('arrayValue' in v) {
+    const arr = (v.arrayValue && v.arrayValue.values) || [];
+    return arr.map(_firestoreRestToPlain);
+  }
+  return null;
+}
+
 // Owner-only: pull this account's data blob out of a separately-restored
-// Firestore backup database and write it back to the live account. Reuses
-// the modular SDK (10.8.0) to read a named database without disturbing the
-// compat connection used everywhere else. The recovery database needs read
-// rules that allow this owner (publish a temporary allow-read rule on it).
+// Firestore backup database and write it back to the live account. Reads via
+// the Firestore REST API using the signed-in user's ID token (so the recovery
+// DB's normal "authenticated read" rule applies and no extra SDK app is
+// needed). Only ever touches users/<currentUser.uid>/data/data.
 async function restoreFromRecoveryDb() {
   if (typeof isAppOwner === 'function' && !isAppOwner()) { alert('Owner only.'); return; }
   if (!currentUser) { alert('Not signed in.'); return; }
@@ -35767,17 +35789,22 @@ async function restoreFromRecoveryDb() {
   const statusEl = document.getElementById('recoveryStatus');
   const setStatus = (msg, isErr) => { if (statusEl) { statusEl.textContent = msg; statusEl.style.color = isErr ? 'var(--accent2)' : 'var(--text-dim)'; } };
   if (!dbId) { setStatus('Enter the recovery database ID.', true); return; }
-  setStatus('Loading recovery reader…');
+  setStatus('Reading users/' + currentUser.uid + '/data/data from "' + dbId + '"…');
   try {
-    const appMod = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js');
-    const fsMod = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
-    const app = appMod.getApp();
-    const recDb = fsMod.getFirestore(app, dbId);
-    setStatus('Reading users/' + currentUser.uid + '/data/data from "' + dbId + '"…');
-    const ref = fsMod.doc(recDb, 'users', currentUser.uid, 'data', 'data');
-    const snap = await fsMod.getDoc(ref);
-    if (!snap.exists()) { setStatus('No data doc found at users/' + currentUser.uid + '/data/data in "' + dbId + '".', true); return; }
-    const recovered = snap.data();
+    const token = await currentUser.getIdToken();
+    const projectId = (firebase.app().options && firebase.app().options.projectId) || 'mwa-point-tracker';
+    const url = 'https://firestore.googleapis.com/v1/projects/' + projectId +
+      '/databases/' + encodeURIComponent(dbId) +
+      '/documents/users/' + currentUser.uid + '/data/data';
+    const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      setStatus('Read failed (' + resp.status + '): ' + txt.slice(0, 300), true);
+      return;
+    }
+    const json = await resp.json();
+    if (!json.fields) { setStatus('No data doc found at users/' + currentUser.uid + '/data/data in "' + dbId + '".', true); return; }
+    const recovered = _firestoreRestToPlain({ mapValue: { fields: json.fields } });
     if (!recovered || !recovered.shifts || !Array.isArray(recovered.cases)) {
       setStatus('That document is missing shifts/cases — does not look like a valid data blob. Aborting.', true);
       return;
