@@ -21143,7 +21143,15 @@ function renderWeeklyChart() {
     rawPts.push(result.total);
     hoursArr.push(hrs);
 
-    const baseRaw = result.ar + result.prod + result.subspec + result.supervision;
+    const baseRaw = (() => {
+      // Base = everything that isn't pager-call or float bonus. Derive it from
+      // the true shift total rather than re-summing a subset of component
+      // fields, so components like the pre-call (morning OR) overlay and the
+      // force-off bonus — which Mole / OB overnight shifts carry — are
+      // included instead of being silently dropped from the bar and its label.
+      const b = round2(result.total - (result.call || 0) - (result.floatBonus || 0));
+      return b > 0 ? b : 0;
+    })();
     const pagerRaw = result.call;
     const floatRaw = result.floatBonus || 0;
     let baseVal = baseRaw;
