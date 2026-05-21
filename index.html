@@ -7955,6 +7955,7 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
       html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">';
       html += '<button class="btn btn-sm" onclick="adminMSInspectDrift(\'' + uid + '\')">Inspect drift</button>';
       html += '<button class="btn btn-sm" onclick="adminMSReconcileToBlob(\'' + uid + '\')" style="background:var(--accent2);color:#1e293b;">Reconcile to blob</button>';
+      html += '<button class="btn btn-sm" onclick="adminMSRebuildBlobFromSub(\'' + uid + '\')" style="background:var(--primary);color:#fff;">Rebuild blob &larr; sub</button>';
       html += '<button class="btn btn-sm" onclick="adminMSForceSignOut(\'' + uid + '\')" style="background:var(--surface);color:var(--accent2);">Force re-sign-in</button>';
       html += '</div>';
       html += '<div id="adminMSDriftDetail_' + uid + '" style="font-size:0.72rem;color:var(--text-dim);"></div>';
@@ -8165,6 +8166,56 @@ async function adminMSReconcileToBlob(uid) {
     showToast('Reconciled: +' + res.wrote + ' / -' + res.deleted);
   } catch (err) {
     detailEl.innerHTML = '<span style="color:var(--accent2);">Reconcile failed: ' + escapeHtml(err.message || String(err)) + '</span>';
+  }
+}
+
+// Rebuild the legacy blob's cases array FROM the per-case subcollection
+// (the opposite direction of Reconcile to blob). Use when the subcollection
+// is the source of truth and the blob has fallen behind — e.g. a case added
+// while reading from the subcollection that didn't land in the blob. Reads
+// the full subcollection, replaces only blob.cases (shifts / overrides /
+// stipends / etc. are preserved), and writes the blob. Never deletes from
+// the subcollection, so it can't lose a case.
+async function adminRebuildBlobFromSub(uid) {
+  if (!uid) throw new Error('uid required');
+  if (!isAppOwner()) throw new Error('not authorized');
+  const snap = await db.collection('users').doc(uid).collection('cases').get();
+  const subCases = [];
+  snap.forEach(doc => { const d = doc.data(); if (d && d.id) subCases.push(d); });
+  if (subCases.length === 0) throw new Error('subcollection is empty — refusing to overwrite blob');
+  const blobRef = db.collection('users').doc(uid).collection('data').doc('data');
+  const blobSnap = await blobRef.get();
+  const blob = blobSnap.exists ? (blobSnap.data() || {}) : {};
+  const prevCount = Array.isArray(blob.cases) ? blob.cases.length : 0;
+  blob.cases = subCases;
+  await blobRef.set(blob);
+  return { prevCount, newCount: subCases.length };
+}
+
+async function adminMSRebuildBlobFromSub(uid) {
+  const detailEl = document.getElementById('adminMSDriftDetail_' + uid);
+  if (!detailEl) return;
+  detailEl.innerHTML = '<span style="color:var(--text-dim);">Loading drift…</span>';
+  let drift;
+  try {
+    drift = await adminInspectCaseDrift(uid);
+  } catch (err) {
+    detailEl.innerHTML = '<span style="color:var(--accent2);">Inspect failed: ' + escapeHtml(err.message || String(err)) + '</span>';
+    return;
+  }
+  const msg = 'Rebuild the blob\'s case list from the subcollection?\n\n'
+    + 'Blob cases: ' + drift.blobCount + '  →  Subcollection cases: ' + drift.subCount + '\n'
+    + 'Adds to blob: ' + drift.onlyInSub.length + ' case(s)\n'
+    + 'Removes from blob: ' + drift.onlyInBlob.length + ' case(s)\n\n'
+    + 'The subcollection is left unchanged (nothing is deleted from it). Shifts and all other data are preserved.';
+  if (!confirm(msg)) return;
+  detailEl.innerHTML = '<span style="color:var(--text-dim);">Rebuilding blob…</span>';
+  try {
+    const res = await adminRebuildBlobFromSub(uid);
+    detailEl.innerHTML = '<span style="color:var(--accent);">&check; Blob rebuilt: ' + res.prevCount + ' &rarr; ' + res.newCount + ' cases. Reload the app.</span>';
+    showToast('Blob rebuilt from subcollection (' + res.newCount + ' cases)');
+  } catch (err) {
+    detailEl.innerHTML = '<span style="color:var(--accent2);">Rebuild failed: ' + escapeHtml(err.message || String(err)) + '</span>';
   }
 }
 
