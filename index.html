@@ -4769,6 +4769,28 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 </div>
 
+<!-- Monthly pace target / options editor -->
+<div class="modal-overlay hidden" id="paceTargetModal" onclick="if(event.target===this)closePaceTargetModal()">
+  <div class="modal" style="max-width:420px;">
+    <h2 id="paceTargetModalTitle">Monthly target</h2>
+    <p id="paceTargetModalHint" style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px;"></p>
+    <div class="form-group">
+      <label for="paceTargetModalInput">Custom goal for this month</label>
+      <input type="number" id="paceTargetModalInput" min="0" step="1" placeholder="Leave blank for rolling average" style="width:100%;">
+    </div>
+    <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:0.82rem;margin-top:6px;">
+      <input type="checkbox" id="paceIncludePostCall" style="width:14px;height:14px;margin-top:2px;flex:none;">
+      <span>Include post-call days in pace
+        <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:2px;">Post Mole, Post OB PM, and Post SF 1 are always excluded. Other post-call days are excluded unless this is checked.</span>
+      </span>
+    </label>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closePaceTargetModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="paceTargetModalSave" style="width:auto;" onclick="savePaceTargetModal()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Admin shift-rule edit modal -->
 <div class="modal-overlay hidden" id="adminRulesModal">
   <div class="modal" style="max-width:520px;">
@@ -27669,6 +27691,24 @@ function renderProjectedAnnual() {
   }
 }
 
+// Post-call recovery days that should not count as expected working days
+// for pace. Post Mole, Post OB PM, and Post SF 1 are always excluded — they
+// are protected recovery days the user isn't expected to produce on. Other
+// "Post …" days (Post Call, Post SF 2, etc.) are excluded by default too,
+// but the user can opt to include them via settings.includePostCallInPace.
+// Points actually earned on these days still count toward the month (they
+// show up as being ahead of pace) — they just aren't an expected baseline.
+function isPaceExcludedPostDay(dateStr) {
+  const cal = data.calendarAssignments && data.calendarAssignments[dateStr];
+  if (!cal || !cal.label) return false;
+  const label = String(cal.label).trim();
+  if (!/^post\b/i.test(label)) return false;
+  if (/\bmole\b/i.test(label)) return true;
+  if (/\bob\b/i.test(label) && /\bpm\b/i.test(label)) return true;
+  if (/\bsf\s*1\b/i.test(label)) return true;
+  return !(settings && settings.includePostCallInPace);
+}
+
 function renderMonthlyPace() {
   // Use effective work date so pace doesn't advance until 0700
   const effDate = effectiveWorkDate();
@@ -27702,6 +27742,7 @@ function renderMonthlyPace() {
     const isWeekend = (dow === 0 || dow === 6);
     if (isWeekend && !shiftDates.has(dateStr)) continue; // skip weekends unless a shift is scheduled
     if (vacDates.has(dateStr)) continue; // skip vacation days
+    if (isPaceExcludedPostDay(dateStr)) continue; // skip post-call recovery days
     weekdaysInMonth++;
     if (d <= dayOfMonth) weekdaysElapsed++;
   }
@@ -27922,22 +27963,39 @@ function editDefaultMonthlyGoal() {
   renderMonthlyPace();
 }
 
+let _paceTargetEditMonth = null;
 function editPaceTarget(monthKey, rollingAvg, currentGoal) {
-  const input = prompt(
-    'Monthly point target for ' + monthKey + '\n' +
-    'Rolling average: ' + rollingAvg.toFixed(0) + ' pts\n\n' +
-    'Enter a custom goal, or leave blank to reset to rolling average:',
-    currentGoal > 0 ? currentGoal : ''
-  );
-  if (input === null) return; // cancelled
+  _paceTargetEditMonth = monthKey;
+  document.getElementById('paceTargetModalTitle').textContent = 'Monthly target — ' + monthKey;
+  document.getElementById('paceTargetModalHint').textContent = rollingAvg > 0
+    ? 'Rolling average: ' + rollingAvg.toFixed(0) + ' pts. Leave the goal blank to track against the rolling average.'
+    : 'Enter a custom goal for this month, or leave it blank.';
+  const inp = document.getElementById('paceTargetModalInput');
+  inp.value = currentGoal > 0 ? currentGoal : '';
+  document.getElementById('paceIncludePostCall').checked = !!(settings && settings.includePostCallInPace);
+  document.getElementById('paceTargetModal').classList.remove('hidden');
+  inp.focus();
+}
+
+function closePaceTargetModal() {
+  document.getElementById('paceTargetModal').classList.add('hidden');
+  _paceTargetEditMonth = null;
+}
+
+function savePaceTargetModal() {
+  const monthKey = _paceTargetEditMonth;
+  if (!monthKey) { closePaceTargetModal(); return; }
   if (!settings.monthlyGoals) settings.monthlyGoals = {};
-  const val = parseFloat(input);
-  if (input.trim() === '' || isNaN(val) || val <= 0) {
+  const raw = document.getElementById('paceTargetModalInput').value;
+  const val = parseFloat(raw);
+  if (raw.trim() === '' || isNaN(val) || val <= 0) {
     delete settings.monthlyGoals[monthKey];
   } else {
     settings.monthlyGoals[monthKey] = round2(val);
   }
+  settings.includePostCallInPace = document.getElementById('paceIncludePostCall').checked;
   saveSettings(settings);
+  closePaceTargetModal();
   renderMonthlyPace();
   updateHeaderPoints();
 }
@@ -32184,6 +32242,7 @@ function updateHeaderPoints() {
       const isWeekend = (dow === 0 || dow === 6);
       if (isWeekend && !hdrShiftDates.has(ds)) continue;
       if (hdrVacDates.has(ds)) continue;
+      if (isPaceExcludedPostDay(ds)) continue; // skip post-call recovery days
       hdrWeekdaysInMonth++;
       if (dd <= dayOfMonth) hdrWeekdaysElapsed++;
     }
