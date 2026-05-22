@@ -27908,24 +27908,42 @@ function renderMonthlyPace() {
   } else {
     const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const perDay = ptsPerDayNeeded > 0 ? ptsPerDayNeeded.toFixed(1) : '';
+    const siteAvgs = getSiteWideAvgByType(); // null until community pool loads
+    let projTotal = 0, projAny = false;
     let rows = '<div style="display:flex;justify-content:space-between;color:var(--text-dim);font-weight:600;margin-bottom:4px;">'
       + '<span>' + remainingDays.length + ' working day' + (remainingDays.length === 1 ? '' : 's') + ' remaining</span>'
-      + (perDay ? '<span>' + perDay + ' pts/day</span>' : '') + '</div>';
+      + (perDay ? '<span>' + perDay + ' pts/day needed</span>' : '') + '</div>';
+    rows += '<div style="display:flex;justify-content:space-between;color:var(--text-dim);font-size:0.68rem;margin-bottom:4px;"><span>Day · assignment</span><span>site avg</span></div>';
     remainingDays.forEach(rd => {
       const dayNum = parseInt(rd.dateStr.split('-')[2], 10);
       const cal = data.calendarAssignments && data.calendarAssignments[rd.dateStr];
       const shift = data.shifts[rd.dateStr];
+      const type = (cal && cal.type) || (shift && shift.assignmentType) || null;
       let assignLabel;
       if (cal && cal.label) assignLabel = cal.label;
       else if (shift && shift.assignmentType) assignLabel = getAssignmentTypeName(shift.assignmentType, shift.siteId);
       else assignLabel = 'Open weekday';
+      let avgStr;
+      if (!type) avgStr = '<span style="color:var(--text-dim);">&mdash;</span>';
+      else if (siteAvgs === null) avgStr = '<span style="color:var(--text-dim);">…</span>';
+      else if (typeof siteAvgs[type] === 'number') {
+        avgStr = '<span style="color:var(--accent);font-weight:600;">' + siteAvgs[type].toFixed(0) + ' pts</span>';
+        projTotal += siteAvgs[type]; projAny = true;
+      } else avgStr = '<span style="color:var(--text-dim);">no data</span>';
       rows += '<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0;">'
-        + '<span>' + dowNames[rd.dow] + ' ' + dayNum + '</span>'
-        + '<span style="color:var(--text-dim);text-align:right;">' + escHtml(assignLabel) + '</span>'
+        + '<span>' + dowNames[rd.dow] + ' ' + dayNum + ' <span style="color:var(--text-dim);">' + escHtml(assignLabel) + '</span></span>'
+        + '<span style="text-align:right;white-space:nowrap;">' + avgStr + '</span>'
         + '</div>';
     });
+    if (projAny) {
+      rows += '<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:4px;padding-top:4px;font-weight:600;">'
+        + '<span>Projected from site avgs</span><span style="color:var(--accent);">' + round2(projTotal).toFixed(0) + ' pts</span></div>';
+    }
     _remList.innerHTML = rows;
   }
+  // Keep the toggle caret consistent if a re-render lands while the list is open.
+  const _caret = document.getElementById('paceRemainingCaret');
+  if (_caret) _caret.innerHTML = _remList.classList.contains('hidden') ? '&#9662;' : '&#9652;';
   document.getElementById('paceBar').style.width = pct + '%';
   let paceColor = 'var(--primary)';
   if (expectedByNow > 0) {
@@ -27968,6 +27986,12 @@ function togglePaceRemaining() {
   const nowHidden = list.classList.toggle('hidden');
   const caret = document.getElementById('paceRemainingCaret');
   if (caret) caret.innerHTML = nowHidden ? '&#9662;' : '&#9652;';
+  // Lazy-load the community pool the first time the list is opened so the
+  // site-wide averages can fill in (loadCommunityStats re-renders the pace
+  // card on success). Only attempt it when signed in.
+  if (!nowHidden && !_communityStatsCache && firestoreSyncEnabled && currentUser) {
+    loadCommunityStats(false);
+  }
 }
 
 // Saves the input from the in-card pace prompt as the user's default
@@ -28075,6 +28099,28 @@ function getAvgPointsByShiftType() {
     avgs[type] = round2(g.totalPts / g.count);
   });
   avgs._overall = allCount > 0 ? round2(allTotal / allCount) : 0;
+  return avgs;
+}
+
+// Site-wide average points per assignment type, drawn from the community
+// (sharedShifts) pool for the user's own site. Returns { [type]: avgPts },
+// or null if the community cache hasn't been loaded yet. The cache is
+// already site-scoped at load time, so this just buckets by assignmentType.
+function getSiteWideAvgByType() {
+  if (!_communityStatsCache || !_communityStatsCache.byUid) return null;
+  const mySite = getCurrentSiteId();
+  const groups = {};
+  Object.values(_communityStatsCache.byUid).forEach(rows => {
+    rows.forEach(r => {
+      if (r.siteId !== mySite) return;
+      if (!r.assignmentType || !(Number(r.points) > 0)) return;
+      if (!groups[r.assignmentType]) groups[r.assignmentType] = { total: 0, count: 0 };
+      groups[r.assignmentType].total += Number(r.points);
+      groups[r.assignmentType].count++;
+    });
+  });
+  const avgs = {};
+  Object.entries(groups).forEach(([t, g]) => { avgs[t] = round2(g.total / g.count); });
   return avgs;
 }
 
@@ -28684,6 +28730,9 @@ function loadCommunityStats(force) {
       });
       _communityStatsCache = { ts: Date.now(), byUid };
       renderCommunityStats();
+      // Refresh the pace card so its remaining-days list can show the
+      // now-available site-wide averages.
+      if (typeof renderMonthlyPace === 'function') renderMonthlyPace();
     })
     .catch(err => {
       console.error('Community stats load error:', err);
