@@ -3116,6 +3116,9 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div id="paceDiff" style="font-size:0.78rem; font-weight:600; flex:1; text-align:center;"></div>
         <span id="paceTarget" style="font-size:0.7rem;color:var(--text-dim);cursor:pointer;white-space:nowrap;" title="Click to set a custom monthly goal"></span>
       </div>
+      <!-- Remaining working days included in the pts/day-needed calc;
+           toggled by clicking the right-hand label. -->
+      <div id="paceRemainingList" class="hidden" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;font-size:0.74rem;max-height:220px;overflow-y:auto;"></div>
     </div>
     <!-- Prompt for users who haven't set a target yet (and don't have
          enough prior-month data for a rolling-average fallback). Once a
@@ -27735,6 +27738,7 @@ function renderMonthlyPace() {
   let weekdaysElapsed = 0;
   const vacDates = new Set(vacationDays.map(s => s.date));
   const shiftDates = new Set(monthShifts.filter(s => s.assignmentType !== 'vacation').map(s => s.date));
+  const remainingDays = []; // working days after today that count toward pts/day needed
   for (let d = 1; d <= daysInMonth; d++) {
     const dt = new Date(effY, effM - 1, d);
     const dow = dt.getDay(); // 0=Sun, 6=Sat
@@ -27745,6 +27749,7 @@ function renderMonthlyPace() {
     if (isPaceExcludedPostDay(dateStr)) continue; // skip post-call recovery days
     weekdaysInMonth++;
     if (d <= dayOfMonth) weekdaysElapsed++;
+    else remainingDays.push({ dateStr, dow });
   }
   const workingDaysInMonth = weekdaysInMonth;
   const workingDaysElapsed = weekdaysElapsed;
@@ -27860,8 +27865,13 @@ function renderMonthlyPace() {
     pct = Math.min(100, round2(currentPts / avgMonthEnd * 100));
     const nMonths = priorMonthCurves.length;
 
-    // Right label: pts/day needed + remaining working days
-    document.getElementById('paceRightLabel').innerHTML = '<span style="color:var(--primary);font-weight:600;">' + ptsPerDayNeeded.toFixed(1) + '</span> pts/day needed <span style="color:var(--text-dim);font-size:0.7rem;">(' + workingDaysRemaining + 'd left)</span>';
+    // Right label: pts/day needed + remaining working days. Clickable to
+    // reveal exactly which remaining days feed the calculation.
+    const _rl = document.getElementById('paceRightLabel');
+    _rl.innerHTML = '<span style="color:var(--primary);font-weight:600;">' + ptsPerDayNeeded.toFixed(1) + '</span> pts/day needed <span style="color:var(--text-dim);font-size:0.7rem;">(' + workingDaysRemaining + 'd left)</span> <span id="paceRemainingCaret" style="color:var(--primary);font-size:0.7rem;">&#9662;</span>';
+    _rl.style.cursor = 'pointer';
+    _rl.title = 'Click to see the remaining shifts included in this pace';
+    _rl.onclick = togglePaceRemaining;
 
     // Center diff label: ahead/behind
     const diffEl = document.getElementById('paceDiff');
@@ -27879,9 +27889,42 @@ function renderMonthlyPace() {
     document.getElementById('paceInfoIcon').setAttribute('data-tip', tip);
   } else {
     pct = Math.min(100, (dayOfMonth / daysInMonth) * 100);
-    document.getElementById('paceRightLabel').textContent = 'Day ' + dayOfMonth + ' of ' + daysInMonth;
+    const _rl = document.getElementById('paceRightLabel');
+    _rl.textContent = 'Day ' + dayOfMonth + ' of ' + daysInMonth;
+    _rl.style.cursor = 'default';
+    _rl.title = '';
+    _rl.onclick = null;
+    document.getElementById('paceRemainingList').classList.add('hidden');
     document.getElementById('paceDiff').textContent = '';
     document.getElementById('paceInfoIcon').setAttribute('data-tip', 'No prior month data for pace comparison');
+  }
+
+  // Build the remaining-shifts list (kept in sync each render; visibility is
+  // toggled by togglePaceRemaining). Shows each upcoming working day that
+  // counts toward the pts/day-needed figure, with its scheduled assignment.
+  const _remList = document.getElementById('paceRemainingList');
+  if (remainingDays.length === 0) {
+    _remList.innerHTML = '<div style="color:var(--text-dim);">No more working days counted this month.</div>';
+  } else {
+    const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const perDay = ptsPerDayNeeded > 0 ? ptsPerDayNeeded.toFixed(1) : '';
+    let rows = '<div style="display:flex;justify-content:space-between;color:var(--text-dim);font-weight:600;margin-bottom:4px;">'
+      + '<span>' + remainingDays.length + ' working day' + (remainingDays.length === 1 ? '' : 's') + ' remaining</span>'
+      + (perDay ? '<span>' + perDay + ' pts/day</span>' : '') + '</div>';
+    remainingDays.forEach(rd => {
+      const dayNum = parseInt(rd.dateStr.split('-')[2], 10);
+      const cal = data.calendarAssignments && data.calendarAssignments[rd.dateStr];
+      const shift = data.shifts[rd.dateStr];
+      let assignLabel;
+      if (cal && cal.label) assignLabel = cal.label;
+      else if (shift && shift.assignmentType) assignLabel = getAssignmentTypeName(shift.assignmentType, shift.siteId);
+      else assignLabel = 'Open weekday';
+      rows += '<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0;">'
+        + '<span>' + dowNames[rd.dow] + ' ' + dayNum + '</span>'
+        + '<span style="color:var(--text-dim);text-align:right;">' + escHtml(assignLabel) + '</span>'
+        + '</div>';
+    });
+    _remList.innerHTML = rows;
   }
   document.getElementById('paceBar').style.width = pct + '%';
   let paceColor = 'var(--primary)';
@@ -27904,7 +27947,7 @@ function renderMonthlyPace() {
     if (goalSource === 'default') {
       editLink = ' <span style="font-size:0.65rem;color:var(--primary);cursor:pointer;" title="Edit default goal" onclick="event.stopPropagation();editDefaultMonthlyGoal()">&#9998;</span>';
     }
-    targetEl.innerHTML = 'Target: <strong>' + avgMonthEnd.toFixed(0) + '</strong>' + tag + editLink;
+    targetEl.innerHTML = '<span style="border-bottom:1px dashed var(--primary);color:var(--primary);">Target: <strong>' + avgMonthEnd.toFixed(0) + '</strong>' + tag + ' &#9998;</span>' + editLink;
     targetEl.title = goalSource === 'custom'
       ? 'Custom goal for this month — click to edit or reset'
       : (goalSource === 'default'
@@ -27915,6 +27958,16 @@ function renderMonthlyPace() {
     targetEl.textContent = '';
     targetEl.onclick = null;
   }
+}
+
+// Show/hide the list of remaining working days that feed the pace's
+// pts/day-needed figure. Wired to the right-hand pace label.
+function togglePaceRemaining() {
+  const list = document.getElementById('paceRemainingList');
+  if (!list) return;
+  const nowHidden = list.classList.toggle('hidden');
+  const caret = document.getElementById('paceRemainingCaret');
+  if (caret) caret.innerHTML = nowHidden ? '&#9662;' : '&#9652;';
 }
 
 // Saves the input from the in-card pace prompt as the user's default
