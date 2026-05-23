@@ -2688,7 +2688,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div class="row"><span>Estimated Points</span><span id="previewPoints">--</span></div>
       </div>
 
-      <div id="caseFormLocationHint" class="hidden" style="font-size:0.68rem;color:var(--text-dim);margin-top:8px;text-align:right;"></div>
+      <div id="caseFormLocationHint" class="hidden" style="font-size:0.78rem;color:var(--text);margin-top:12px;padding:8px 12px;background:rgba(102,187,106,0.10);border-left:3px solid rgba(102,187,106,0.75);border-radius:4px;"></div>
 
       <div style="margin-top: 16px;">
         <button class="btn btn-primary" id="saveCaseBtn">Save Case</button>
@@ -19297,6 +19297,9 @@ function updateDataEntryState() {
       caseSection.classList.add('hidden');
     } else {
       caseSection.classList.remove('hidden');
+      // Refresh the bottom-of-form Location hint on every entry into the
+      // case section so it shows the inherited tag right away.
+      if (typeof _updateCaseFormLocationHint === 'function') _updateCaseFormLocationHint();
     }
     caseListCard.classList.remove('hidden');
   } else {
@@ -19361,18 +19364,10 @@ function renderDECaseList() {
         estFinishHtml = '<div style="flex-basis:100%;text-align:center;font-size:0.7rem;color:var(--text-dim);margin-top:6px;line-height:1.4;">est. finish <strong style="color:var(--text);">' + escHtml(est.finish) + '</strong> <span style="opacity:0.85;">' + label + '</span></div>';
       }
     }
-    // Resolve the case's Location (segment → shift → admin default) so the
-    // user has visible confirmation that the case is being tagged.
-    let _deLocStr = '';
-    if (shift && siteHasSubSites(shift.siteId)) {
-      const _ds = c.subSiteId || subSiteIdForCase(shift, c.startTime);
-      const _dl = _ds ? getSubSiteLabel(shift.siteId, _ds) : '';
-      if (_dl) _deLocStr = ` <span style="color:rgba(102,187,106,1);font-weight:600;">@ ${escHtml(_dl)}</span>`;
-    }
     html += `<div class="de-case-list-item" onclick="openCaseEdit('${c.id}')" style="cursor:pointer;${estFinishHtml ? 'flex-wrap:wrap;' : ''}">
       <div class="de-info">
         <div class="de-name">${escHtml(name)}${c.asaCode ? ' <span style="color:var(--text-dim);font-size:0.75rem;">(' + escHtml(c.asaCode) + ')</span>' : ''}${estTag}</div>
-        ${timeStr || _deLocStr ? `<div class="de-detail">${escHtml(timeStr)}${_deLocStr}</div>` : ''}
+        ${timeStr ? `<div class="de-detail">${escHtml(timeStr)}</div>` : ''}
       </div>
       <div class="de-actions">
         <span class="de-pts">${pts.toFixed(1)}</span>
@@ -20634,16 +20629,20 @@ function _updateCaseFormLocationHint() {
   const siteId = (shift && shift.siteId) || getCurrentSiteId();
   if (!siteHasSubSites(siteId)) { hint.classList.add('hidden'); return; }
   if (shift && isLocationExemptForType(siteId, shift.assignmentType)) { hint.classList.add('hidden'); return; }
+  if (!shift) { hint.classList.add('hidden'); return; }
   const startTime = document.getElementById('caseStart')?.value || '';
-  if (!shift || !startTime) { hint.classList.add('hidden'); return; }
-  const subId = subSiteIdForCase(shift, startTime);
+  // Resolve via segment when a start time is filled, otherwise fall back
+  // to the shift-level / admin default so the hint is visible from the
+  // moment the form is open.
+  const subId = startTime
+    ? subSiteIdForCase(shift, startTime)
+    : (shift.subSiteId || getDefaultSubSiteForAssignmentType(siteId, shift.assignmentType));
+  hint.classList.remove('hidden');
   if (!subId) {
-    hint.classList.remove('hidden');
-    hint.innerHTML = 'Location: <span style="color:var(--accent2);">not set</span> <span style="opacity:0.7;">(edit the shift to tag this segment)</span>';
+    hint.innerHTML = '<strong>Location:</strong> <span style="color:var(--accent2);">not set</span> <span style="opacity:0.7;">(edit the shift to tag this segment)</span>';
     return;
   }
-  hint.classList.remove('hidden');
-  hint.textContent = 'Location: ' + getSubSiteLabel(siteId, subId);
+  hint.innerHTML = '<strong>Location:</strong> ' + escapeHtml(getSubSiteLabel(siteId, subId));
 }
 
 // Same hint, edit-modal flavor — reads the modal's own start-time input.
