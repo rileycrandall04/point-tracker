@@ -1,8 +1,4 @@
-<<<<<<< Updated upstream
-const CACHE_NAME = 'mwa-tracker-v414';
-=======
-const CACHE_NAME = 'mwa-tracker-v381';
->>>>>>> Stashed changes
+const CACHE_NAME = 'mwa-tracker-v415';
 const ASSETS = [
   './',
   './index.html',
