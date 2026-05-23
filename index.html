@@ -10283,6 +10283,15 @@ function writeSharedCase(caseData, shift) {
   if (settings.shareData === false) return;
   if (caseData && caseData.demoSeed === true) return; // never share seeded demo data
   if (!caseData.id) return;
+  // Shared/handoff cases record only the portion this provider worked, so
+  // their times don't reflect the full case window. Excluding them from
+  // the community pool keeps procedure-time and surgeon-efficiency
+  // averages honest. Also clear any prior full-case doc when a case gets
+  // toggled into shared after the fact.
+  if (caseData.isSharedCase || caseData.isSharedLabor) {
+    deleteSharedCase(caseData.id);
+    return;
+  }
   const docId = currentUser.uid + '_' + caseData.id;
   const shared = buildSharedCase(caseData, shift);
   db.collection('sharedCases').doc(docId).set(shared).catch(err => {
@@ -10796,8 +10805,17 @@ function syncAllSharedCases() {
       if (!c.id) return;
       if (c.demoSeed === true) return; // never share seeded demo data
       const docId = currentUser.uid + '_' + c.id;
+      const ref = db.collection('sharedCases').doc(docId);
+      // Partial / handoff cases don't represent full case time, so they
+      // never belong in the community pool. Actively delete here so the
+      // backfill also cleans up any stale full-case docs uploaded before
+      // this filter existed.
+      if (c.isSharedCase || c.isSharedLabor) {
+        batch.delete(ref);
+        return;
+      }
       const shift = data.shifts[c.shiftDate];
-      batch.set(db.collection('sharedCases').doc(docId), buildSharedCase(c, shift));
+      batch.set(ref, buildSharedCase(c, shift));
     });
     batch.commit().catch(err => console.error('Shared batch write error:', err));
   }
