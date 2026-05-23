@@ -3095,33 +3095,20 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <span style="font-size:0.78rem;font-weight:600;">Turnover Time <span class="info-icon" data-tip="Minutes between case end and the next case start, within one continuous clock-in. Excludes labor / APS / acute pain / ICU-ER / shared cases, c-sections, nerve-block-only entries, NORA, ACS, OB-style shifts, SF1 daytime, weekends, and holidays. Window: trailing 90 days. Need 10 intervals to show a number.">i</span></span>
       <span style="font-size:0.68rem;color:var(--text-dim);">Past 90 days</span>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-      <div style="background:var(--surface2);border-radius:8px;padding:8px 10px;">
-        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px;">You</div>
-        <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
-          <span style="color:var(--text-dim);">Mean</span>
-          <span style="font-weight:600;color:var(--accent2);" id="turnoverYouMean">—</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
-          <span style="color:var(--text-dim);">Median</span>
-          <span style="font-weight:600;color:var(--accent);" id="turnoverYouMedian">—</span>
-        </div>
-        <div style="font-size:0.62rem;color:var(--text-dim);margin-top:4px;" id="turnoverYouCount">—</div>
+    <div style="background:var(--surface2);border-radius:8px;padding:8px 10px;">
+      <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px;">You</div>
+      <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+        <span style="color:var(--text-dim);">Mean</span>
+        <span style="font-weight:600;color:var(--accent2);" id="turnoverYouMean">—</span>
       </div>
-      <div style="background:var(--surface2);border-radius:8px;padding:8px 10px;">
-        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px;">Site</div>
-        <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
-          <span style="color:var(--text-dim);">Mean</span>
-          <span style="font-weight:600;color:var(--accent2);" id="turnoverSiteMean">—</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
-          <span style="color:var(--text-dim);">Median</span>
-          <span style="font-weight:600;color:var(--accent);" id="turnoverSiteMedian">—</span>
-        </div>
-        <div style="font-size:0.62rem;color:var(--text-dim);margin-top:4px;" id="turnoverSiteMeta">—</div>
+      <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+        <span style="color:var(--text-dim);">Median</span>
+        <span style="font-weight:600;color:var(--accent);" id="turnoverYouMedian">—</span>
       </div>
+      <div style="font-size:0.62rem;color:var(--text-dim);margin-top:4px;" id="turnoverYouCount">—</div>
     </div>
-    <div style="font-size:0.64rem;color:var(--text-dim);margin-top:6px;line-height:1.4;" id="turnoverSiteNote"></div>
+    <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;margin:10px 0 4px;">By Site</div>
+    <div id="turnoverBySiteList" style="display:flex;flex-direction:column;gap:4px;"></div>
   </div>
 
   <!-- Hours Trend -->
@@ -29334,14 +29321,31 @@ async function loadSharedTurnoverStats(force) {
   if (!force && fresh) return _sharedTurnoverStatsCache;
   const mySite = getCurrentSiteId();
   try {
-    const snap = await db.collection('sharedTurnoverStats').where('siteId', '==', mySite).get();
-    const byUid = {};
-    snap.forEach(doc => {
-      const d = doc.data() || {};
-      if (!d.uid || d.siteId !== mySite) return;
-      byUid[d.uid] = d;
-    });
-    _sharedTurnoverStatsCache = { ts: Date.now(), byUid };
+    // Fetch every site's published stats so the Turnover card can list
+    // them all. Falls back to a per-site query if the cross-site read is
+    // blocked by Firestore rules (some deployments may scope reads).
+    let byUid = {};
+    let crossSiteOk = false;
+    try {
+      const snap = await db.collection('sharedTurnoverStats').get();
+      snap.forEach(doc => {
+        const d = doc.data() || {};
+        if (!d.uid) return;
+        byUid[d.uid] = d;
+      });
+      crossSiteOk = true;
+    } catch (errAll) {
+      console.warn('Cross-site sharedTurnoverStats read denied, falling back to current site:', errAll);
+    }
+    if (!crossSiteOk) {
+      const snap = await db.collection('sharedTurnoverStats').where('siteId', '==', mySite).get();
+      snap.forEach(doc => {
+        const d = doc.data() || {};
+        if (!d.uid || d.siteId !== mySite) return;
+        byUid[d.uid] = d;
+      });
+    }
+    _sharedTurnoverStatsCache = { ts: Date.now(), byUid, crossSiteOk };
     return _sharedTurnoverStatsCache;
   } catch (err) {
     console.warn('Shared turnover stats load failed:', err);
@@ -29425,10 +29429,7 @@ function renderTurnoverCard() {
   const youMean = document.getElementById('turnoverYouMean');
   const youMedian = document.getElementById('turnoverYouMedian');
   const youCount = document.getElementById('turnoverYouCount');
-  const siteMean = document.getElementById('turnoverSiteMean');
-  const siteMedian = document.getElementById('turnoverSiteMedian');
-  const siteMeta = document.getElementById('turnoverSiteMeta');
-  const siteNote = document.getElementById('turnoverSiteNote');
+  const bySiteList = document.getElementById('turnoverBySiteList');
 
   // YOU — local data, instant.
   const userIntervals = getUserTurnoverIntervals();
@@ -29445,47 +29446,72 @@ function renderTurnoverCard() {
       : 'No qualifying cases yet';
   }
 
-  // SITE — Phase C if enough contributors, else Phase A. Both numbers
-  // are macro-averaged across users (mean of per-user means, median of
-  // per-user medians) so a single heavy contributor doesn't dominate.
+  // BY SITE — one row per known site using Phase C (shared aggregate) stats.
+  // Phase A approximation only works for the current site (its caches are
+  // single-site), so other sites stay "—" until they reach Phase C.
   const mySite = getCurrentSiteId();
-  const phaseC = getSiteTurnoverStatsFromPhaseC(mySite);
-  if (phaseC && phaseC.contributors >= TURNOVER_PHASE_C_MIN_CONTRIBUTORS) {
-    siteMean.textContent = _fmtTurnoverMin(phaseC.mean);
-    siteMedian.textContent = _fmtTurnoverMin(phaseC.median);
-    siteMeta.textContent = phaseC.contributors + ' contributors · last ' + TURNOVER_WINDOW_DAYS + 'd';
-    siteNote.textContent = '';
-  } else {
-    const approx = getSiteTurnoverStatsApproximate(mySite);
-    if (approx && approx.contributors >= TURNOVER_PHASE_A_MIN_CONTRIBUTORS) {
-      siteMean.textContent = _fmtTurnoverMin(approx.mean);
-      siteMedian.textContent = _fmtTurnoverMin(approx.median);
-      siteMeta.textContent = approx.contributors + ' contributors · ' + approx.count + ' intervals · last ' + TURNOVER_WINDOW_DAYS + 'd';
+  const siteIds = Object.keys(sitesCache || {}).filter(id => id);
+  if (siteIds.length === 0 && mySite) siteIds.push(mySite);
+  // Sort: current site first, then alphabetical by display name.
+  siteIds.sort((a, b) => {
+    if (a === mySite && b !== mySite) return -1;
+    if (b === mySite && a !== mySite) return 1;
+    const an = (sitesCache[a] && sitesCache[a].name) || a;
+    const bn = (sitesCache[b] && sitesCache[b].name) || b;
+    return an.localeCompare(bn);
+  });
+
+  let html = '';
+  siteIds.forEach(sid => {
+    const name = (sitesCache[sid] && sitesCache[sid].name) || sid;
+    const isMine = sid === mySite;
+    let meanStr = '—', medianStr = '—', metaStr = '';
+    const phaseC = getSiteTurnoverStatsFromPhaseC(sid);
+    if (phaseC && phaseC.contributors >= TURNOVER_PHASE_C_MIN_CONTRIBUTORS) {
+      meanStr = _fmtTurnoverMin(phaseC.mean);
+      medianStr = _fmtTurnoverMin(phaseC.median);
+      metaStr = phaseC.contributors + ' contributors';
+    } else if (isMine) {
+      const approx = getSiteTurnoverStatsApproximate(sid);
+      if (approx && approx.contributors >= TURNOVER_PHASE_A_MIN_CONTRIBUTORS) {
+        meanStr = _fmtTurnoverMin(approx.mean);
+        medianStr = _fmtTurnoverMin(approx.median);
+        metaStr = approx.contributors + ' contributors · approx';
+      } else if (approx === null) {
+        metaStr = 'Loading…';
+      } else {
+        metaStr = (approx.contributors || 0) + '/' + TURNOVER_PHASE_A_MIN_CONTRIBUTORS + ' contributors';
+      }
     } else {
-      siteMean.textContent = '—';
-      siteMedian.textContent = '—';
-      siteMeta.textContent = approx === null
-        ? 'Loading…'
-        : approx.contributors + '/' + TURNOVER_PHASE_A_MIN_CONTRIBUTORS + ' qualifying contributors so far';
+      metaStr = phaseC
+        ? phaseC.contributors + '/' + TURNOVER_PHASE_C_MIN_CONTRIBUTORS + ' contributors'
+        : 'No data yet';
     }
-    siteNote.textContent = phaseC
-      ? phaseC.contributors + '/' + TURNOVER_PHASE_C_MIN_CONTRIBUTORS + ' users have shared stats; switching to precise aggregate at ' + TURNOVER_PHASE_C_MIN_CONTRIBUTORS + '.'
-      : 'Site number is an average of each contributor\'s own mean / median, so heavy contributors don\'t skew it. Approximate while sharedShifts doesn\'t carry per-segment clock-in data.';
-  }
+    const rowStyle = isMine
+      ? 'background:rgba(66,133,244,0.10);border:1px solid rgba(66,133,244,0.35);'
+      : 'background:var(--surface2);';
+    html += '<div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;' + rowStyle + '">'
+      + '<div style="min-width:0;">'
+      +   '<div style="font-size:0.78rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(name) + (isMine ? ' <span style="font-size:0.6rem;color:var(--primary);font-weight:600;letter-spacing:0.3px;">YOUR SITE</span>' : '') + '</div>'
+      +   (metaStr ? '<div style="font-size:0.6rem;color:var(--text-dim);margin-top:2px;">' + escHtml(metaStr) + '</div>' : '')
+      + '</div>'
+      + '<div style="font-size:0.78rem;color:var(--accent2);font-weight:600;text-align:right;min-width:54px;">' + escHtml(meanStr) + ' <span style="font-size:0.6rem;color:var(--text-dim);font-weight:400;">mean</span></div>'
+      + '<div style="font-size:0.78rem;color:var(--accent);font-weight:600;text-align:right;min-width:54px;">' + escHtml(medianStr) + ' <span style="font-size:0.6rem;color:var(--text-dim);font-weight:400;">med</span></div>'
+      + '</div>';
+  });
+  if (!html) html = '<div style="font-size:0.7rem;color:var(--text-dim);">No site data available.</div>';
+  bySiteList.innerHTML = html;
 
   // Trigger lazy loads if data isn't ready yet. Re-render once they
   // resolve so the placeholders fill in.
-  let needsRerender = false;
   if (firestoreSyncEnabled && currentUser) {
     if (!_communityStatsCache) {
       loadCommunityStats(false);
     }
     if (!_sharedTurnoverStatsCache) {
-      needsRerender = true;
       loadSharedTurnoverStats(false).then(() => renderTurnoverCard()).catch(() => {});
     }
   }
-  void needsRerender; // intentional: re-render is triggered above
 }
 
 
