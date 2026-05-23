@@ -20938,8 +20938,31 @@ const APP_ANNOUNCEMENTS = [
 // up. Survives until the tab reloads.
 const _shownAnnouncementsThisSession = new Set();
 
+// One-shot resets per user, idempotent via a token list on settings.
+// Adds an entry here whenever you want a specific user to re-see an
+// announcement they've already dismissed (e.g. while testing a change).
+const _ANNOUNCEMENT_RESETS = [
+  { email: 'riley.crandall@gmail.com', token: 'ticker-2026-05-23-replay' }
+];
+
+function _applyAnnouncementResets() {
+  if (!currentUser || !currentUser.email) return;
+  if (!settings) return;
+  if (!Array.isArray(settings._announcementResetTokens)) settings._announcementResetTokens = [];
+  let mutated = false;
+  _ANNOUNCEMENT_RESETS.forEach(r => {
+    if (r.email !== currentUser.email) return;
+    if (settings._announcementResetTokens.includes(r.token)) return;
+    settings.seenAnnouncements = [];
+    settings._announcementResetTokens.push(r.token);
+    mutated = true;
+  });
+  if (mutated) saveSettings(settings);
+}
+
 function _maybeShowAnnouncements() {
   if (document._announcementShowing) return;
+  _applyAnnouncementResets();
   // Brand-new accounts (no shifts, no cases) have no "before" to compare
   // the change against, so skip historical-change announcements for them.
   const hasShifts = data && data.shifts && Object.keys(data.shifts).length > 0;
