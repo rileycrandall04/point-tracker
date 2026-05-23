@@ -2916,6 +2916,10 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <button class="tab-btn" data-cbl-range="ytd" onclick="switchCasesByLocationRange('ytd')">Year to Date</button>
         <button class="tab-btn" data-cbl-range="all" onclick="switchCasesByLocationRange('all')">All Time</button>
       </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+        <button class="tab-btn active" data-cbl-metric="count" onclick="switchCasesByLocationMetric('count')">By Count</button>
+        <button class="tab-btn" data-cbl-metric="time" onclick="switchCasesByLocationMetric('time')">By Time</button>
+      </div>
       <div id="casesByLocationContent">
         <p style="color:var(--text-dim);font-size:0.85rem;">No cases yet.</p>
       </div>
@@ -31513,12 +31517,40 @@ function renderAnalyticsTab() {
 }
 
 let _casesByLocationRange = 'month';
+let _casesByLocationMetric = 'count';
 function switchCasesByLocationRange(range) {
   _casesByLocationRange = range;
   document.querySelectorAll('#casesByLocationCard [data-cbl-range]').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-cbl-range') === range);
   });
   renderCasesByLocation();
+}
+function switchCasesByLocationMetric(metric) {
+  _casesByLocationMetric = metric;
+  document.querySelectorAll('#casesByLocationCard [data-cbl-metric]').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-cbl-metric') === metric);
+  });
+  renderCasesByLocation();
+}
+
+// Minutes between case start and end (cross-midnight aware). Returns 0
+// when the case has no clock-out yet so open cases don't skew time
+// percentages with an undefined duration.
+function _caseDurationMin(c) {
+  if (!c || !c.startTime || !c.endTime) return 0;
+  const s = timeToMinutes(c.startTime);
+  let e = timeToMinutes(c.endTime);
+  if (isNaN(s) || isNaN(e)) return 0;
+  if (e <= s) e += 1440;
+  return Math.max(0, e - s);
+}
+
+function _formatLocMinutes(mins) {
+  const m = Math.round(mins || 0);
+  if (m < 60) return m + 'm';
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r === 0 ? (h + 'h') : (h + 'h ' + r + 'm');
 }
 
 function renderCasesByLocation() {
@@ -31527,14 +31559,19 @@ function renderCasesByLocation() {
   const today = new Date();
   const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
   const range = _casesByLocationRange || 'month';
+  const metric = _casesByLocationMetric === 'time' ? 'time' : 'count';
   let from = '';
   if (range === 'month') from = todayStr.substring(0, 7) + '-01';
   else if (range === 'ytd') from = todayStr.substring(0, 4) + '-01-01';
   // Aggregate cases by (siteId, subSiteId). Resolves via subSiteIdForCase
-  // so cases that inherit from the shift still attribute correctly.
+  // so cases that inherit from the shift still attribute correctly. Tracks
+  // both count and total minutes per location so the user toggle picks the
+  // metric without re-walking the dataset.
   const byKey = {};
-  let total = 0;
-  let untagged = 0;
+  let totalCount = 0;
+  let totalMin = 0;
+  let untaggedCount = 0;
+  let untaggedMin = 0;
   data.cases.forEach(c => {
     if (!c || !c.shiftDate) return;
     if (from && c.shiftDate < from) return;
@@ -31542,28 +31579,43 @@ function renderCasesByLocation() {
     const siteId = (shift && shift.siteId) || '';
     if (!siteId || !siteHasSubSites(siteId)) return;
     if (shift && isLocationExemptForType(siteId, shift.assignmentType)) return;
-    total++;
+    const mins = _caseDurationMin(c);
+    totalCount++;
+    totalMin += mins;
     const subId = c.subSiteId || (shift ? subSiteIdForCase(shift, c.startTime) : '');
-    if (!subId) { untagged++; return; }
+    if (!subId) { untaggedCount++; untaggedMin += mins; return; }
     const key = siteId + '||' + subId;
-    if (!byKey[key]) byKey[key] = { siteId, subId, label: getSubSiteLabel(siteId, subId) || subId, count: 0 };
+    if (!byKey[key]) byKey[key] = { siteId, subId, label: getSubSiteLabel(siteId, subId) || subId, count: 0, minutes: 0 };
     byKey[key].count++;
+    byKey[key].minutes += mins;
   });
-  if (total === 0) {
+  if (totalCount === 0) {
     el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No cases in this range.</p>';
     return;
   }
-  const rows = Object.values(byKey).sort((a, b) => b.count - a.count);
+  // When metric=time and no case has a clock-out, fall back to count so
+  // the panel never shows all zeros.
+  const useTime = metric === 'time' && totalMin > 0;
+  const denom = useTime ? totalMin : totalCount;
+  const rows = Object.values(byKey).sort((a, b) => (useTime ? b.minutes - a.minutes : b.count - a.count));
   let html = '';
   rows.forEach(r => {
-    const pct = total > 0 ? ((r.count / total) * 100).toFixed(0) : '0';
-    html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.label)} <span style="color:var(--text-dim);font-size:0.7rem;">(${escHtml(r.siteId)})</span></span><span class="eff-value">${r.count} <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400;">(${pct}%)</span></span></div>`;
+    const v = useTime ? r.minutes : r.count;
+    const pct = denom > 0 ? ((v / denom) * 100).toFixed(0) : '0';
+    const valStr = useTime ? _formatLocMinutes(r.minutes) : String(r.count);
+    html += `<div class="efficiency-item"><span class="eff-label">${escHtml(r.label)} <span style="color:var(--text-dim);font-size:0.7rem;">(${escHtml(r.siteId)})</span></span><span class="eff-value">${valStr} <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400;">(${pct}%)</span></span></div>`;
   });
-  if (untagged > 0) {
-    const pct = ((untagged / total) * 100).toFixed(0);
-    html += `<div class="efficiency-item" style="opacity:0.7;"><span class="eff-label">Untagged</span><span class="eff-value">${untagged} <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400;">(${pct}%)</span></span></div>`;
+  const untaggedV = useTime ? untaggedMin : untaggedCount;
+  if (untaggedV > 0) {
+    const pct = ((untaggedV / denom) * 100).toFixed(0);
+    const valStr = useTime ? _formatLocMinutes(untaggedMin) : String(untaggedCount);
+    html += `<div class="efficiency-item" style="opacity:0.7;"><span class="eff-label">Untagged</span><span class="eff-value">${valStr} <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400;">(${pct}%)</span></span></div>`;
   }
-  html += `<div class="efficiency-item" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;font-weight:600;"><span class="eff-label">Total</span><span class="eff-value">${total}</span></div>`;
+  const totalStr = useTime ? _formatLocMinutes(totalMin) : String(totalCount);
+  html += `<div class="efficiency-item" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;font-weight:600;"><span class="eff-label">Total</span><span class="eff-value">${totalStr}</span></div>`;
+  if (metric === 'time' && totalMin === 0) {
+    html += `<p style="font-size:0.72rem;color:var(--text-dim);margin:6px 0 0;">No clocked-out cases yet — showing counts.</p>`;
+  }
   el.innerHTML = html;
 }
 
