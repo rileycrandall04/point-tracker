@@ -2786,8 +2786,23 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="card" id="todayBreakdownCard" style="padding:12px 16px;overflow:hidden;">
     <div id="tickerCaseFinishBar" style="display:none;margin:-12px -16px 10px;"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;">
-      <h2 id="todayTitle" style="margin:0;font-size:0.9rem;">Today</h2>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button id="tickerGearBtn" type="button" aria-label="Customize ticker" style="background:none;border:none;cursor:pointer;font-size:0.95rem;color:var(--text-dim);padding:2px 4px;line-height:1;">&#9881;</button>
+        <h2 id="todayTitle" style="margin:0;font-size:0.9rem;">Today</h2>
+      </div>
       <button class="btn btn-sm hidden" id="todayEditShiftBtn" style="padding:4px 10px;font-size:0.72rem;background:none;color:var(--primary);">Edit Shift</button>
+    </div>
+    <div id="tickerGearPanel" class="hidden" style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:0.74rem;color:var(--text);">
+      <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" data-tp="assignment" style="width:14px;height:14px;margin:0;"> Assignment</label>
+      <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" data-tp="hours" style="width:14px;height:14px;margin:0;"> Hours</label>
+      <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" data-tp="live" style="width:14px;height:14px;margin:0;"> LIVE indicator</label>
+      <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" data-tp="points" style="width:14px;height:14px;margin:0;"> Points</label>
+      <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" data-tp="est" style="width:14px;height:14px;margin:0;"> EST tag</label>
+      <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" data-tp="dollars" style="width:14px;height:14px;margin:0;"> Dollars</label>
+      <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" data-tp="components" style="width:14px;height:14px;margin:0;"> Components (AR/Prod/Pager/Sub)</label>
+      <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" data-tp="rate" style="width:14px;height:14px;margin:0;"> Rate (live pts/hr)</label>
+      <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" data-tp="day" style="width:14px;height:14px;margin:0;"> Day pts/hr</label>
+      <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" data-tp="location" style="width:14px;height:14px;margin:0;"> Location</label>
     </div>
     <div id="todayBreakdown"></div>
   </div>
@@ -20822,6 +20837,71 @@ function resetCaseForm() {
 // ================================================================
 // TODAY PAGE
 // ================================================================
+
+// Per-user toggles for which pieces of the ticker render. Stored on
+// `settings.tickerPrefs`; missing keys fall back to TICKER_PREF_DEFAULTS
+// so users on a stale settings doc just see the default layout.
+const TICKER_PREF_DEFAULTS = {
+  assignment: true,
+  points: true,
+  dollars: true,
+  hours: false,
+  live: false,
+  est: false,
+  components: false,
+  rate: false,
+  day: false,
+  location: false
+};
+
+function getTickerPrefs() {
+  const saved = (settings && settings.tickerPrefs) || {};
+  const out = {};
+  Object.keys(TICKER_PREF_DEFAULTS).forEach(k => {
+    out[k] = (k in saved) ? !!saved[k] : TICKER_PREF_DEFAULTS[k];
+  });
+  return out;
+}
+
+function setTickerPref(key, val) {
+  if (!settings.tickerPrefs) settings.tickerPrefs = {};
+  settings.tickerPrefs[key] = !!val;
+  saveSettings(settings);
+}
+
+// One-time wiring for the gear button + toggle panel. Idempotent so it
+// is safe to call multiple times during init.
+function _initTickerGear() {
+  const btn = document.getElementById('tickerGearBtn');
+  const panel = document.getElementById('tickerGearPanel');
+  if (!btn || !panel || btn._wired) return;
+  btn._wired = true;
+  const prefs = getTickerPrefs();
+  panel.querySelectorAll('input[data-tp]').forEach(input => {
+    const key = input.dataset.tp;
+    input.checked = !!prefs[key];
+    input.addEventListener('change', () => {
+      setTickerPref(key, input.checked);
+      if (typeof renderToday === 'function') renderToday();
+    });
+  });
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('hidden');
+  });
+  // Click-outside closes the panel.
+  document.addEventListener('click', (e) => {
+    if (panel.classList.contains('hidden')) return;
+    if (panel.contains(e.target) || btn.contains(e.target)) return;
+    panel.classList.add('hidden');
+  });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _initTickerGear);
+} else {
+  _initTickerGear();
+}
+
 function renderToday() {
   checkPVReminder();
   checkPaycheckReminder();
@@ -20873,18 +20953,23 @@ function renderToday() {
   const dCalLabel = data.calendarAssignments[date];
   const typeName = dCalLabel ? dCalLabel.label : getAssignmentTypeName(shift.assignmentType, shift.siteId);
 
+  const _tp = getTickerPrefs();
   let bdHtml = '<div style="margin-top:6px;">';
 
-  // Assignment type + dollar total row
-  bdHtml += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">`;
-  bdHtml += `<span style="font-size:0.7rem;font-weight:600;color:var(--primary);background:rgba(66,133,244,0.12);padding:2px 8px;border-radius:10px;letter-spacing:0.3px;">${escHtml(typeName)}</span>`;
-  if (shiftHrs > 0) {
-    bdHtml += `<span style="font-size:0.72rem;color:var(--text-dim);">${shiftHrs.toFixed(1)} hrs</span>`;
+  // Assignment type + hours row — collapses empty when both are off.
+  if (_tp.assignment || (_tp.hours && shiftHrs > 0)) {
+    bdHtml += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">`;
+    bdHtml += _tp.assignment
+      ? `<span style="font-size:0.7rem;font-weight:600;color:var(--primary);background:rgba(66,133,244,0.12);padding:2px 8px;border-radius:10px;letter-spacing:0.3px;">${escHtml(typeName)}</span>`
+      : '<span></span>';
+    if (_tp.hours && shiftHrs > 0) {
+      bdHtml += `<span style="font-size:0.72rem;color:var(--text-dim);">${shiftHrs.toFixed(1)} hrs</span>`;
+    }
+    bdHtml += `</div>`;
   }
-  bdHtml += `</div>`;
 
   // LIVE indicator (visible only when clocked in)
-  if (result.isInProgress) {
+  if (_tp.live && result.isInProgress) {
     bdHtml += `<div id="todayLiveIndicator" style="display:flex;align-items:center;gap:5px;margin-bottom:2px;">`;
     bdHtml += `<span style="color:#4caf50;font-size:0.7rem;animation:livePulse 1.5s ease-in-out infinite;">&#9679;</span>`;
     bdHtml += `<span style="font-size:0.7rem;font-weight:600;color:#4caf50;letter-spacing:0.5px;">LIVE</span>`;
@@ -20892,29 +20977,37 @@ function renderToday() {
   }
 
   // Big point total + dollar equivalent
-  bdHtml += `<div style="display:flex;align-items:baseline;gap:8px;">`;
-  const ptsPrecision = result.isInProgress ? 3 : 2;
-  bdHtml += `<span id="todayLivePts" style="font-size:1.9rem;font-weight:700;line-height:1;">${result.total.toFixed(ptsPrecision)}</span>`;
-  bdHtml += `<span style="font-size:0.85rem;color:var(--text-dim);">pts</span>`;
-  bdHtml += estTag;
-  bdHtml += `<span id="todayLiveDollars" class="monetary" style="font-size:1.1rem;font-weight:600;color:var(--text-dim);margin-left:auto;">$${dollarTotal.toFixed(2)}</span>`;
-  bdHtml += `</div>`;
+  if (_tp.points || _tp.dollars) {
+    bdHtml += `<div style="display:flex;align-items:baseline;gap:8px;">`;
+    const ptsPrecision = result.isInProgress ? 3 : 2;
+    if (_tp.points) {
+      bdHtml += `<span id="todayLivePts" style="font-size:1.9rem;font-weight:700;line-height:1;">${result.total.toFixed(ptsPrecision)}</span>`;
+      bdHtml += `<span style="font-size:0.85rem;color:var(--text-dim);">pts</span>`;
+      if (_tp.est) bdHtml += estTag;
+    }
+    if (_tp.dollars) {
+      bdHtml += `<span id="todayLiveDollars" class="monetary" style="font-size:1.1rem;font-weight:600;color:var(--text-dim);margin-left:auto;">$${dollarTotal.toFixed(2)}</span>`;
+    }
+    bdHtml += `</div>`;
+  }
 
   // Component breakdown chips
-  const comps = [];
-  const arWithSupv = result.ar + result.supervision;
-  if (arWithSupv > 0) comps.push({ label: 'AR', val: arWithSupv });
-  if (result.prod > 0) comps.push({ label: 'Prod', val: result.prod });
-  if (result.call > 0) comps.push({ label: 'Pager', val: result.call });
-  if (result.subspec > 0) comps.push({ label: 'Sub', val: result.subspec });
-  if (comps.length > 0) {
-    bdHtml += `<div id="todayCompChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">`;
-    comps.forEach(c => {
-      const chipColor = c.label === 'Pager' ? 'rgba(245,166,35,0.15)' : 'rgba(255,255,255,0.06)';
-      const textColor = c.label === 'Pager' ? 'rgba(245,166,35,0.9)' : 'var(--text-dim)';
-      bdHtml += `<span style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:${chipColor};color:${textColor};font-weight:500;">${c.label} ${c.val.toFixed(1)}</span>`;
-    });
-    bdHtml += `</div>`;
+  if (_tp.components) {
+    const comps = [];
+    const arWithSupv = result.ar + result.supervision;
+    if (arWithSupv > 0) comps.push({ label: 'AR', val: arWithSupv });
+    if (result.prod > 0) comps.push({ label: 'Prod', val: result.prod });
+    if (result.call > 0) comps.push({ label: 'Pager', val: result.call });
+    if (result.subspec > 0) comps.push({ label: 'Sub', val: result.subspec });
+    if (comps.length > 0) {
+      bdHtml += `<div id="todayCompChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">`;
+      comps.forEach(c => {
+        const chipColor = c.label === 'Pager' ? 'rgba(245,166,35,0.15)' : 'rgba(255,255,255,0.06)';
+        const textColor = c.label === 'Pager' ? 'rgba(245,166,35,0.9)' : 'var(--text-dim)';
+        bdHtml += `<span style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:${chipColor};color:${textColor};font-weight:500;">${c.label} ${c.val.toFixed(1)}</span>`;
+      });
+      bdHtml += `</div>`;
+    }
   }
 
   bdHtml += '<div id="todayRateChips"></div>';
@@ -21593,19 +21686,20 @@ function updateTodayRateChips() {
   const now = new Date();
   const currentMin = now.getHours() * 60 + now.getMinutes();
 
+  const _tp = getTickerPrefs();
   let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:0.78rem;">';
 
   // Resolve the current Location once — appended to the chip row below
   // so it sits on the same line as the bottom pill, pushed to the right.
   let _curLocLabel = '';
-  if (siteHasSubSites(shift.siteId) && !isLocationExemptForType(shift.siteId, shift.assignmentType)) {
+  if (_tp.location && siteHasSubSites(shift.siteId) && !isLocationExemptForType(shift.siteId, shift.assignmentType)) {
     const nowHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     const curSubId = subSiteIdForCase(shift, nowHHMM);
     _curLocLabel = curSubId ? (getSubSiteLabel(shift.siteId, curSubId) || '') : '';
   }
 
   // Current rate chip (only when clocked in — shift in progress)
-  if (date === effectiveWorkDate() && result.isInProgress) {
+  if (_tp.rate && date === effectiveWorkDate() && result.isInProgress) {
     const currentRate = getARRate(shift.assignmentType, isHol, isWknd, currentMin, shift.siteId);
     // CRNA supervision bonus: +7/hr for standalone CRNA_supervision or overlay during supervision window
     let supRate = 0;
@@ -21689,7 +21783,7 @@ function updateTodayRateChips() {
   // Daily pts/hr chip
   const isCallShift = shift && ['mole','1st_call','2nd_call','3rd_call','4th_call','endo','SF1','SF2'].includes(shift.assignmentType);
   const dayDenominator = isCallShift ? 24 : shiftHrs;
-  if (dayDenominator > 0) {
+  if (_tp.day && dayDenominator > 0) {
     const dailyPtsHr = result.total / dayDenominator;
     const dailyDollarsHr = round2(dailyPtsHr * pv);
     html += `<div style="padding:4px 10px;background:rgba(255,255,255,0.06);border-radius:12px;color:var(--text-dim);font-weight:600;">`;
