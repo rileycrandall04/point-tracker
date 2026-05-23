@@ -18,7 +18,7 @@ The **Scaling Test** admin tab runs isolated validation scenarios against shadow
 - [ ] **#2 — Migrate per-user data blob off the 1 MiB ceiling** ([index.html:7707](../index.html), [index.html:7768](../index.html)) — `users/{uid}/data/data` will silently fail at ~1,500 cases/year × 2–4 years. Move cases to a subcollection.
   - [x] **Phase 1: dual-write + backfill** — every case mutation mirrors to `users/{uid}/cases/{caseId}`; one-time backfill on login. Reads still on blob. Kill switch `settings.dualWriteCasesEnabled`.
   - [x] **Phase 1a: tooling & visibility** — admin Migration tab (PR #388), drift inspector + reconcile-to-blob (#389), force re-sign-in for stuck users (#390), running version display (#391), date-range User Data Lookup (#392), per-write failure logging + on-open drift detection + 30-min SW update nudge (#393), isolated Scaling Test harness (this PR).
-  - [ ] **Phase 2: switch reads — global flag rollout** — `off` → `opted-in-only` (canary on own account, watch diagnostics) → `on` (everyone). Blob stays as the write target and safety net throughout.
+  - [x] **Phase 2: switch reads — global flag rollout** — `off` → `opted-in-only` (canary on own account ~2026-05-17, expanded to 5 high-volume users for a week) → `on` (everyone, 2026-05-22). Blob remains the write target + safety net.
   - [ ] **Phase 3 prerequisite: Cloud Functions server-side dual-write** — Firestore trigger on `users/{uid}/data/data` writes mirrors any `cases[]` changes into the subcollection regardless of client version. Closes the stale-cache loophole that would become data loss in Phase 3. Required before Phase 3 ships.
   - [ ] **Phase 3a: stop client-side blob writes for cases** — only after Cloud Functions trigger has been live + clean for an extended period. Blob's `cases[]` becomes derived state.
   - [ ] **Phase 3b: prune `cases[]` from existing blobs** — final cleanup, separate decision after Phase 3a soaks.
@@ -54,6 +54,22 @@ Inventory as of 2026-05-17 (line numbers will drift as the file changes — sear
 2. For each PR, add a matching scenario to the Scaling Test harness so the refactor is covered.
 3. After all 11 are refactored AND the Cloud Functions server-side dual-write trigger is live + soaked, ship Phase 3a.
 4. After 3a has been clean for an extended period, ship Phase 3b (prune `cases[]` from existing blobs).
+
+## Future watch items (no action yet, watch for the trigger)
+
+These aren't problems today. Note them so they aren't forgotten when growth eventually makes them ones.
+
+### Shifts subcollection migration
+
+After Phase 3b strips `cases[]` from the blob, **shifts becomes the dominant growth field**. Each shift object is ~200–400 bytes (date, siteId, assignmentType, timeEntries, flags). At ~25 shifts/month per user, that's roughly **90 KB/year of blob growth from shifts alone** — plus ~50 KB/year from `calendarAssignments`, paychecks, etc. Total post-Phase-3 blob growth ≈ 100–150 KB/year per active user.
+
+At that rate, hitting the 1 MiB doc cap takes **10+ years** of continuous use. Not urgent.
+
+**Trigger to start planning:** any user's blob document crosses **500 KB**. Check via Admin → User Data Lookup or the Run Comparison tool's blob count (which we'd repurpose to also show blob size). At 500 KB we still have years of runway, but should start the design / canary cycle.
+
+**Migration shape (when we get there):** mirror exactly what we did for cases. `users/{uid}/shifts/{date}` subcollection — date string is a natural doc id. Three-phase rollout (dual-write → switch reads → strip from blob). Cloud Functions trigger as Phase 3 prerequisite. Scaling Test harness gets matching shift-mutation scenarios. The pattern is now proven; the only thing required is the time to do it carefully.
+
+**Related fields that may need similar treatment eventually** (in order of likely growth pressure): `calendarAssignments`, `paychecks`. Same pattern would apply.
 
 ## Workflow
 
