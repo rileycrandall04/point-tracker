@@ -198,6 +198,15 @@ service cloud.firestore {
       allow update, delete: if (isSignedIn() && resource.data.uid == request.auth.uid)
                                || isAppOwner();
     }
+    // sharedTurnoverStats/{uid}: each user publishes their own
+    // pre-computed turnover summary (count, mean, median, p25, p75)
+    // for the Turnover Time card's Phase C site aggregate. Owner-only
+    // writes; pool-readable subject to quarantine.
+    match /sharedTurnoverStats/{uid} {
+      allow read: if canPool();
+      allow create, update: if isSelf(uid) && request.resource.data.uid == uid;
+      allow delete: if isSelf(uid) || isAppOwner();
+    }
 
     // -------------------------------------------------------------------------
     // sites/{siteId} — scoring/compensation rules. Readable by all signed-in
