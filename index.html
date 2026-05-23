@@ -36064,12 +36064,21 @@ function _renderAuthError(err) {
   });
 }
 
+// In-flight guard: impatient re-clicks on the Google button cancel the
+// previous signInWithPopup attempt (Firebase throws cancelled-popup-request),
+// which combined with the COOP popup-close detection issue made the button
+// feel like it needed 3-4 presses. Ignore clicks while one attempt is open.
+let _signInInFlight = false;
 document.getElementById('googleSignInBtn').addEventListener('click', async () => {
+  if (_signInInFlight) return;
+  const btn = document.getElementById('googleSignInBtn');
   const errEl = document.getElementById('authError');
   const loadEl = document.getElementById('authLoading');
   errEl.classList.add('hidden');
   errEl.innerHTML = '';
   loadEl.classList.remove('hidden');
+  _signInInFlight = true;
+  btn.disabled = true;
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
     await auth.signInWithPopup(provider);
@@ -36077,6 +36086,9 @@ document.getElementById('googleSignInBtn').addEventListener('click', async () =>
     console.error('Sign-in error:', err);
     loadEl.classList.add('hidden');
     _renderAuthError(err);
+  } finally {
+    _signInInFlight = false;
+    btn.disabled = false;
   }
 });
 
