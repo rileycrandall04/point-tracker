@@ -3033,6 +3033,41 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
   </div>
 
+  <!-- Turnover Time -->
+  <div class="card" id="turnoverCard" style="padding:10px 14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <span style="font-size:0.78rem;font-weight:600;">Turnover Time <span class="info-icon" data-tip="Minutes between case end and the next case start, within one continuous clock-in. Excludes labor / APS / acute pain / ICU-ER / shared cases, c-sections, nerve-block-only entries, NORA, ACS, OB-style shifts, SF1 daytime, weekends, and holidays. Window: trailing 90 days. Need 10 intervals to show a number.">i</span></span>
+      <span style="font-size:0.68rem;color:var(--text-dim);">Past 90 days</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div style="background:var(--surface2);border-radius:8px;padding:8px 10px;">
+        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px;">You</div>
+        <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+          <span style="color:var(--text-dim);">Mean</span>
+          <span style="font-weight:600;color:var(--accent2);" id="turnoverYouMean">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+          <span style="color:var(--text-dim);">Median</span>
+          <span style="font-weight:600;color:var(--accent);" id="turnoverYouMedian">—</span>
+        </div>
+        <div style="font-size:0.62rem;color:var(--text-dim);margin-top:4px;" id="turnoverYouCount">—</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:8px 10px;">
+        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px;">Site</div>
+        <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+          <span style="color:var(--text-dim);">Mean</span>
+          <span style="font-weight:600;color:var(--accent2);" id="turnoverSiteMean">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+          <span style="color:var(--text-dim);">Median</span>
+          <span style="font-weight:600;color:var(--accent);" id="turnoverSiteMedian">—</span>
+        </div>
+        <div style="font-size:0.62rem;color:var(--text-dim);margin-top:4px;" id="turnoverSiteMeta">—</div>
+      </div>
+    </div>
+    <div style="font-size:0.64rem;color:var(--text-dim);margin-top:6px;line-height:1.4;" id="turnoverSiteNote"></div>
+  </div>
+
   <!-- Hours Trend -->
   <div class="card">
     <h2>Monthly Hours Trend</h2>
@@ -10129,6 +10164,8 @@ function saveData(d) {
   // to the sharedShifts collection. Settings/cases-only saves are cheap
   // since the timer is reset, not the work itself.
   scheduleSharedShiftsSync();
+  // Recompute the user's published turnover stats on the same cadence.
+  if (typeof scheduleSharedTurnoverStatsSync === 'function') scheduleSharedTurnoverStatsSync();
 }
 
 let _sharedShiftsSyncTimer = null;
@@ -28165,6 +28202,369 @@ function getSiteWideAvgByType() {
   return avgs;
 }
 
+// ================================================================
+// TURNOVER TIME
+// ----------------------------------------------------------------
+// "Turnover" = minutes between the end of one case and the start of
+// the next, on the same day, inside the same continuous clock-in
+// segment of the user's shift. Drives the Turnover Time card on the
+// Time page.
+//
+// Eligibility (matches the spec the user agreed to):
+//   - case.caseType === 'standard'        (drops labor, APS, acute
+//                                          pain, ICU/ER lines)
+//   - !isSharedCase && !isSharedLabor     (partial cases don't count)
+//   - both startTime and endTime present
+//   - procedure doesn't look like a c-section
+//   - procedure doesn't look like a nerve-block-only entry
+//   - weekday, non-holiday
+//   - shift assignmentType isn't NORA or ACS
+//   - shift isn't "restricted call": no OB-style (arRate.mode='ob');
+//     SF1 daytime (Mon–Fri 07:00–17:00) is the one explicit carve-out
+//   - case start falls inside one of the shift's timeEntries[]
+//     segments; intervals only span cases inside the same segment
+// ================================================================
+const TURNOVER_WINDOW_DAYS = 90;
+const TURNOVER_MIN_INTERVALS = 10;
+const TURNOVER_PHASE_C_MIN_CONTRIBUTORS = 10;
+const TURNOVER_PHASE_C_FRESH_DAYS = 30;
+const TURNOVER_CSECTION_RE = /\b(c[-\s\/]?section|cesarean|caesarean|c\/s)\b/i;
+const TURNOVER_BLOCK_RE = /\bblock(?:s)?\b/i;
+
+function _turnoverCaseEligible(c) {
+  if (!c) return false;
+  if (c.caseType !== 'standard') return false;
+  if (c.isSharedCase || c.isSharedLabor) return false;
+  if (!c.startTime || !c.endTime) return false;
+  const proc = String(c.procedure || '');
+  if (TURNOVER_CSECTION_RE.test(proc)) return false;
+  if (TURNOVER_BLOCK_RE.test(proc)) return false;
+  return true;
+}
+
+function _turnoverShiftExcluded(siteId, assignmentType, caseStartMin, dateStr) {
+  if (!assignmentType) return true;
+  if (assignmentType === 'NORA' || assignmentType === 'ACS') return true;
+  const rule = getResolvedShiftRules(siteId)[assignmentType];
+  if (rule && rule.arRate && rule.arRate.mode === 'ob') return true;
+  if (assignmentType === 'SF1') {
+    const dow = new Date(dateStr + 'T12:00:00').getDay();
+    const isWeekend = (dow === 0 || dow === 6);
+    if (!isWeekend && caseStartMin >= 420 && caseStartMin < 1020) return true;
+  }
+  return false;
+}
+
+function _turnoverDateEligible(dateStr, isHoliday) {
+  const dow = new Date(dateStr + 'T12:00:00').getDay();
+  if (dow === 0 || dow === 6) return false;
+  if (isHoliday) return false;
+  return true;
+}
+
+function _turnoverMinIsInSegment(min, segStart, segEnd) {
+  if (segEnd >= segStart) return min >= segStart && min <= segEnd;
+  return min >= segStart || min <= segEnd;
+}
+
+function _turnoverGapMin(prevEnd, nextStart) {
+  let g = nextStart - prevEnd;
+  if (g < 0) g += 1440;
+  return g;
+}
+
+// Intervals from the current user's local data — precise (uses
+// per-segment clock-in windows). Returns an array of minute gaps.
+function getUserTurnoverIntervals(daysWindow) {
+  const days = daysWindow || TURNOVER_WINDOW_DAYS;
+  const now = new Date();
+  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
+  const pad = n => String(n).padStart(2, '0');
+  const cutoffStr = cutoff.getFullYear() + '-' + pad(cutoff.getMonth() + 1) + '-' + pad(cutoff.getDate());
+
+  const byDate = {};
+  (data.cases || []).forEach(c => {
+    if (!c.shiftDate || c.shiftDate < cutoffStr) return;
+    if (!_turnoverCaseEligible(c)) return;
+    const shift = data.shifts[c.shiftDate];
+    if (!shift) return;
+    if (!_turnoverDateEligible(c.shiftDate, !!shift.isHoliday)) return;
+    const caseStartMin = timeToMinutes(c.startTime);
+    if (_turnoverShiftExcluded(shift.siteId, shift.assignmentType, caseStartMin, c.shiftDate)) return;
+    (byDate[c.shiftDate] = byDate[c.shiftDate] || []).push(c);
+  });
+
+  const intervals = [];
+  for (const dateStr in byDate) {
+    const shift = data.shifts[dateStr];
+    const segments = (shift.timeEntries || [])
+      .filter(e => e && e.start && e.end)
+      .map(e => ({ startMin: timeToMinutes(e.start), endMin: timeToMinutes(e.end) }));
+    if (segments.length === 0) continue;
+    const cases = byDate[dateStr].slice().sort((a, b) => {
+      const am = timeToMinutes(a.startTime), bm = timeToMinutes(b.startTime);
+      if (am !== bm) return am - bm;
+      return timeToMinutes(a.endTime) - timeToMinutes(b.endTime);
+    });
+    segments.forEach(seg => {
+      const segCases = cases.filter(c => _turnoverMinIsInSegment(timeToMinutes(c.startTime), seg.startMin, seg.endMin));
+      for (let i = 1; i < segCases.length; i++) {
+        const prevEnd = timeToMinutes(segCases[i - 1].endTime);
+        const curStart = timeToMinutes(segCases[i].startTime);
+        const gap = _turnoverGapMin(prevEnd, curStart);
+        if (gap > 0) intervals.push(gap);
+      }
+    });
+  }
+  return intervals;
+}
+
+function getTurnoverStats(intervals) {
+  if (!intervals || intervals.length === 0) return null;
+  const sorted = intervals.slice().sort((a, b) => a - b);
+  const n = sorted.length;
+  const sum = sorted.reduce((a, b) => a + b, 0);
+  const pct = (p) => {
+    const idx = (n - 1) * p;
+    const lo = Math.floor(idx), hi = Math.ceil(idx);
+    if (lo === hi) return sorted[lo];
+    return sorted[lo] * (hi - idx) + sorted[hi] * (idx - lo);
+  };
+  return {
+    count: n,
+    mean: round2(sum / n),
+    median: round2(pct(0.5)),
+    p25: round2(pct(0.25)),
+    p75: round2(pct(0.75))
+  };
+}
+
+// Phase A site stats: build intervals from sharedCases for the site,
+// using sharedShifts (via the community stats cache) to look up each
+// case's assignmentType + holiday flag. No per-segment data is in the
+// community pool, so the whole shift is treated as one continuous
+// clock-in window — slight over-count when other users clock in/out
+// mid-day. Tooltip surfaces this caveat.
+function getSiteTurnoverIntervalsApproximate(siteId) {
+  if (!Array.isArray(sharedCasesCache) || sharedCasesCache.length === 0) return null;
+  if (!_communityStatsCache || !_communityStatsCache.byUid) return null;
+  const days = TURNOVER_WINDOW_DAYS;
+  const now = new Date();
+  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
+  const pad = n => String(n).padStart(2, '0');
+  const cutoffStr = cutoff.getFullYear() + '-' + pad(cutoff.getMonth() + 1) + '-' + pad(cutoff.getDate());
+
+  const shiftLookup = {};
+  Object.entries(_communityStatsCache.byUid).forEach(([uid, rows]) => {
+    rows.forEach(r => {
+      if (r.siteId !== siteId) return;
+      shiftLookup[uid + '|' + r.shiftDate] = r;
+    });
+  });
+
+  const myUid = currentUser ? currentUser.uid : null;
+  const byUidDate = {};
+  sharedCasesCache.forEach(sc => {
+    if (!sc || sc.siteId !== siteId) return;
+    if (myUid && sc.uid === myUid) return; // user's own intervals come from precise local data
+    if (!sc.shiftDate || sc.shiftDate < cutoffStr) return;
+    if (sc.caseType !== 'standard') return;
+    if (!sc.startTime || !sc.endTime) return;
+    const proc = String(sc.procedure || '');
+    if (TURNOVER_CSECTION_RE.test(proc)) return;
+    if (TURNOVER_BLOCK_RE.test(proc)) return;
+    const sh = shiftLookup[sc.uid + '|' + sc.shiftDate];
+    if (!sh) return;
+    if (!_turnoverDateEligible(sc.shiftDate, false)) return;
+    const caseStartMin = timeToMinutes(sc.startTime);
+    if (_turnoverShiftExcluded(siteId, sh.assignmentType, caseStartMin, sc.shiftDate)) return;
+    (byUidDate[sc.uid + '|' + sc.shiftDate] = byUidDate[sc.uid + '|' + sc.shiftDate] || []).push(sc);
+  });
+
+  const intervals = [];
+  for (const key in byUidDate) {
+    const list = byUidDate[key].slice().sort((a, b) => {
+      const am = timeToMinutes(a.startTime), bm = timeToMinutes(b.startTime);
+      if (am !== bm) return am - bm;
+      return timeToMinutes(a.endTime) - timeToMinutes(b.endTime);
+    });
+    for (let i = 1; i < list.length; i++) {
+      const prevEnd = timeToMinutes(list[i - 1].endTime);
+      const curStart = timeToMinutes(list[i].startTime);
+      const gap = _turnoverGapMin(prevEnd, curStart);
+      if (gap > 0) intervals.push(gap);
+    }
+  }
+  return intervals;
+}
+
+// Phase C: each user writes their own pre-computed stats to
+// sharedTurnoverStats/{uid}. Site stat = aggregate across users with
+// a recent, sufficiently-sampled doc.
+let _sharedTurnoverStatsCache = null; // { ts, byUid: { uid: doc } }
+
+async function loadSharedTurnoverStats(force) {
+  if (!firestoreSyncEnabled || !currentUser) return null;
+  const fresh = _sharedTurnoverStatsCache && (Date.now() - _sharedTurnoverStatsCache.ts) < 5 * 60 * 1000;
+  if (!force && fresh) return _sharedTurnoverStatsCache;
+  const mySite = getCurrentSiteId();
+  try {
+    const snap = await db.collection('sharedTurnoverStats').where('siteId', '==', mySite).get();
+    const byUid = {};
+    snap.forEach(doc => {
+      const d = doc.data() || {};
+      if (!d.uid || d.siteId !== mySite) return;
+      byUid[d.uid] = d;
+    });
+    _sharedTurnoverStatsCache = { ts: Date.now(), byUid };
+    return _sharedTurnoverStatsCache;
+  } catch (err) {
+    console.warn('Shared turnover stats load failed:', err);
+    return null;
+  }
+}
+
+function getSiteTurnoverStatsFromPhaseC(siteId) {
+  if (!_sharedTurnoverStatsCache || !_sharedTurnoverStatsCache.byUid) return null;
+  const freshCutoff = Date.now() - TURNOVER_PHASE_C_FRESH_DAYS * 86400000;
+  const contributors = [];
+  Object.values(_sharedTurnoverStatsCache.byUid).forEach(d => {
+    if (!d || d.siteId !== siteId) return;
+    if (!(Number(d.count) >= TURNOVER_MIN_INTERVALS)) return;
+    const upd = Date.parse(d.updatedAt || '');
+    if (!(upd > freshCutoff)) return;
+    contributors.push(d);
+  });
+  if (contributors.length === 0) return null;
+  const sumMean = contributors.reduce((a, d) => a + Number(d.mean || 0), 0);
+  const sumMedian = contributors.reduce((a, d) => a + Number(d.median || 0), 0);
+  const totalCount = contributors.reduce((a, d) => a + Number(d.count || 0), 0);
+  return {
+    mean: round2(sumMean / contributors.length),
+    median: round2(sumMedian / contributors.length),
+    count: totalCount,
+    contributors: contributors.length
+  };
+}
+
+// Build and write the current user's sharedTurnoverStats doc. Idempotent
+// — no-op if shareData is off or the user has too few intervals.
+function _buildSharedTurnoverStatsPayload() {
+  const intervals = getUserTurnoverIntervals();
+  const stats = getTurnoverStats(intervals);
+  if (!stats || stats.count < TURNOVER_MIN_INTERVALS) return null;
+  return {
+    uid: currentUser ? currentUser.uid : '',
+    siteId: getCurrentSiteId(),
+    windowDays: TURNOVER_WINDOW_DAYS,
+    count: stats.count,
+    mean: stats.mean,
+    median: stats.median,
+    p25: stats.p25,
+    p75: stats.p75,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function writeSharedTurnoverStats() {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (settings && settings.shareData === false) return;
+  const payload = _buildSharedTurnoverStatsPayload();
+  if (!payload) return;
+  db.collection('sharedTurnoverStats').doc(currentUser.uid).set(payload).catch(err => {
+    console.warn('sharedTurnoverStats write failed:', err);
+  });
+}
+
+let _sharedTurnoverStatsTimer = null;
+function scheduleSharedTurnoverStatsSync() {
+  if (_sharedTurnoverStatsTimer) clearTimeout(_sharedTurnoverStatsTimer);
+  _sharedTurnoverStatsTimer = setTimeout(() => {
+    _sharedTurnoverStatsTimer = null;
+    writeSharedTurnoverStats();
+  }, 8000);
+}
+
+function _fmtTurnoverMin(m) {
+  if (m == null || !Number.isFinite(m)) return '—';
+  const mins = Math.round(m);
+  if (mins < 60) return mins + ' min';
+  const h = Math.floor(mins / 60);
+  const r = mins % 60;
+  return h + 'h ' + (r < 10 ? '0' + r : r) + 'm';
+}
+
+function renderTurnoverCard() {
+  const card = document.getElementById('turnoverCard');
+  if (!card) return;
+  const youMean = document.getElementById('turnoverYouMean');
+  const youMedian = document.getElementById('turnoverYouMedian');
+  const youCount = document.getElementById('turnoverYouCount');
+  const siteMean = document.getElementById('turnoverSiteMean');
+  const siteMedian = document.getElementById('turnoverSiteMedian');
+  const siteMeta = document.getElementById('turnoverSiteMeta');
+  const siteNote = document.getElementById('turnoverSiteNote');
+
+  // YOU — local data, instant.
+  const userIntervals = getUserTurnoverIntervals();
+  const userStats = getTurnoverStats(userIntervals);
+  if (userStats && userStats.count >= TURNOVER_MIN_INTERVALS) {
+    youMean.textContent = _fmtTurnoverMin(userStats.mean);
+    youMedian.textContent = _fmtTurnoverMin(userStats.median);
+    youCount.textContent = userStats.count + ' interval' + (userStats.count === 1 ? '' : 's') + ' · last ' + TURNOVER_WINDOW_DAYS + 'd';
+  } else {
+    youMean.textContent = '—';
+    youMedian.textContent = '—';
+    youCount.textContent = userStats
+      ? userStats.count + '/' + TURNOVER_MIN_INTERVALS + ' intervals so far'
+      : 'No qualifying cases yet';
+  }
+
+  // SITE — Phase C if enough contributors, else Phase A. Both can be
+  // async (need community shifts + sharedTurnoverStats); render
+  // placeholders, then upgrade when data arrives.
+  const mySite = getCurrentSiteId();
+  const phaseC = getSiteTurnoverStatsFromPhaseC(mySite);
+  if (phaseC && phaseC.contributors >= TURNOVER_PHASE_C_MIN_CONTRIBUTORS) {
+    siteMean.textContent = _fmtTurnoverMin(phaseC.mean);
+    siteMedian.textContent = _fmtTurnoverMin(phaseC.median);
+    siteMeta.textContent = phaseC.contributors + ' contributors · last ' + TURNOVER_WINDOW_DAYS + 'd';
+    siteNote.textContent = '';
+  } else {
+    const approxIntervals = getSiteTurnoverIntervalsApproximate(mySite);
+    const approxStats = approxIntervals ? getTurnoverStats(approxIntervals) : null;
+    if (approxStats && approxStats.count >= TURNOVER_MIN_INTERVALS) {
+      siteMean.textContent = _fmtTurnoverMin(approxStats.mean);
+      siteMedian.textContent = _fmtTurnoverMin(approxStats.median);
+      siteMeta.textContent = approxStats.count + ' intervals (approx) · last ' + TURNOVER_WINDOW_DAYS + 'd';
+    } else {
+      siteMean.textContent = '—';
+      siteMedian.textContent = '—';
+      siteMeta.textContent = approxIntervals === null
+        ? 'Loading…'
+        : (approxStats ? approxStats.count + '/' + TURNOVER_MIN_INTERVALS + ' intervals so far' : 'No site data');
+    }
+    siteNote.textContent = phaseC
+      ? phaseC.contributors + '/' + TURNOVER_PHASE_C_MIN_CONTRIBUTORS + ' users have shared stats; switching to precise aggregate at ' + TURNOVER_PHASE_C_MIN_CONTRIBUTORS + '.'
+      : 'Approximate: other users\' clock-in/out segments aren\'t shared, so this treats each shift as one continuous window.';
+  }
+
+  // Trigger lazy loads if data isn't ready yet. Re-render once they
+  // resolve so the placeholders fill in.
+  let needsRerender = false;
+  if (firestoreSyncEnabled && currentUser) {
+    if (!_communityStatsCache) {
+      loadCommunityStats(false);
+    }
+    if (!_sharedTurnoverStatsCache) {
+      needsRerender = true;
+      loadSharedTurnoverStats(false).then(() => renderTurnoverCard()).catch(() => {});
+    }
+  }
+  void needsRerender; // intentional: re-render is triggered above
+}
+
+
 // Calculate average shifts per week by type (last 3 months, total calendar weeks incl. vacation)
 function getShiftsPerWeekByType() {
   const recent = getRecentShifts(3);
@@ -28774,6 +29174,8 @@ function loadCommunityStats(force) {
       // Refresh the pace card so its remaining-days list can show the
       // now-available site-wide averages.
       if (typeof renderMonthlyPace === 'function') renderMonthlyPace();
+      // Turnover card needs the shifts lookup for Phase A site stats.
+      if (typeof renderTurnoverCard === 'function') renderTurnoverCard();
     })
     .catch(err => {
       console.error('Community stats load error:', err);
@@ -29099,6 +29501,7 @@ function renderTimeTab() {
   const assignTitleEl = document.getElementById('assignDataTitle');
   if (assignTitleEl) assignTitleEl.textContent = _userName ? (_userName + "'s Personal Assignment Data") : 'Personal Assignment Data';
   renderTimeSummary();
+  renderTurnoverCard();
   renderProductionTrend();
   renderAssignData();
   renderNightCallFreq();
@@ -36437,6 +36840,11 @@ auth.onAuthStateChanged(async (user) => {
     loadSharedCases().then(() => refreshSharedViews()).catch(() => {});
     loadSurgeonMappings().catch(() => {});
     loadUserProfiles().catch(() => {});
+    // Publish this user's own turnover stats once on sign-in so the
+    // Phase C aggregate stays current across sessions. Debounced via
+    // scheduleSharedTurnoverStatsSync so we don't race with the initial
+    // shared shifts sync hammering Firestore.
+    if (typeof scheduleSharedTurnoverStatsSync === 'function') scheduleSharedTurnoverStatsSync();
     loadSites().then(() => {
       renderSiteRow();
       renderInviteBanner();
