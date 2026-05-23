@@ -20932,11 +20932,35 @@ const APP_ANNOUNCEMENTS = [
   }
 ];
 
+// Session-level guard so an announcement can't re-pop within the same
+// page lifetime, even if a Firestore settings load lands after dismissal
+// and momentarily clobbers seenAnnouncements before saveSettings catches
+// up. Survives until the tab reloads.
+const _shownAnnouncementsThisSession = new Set();
+
 function _maybeShowAnnouncements() {
   if (document._announcementShowing) return;
+  // Brand-new accounts (no shifts, no cases) have no "before" to compare
+  // the change against, so skip historical-change announcements for them.
+  const hasShifts = data && data.shifts && Object.keys(data.shifts).length > 0;
+  const hasCases = data && Array.isArray(data.cases) && data.cases.length > 0;
+  if (!hasShifts && !hasCases) {
+    // Pre-mark every announcement as seen so a returning user who happens
+    // to start with an empty dataset on a new device doesn't get the
+    // popup later either.
+    if (settings) {
+      if (!Array.isArray(settings.seenAnnouncements)) settings.seenAnnouncements = [];
+      APP_ANNOUNCEMENTS.forEach(a => {
+        if (!settings.seenAnnouncements.includes(a.id)) settings.seenAnnouncements.push(a.id);
+      });
+      saveSettings(settings);
+    }
+    return;
+  }
   const seen = (settings && Array.isArray(settings.seenAnnouncements)) ? settings.seenAnnouncements : [];
-  const next = APP_ANNOUNCEMENTS.find(a => !seen.includes(a.id));
+  const next = APP_ANNOUNCEMENTS.find(a => !seen.includes(a.id) && !_shownAnnouncementsThisSession.has(a.id));
   if (!next) return;
+  _shownAnnouncementsThisSession.add(next.id);
   _showAnnouncementModal(next);
 }
 
@@ -20944,7 +20968,7 @@ function _showAnnouncementModal(ann) {
   document._announcementShowing = true;
   const overlay = document.createElement('div');
   overlay.id = 'announcementOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
   overlay.innerHTML =
     '<div role="dialog" aria-modal="true" style="background:var(--card);border:1px solid var(--border);border-radius:12px;max-width:420px;width:100%;padding:18px 18px 14px;box-shadow:0 18px 42px rgba(0,0,0,0.45);">'
     + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
@@ -20967,8 +20991,6 @@ function _showAnnouncementModal(ann) {
     document._announcementShowing = false;
   };
   overlay.querySelector('#announcementGotIt').addEventListener('click', dismiss);
-  // Click on the dim backdrop dismisses too.
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss(); });
 }
 
 function renderToday() {
@@ -37999,7 +38021,13 @@ function initApp() {
   // One-off "what's new" announcements. Shown once per user, persisted
   // via settings.seenAnnouncements so the modal doesn't re-pop after
   // dismissal even across devices (settings is synced).
-  if (typeof _maybeShowAnnouncements === 'function') _maybeShowAnnouncements();
+  //   - Skipped for the pre-auth initApp() call (currentUser is null
+  //     before sign-in completes) so the popup only fires after the
+  //     user is fully signed in with their real data loaded.
+  //   - Deferred a beat so the post-login render settles first.
+  if (typeof _maybeShowAnnouncements === 'function' && currentUser) {
+    setTimeout(() => { try { _maybeShowAnnouncements(); } catch (_) {} }, 1200);
+  }
 }
 
 // Run init immediately with localStorage data (will re-run after auth)
