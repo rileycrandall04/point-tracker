@@ -20919,7 +20919,6 @@ function renderToday() {
 
   bdHtml += '<div id="todayRateChips"></div>';
   bdHtml += '<div id="todayLiveRates"></div>';
-  bdHtml += '<div id="todayCurrentLocation" style="text-align:right;font-size:0.7rem;color:var(--text-dim);margin-top:6px;letter-spacing:0.2px;"></div>';
   bdHtml += '</div>';
   document.getElementById('todayBreakdown').innerHTML = bdHtml;
   updateTodayRateChips();
@@ -21594,19 +21593,15 @@ function updateTodayRateChips() {
   const now = new Date();
   const currentMin = now.getHours() * 60 + now.getMinutes();
 
-  let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:0.78rem;">';
+  let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:0.78rem;">';
 
-  // Current Location footer — plain, small, bottom-right of the ticker
-  // card. Hidden when the site has no sub-sites or the type is exempt.
-  const locEl = document.getElementById('todayCurrentLocation');
-  if (locEl) {
-    let locTxt = '';
-    if (siteHasSubSites(shift.siteId) && !isLocationExemptForType(shift.siteId, shift.assignmentType)) {
-      const nowHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-      const curSubId = subSiteIdForCase(shift, nowHHMM);
-      locTxt = curSubId ? (getSubSiteLabel(shift.siteId, curSubId) || '') : '';
-    }
-    locEl.textContent = locTxt;
+  // Resolve the current Location once — appended to the chip row below
+  // so it sits on the same line as the bottom pill, pushed to the right.
+  let _curLocLabel = '';
+  if (siteHasSubSites(shift.siteId) && !isLocationExemptForType(shift.siteId, shift.assignmentType)) {
+    const nowHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const curSubId = subSiteIdForCase(shift, nowHHMM);
+    _curLocLabel = curSubId ? (getSubSiteLabel(shift.siteId, curSubId) || '') : '';
   }
 
   // Current rate chip (only when clocked in — shift in progress)
@@ -21701,6 +21696,10 @@ function updateTodayRateChips() {
     html += `Day: ${dailyPtsHr.toFixed(1)} pts/hr`;
     html += ` <span class="monetary" style="font-weight:400;font-size:0.72rem;">($${dailyDollarsHr.toFixed(0)}/hr)</span>`;
     html += `</div>`;
+  }
+
+  if (_curLocLabel) {
+    html += `<span style="margin-left:auto;font-size:0.7rem;color:var(--text-dim);letter-spacing:0.2px;">${escHtml(_curLocLabel)}</span>`;
   }
 
   html += '</div>';
