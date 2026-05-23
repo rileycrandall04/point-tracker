@@ -28226,6 +28226,7 @@ function getSiteWideAvgByType() {
 // ================================================================
 const TURNOVER_WINDOW_DAYS = 90;
 const TURNOVER_MIN_INTERVALS = 10;
+const TURNOVER_PHASE_A_MIN_CONTRIBUTORS = 3;
 const TURNOVER_PHASE_C_MIN_CONTRIBUTORS = 10;
 const TURNOVER_PHASE_C_FRESH_DAYS = 30;
 const TURNOVER_CSECTION_RE = /\b(c[-\s\/]?section|cesarean|caesarean|c\/s)\b/i;
@@ -28345,7 +28346,17 @@ function getTurnoverStats(intervals) {
 // community pool, so the whole shift is treated as one continuous
 // clock-in window — slight over-count when other users clock in/out
 // mid-day. Tooltip surfaces this caveat.
-function getSiteTurnoverIntervalsApproximate(siteId) {
+// Phase A site stats: macro-averaged across users so a single heavy
+// contributor (hundreds of cases) doesn't drag the site number around.
+// Each qualifying user gets equal weight: compute their own mean and
+// median, then average those across users. Per-user filter requires
+// >= TURNOVER_MIN_INTERVALS to keep noisy small samples out.
+//
+// We don't have per-segment clock-in data for other users (sharedShifts
+// only carries overall start/end), so we treat each user's day as one
+// continuous window — slight over-count when they clock in/out mid-day.
+// Phase C replaces this once enough users publish their own stats.
+function getSiteTurnoverStatsApproximate(siteId) {
   if (!Array.isArray(sharedCasesCache) || sharedCasesCache.length === 0) return null;
   if (!_communityStatsCache || !_communityStatsCache.byUid) return null;
   const days = TURNOVER_WINDOW_DAYS;
@@ -28381,8 +28392,9 @@ function getSiteTurnoverIntervalsApproximate(siteId) {
     (byUidDate[sc.uid + '|' + sc.shiftDate] = byUidDate[sc.uid + '|' + sc.shiftDate] || []).push(sc);
   });
 
-  const intervals = [];
+  const intervalsByUid = {};
   for (const key in byUidDate) {
+    const uid = key.split('|')[0];
     const list = byUidDate[key].slice().sort((a, b) => {
       const am = timeToMinutes(a.startTime), bm = timeToMinutes(b.startTime);
       if (am !== bm) return am - bm;
@@ -28392,10 +28404,25 @@ function getSiteTurnoverIntervalsApproximate(siteId) {
       const prevEnd = timeToMinutes(list[i - 1].endTime);
       const curStart = timeToMinutes(list[i].startTime);
       const gap = _turnoverGapMin(prevEnd, curStart);
-      if (gap > 0) intervals.push(gap);
+      if (gap > 0) (intervalsByUid[uid] = intervalsByUid[uid] || []).push(gap);
     }
   }
-  return intervals;
+
+  const userStats = [];
+  Object.values(intervalsByUid).forEach(arr => {
+    const s = getTurnoverStats(arr);
+    if (s && s.count >= TURNOVER_MIN_INTERVALS) userStats.push(s);
+  });
+  if (userStats.length === 0) return { mean: null, median: null, count: 0, contributors: 0 };
+  const sumMean = userStats.reduce((a, s) => a + s.mean, 0);
+  const sumMedian = userStats.reduce((a, s) => a + s.median, 0);
+  const totalCount = userStats.reduce((a, s) => a + s.count, 0);
+  return {
+    mean: round2(sumMean / userStats.length),
+    median: round2(sumMedian / userStats.length),
+    count: totalCount,
+    contributors: userStats.length
+  };
 }
 
 // Phase C: each user writes their own pre-computed stats to
@@ -28520,9 +28547,9 @@ function renderTurnoverCard() {
       : 'No qualifying cases yet';
   }
 
-  // SITE — Phase C if enough contributors, else Phase A. Both can be
-  // async (need community shifts + sharedTurnoverStats); render
-  // placeholders, then upgrade when data arrives.
+  // SITE — Phase C if enough contributors, else Phase A. Both numbers
+  // are macro-averaged across users (mean of per-user means, median of
+  // per-user medians) so a single heavy contributor doesn't dominate.
   const mySite = getCurrentSiteId();
   const phaseC = getSiteTurnoverStatsFromPhaseC(mySite);
   if (phaseC && phaseC.contributors >= TURNOVER_PHASE_C_MIN_CONTRIBUTORS) {
@@ -28531,22 +28558,21 @@ function renderTurnoverCard() {
     siteMeta.textContent = phaseC.contributors + ' contributors · last ' + TURNOVER_WINDOW_DAYS + 'd';
     siteNote.textContent = '';
   } else {
-    const approxIntervals = getSiteTurnoverIntervalsApproximate(mySite);
-    const approxStats = approxIntervals ? getTurnoverStats(approxIntervals) : null;
-    if (approxStats && approxStats.count >= TURNOVER_MIN_INTERVALS) {
-      siteMean.textContent = _fmtTurnoverMin(approxStats.mean);
-      siteMedian.textContent = _fmtTurnoverMin(approxStats.median);
-      siteMeta.textContent = approxStats.count + ' intervals (approx) · last ' + TURNOVER_WINDOW_DAYS + 'd';
+    const approx = getSiteTurnoverStatsApproximate(mySite);
+    if (approx && approx.contributors >= TURNOVER_PHASE_A_MIN_CONTRIBUTORS) {
+      siteMean.textContent = _fmtTurnoverMin(approx.mean);
+      siteMedian.textContent = _fmtTurnoverMin(approx.median);
+      siteMeta.textContent = approx.contributors + ' contributors · ' + approx.count + ' intervals · last ' + TURNOVER_WINDOW_DAYS + 'd';
     } else {
       siteMean.textContent = '—';
       siteMedian.textContent = '—';
-      siteMeta.textContent = approxIntervals === null
+      siteMeta.textContent = approx === null
         ? 'Loading…'
-        : (approxStats ? approxStats.count + '/' + TURNOVER_MIN_INTERVALS + ' intervals so far' : 'No site data');
+        : approx.contributors + '/' + TURNOVER_PHASE_A_MIN_CONTRIBUTORS + ' qualifying contributors so far';
     }
     siteNote.textContent = phaseC
       ? phaseC.contributors + '/' + TURNOVER_PHASE_C_MIN_CONTRIBUTORS + ' users have shared stats; switching to precise aggregate at ' + TURNOVER_PHASE_C_MIN_CONTRIBUTORS + '.'
-      : 'Approximate: other users\' clock-in/out segments aren\'t shared, so this treats each shift as one continuous window.';
+      : 'Site number is an average of each contributor\'s own mean / median, so heavy contributors don\'t skew it. Approximate while sharedShifts doesn\'t carry per-segment clock-in data.';
   }
 
   // Trigger lazy loads if data isn't ready yet. Re-render once they
