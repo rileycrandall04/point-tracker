@@ -2189,15 +2189,25 @@ body.hide-monetary .monetary-hide { display: none !important; }
         </div>
       </div>
 
+      <!-- Shift-level Location picker — surfaces for shifts that have no
+           clocked-in time (vacation / forced off / flat-payment). Regular
+           shifts pick a location per time entry instead. -->
+      <div id="shiftLocationSection" class="form-group hidden">
+        <label>Location</label>
+        <div id="shiftLocationRadios" style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-top:4px;font-size:0.85rem;"></div>
+      </div>
+
       <div class="form-group" id="timeEntriesGroup">
         <label id="timeEntriesLabel">Time Entries</label>
         <p id="timeEntriesHelp" class="hidden" style="font-size:0.72rem;color:var(--text-dim);margin:0 0 6px;line-height:1.4;"></p>
         <div id="timeEntriesContainer">
-          <div class="time-entry-row">
-            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="07:10">
-            <span class="te-label">to</span>
-            <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-end" value="17:00">
-            <button type="button" class="remove-entry-btn" disabled>&times;</button>
+          <div class="te-block" style="margin-bottom:8px;">
+            <div class="time-entry-row" style="margin-bottom:0;">
+              <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="07:10">
+              <span class="te-label">to</span>
+              <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-end" value="17:00">
+              <button type="button" class="remove-entry-btn" disabled>&times;</button>
+            </div>
           </div>
         </div>
         <button type="button" class="add-entry-btn" id="addTimeEntryBtn">+ Add Time Entry</button>
@@ -10909,15 +10919,17 @@ function buildSharedShift(shift) {
   if (!shift || !shift.date) return null;
   const hrs = calcShiftHours(shift);
   const total = calcShiftTotal(shift).total;
-  // First-segment sub-site as the shift-level summary. Per-segment tags
-  // ride along in subSiteIds[] so site analytics can break a shift down
-  // when it spans multiple locations (e.g. UVH morning -> PSC afternoon).
+  // First-segment sub-site as the shift-level summary; falls back to the
+  // shift's own subSiteId (set for vacation / forced-off / OR_float).
+  // Per-segment tags ride along in subSiteIds[] so site analytics can
+  // break a shift down when it spans multiple locations.
   const firstSeg = (shift.timeEntries && shift.timeEntries[0]) || null;
   const subSiteIds = (shift.timeEntries || []).map(e => (e && e.subSiteId) || '');
+  const shiftSubSite = (firstSeg && firstSeg.subSiteId) || shift.subSiteId || '';
   return {
     uid: currentUser ? currentUser.uid : '',
     siteId: shift.siteId || getCurrentSiteId(),
-    subSiteId: (firstSeg && firstSeg.subSiteId) || '',
+    subSiteId: shiftSubSite,
     subSiteIds: subSiteIds,
     assignmentType: shift.assignmentType || '',
     shiftDate: shift.date,
@@ -12971,13 +12983,16 @@ function _findTimeEntryForCase(shift, caseStartTime) {
   return null;
 }
 
-// Resolve the subSiteId to stamp on a case at save time. Falls back to
-// the shift-level default for the assignment type, then empty.
+// Resolve the subSiteId to stamp on a case at save time. Priority:
+//   1. The time entry segment that owns the case start time.
+//   2. The shift-level subSiteId (set for vacation / forced-off /
+//      flat-payment / OR_float shifts and as a fallback elsewhere).
+//   3. The admin's per-shift-type default.
 function subSiteIdForCase(shift, caseStartTime) {
   if (!shift) return '';
   const seg = _findTimeEntryForCase(shift, caseStartTime);
   if (seg && seg.subSiteId) return seg.subSiteId;
-  // No matching segment / no tag — last-resort default by shift type.
+  if (shift.subSiteId) return shift.subSiteId;
   return getDefaultSubSiteForAssignmentType(shift.siteId, shift.assignmentType);
 }
 
@@ -13820,9 +13835,20 @@ function initMilTimeInputs() {
 // ================================================================
 // DYNAMIC TIME ENTRIES
 // ================================================================
+let _teRowIdSeq = 0;
 function createTimeEntryRow(start, end, subSiteId) {
+  // Wrapper holds both the time-input row and the optional Location radio
+  // sub-row, so removal takes both. Selectors switched from .time-entry-row
+  // to .te-block to query the wrappers.
+  const block = document.createElement('div');
+  block.className = 'te-block';
+  block.style.marginBottom = '8px';
+  const rowId = ++_teRowIdSeq;
+  block.dataset.rowId = String(rowId);
+
   const row = document.createElement('div');
   row.className = 'time-entry-row';
+  row.style.marginBottom = '0';
   row.innerHTML = `
     <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="${start || ''}">
     <span class="te-label">to</span>
@@ -13830,8 +13856,9 @@ function createTimeEntryRow(start, end, subSiteId) {
     <span class="te-next-day" style="display:none;color:var(--accent2);font-size:0.7rem;font-weight:600;">+1d</span>
     <button type="button" class="remove-entry-btn">&times;</button>
   `;
+  block.appendChild(row);
+
   row.querySelectorAll('input.mil-time').forEach(input => bindMilTimeInput(input));
-  // Show +1d indicator when end time < start time (cross-midnight)
   const startInput = row.querySelector('.te-start');
   const endInput = row.querySelector('.te-end');
   const nextDayBadge = row.querySelector('.te-next-day');
@@ -13844,32 +13871,38 @@ function createTimeEntryRow(start, end, subSiteId) {
   endInput.addEventListener('input', updateCrossMidnight);
   updateCrossMidnight();
   row.querySelector('.remove-entry-btn').addEventListener('click', function() {
-    row.remove();
+    block.remove();
     updateRemoveButtons();
   });
-  // Location picker — only rendered when the site has subSites configured.
-  // Default seeded from sites/{siteId}.subSiteDefaults[assignmentType] when
-  // no subSiteId was passed in (i.e. brand-new row); existing rows preserve
-  // whatever was saved so editing doesn't surprise-rewrite the tag.
+
+  // Location radios live directly under the time row when the site has
+  // sub-sites configured. Default value: passed-in subSiteId (existing
+  // row) > admin per-shift-type default (new row) > none.
   const siteId = getCurrentSiteId();
   if (siteHasSubSites(siteId)) {
-    const sel = document.createElement('select');
-    sel.className = 'te-subsite';
-    sel.style.cssText = 'margin-left:8px;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.78rem;min-width:0;max-width:130px;';
-    let opts = '<option value="">— Location —</option>';
-    getSubSitesForSite(siteId).forEach(s => {
-      opts += '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.label) + '</option>';
-    });
-    sel.innerHTML = opts;
+    const subs = getSubSitesForSite(siteId);
+    const groupName = 'te-loc-' + rowId;
     let initial = subSiteId || '';
     if (!initial) {
       const t = (typeof getSelectedAssignmentType === 'function') ? getSelectedAssignmentType() : '';
       initial = getDefaultSubSiteForAssignmentType(siteId, t);
     }
-    sel.value = initial;
-    row.appendChild(sel);
+    const locRow = document.createElement('div');
+    locRow.className = 'te-location-row';
+    locRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin:6px 0 0 0;font-size:0.78rem;';
+    let html = '<span style="font-size:0.7rem;color:var(--text-dim);">Location</span>';
+    subs.forEach(s => {
+      const checked = (initial === s.id) ? ' checked' : '';
+      html += '<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--text);">'
+        + '<input type="radio" name="' + escapeHtml(groupName) + '" value="' + escapeHtml(s.id) + '" class="te-subsite-radio" style="width:14px;height:14px;margin:0;flex:none;"' + checked + '>'
+        + '<span>' + escapeHtml(s.label) + '</span>'
+        + '</label>';
+    });
+    locRow.innerHTML = html;
+    block.appendChild(locRow);
   }
-  return row;
+
+  return block;
 }
 
 function addTimeEntry() {
@@ -13882,23 +13915,29 @@ function addTimeEntry() {
 }
 
 function updateRemoveButtons() {
-  const rows = document.querySelectorAll('#timeEntriesContainer .time-entry-row');
-  rows.forEach(row => {
-    const btn = row.querySelector('.remove-entry-btn');
-    btn.disabled = rows.length <= 1;
+  // Each time entry lives inside a .te-block wrapper (which may also
+  // contain a Location radio sub-row). Fall back to bare .time-entry-row
+  // for the static initial markup before the first populateTimeEntries.
+  const blocks = document.querySelectorAll('#timeEntriesContainer .te-block, #timeEntriesContainer > .time-entry-row');
+  blocks.forEach(b => {
+    const btn = b.querySelector('.remove-entry-btn');
+    if (btn) btn.disabled = blocks.length <= 1;
   });
 }
 
 function collectTimeEntries() {
-  const rows = document.querySelectorAll('#timeEntriesContainer .time-entry-row');
+  const blocks = document.querySelectorAll('#timeEntriesContainer .te-block, #timeEntriesContainer > .time-entry-row');
   const entries = [];
-  rows.forEach(row => {
-    const start = row.querySelector('.te-start').value.trim();
-    const end = row.querySelector('.te-end').value.trim();
+  blocks.forEach(b => {
+    const startEl = b.querySelector('.te-start');
+    const endEl = b.querySelector('.te-end');
+    const start = startEl ? startEl.value.trim() : '';
+    const end = endEl ? endEl.value.trim() : '';
     if (start || end) {
-      const subSel = row.querySelector('.te-subsite');
       const entry = { start, end };
-      if (subSel) entry.subSiteId = subSel.value || '';
+      const radio = b.querySelector('.te-subsite-radio:checked');
+      if (radio) entry.subSiteId = radio.value || '';
+      else if (siteHasSubSites(getCurrentSiteId())) entry.subSiteId = '';
       entries.push(entry);
     }
   });
@@ -18749,6 +18788,7 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
   } else {
     document.getElementById('timeEntriesGroup').classList.remove('hidden');
   }
+  _updateShiftLevelLocationSection();
   updateUnrestrictedCallVisibility();
   updateSupervisionOverlayVisibility();
   updatePreCallOverlayVisibility();
@@ -19092,6 +19132,10 @@ function loadShiftForDate() {
   updateSupervisionOverlayVisibility();
   updatePreCallOverlayVisibility();
   updateTempCoverageVisibility();
+  // Shift-level Location picker: re-render with the loaded shift's value.
+  // For a brand-new (unset) date, fall back to the admin's per-shift-type
+  // default via the helper's own logic.
+  _updateShiftLevelLocationSection(data.shifts[date] && data.shifts[date].subSiteId);
   updateEndTimeWarning();
 }
 
@@ -19342,14 +19386,26 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     showToast('Please enter at least one start time');
     return;
   }
-  // Location required on every time entry when this site has sub-sites
-  // configured. Skipped for vacation / flat-payment / forced-off saves
-  // since those have no real clock-in segment.
-  if (!skipTimeEntries && siteHasSubSites(getCurrentSiteId())) {
-    const missingLoc = timeEntries.some(e => (e.start || e.end) && !e.subSiteId);
-    if (missingLoc) {
-      showToast('Pick a Location for every time entry');
-      return;
+  // Location handling when this site has sub-sites configured.
+  //   - Shift types covered by the shift-level picker (vacation /
+  //     forced-off / flat-payment / OR_float) only require ONE pick at
+  //     the top of the form.
+  //   - All other types require a Location on every time entry, as
+  //     before.
+  const _shiftLoc = _getShiftLevelLocation();
+  if (siteHasSubSites(getCurrentSiteId())) {
+    const needsShiftLevel = _shiftNeedsShiftLevelLocation(assignmentType, getCurrentSiteId());
+    if (needsShiftLevel) {
+      if (!_shiftLoc) {
+        showToast('Pick a Location for this shift');
+        return;
+      }
+    } else if (!skipTimeEntries) {
+      const missingLoc = timeEntries.some(e => (e.start || e.end) && !e.subSiteId);
+      if (missingLoc) {
+        showToast('Pick a Location for every time entry');
+        return;
+      }
     }
   }
   // Validate: entries should be in chronological order, no overlaps.
@@ -19418,6 +19474,7 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     data.shifts[dt] = {
       date: dt, assignmentType: effectiveType,
       siteId: data.shifts[dt]?.siteId || getCurrentSiteId(),
+      subSiteId: _shiftLoc || '',
       startTime: allTimeEntries[0]?.start || '',
       endTime: allTimeEntries[allTimeEntries.length - 1]?.end || '',
       timeEntries: allTimeEntries,
@@ -20381,6 +20438,57 @@ function updatePointPreview() {
   // Surface the location this case will be tagged with — only meaningful
   // when the site has sub-sites configured and we have a saved shift.
   _updateCaseFormLocationHint();
+}
+
+// Shift types that need a shift-level Location picker (separate from
+// the per-time-entry pickers). Vacation / forced-off / flat-payment
+// shifts have no time entries at all, so they'd otherwise go untagged.
+// OR_float gets a shift-level picker too (per user spec — float work
+// is "where am I today" rather than per-segment).
+function _shiftNeedsShiftLevelLocation(type, siteId) {
+  if (!type) return false;
+  if (type === 'vacation' || type === 'forced_off' || type === 'OR_float') return true;
+  if (getFlatPaymentRule(type, siteId)) return true;
+  return false;
+}
+
+// Show / hide the shift-level Location picker (radio buttons) for the
+// shift types that need one. Optionally preserves an explicit value
+// passed in (used when loading an existing shift); otherwise falls back
+// to the admin per-shift-type default.
+function _updateShiftLevelLocationSection(preserveValue) {
+  const section = document.getElementById('shiftLocationSection');
+  const radiosEl = document.getElementById('shiftLocationRadios');
+  if (!section || !radiosEl) return;
+  const siteId = getCurrentSiteId();
+  if (!siteHasSubSites(siteId)) { section.classList.add('hidden'); return; }
+  const type = (typeof getSelectedAssignmentType === 'function') ? getSelectedAssignmentType() : '';
+  const show = _shiftNeedsShiftLevelLocation(type, siteId);
+  section.classList.toggle('hidden', !show);
+  if (!show) return;
+  // Build radios. Preserve a passed-in value (loading an existing shift)
+  // or the currently-selected one (assignment-type change); otherwise
+  // fall back to the admin's per-shift-type default.
+  let selected = preserveValue;
+  if (selected === undefined) {
+    const cur = radiosEl.querySelector('input[type="radio"]:checked');
+    selected = cur ? cur.value : '';
+  }
+  if (!selected) selected = getDefaultSubSiteForAssignmentType(siteId, type) || '';
+  let html = '';
+  getSubSitesForSite(siteId).forEach(s => {
+    const checked = (selected === s.id) ? ' checked' : '';
+    html += '<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--text);">'
+      + '<input type="radio" name="shift-loc" value="' + escapeHtml(s.id) + '" style="width:14px;height:14px;margin:0;flex:none;"' + checked + '>'
+      + '<span>' + escapeHtml(s.label) + '</span>'
+      + '</label>';
+  });
+  radiosEl.innerHTML = html;
+}
+
+function _getShiftLevelLocation() {
+  const r = document.querySelector('#shiftLocationRadios input[type="radio"]:checked');
+  return r ? r.value : '';
 }
 
 // Refresh the "Location: X" hint under the case form based on the
