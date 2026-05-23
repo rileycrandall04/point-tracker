@@ -2352,12 +2352,14 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div class="hidden" id="tempCoverageForm">
           <div class="form-group" style="margin-top:8px;">
             <label>Direction</label>
-            <div style="display:flex;gap:16px;">
-              <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer;">
-                <input type="radio" name="tcDirection" value="covered" checked> Someone covering for me
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;">
+                <input type="radio" name="tcDirection" value="covered" checked style="width:14px;height:14px;margin:0;flex:none;">
+                <span>Someone covering for me</span>
               </label>
-              <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer;">
-                <input type="radio" name="tcDirection" value="covering"> I'm covering for someone
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;">
+                <input type="radio" name="tcDirection" value="covering" style="width:14px;height:14px;margin:0;flex:none;">
+                <span>I'm covering for someone</span>
               </label>
             </div>
           </div>
