@@ -12789,14 +12789,37 @@ function _pagerCallConfig(k) {
 // Returns the ordered list of shift type IDs that should appear in the
 // assignment-type dropdowns for users on this site.
 //   - If sites/{siteId}.visibleShiftTypes is set, returns that array.
-//   - Otherwise, falls back to all keys of DEFAULT_SHIFT_RULES (current
-//     UVH behavior). This keeps backward compat: UVH (no override) sees
-//     every shift type. Other / IMC / etc. set their own whitelist.
+//   - UVH (the default site) falls back to ASSIGNMENT_TYPE_OPTIONS because
+//     DEFAULT_SHIFT_RULES are UVH-flavored — that list is correct there.
+//   - Any other site without an explicit whitelist derives the list from
+//     the site's own shiftRulesOverride keys + any types already in use in
+//     this user's data for that site + a small universal baseline. This
+//     avoids showing UVH-only options (Mole, SF 1, UVH OB, …) on sites
+//     where those don't exist, which was confusing users at other sites
+//     into mapping their shifts incorrectly.
 function getVisibleShiftTypesForSite(siteId) {
   if (!siteId) siteId = getCurrentSiteId();
   const list = sitesCache[siteId] && sitesCache[siteId].visibleShiftTypes;
   if (Array.isArray(list) && list.length > 0) return list.slice();
-  return ASSIGNMENT_TYPE_OPTIONS.map(o => o.value);
+  if (siteId === DEFAULT_SITE_ID) return ASSIGNMENT_TYPE_OPTIONS.map(o => o.value);
+  const seen = new Set();
+  const push = (t) => { if (t && !seen.has(t)) seen.add(t); };
+  const override = (sitesCache[siteId] && sitesCache[siteId].shiftRulesOverride) || {};
+  Object.keys(override).forEach(push);
+  try {
+    if (data && data.shifts) {
+      Object.values(data.shifts).forEach(s => {
+        if (s && s.siteId === siteId && s.assignmentType) push(s.assignmentType);
+      });
+    }
+    if (data && data.calendarAssignments) {
+      Object.values(data.calendarAssignments).forEach(c => {
+        if (c && c.type) push(c.type);
+      });
+    }
+  } catch (e) { /* ignore — best-effort enrichment only */ }
+  ['OR', 'vacation', 'forced_off'].forEach(push);
+  return Array.from(seen);
 }
 
 // Site-shared calendar title mappings: a per-site map title → {type, label}
