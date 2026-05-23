@@ -20919,6 +20919,7 @@ function renderToday() {
 
   bdHtml += '<div id="todayRateChips"></div>';
   bdHtml += '<div id="todayLiveRates"></div>';
+  bdHtml += '<div id="todayCurrentLocation" style="text-align:right;font-size:0.7rem;color:var(--text-dim);margin-top:6px;letter-spacing:0.2px;"></div>';
   bdHtml += '</div>';
   document.getElementById('todayBreakdown').innerHTML = bdHtml;
   updateTodayRateChips();
@@ -21595,16 +21596,17 @@ function updateTodayRateChips() {
 
   let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:0.78rem;">';
 
-  // Current Location chip — resolves the segment that owns the current
-  // clock time so the user can confirm what new cases will be tagged
-  // with. Hidden when the site has no sub-sites or the type is exempt.
-  if (siteHasSubSites(shift.siteId) && !isLocationExemptForType(shift.siteId, shift.assignmentType)) {
-    const nowHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-    const curSubId = subSiteIdForCase(shift, nowHHMM);
-    const curLabel = curSubId ? getSubSiteLabel(shift.siteId, curSubId) : '';
-    if (curLabel) {
-      html += `<div style="padding:4px 10px;background:rgba(102,187,106,0.14);border-radius:12px;color:rgba(102,187,106,1);font-weight:600;">@ ${escHtml(curLabel)}</div>`;
+  // Current Location footer — plain, small, bottom-right of the ticker
+  // card. Hidden when the site has no sub-sites or the type is exempt.
+  const locEl = document.getElementById('todayCurrentLocation');
+  if (locEl) {
+    let locTxt = '';
+    if (siteHasSubSites(shift.siteId) && !isLocationExemptForType(shift.siteId, shift.assignmentType)) {
+      const nowHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+      const curSubId = subSiteIdForCase(shift, nowHHMM);
+      locTxt = curSubId ? (getSubSiteLabel(shift.siteId, curSubId) || '') : '';
     }
+    locEl.textContent = locTxt;
   }
 
   // Current rate chip (only when clocked in — shift in progress)
