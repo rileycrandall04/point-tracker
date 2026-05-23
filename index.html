@@ -13020,6 +13020,29 @@ function _findTimeEntryForCase(shift, caseStartTime) {
   return null;
 }
 
+// Re-runs subSiteIdForCase against every case on `shiftDate` and writes
+// any changed values back to the case + Firestore mirrors. Called after
+// a shift save so back-filling Location on past intervals retags the
+// cases that fell inside them. Returns the number of cases changed so
+// callers can surface a toast.
+function restampCaseLocationsForShift(shiftDate) {
+  if (!shiftDate) return 0;
+  const shift = data.shifts[shiftDate];
+  if (!shift) return 0;
+  let changed = 0;
+  data.cases.forEach(c => {
+    if (!c || c.shiftDate !== shiftDate) return;
+    const next = subSiteIdForCase(shift, c.startTime) || '';
+    const prev = c.subSiteId || '';
+    if (next === prev) return;
+    c.subSiteId = next;
+    changed++;
+    try { if (typeof writeCaseDoc === 'function') writeCaseDoc(c); } catch (e) {}
+    try { if (typeof writeSharedCase === 'function') writeSharedCase(c, shift); } catch (e) {}
+  });
+  return changed;
+}
+
 // Resolve the subSiteId to stamp on a case at save time. Priority:
 //   1. The time entry segment that owns the case start time.
 //   2. The shift-level subSiteId (set for flat-payment shifts and any
@@ -19579,6 +19602,14 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     };
   });
   saveData(data);
+  // Re-stamp Location on every case under each saved date so back-filling
+  // intervals on a past shift retags its cases. Skipped for vacation
+  // ranges (no cases there anyway).
+  let _restamped = 0;
+  if (!isVacation) {
+    datesToSave.forEach(dt => { _restamped += restampCaseLocationsForShift(dt); });
+    if (_restamped > 0) saveData(data);
+  }
   // Auto-fill supervision end time when shift ends with open supervision
   if (datesToSave.length === 1 && !skipTimeEntries) {
     const savedShift = data.shifts[date];
@@ -19603,7 +19634,8 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     const msg = `${datesToSave.length - skipped} vacation day${datesToSave.length - skipped !== 1 ? 's' : ''} saved!` + (skipped ? ` (${skipped} existing shift${skipped !== 1 ? 's' : ''} skipped)` : '');
     showToast(msg);
   } else {
-    showToast('Shift saved!');
+    const tail = _restamped > 0 ? ` (${_restamped} case${_restamped !== 1 ? 's' : ''} re-tagged)` : '';
+    showToast('Shift saved!' + tail);
   }
   deShiftEditing = false;
   returnToToday = false;
@@ -24315,6 +24347,7 @@ document.getElementById('saveShiftEdit').addEventListener('click', () => {
     shift.startTime = shift.timeEntries[0].start;
     shift.endTime = shift.timeEntries[shift.timeEntries.length - 1].end;
   }
+  const _editRestamped = restampCaseLocationsForShift(editingShiftDate);
   saveData(data);
   document.getElementById('shiftEditModal').classList.add('hidden');
   editingShiftDate = null;
@@ -24322,7 +24355,7 @@ document.getElementById('saveShiftEdit').addEventListener('click', () => {
   renderShiftLogTable();
   renderToday();
   renderDailyTab();
-  showToast('Shift updated');
+  showToast('Shift updated' + (_editRestamped > 0 ? ` (${_editRestamped} case${_editRestamped !== 1 ? 's' : ''} re-tagged)` : ''));
 });
 
 document.getElementById('deleteShiftBtn').addEventListener('click', () => {
