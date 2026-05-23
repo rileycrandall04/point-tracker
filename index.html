@@ -13012,7 +13012,11 @@ function _findTimeEntryForCase(shift, caseStartTime) {
     if (!e || !e.start) continue;
     const s = timeToMinutes(e.start);
     if (isNaN(s)) continue;
-    const rawEnd = e.end ? timeToMinutes(e.end) : s;
+    // An interval with no clock-out time yet is treated as open-ended
+    // until +24h (the longest a single shift would run), so cases logged
+    // during a live shift — and the live ticker chip — match correctly
+    // instead of falling through to the shift-level fallback.
+    const rawEnd = e.end ? timeToMinutes(e.end) : (s + 1440);
     const en = (e.end && rawEnd <= s) ? rawEnd + 1440 : rawEnd;
     const csmAdj = csm < s ? csm + 1440 : csm;
     if (csmAdj >= s && csmAdj <= en) return e;
@@ -19278,7 +19282,15 @@ function updateDataEntryState() {
     } else if (isForcedOff) {
       document.getElementById('deSSBTimes').textContent = '56 pts — Forced Off';
     } else {
-      document.getElementById('deSSBTimes').textContent = entries.map(e => (e.start || '?') + ' - ' + (e.end || '?')).join(', ');
+      // Inline each interval's Location next to its times so the user
+      // sees the tagging at a glance from the data-entry summary bar.
+      const _ssbShowLoc = siteHasSubSites(shift.siteId) && !isLocationExemptForType(shift.siteId, shift.assignmentType);
+      document.getElementById('deSSBTimes').textContent = entries.map(e => {
+        const range = (e.start || '?') + ' - ' + (e.end || '?');
+        if (!_ssbShowLoc) return range;
+        const loc = e.subSiteId ? getSubSiteLabel(shift.siteId, e.subSiteId) : '';
+        return loc ? (range + ' @ ' + loc) : range;
+      }).join(', ');
     }
     // Show case section only if not vacation/forced off
     if (isVacation || isForcedOff) {
@@ -19349,10 +19361,18 @@ function renderDECaseList() {
         estFinishHtml = '<div style="flex-basis:100%;text-align:center;font-size:0.7rem;color:var(--text-dim);margin-top:6px;line-height:1.4;">est. finish <strong style="color:var(--text);">' + escHtml(est.finish) + '</strong> <span style="opacity:0.85;">' + label + '</span></div>';
       }
     }
+    // Resolve the case's Location (segment → shift → admin default) so the
+    // user has visible confirmation that the case is being tagged.
+    let _deLocStr = '';
+    if (shift && siteHasSubSites(shift.siteId)) {
+      const _ds = c.subSiteId || subSiteIdForCase(shift, c.startTime);
+      const _dl = _ds ? getSubSiteLabel(shift.siteId, _ds) : '';
+      if (_dl) _deLocStr = ` <span style="color:rgba(102,187,106,1);font-weight:600;">@ ${escHtml(_dl)}</span>`;
+    }
     html += `<div class="de-case-list-item" onclick="openCaseEdit('${c.id}')" style="cursor:pointer;${estFinishHtml ? 'flex-wrap:wrap;' : ''}">
       <div class="de-info">
         <div class="de-name">${escHtml(name)}${c.asaCode ? ' <span style="color:var(--text-dim);font-size:0.75rem;">(' + escHtml(c.asaCode) + ')</span>' : ''}${estTag}</div>
-        ${timeStr ? `<div class="de-detail">${escHtml(timeStr)}</div>` : ''}
+        ${timeStr || _deLocStr ? `<div class="de-detail">${escHtml(timeStr)}${_deLocStr}</div>` : ''}
       </div>
       <div class="de-actions">
         <span class="de-pts">${pts.toFixed(1)}</span>
