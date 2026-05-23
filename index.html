@@ -2668,6 +2668,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div class="row"><span>Estimated Points</span><span id="previewPoints">--</span></div>
       </div>
 
+      <div id="caseFormLocationHint" class="hidden" style="font-size:0.68rem;color:var(--text-dim);margin-top:8px;text-align:right;"></div>
+
       <div style="margin-top: 16px;">
         <button class="btn btn-primary" id="saveCaseBtn">Save Case</button>
       </div>
@@ -4478,6 +4480,24 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </details>
   </div>
 
+  <!-- Locations (sub-site) editor — visible to site admins of their site.
+       Adds physical-location tagging for time entries / cases at sites
+       that span multiple campuses (e.g. UVH covers UVH / PSC / SSSC / SFH). -->
+  <div class="card hidden" id="adminLocationsCard" style="margin-top:12px;">
+    <details class="adm-fold adm-card-fold">
+      <summary><h2 style="margin:0;">Locations</h2></summary>
+      <div class="adm-fold-body">
+        <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;line-height:1.4;">
+          Add the physical locations your site covers. Users will be required to pick a location for each time entry on this site, and cases inherit the location of the segment they fall into. Optional: set a default location per shift type so common assignments pre-fill.
+        </p>
+        <div id="adminLocationsContent" style="font-size:0.85rem;">Loading…</div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+          <button class="btn btn-primary btn-sm" id="adminLocationsSaveBtn" onclick="saveAdminLocations()" style="width:auto;">Save Changes</button>
+        </div>
+      </div>
+    </details>
+  </div>
+
   <!-- Admin User Lookup (admin only) -->
   <div class="card hidden" id="adminUserLookupCard" style="margin-top:12px;">
     <details class="adm-fold adm-card-fold">
@@ -5156,6 +5176,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <label>Notes (optional)</label>
       <textarea id="editCaseCaseNotes" placeholder="Additional notes" autocomplete="off" rows="1" style="min-height:auto;"></textarea>
     </div>
+    <div id="editCaseLocationHint" class="hidden" style="font-size:0.68rem;color:var(--text-dim);margin-top:8px;text-align:right;"></div>
     <div class="modal-actions" style="justify-content:space-between;">
       <button class="btn btn-danger btn-sm" id="deleteCaseEdit">Delete</button>
       <div style="display:flex;gap:8px;">
@@ -10302,6 +10323,7 @@ function buildSharedCase(caseData, shift) {
   return {
     uid: currentUser ? currentUser.uid : '',
     siteId: caseData.siteId || (shift && shift.siteId) || getCurrentSiteId(),
+    subSiteId: caseData.subSiteId || '',
     caseType: caseData.caseType || '',
     shiftDate: caseData.shiftDate || '',
     timestamp: caseData.timestamp || new Date().toISOString(),
@@ -10887,9 +10909,16 @@ function buildSharedShift(shift) {
   if (!shift || !shift.date) return null;
   const hrs = calcShiftHours(shift);
   const total = calcShiftTotal(shift).total;
+  // First-segment sub-site as the shift-level summary. Per-segment tags
+  // ride along in subSiteIds[] so site analytics can break a shift down
+  // when it spans multiple locations (e.g. UVH morning -> PSC afternoon).
+  const firstSeg = (shift.timeEntries && shift.timeEntries[0]) || null;
+  const subSiteIds = (shift.timeEntries || []).map(e => (e && e.subSiteId) || '');
   return {
     uid: currentUser ? currentUser.uid : '',
     siteId: shift.siteId || getCurrentSiteId(),
+    subSiteId: (firstSeg && firstSeg.subSiteId) || '',
+    subSiteIds: subSiteIds,
     assignmentType: shift.assignmentType || '',
     shiftDate: shift.date,
     monthBucket: shift.date.slice(0, 7), // YYYY-MM, handy for future filters
@@ -12883,6 +12912,237 @@ function getEffectiveCalendarMapping(title, siteId) {
   return undefined;
 }
 
+// ----- Sub-sites (a.k.a. "Locations") ----------------------------------------
+// Some sites (initially UVH: UVH/PSC/SSSC/SFH) physically cover multiple
+// locations under one organisation-level site. Each timeEntries[] segment
+// can be tagged with a subSiteId; cases inherit the segment's value at
+// save time. Config lives on the site doc, admin-editable through the
+// Locations card on the Admin page:
+//
+//   sites/{siteId}.subSites        = [{ id, label }]
+//   sites/{siteId}.subSiteDefaults = { [assignmentType]: subSiteId }
+//
+// When a site has no subSites configured, no UI surfaces — zero impact.
+function getSubSitesForSite(siteId) {
+  if (!siteId) siteId = getCurrentSiteId();
+  const list = sitesCache[siteId] && sitesCache[siteId].subSites;
+  return Array.isArray(list) ? list.slice() : [];
+}
+
+function siteHasSubSites(siteId) {
+  return getSubSitesForSite(siteId).length > 0;
+}
+
+function getSubSiteDefaults(siteId) {
+  if (!siteId) siteId = getCurrentSiteId();
+  const d = sitesCache[siteId] && sitesCache[siteId].subSiteDefaults;
+  return (d && typeof d === 'object') ? d : {};
+}
+
+function getDefaultSubSiteForAssignmentType(siteId, assignmentType) {
+  if (!assignmentType) return '';
+  const defaults = getSubSiteDefaults(siteId);
+  return defaults[assignmentType] || '';
+}
+
+function getSubSiteLabel(siteId, subSiteId) {
+  if (!subSiteId) return '';
+  const list = getSubSitesForSite(siteId);
+  const hit = list.find(s => s && s.id === subSiteId);
+  return (hit && hit.label) || '';
+}
+
+// Pick the timeEntries[] segment that owns this case start time. Returns
+// the entry object or null. Cross-midnight aware via the same wrap logic
+// the rest of the engine uses (end <= start counts as next day).
+function _findTimeEntryForCase(shift, caseStartTime) {
+  if (!shift || !shift.timeEntries || !caseStartTime) return null;
+  const csm = timeToMinutes(caseStartTime);
+  if (isNaN(csm)) return null;
+  for (const e of shift.timeEntries) {
+    if (!e || !e.start) continue;
+    const s = timeToMinutes(e.start);
+    if (isNaN(s)) continue;
+    const rawEnd = e.end ? timeToMinutes(e.end) : s;
+    const en = (e.end && rawEnd <= s) ? rawEnd + 1440 : rawEnd;
+    const csmAdj = csm < s ? csm + 1440 : csm;
+    if (csmAdj >= s && csmAdj <= en) return e;
+  }
+  return null;
+}
+
+// Resolve the subSiteId to stamp on a case at save time. Falls back to
+// the shift-level default for the assignment type, then empty.
+function subSiteIdForCase(shift, caseStartTime) {
+  if (!shift) return '';
+  const seg = _findTimeEntryForCase(shift, caseStartTime);
+  if (seg && seg.subSiteId) return seg.subSiteId;
+  // No matching segment / no tag — last-resort default by shift type.
+  return getDefaultSubSiteForAssignmentType(shift.siteId, shift.assignmentType);
+}
+
+// Persist subSites + subSiteDefaults for a site. Mirrors the
+// persistCalendarMappings pattern (sites/{siteId} writes are admin-gated
+// by Firestore rules); also rewrites sitesCache so the UI sees the new
+// state without a reload.
+async function persistSubSiteConfig(siteId, subSites, subSiteDefaults) {
+  if (!siteId) throw new Error('siteId required');
+  if (!isSiteAdmin(siteId)) throw new Error('Not authorized for this site');
+  if (!firestoreSyncEnabled || !db) throw new Error('Firestore not available');
+  const payload = {};
+  payload.subSites = Array.isArray(subSites) ? subSites : [];
+  payload.subSiteDefaults = (subSiteDefaults && typeof subSiteDefaults === 'object') ? subSiteDefaults : {};
+  await db.collection('sites').doc(siteId).set(payload, { merge: true });
+  if (!sitesCache[siteId]) sitesCache[siteId] = {};
+  sitesCache[siteId].subSites = payload.subSites;
+  sitesCache[siteId].subSiteDefaults = payload.subSiteDefaults;
+}
+
+// ----- Admin Locations editor ------------------------------------------------
+// In-memory edit state for the Locations card. Initialised from
+// sitesCache on each render so the admin can stage multiple changes
+// (add / rename / delete / reassign defaults) before hitting Save.
+let _adminLocationsState = null;
+
+function _adminLocationsResetState(siteId) {
+  _adminLocationsState = {
+    siteId,
+    subSites: getSubSitesForSite(siteId),
+    defaults: { ...getSubSiteDefaults(siteId) }
+  };
+}
+
+function _adminLocationsMakeId(label, existing) {
+  const base = String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'loc';
+  let id = base;
+  let n = 2;
+  const ids = new Set((existing || []).map(s => s.id));
+  while (ids.has(id)) { id = base + '_' + n; n++; }
+  return id;
+}
+
+function renderAdminLocations() {
+  const out = document.getElementById('adminLocationsContent');
+  if (!out) return;
+  const siteId = getCurrentSiteId();
+  if (!isSiteAdmin(siteId)) {
+    out.innerHTML = '<p style="color:var(--accent2);">You aren\'t a site admin for ' + escapeHtml(siteId) + '.</p>';
+    return;
+  }
+  // Re-init state whenever the site changes (or first render).
+  if (!_adminLocationsState || _adminLocationsState.siteId !== siteId) {
+    _adminLocationsResetState(siteId);
+  }
+  const state = _adminLocationsState;
+
+  let html = '';
+  html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Site: <strong>' + escapeHtml((sitesCache[siteId] && sitesCache[siteId].name) || siteId) + '</strong></div>';
+
+  // ----- Locations list -----
+  html += '<div style="font-weight:600;font-size:0.82rem;margin-bottom:4px;">Locations</div>';
+  if (state.subSites.length === 0) {
+    html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">No locations yet. Add one below.</p>';
+  } else {
+    state.subSites.forEach((s, i) => {
+      html += '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(71,85,105,0.15);">'
+        + '<input type="text" value="' + escapeHtml(s.label) + '" onchange="renameAdminLocation(' + i + ', this.value)" style="flex:1;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.82rem;">'
+        + '<span style="font-size:0.66rem;color:var(--text-dim);font-family:monospace;">' + escapeHtml(s.id) + '</span>'
+        + '<button class="btn btn-danger btn-sm" onclick="deleteAdminLocation(' + i + ')" style="width:auto;padding:2px 8px;font-size:0.72rem;">Delete</button>'
+        + '</div>';
+    });
+  }
+  html += '<div style="display:flex;gap:6px;margin-top:8px;align-items:center;">'
+    + '<input type="text" id="adminLocationsNewLabel" placeholder="New location name" style="flex:1;padding:6px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.82rem;">'
+    + '<button class="btn btn-primary btn-sm" onclick="addAdminLocation()" style="width:auto;">+ Add</button>'
+    + '</div>';
+
+  // ----- Defaults table -----
+  html += '<div style="font-weight:600;font-size:0.82rem;margin-top:18px;margin-bottom:4px;">Default location by shift type</div>';
+  html += '<p style="font-size:0.7rem;color:var(--text-dim);margin:0 0 8px 0;">Users can still override these on each time entry.</p>';
+  const types = getVisibleShiftTypesForSite(siteId);
+  if (types.length === 0 || state.subSites.length === 0) {
+    html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0;">' + (state.subSites.length === 0 ? 'Add at least one location to enable defaults.' : 'No shift types configured for this site.') + '</p>';
+  } else {
+    html += '<div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;">';
+    types.forEach(t => {
+      const cur = state.defaults[t] || '';
+      let opts = '<option value="">— Ask each time —</option>';
+      state.subSites.forEach(s => {
+        opts += '<option value="' + escapeHtml(s.id) + '"' + (cur === s.id ? ' selected' : '') + '>' + escapeHtml(s.label) + '</option>';
+      });
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-bottom:1px solid rgba(71,85,105,0.12);font-size:0.78rem;">'
+        + '<span>' + escapeHtml(getShiftTypeLabel(t, siteId)) + ' <span style="color:var(--text-dim);font-size:0.66rem;font-family:monospace;">' + escapeHtml(t) + '</span></span>'
+        + '<select onchange="setAdminLocationDefault(\'' + escapeHtml(t) + '\', this.value)" style="padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.78rem;min-width:130px;">' + opts + '</select>'
+        + '</div>';
+    });
+    html += '</div>';
+  }
+
+  out.innerHTML = html;
+}
+
+function addAdminLocation() {
+  if (!_adminLocationsState) return;
+  const inp = document.getElementById('adminLocationsNewLabel');
+  const label = inp ? inp.value.trim() : '';
+  if (!label) { showToast('Enter a location name'); return; }
+  if (_adminLocationsState.subSites.some(s => s.label.toLowerCase() === label.toLowerCase())) {
+    showToast('That location already exists');
+    return;
+  }
+  const id = _adminLocationsMakeId(label, _adminLocationsState.subSites);
+  _adminLocationsState.subSites.push({ id, label });
+  if (inp) inp.value = '';
+  renderAdminLocations();
+}
+
+function renameAdminLocation(idx, newLabel) {
+  if (!_adminLocationsState) return;
+  const s = _adminLocationsState.subSites[idx];
+  if (!s) return;
+  const trimmed = String(newLabel || '').trim();
+  if (!trimmed) { showToast('Location name can\'t be empty'); renderAdminLocations(); return; }
+  s.label = trimmed;
+}
+
+function deleteAdminLocation(idx) {
+  if (!_adminLocationsState) return;
+  const s = _adminLocationsState.subSites[idx];
+  if (!s) return;
+  if (!confirm('Delete location "' + s.label + '"?\n\nExisting data tagged with it stays as-is, but new time entries can\'t pick it. The default-by-shift-type map will drop this location too.')) return;
+  _adminLocationsState.subSites.splice(idx, 1);
+  // Scrub any defaults pointing at the deleted location.
+  Object.keys(_adminLocationsState.defaults).forEach(t => {
+    if (_adminLocationsState.defaults[t] === s.id) delete _adminLocationsState.defaults[t];
+  });
+  renderAdminLocations();
+}
+
+function setAdminLocationDefault(assignmentType, subSiteId) {
+  if (!_adminLocationsState) return;
+  if (!subSiteId) {
+    delete _adminLocationsState.defaults[assignmentType];
+  } else {
+    _adminLocationsState.defaults[assignmentType] = subSiteId;
+  }
+}
+
+async function saveAdminLocations() {
+  if (!_adminLocationsState) return;
+  const btn = document.getElementById('adminLocationsSaveBtn');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    await persistSubSiteConfig(_adminLocationsState.siteId, _adminLocationsState.subSites, _adminLocationsState.defaults);
+    showToast('Locations saved');
+  } catch (err) {
+    console.error('Locations save failed:', err);
+    showToast('Save failed: ' + (err.message || err));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+  }
+}
+
 // Persist a batch of title → mapping choices. Admin users write to the
 // site-shared map (sites/{siteId}.calendarMappings); non-admins fall back
 // to their personal override (settings.calendarMappings). Pass mapping=null
@@ -13560,7 +13820,7 @@ function initMilTimeInputs() {
 // ================================================================
 // DYNAMIC TIME ENTRIES
 // ================================================================
-function createTimeEntryRow(start, end) {
+function createTimeEntryRow(start, end, subSiteId) {
   const row = document.createElement('div');
   row.className = 'time-entry-row';
   row.innerHTML = `
@@ -13587,6 +13847,28 @@ function createTimeEntryRow(start, end) {
     row.remove();
     updateRemoveButtons();
   });
+  // Location picker — only rendered when the site has subSites configured.
+  // Default seeded from sites/{siteId}.subSiteDefaults[assignmentType] when
+  // no subSiteId was passed in (i.e. brand-new row); existing rows preserve
+  // whatever was saved so editing doesn't surprise-rewrite the tag.
+  const siteId = getCurrentSiteId();
+  if (siteHasSubSites(siteId)) {
+    const sel = document.createElement('select');
+    sel.className = 'te-subsite';
+    sel.style.cssText = 'margin-left:8px;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.78rem;min-width:0;max-width:130px;';
+    let opts = '<option value="">— Location —</option>';
+    getSubSitesForSite(siteId).forEach(s => {
+      opts += '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.label) + '</option>';
+    });
+    sel.innerHTML = opts;
+    let initial = subSiteId || '';
+    if (!initial) {
+      const t = (typeof getSelectedAssignmentType === 'function') ? getSelectedAssignmentType() : '';
+      initial = getDefaultSubSiteForAssignmentType(siteId, t);
+    }
+    sel.value = initial;
+    row.appendChild(sel);
+  }
   return row;
 }
 
@@ -13613,7 +13895,12 @@ function collectTimeEntries() {
   rows.forEach(row => {
     const start = row.querySelector('.te-start').value.trim();
     const end = row.querySelector('.te-end').value.trim();
-    if (start || end) entries.push({ start, end });
+    if (start || end) {
+      const subSel = row.querySelector('.te-subsite');
+      const entry = { start, end };
+      if (subSel) entry.subSiteId = subSel.value || '';
+      entries.push(entry);
+    }
   });
   return entries;
 }
@@ -13623,7 +13910,7 @@ function populateTimeEntries(entries) {
   container.innerHTML = '';
   if (!entries || entries.length === 0) entries = [{ start: '07:10', end: '' }];
   entries.forEach(e => {
-    container.appendChild(createTimeEntryRow(e.start, e.end));
+    container.appendChild(createTimeEntryRow(e.start, e.end, e.subSiteId));
   });
   updateRemoveButtons();
 }
@@ -15181,6 +15468,8 @@ function renderAdminPage() {
   };
   showOwnerOnly('claudeAISettingsCard');
   showAnyAdmin('adminMultiSiteCard');
+  showAnyAdmin('adminLocationsCard');
+  if (isOwner || isSAdmin) renderAdminLocations();
   showOwnerOnly('adminUserLookupCard');
   showOwnerOnly('adminProcedureMappingsCard');
   if (isOwner) renderAdminProcedureMappings();
@@ -19053,6 +19342,16 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
     showToast('Please enter at least one start time');
     return;
   }
+  // Location required on every time entry when this site has sub-sites
+  // configured. Skipped for vacation / flat-payment / forced-off saves
+  // since those have no real clock-in segment.
+  if (!skipTimeEntries && siteHasSubSites(getCurrentSiteId())) {
+    const missingLoc = timeEntries.some(e => (e.start || e.end) && !e.subSiteId);
+    if (missingLoc) {
+      showToast('Pick a Location for every time entry');
+      return;
+    }
+  }
   // Validate: entries should be in chronological order, no overlaps.
   // Cross-midnight aware over multiple days so >24 h shifts (extended OB
   // call etc.) compose correctly: each entry must start at or after the
@@ -20049,6 +20348,10 @@ document.getElementById('caseStart').addEventListener('change', function() {
   updatePointPreview();
 });
 
+// Always refresh the Location hint when the start time changes — it
+// determines which time entry segment owns this case.
+document.getElementById('caseStart').addEventListener('input', _updateCaseFormLocationHint);
+
 function updateModifierTags() {
   const tags = [];
   if (document.getElementById('caseEmergency').checked) tags.push('Emergency');
@@ -20075,6 +20378,54 @@ function updatePointPreview() {
   } else {
     stopCasePreviewTicker();
   }
+  // Surface the location this case will be tagged with — only meaningful
+  // when the site has sub-sites configured and we have a saved shift.
+  _updateCaseFormLocationHint();
+}
+
+// Refresh the "Location: X" hint under the case form based on the
+// current start time and the shift's segment tags. Stays hidden on
+// sites without sub-sites or when no inheritable tag exists.
+function _updateCaseFormLocationHint() {
+  const hint = document.getElementById('caseFormLocationHint');
+  if (!hint) return;
+  const shift = data.shifts[workingDate];
+  const siteId = (shift && shift.siteId) || getCurrentSiteId();
+  if (!siteHasSubSites(siteId)) { hint.classList.add('hidden'); return; }
+  const startTime = document.getElementById('caseStart')?.value || '';
+  if (!shift || !startTime) { hint.classList.add('hidden'); return; }
+  const subId = subSiteIdForCase(shift, startTime);
+  if (!subId) {
+    hint.classList.remove('hidden');
+    hint.innerHTML = 'Location: <span style="color:var(--accent2);">not set</span> <span style="opacity:0.7;">(edit the shift to tag this segment)</span>';
+    return;
+  }
+  hint.classList.remove('hidden');
+  hint.textContent = 'Location: ' + getSubSiteLabel(siteId, subId);
+}
+
+// Same hint, edit-modal flavor — reads the modal's own start-time input.
+function _updateEditCaseLocationHint() {
+  const hint = document.getElementById('editCaseLocationHint');
+  if (!hint) return;
+  if (typeof editingCaseId === 'undefined' || !editingCaseId) { hint.classList.add('hidden'); return; }
+  const c = data.cases.find(x => x.id === editingCaseId);
+  if (!c) { hint.classList.add('hidden'); return; }
+  const shift = data.shifts[c.shiftDate];
+  const siteId = (shift && shift.siteId) || getCurrentSiteId();
+  if (!siteHasSubSites(siteId)) { hint.classList.add('hidden'); return; }
+  // Standard cases use editCaseStart; labor uses editLaborStart.
+  const startEl = document.getElementById('editCaseStart') || document.getElementById('editLaborStart');
+  const startTime = (startEl && startEl.value) || c.startTime || '';
+  if (!startTime) { hint.classList.add('hidden'); return; }
+  const subId = subSiteIdForCase(shift, startTime);
+  if (!subId) {
+    hint.classList.remove('hidden');
+    hint.innerHTML = 'Location: <span style="color:var(--accent2);">not set</span> <span style="opacity:0.7;">(edit the shift to tag this segment)</span>';
+    return;
+  }
+  hint.classList.remove('hidden');
+  hint.textContent = 'Location: ' + getSubSiteLabel(siteId, subId);
 }
 
 function buildCaseFromForm() {
@@ -20150,6 +20501,10 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
     if (!caseData.acutePainProcType) { showToast('Please select a procedure type'); return; }
   }
   caseData.siteId = data.shifts[date]?.siteId || getCurrentSiteId();
+  // Inherit the sub-site tag from the time entry this case's start
+  // falls into. Empty when the site doesn't use sub-sites or the
+  // segment is untagged — analytics that filter by location will skip it.
+  caseData.subSiteId = subSiteIdForCase(data.shifts[date], caseData.startTime);
   data.cases.push(caseData);
   saveData(data);
   writeSharedCase(caseData, data.shifts[date]);
@@ -23628,17 +23983,39 @@ function navigateToCommunityStatsPage() {
 function renderEditShiftTimeEntries(entries) {
   const container = document.getElementById('editShiftTimeEntries');
   if (!entries || entries.length === 0) entries = [{ start: '', end: '' }];
+  // Resolve the shift's site once so we can decide whether to surface the
+  // Location picker. Falls back to the user's current site if the modal
+  // was opened without a saved shift (rare).
+  const shift = editingShiftDate ? data.shifts[editingShiftDate] : null;
+  const siteId = (shift && shift.siteId) || getCurrentSiteId();
+  const showSubSite = siteHasSubSites(siteId);
+  const subSites = showSubSite ? getSubSitesForSite(siteId) : [];
+  const assignType = (shift && shift.assignmentType) || '';
+  const defaultSub = showSubSite ? getDefaultSubSiteForAssignmentType(siteId, assignType) : '';
   let html = '';
   entries.forEach((e, i) => {
-    html += `<div class="form-row" style="align-items:end;gap:8px;margin-top:8px;">
-      <div class="form-group" style="flex:1;">
+    let subSelHtml = '';
+    if (showSubSite) {
+      const sel = e.subSiteId || defaultSub || '';
+      let opts = '<option value="">— Pick —</option>';
+      subSites.forEach(s => {
+        opts += '<option value="' + escapeHtml(s.id) + '"' + (sel === s.id ? ' selected' : '') + '>' + escapeHtml(s.label) + '</option>';
+      });
+      subSelHtml = `<div class="form-group" style="flex:1;">
+        <label>Location${entries.length > 1 ? ' #' + (i + 1) : ''}</label>
+        <select class="edit-shift-subsite" style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.8rem;">${opts}</select>
+      </div>`;
+    }
+    html += `<div class="form-row" style="align-items:end;gap:8px;margin-top:8px;flex-wrap:wrap;">
+      <div class="form-group" style="flex:1;min-width:90px;">
         <label>Start${entries.length > 1 ? ' #' + (i + 1) : ''}</label>
         <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time edit-shift-start" value="${e.start || ''}">
       </div>
-      <div class="form-group" style="flex:1;">
+      <div class="form-group" style="flex:1;min-width:90px;">
         <label>End${entries.length > 1 ? ' #' + (i + 1) : ''}</label>
         <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time edit-shift-end" value="${e.end || ''}">
       </div>
+      ${subSelHtml}
       ${entries.length > 1 ? `<button class="btn btn-danger btn-sm" onclick="removeEditShiftEntry(${i})" style="margin-bottom:4px;padding:4px 8px;">x</button>` : ''}
     </div>`;
   });
@@ -23647,11 +24024,18 @@ function renderEditShiftTimeEntries(entries) {
 }
 
 function getEditShiftEntries() {
-  const starts = document.querySelectorAll('#editShiftTimeEntries .edit-shift-start');
-  const ends = document.querySelectorAll('#editShiftTimeEntries .edit-shift-end');
+  const rows = document.querySelectorAll('#editShiftTimeEntries .form-row');
   const entries = [];
-  starts.forEach((s, i) => {
-    entries.push({ start: s.value.trim(), end: (ends[i] ? ends[i].value.trim() : '') });
+  rows.forEach(row => {
+    const s = row.querySelector('.edit-shift-start');
+    const e = row.querySelector('.edit-shift-end');
+    const sub = row.querySelector('.edit-shift-subsite');
+    const entry = {
+      start: s ? s.value.trim() : '',
+      end: e ? e.value.trim() : ''
+    };
+    if (sub) entry.subSiteId = sub.value || '';
+    entries.push(entry);
   });
   return entries;
 }
@@ -23674,7 +24058,16 @@ document.getElementById('saveShiftEdit').addEventListener('click', () => {
   if (!shift) return;
   shift.assignmentType = document.getElementById('editShiftType').value;
   shift.isHoliday = document.getElementById('editShiftHoliday').checked;
-  shift.timeEntries = getEditShiftEntries();
+  const _editedEntries = getEditShiftEntries();
+  // Location required on every entry when the site has sub-sites configured.
+  if (siteHasSubSites(shift.siteId || getCurrentSiteId())) {
+    const missingLoc = _editedEntries.some(e => (e.start || e.end) && !e.subSiteId);
+    if (missingLoc) {
+      showToast('Pick a Location for every time entry');
+      return;
+    }
+  }
+  shift.timeEntries = _editedEntries;
   // Also sync legacy startTime/endTime
   if (shift.timeEntries.length > 0) {
     shift.startTime = shift.timeEntries[0].start;
@@ -31940,6 +32333,7 @@ function openCaseEdit(caseId) {
   document.getElementById('editORCaseRow').classList.toggle('hidden', !shiftDoublesProduction(shift));
   document.getElementById('editCaseORCase').checked = c.isORCase || false;
 
+  _updateEditCaseLocationHint();
   document.getElementById('caseEditModal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
 }
@@ -32008,6 +32402,9 @@ document.getElementById('saveCaseEdit').addEventListener('click', () => {
   const wasUnbilled = c.unbilled;
   c.unbilled = document.getElementById('editCaseUnbilled').checked;
   if (!c.unbilled && wasUnbilled) delete c.billingMonth;
+  // Re-derive sub-site tag in case the start time was edited into a
+  // different time entry segment.
+  c.subSiteId = subSiteIdForCase(data.shifts[c.shiftDate], c.startTime);
   saveData(data);
   writeSharedCase(c, data.shifts[c.shiftDate]);
   writeCaseDoc(c);
@@ -32029,6 +32426,13 @@ document.getElementById('cancelCaseEdit').addEventListener('click', () => {
 
 document.getElementById('caseEditModal').addEventListener('click', (e) => {
   if (e.target.id === 'caseEditModal') { document.getElementById('caseEditModal').classList.add('hidden'); document.body.style.overflow = ''; }
+});
+
+// Live-update the Location hint in the case edit modal when the user
+// drags the start time into a different segment.
+['editCaseStart', 'editLaborStart'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', _updateEditCaseLocationHint);
 });
 
 document.getElementById('deleteCaseEdit').addEventListener('click', () => {
