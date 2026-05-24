@@ -29284,7 +29284,11 @@ function getUserTurnoverIntervals(daysWindow) {
 
 function getTurnoverPrefs() {
   const p = (settings && settings.turnoverPrefs) || {};
-  return { excludeEndo: !!p.excludeEndo };
+  // Default to excluding endo since the rapid colonoscopy/EGD cadence
+  // dwarfs everything else when it's mixed in. Users can opt back in
+  // via the gear menu.
+  const excludeEndo = ('excludeEndo' in p) ? !!p.excludeEndo : true;
+  return { excludeEndo };
 }
 function setTurnoverPref(key, val) {
   if (!settings.turnoverPrefs) settings.turnoverPrefs = {};
