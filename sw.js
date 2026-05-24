@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mwa-tracker-v432';
+const CACHE_NAME = 'mwa-tracker-v433';
 const ASSETS = [
   './',
   './index.html',

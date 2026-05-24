@@ -2012,6 +2012,19 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div id="authError" style="color:var(--danger);font-size:0.8rem;margin-top:12px;line-height:1.5;" class="hidden"></div>
   <p class="auth-loading hidden" id="authLoading">Signing in...</p>
 </div>
+<script>
+  // Skip the auth-overlay flash for returning signed-in users. The
+  // `pt_signedIn` flag is stamped by onAuthStateChanged on a successful
+  // sign-in and cleared on sign-out, so it's a fast synchronous proxy
+  // for "Firebase will resolve a user once it finishes restoring the
+  // session." If that proxy is wrong (user signed out elsewhere),
+  // onAuthStateChanged will re-show the overlay and clear the flag.
+  try {
+    if (localStorage.getItem('pt_signedIn') === '1') {
+      document.getElementById('authOverlay').classList.add('hidden');
+    }
+  } catch (_) {}
+</script>
 
 <!-- ===== ONE-TIME FEATURE NOTIFICATION ===== -->
 <div class="tutorial-overlay hidden" id="featureNoticeOverlay" style="z-index:10001;">
@@ -37548,12 +37561,33 @@ function _renderAuthError(err) {
   });
 }
 
+// Guard against the sign-in popup hanging. On mobile, signInWithPopup
+// can stay pending forever if the Custom Tab is dismissed in a way
+// Firebase doesn't observe — leaving the button visually stuck in the
+// "Signing in..." state and the in-flight promise blocking retries.
+let _signInInProgress = false;
 document.getElementById('googleSignInBtn').addEventListener('click', async () => {
+  if (_signInInProgress) return;
+  _signInInProgress = true;
+  const btn = document.getElementById('googleSignInBtn');
   const errEl = document.getElementById('authError');
   const loadEl = document.getElementById('authLoading');
   errEl.classList.add('hidden');
   errEl.innerHTML = '';
   loadEl.classList.remove('hidden');
+  btn.disabled = true;
+  // If signInWithPopup neither resolves nor rejects within 90s, force
+  // the UI back into a clickable state so the user can retry without
+  // reloading the page.
+  const watchdog = setTimeout(() => {
+    if (!_signInInProgress) return;
+    _signInInProgress = false;
+    btn.disabled = false;
+    loadEl.classList.add('hidden');
+    errEl.innerHTML = '<strong>Sign-in didn’t finish.</strong>'
+      + '<div style="margin-top:4px;">If the Google popup closed without completing, tap <strong>Sign in with Google</strong> again to retry.</div>';
+    errEl.classList.remove('hidden');
+  }, 90000);
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
     await auth.signInWithPopup(provider);
@@ -37561,6 +37595,10 @@ document.getElementById('googleSignInBtn').addEventListener('click', async () =>
     console.error('Sign-in error:', err);
     loadEl.classList.add('hidden');
     _renderAuthError(err);
+  } finally {
+    clearTimeout(watchdog);
+    _signInInProgress = false;
+    btn.disabled = false;
   }
 });
 
@@ -37695,6 +37733,10 @@ auth.onAuthStateChanged(async (user) => {
     // Past this point we know the account isn't tombstoned — clear any
     // leftover banner flag from an earlier bounced session.
     try { localStorage.removeItem('pt_deletedAccount'); } catch (_) {}
+    // Stamp the synchronous "user is signed in" hint so the next cold
+    // load can hide the auth overlay before Firebase finishes restoring
+    // the session. Read by the inline script next to the overlay markup.
+    try { localStorage.setItem('pt_signedIn', '1'); } catch (_) {}
 
     // Blocklist check: an app owner who rejected this person added their
     // email to accessBlocklist. Bounce them the same way as a tombstone.
@@ -37993,6 +38035,9 @@ auth.onAuthStateChanged(async (user) => {
     _lastSyncedShiftPayloads.clear();
     _sharedShiftsPrimePromise = null;
     document.getElementById('authOverlay').classList.remove('hidden');
+    // Clear the synchronous signed-in hint so the next cold load shows
+    // the auth overlay immediately instead of flashing the cached app.
+    try { localStorage.removeItem('pt_signedIn'); } catch (_) {}
 
     // If we just bounced a deleted user (tombstone check above), surface a
     // banner in the auth-overlay error slot so they understand why they were
