@@ -4331,6 +4331,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
           </p>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="btn btn-sm hidden" id="adminRulesDeleteSelectedBtn" onclick="adminRulesDeleteSelected()" style="background:var(--surface2);color:var(--accent2);">Delete selected</button>
+            <button class="btn btn-sm" onclick="adminRulesCopySummary()" style="background:var(--surface2);color:var(--text);" title="Copy a plain-text summary of every visible shift rule at this site to the clipboard.">Copy summary</button>
             <button class="btn btn-primary btn-sm" onclick="adminRulesOpenModal(null)">+ Add shift type</button>
           </div>
         </div>
@@ -8801,6 +8802,100 @@ function _adminRulesDescribe(rule, key) {
   return '<ul style="margin:4px 0 0 0;padding-left:18px;line-height:1.45;">'
        + lines.map(l => '<li>' + l + '</li>').join('')
        + '</ul>';
+}
+
+// Plain-text twin of _adminRulesDescribe. Same content/order, no HTML.
+// Used by "Copy summary" so the pasted text reads cleanly in plain editors.
+function _adminRulesDescribePlain(rule, key) {
+  if (!rule) return '  - (no rule)';
+  const lines = [];
+  const arMode = rule.arRate && rule.arRate.mode;
+  if (arMode === 'general') lines.push('Base AR rate: 20 pts/hr.');
+  else if (arMode === 'ob') lines.push('Base AR rate: 13 pts/hr. Non-OR case production is doubled.');
+  else if (arMode === 'sf1') lines.push('Base AR rate: Unrestricted OB (13 pts/hr restricted hours, 20 pts/hr unrestricted hours). Non-OR case production is doubled.');
+  else if (arMode === 'none' || arMode == null) lines.push('Base AR rate: none.');
+  else lines.push('Base AR rate: ' + arMode + '.');
+
+  if (rule.pagerWindow) {
+    const wd = rule.pagerWindow.weekday, we = rule.pagerWindow.weekend;
+    const parts = [];
+    if (wd) parts.push(_fmtHours(wd.end - wd.start) + ' weekday'); else parts.push('none weekday');
+    if (we) parts.push(_fmtHours(we.end - we.start) + ' weekend/holiday'); else parts.push('none weekend');
+    lines.push('Unrestricted call (paid 3.5 pts/hr): ' + parts.join(', ') + '.');
+  }
+
+  if (rule.productionMultiplier && rule.productionMultiplier !== 1) {
+    lines.push('Production multiplier: x' + rule.productionMultiplier + ' on non-OR case points.');
+  }
+  if (rule.flatPoints) lines.push('Flat points: ' + rule.flatPoints + ' (paid regardless of duration).');
+  if (rule.floatBonus)  lines.push('Float bonus: +' + rule.floatBonus + ' pts.');
+  if (rule.cardiacBonus) lines.push('Exposes a cardiac subspecialty toggle on shift entry (+45 pts/day when checked).');
+  if (rule.liverBonus)   lines.push('Exposes a liver subspecialty toggle on shift entry (+45 pts/day when checked).');
+  if (rule.noProductivity && !rule.unrestrictedCallEntry) lines.push('No productivity - pay is flat points only; no AR or case points.');
+  if (rule.unrestrictedCallEntry) lines.push('User enters unrestricted call hours manually on the shift form (paid 3.5 pts/hr).');
+
+  if (key === 'cardiac_liver') {
+    lines.push('Engine auto-adds the +45 pt subspecialty bonus; base totals are 94 pts weekday / 129 pts weekend.');
+  }
+  if (key === 'OR' || key === 'OR_float') {
+    lines.push('Engine adds a 4 hr / 80 pt minimum on weekday non-holidays.');
+  }
+
+  return lines.map(l => '  - ' + l).join('\n');
+}
+
+// Resolve a shift-type ID against the current draft, mirroring
+// getResolvedShiftRules() but reading from adminRulesDraft so the
+// summary reflects unsaved edits.
+function _adminRulesResolveDraftRule(typeId) {
+  const override = (adminRulesDraft.shiftRulesOverride || {})[typeId];
+  if (!override) return DEFAULT_SHIFT_RULES[typeId] || null;
+  let base = DEFAULT_SHIFT_RULES[typeId] || {};
+  let layer = override;
+  if (override.inherit_uvh && DEFAULT_SHIFT_RULES[override.inherit_uvh]) {
+    base = DEFAULT_SHIFT_RULES[override.inherit_uvh];
+    const { inherit_uvh, ...rest } = override;
+    layer = rest;
+  }
+  return _deepMerge(base, layer);
+}
+
+function adminRulesCopySummary() {
+  const siteId = adminRulesSiteId;
+  const siteName = (sitesCache[siteId] && sitesCache[siteId].name) || siteId || 'site';
+  const draftVisible = adminRulesDraft.visibleShiftTypes || [];
+  const overrideIds = Object.keys(adminRulesDraft.shiftRulesOverride || {});
+  const ids = draftVisible.length > 0
+    ? draftVisible.slice().sort()
+    : overrideIds.slice().sort();
+
+  const heading = 'Shift rules — ' + siteName;
+  const out = [heading, '='.repeat(Math.min(60, heading.length)), ''];
+
+  if (ids.length === 0) {
+    out.push('(No visible shift types configured for this site.)');
+  } else {
+    for (const id of ids) {
+      const rule = _adminRulesResolveDraftRule(id);
+      const label = _adminRulesLabelFor(id);
+      out.push(label + ' [' + id + ']');
+      const inh = adminRulesDraft.shiftRulesOverride[id]
+        && adminRulesDraft.shiftRulesOverride[id].inherit_uvh;
+      if (inh) out.push('  (inherits from ' + inh + ')');
+      out.push(_adminRulesDescribePlain(rule, id));
+      out.push('');
+    }
+  }
+
+  const text = out.join('\n').replace(/\s+$/, '') + '\n';
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => showToast('Site rules summary copied (' + ids.length + ' shift' + (ids.length === 1 ? '' : 's') + ')'),
+      () => showToast('Copy failed — clipboard blocked')
+    );
+  } else {
+    showToast('Clipboard API not available in this browser');
+  }
 }
 
 function _fmtMin(min) {
