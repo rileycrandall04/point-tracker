@@ -11110,6 +11110,11 @@ async function loadSharedCases(retryCount) {
     sharedCasesLoaded = true;
     renderCollectiveCases();
     if (typeof refreshProcedureDatalist === 'function') refreshProcedureDatalist();
+    // Group columns on the Turnover card depend on this cache — refresh
+    // so they fill in once the read lands.
+    if (typeof renderTurnoverCard === 'function') {
+      try { renderTurnoverCard(); } catch (e) {}
+    }
     console.log('Loaded ' + sharedCasesCache.length + ' shared cases');
     return sharedCasesCache;
   } catch (err) {
@@ -29547,21 +29552,22 @@ function renderTurnoverCard() {
 
   const mySite = getCurrentSiteId();
   const subSites = (typeof getSubSitesForSite === 'function') ? getSubSitesForSite(mySite) : [];
-  if (!subSites || subSites.length === 0) {
-    byLocList.innerHTML = '<div style="font-size:0.7rem;color:var(--text-dim);padding:6px 10px;background:var(--surface2);border-radius:6px;">No locations configured for this site. Admins can add them under Admin &rarr; Locations.</div>';
-    return;
-  }
 
-  // Bucket the user's own intervals by location.
+  // Build per-location buckets from the user's intervals.
   const userEntries = _getUserTurnoverEntries();
   const myByLoc = {};
   userEntries.forEach(e => {
     if (!e.subSiteId) return;
     (myByLoc[e.subSiteId] = myByLoc[e.subSiteId] || []).push(e.gap);
   });
+  const myAllIntervals = userEntries.map(e => e.gap);
 
-  // Approximate group stats per location.
-  const groupByLoc = getGroupTurnoverStatsByLocation(mySite);
+  // Group stats: per-location approximation + site-wide approximation
+  // (the latter powers the Overall row, which always renders so the card
+  // is useful even on sites that haven't configured sub-sites yet).
+  const groupByLoc = (subSites && subSites.length > 0) ? getGroupTurnoverStatsByLocation(mySite) : {};
+  const groupOverallApprox = getSiteTurnoverStatsApproximate(mySite);
+  const groupOverallPhaseC = getSiteTurnoverStatsFromPhaseC(mySite);
 
   // 5-column grid: Location | My Med | Group Med | My Mean | Group Mean
   const gridStyle = 'display:grid;grid-template-columns:1fr 56px 56px 56px 56px;column-gap:8px;row-gap:4px;align-items:center;';
@@ -29573,32 +29579,61 @@ function renderTurnoverCard() {
        + '<div style="' + headStyle + 'text-align:right;">Group Med</div>'
        + '<div style="' + headStyle + 'text-align:right;">My Mean</div>'
        + '<div style="' + headStyle + 'text-align:right;">Group Mean</div>';
-  subSites.forEach(s => {
-    const list = myByLoc[s.id] || [];
-    const myStats = getTurnoverStats(list);
-    const myMed = (myStats && myStats.count >= TURNOVER_MIN_INTERVALS) ? _fmtTurnoverMin(myStats.median) : '—';
-    const myMean = (myStats && myStats.count >= TURNOVER_MIN_INTERVALS) ? _fmtTurnoverMin(myStats.mean) : '—';
-    const g = groupByLoc[s.id];
-    const grpOk = g && g.contributors >= TURNOVER_PHASE_A_MIN_CONTRIBUTORS && g.mean != null;
-    const grpMed = grpOk ? _fmtTurnoverMin(g.median) : '—';
-    const grpMean = grpOk ? _fmtTurnoverMin(g.mean) : '—';
-    // Meta line under location: my interval count + group contributor count.
+
+  const _renderRow = (label, myStats, groupStats, groupOk, sublabel) => {
+    const myReady = myStats && myStats.count >= TURNOVER_MIN_INTERVALS;
+    const myMed = myReady ? _fmtTurnoverMin(myStats.median) : '—';
+    const myMean = myReady ? _fmtTurnoverMin(myStats.mean) : '—';
+    const grpMed = groupOk ? _fmtTurnoverMin(groupStats.median) : '—';
+    const grpMean = groupOk ? _fmtTurnoverMin(groupStats.mean) : '—';
     const myCount = myStats ? myStats.count : 0;
-    const grpCount = g ? (g.contributors || 0) : 0;
-    const metaParts = [];
-    metaParts.push('you ' + myCount + '/' + TURNOVER_MIN_INTERVALS);
-    metaParts.push('grp ' + grpCount + (grpOk ? '' : ('/' + TURNOVER_PHASE_A_MIN_CONTRIBUTORS)));
-    const meta = metaParts.join(' · ');
+    const grpCount = groupStats ? (groupStats.contributors || 0) : 0;
+    const minGrp = (groupStats && groupStats._phaseCMin) || TURNOVER_PHASE_A_MIN_CONTRIBUTORS;
+    const meta = sublabel != null ? sublabel
+      : ('you ' + myCount + '/' + TURNOVER_MIN_INTERVALS + ' · grp ' + grpCount + (groupOk ? '' : ('/' + minGrp)));
     html += '<div style="min-width:0;padding:4px 0;border-top:1px solid var(--border);">'
-         +   '<div style="font-size:0.78rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(s.label || s.id) + '</div>'
-         +   '<div style="font-size:0.58rem;color:var(--text-dim);margin-top:1px;">' + escHtml(meta) + '</div>'
+         +   '<div style="font-size:0.78rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(label) + '</div>'
+         +   (meta ? '<div style="font-size:0.58rem;color:var(--text-dim);margin-top:1px;">' + escHtml(meta) + '</div>' : '')
          + '</div>'
          + '<div style="' + valStyle + 'color:var(--accent);border-top:1px solid var(--border);padding:4px 0;">' + escHtml(myMed) + '</div>'
          + '<div style="' + valStyle + 'color:var(--accent);opacity:0.75;border-top:1px solid var(--border);padding:4px 0;">' + escHtml(grpMed) + '</div>'
          + '<div style="' + valStyle + 'color:var(--accent2);border-top:1px solid var(--border);padding:4px 0;">' + escHtml(myMean) + '</div>'
          + '<div style="' + valStyle + 'color:var(--accent2);opacity:0.75;border-top:1px solid var(--border);padding:4px 0;">' + escHtml(grpMean) + '</div>';
-  });
+  };
+
+  // Overall row — always renders. Prefer the precise Phase C aggregate
+  // for the group when available; fall back to the Phase A approximation.
+  const myOverallStats = getTurnoverStats(myAllIntervals);
+  let overallGroup = null;
+  let overallOk = false;
+  if (groupOverallPhaseC && groupOverallPhaseC.contributors >= TURNOVER_PHASE_C_MIN_CONTRIBUTORS) {
+    overallGroup = groupOverallPhaseC;
+    overallOk = true;
+  } else if (groupOverallApprox && groupOverallApprox.contributors >= TURNOVER_PHASE_A_MIN_CONTRIBUTORS && groupOverallApprox.mean != null) {
+    overallGroup = groupOverallApprox;
+    overallOk = true;
+  } else {
+    overallGroup = groupOverallApprox || { contributors: 0 };
+  }
+  _renderRow('Overall', myOverallStats, overallGroup, overallOk);
+
+  // Per-location rows (only if the site has sub-sites configured).
+  if (subSites && subSites.length > 0) {
+    subSites.forEach(s => {
+      const list = myByLoc[s.id] || [];
+      const myStats = getTurnoverStats(list);
+      const g = groupByLoc[s.id];
+      const groupOk = !!(g && g.contributors >= TURNOVER_PHASE_A_MIN_CONTRIBUTORS && g.mean != null);
+      _renderRow(s.label || s.id, myStats, g, groupOk);
+    });
+  }
   html += '</div>';
+
+  // Hint when no sub-sites configured — admin can add them to unlock
+  // the per-location breakdown.
+  if (!subSites || subSites.length === 0) {
+    html += '<div style="font-size:0.62rem;color:var(--text-dim);margin-top:8px;line-height:1.4;">Configure Locations under Admin &rarr; Locations to break out turnover by sub-site.</div>';
+  }
   byLocList.innerHTML = html;
 
   // Trigger lazy loads if data isn't ready yet. Re-render once they
@@ -38041,6 +38076,9 @@ auth.onAuthStateChanged(async (user) => {
       }
       if (typeof renderShiftLogTable === 'function') {
         try { renderShiftLogTable(); } catch (e) { console.warn('renderShiftLogTable post-loadSites failed:', e); }
+      }
+      if (typeof renderTurnoverCard === 'function') {
+        try { renderTurnoverCard(); } catch (e) { console.warn('renderTurnoverCard post-loadSites failed:', e); }
       }
       // Admin drawer toggle was first evaluated immediately after auth.
       // Re-evaluate now that profile + site list have both finished loading
