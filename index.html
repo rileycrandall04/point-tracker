@@ -29244,7 +29244,12 @@ function _getUserTurnoverEntries(daysWindow, opts) {
   (data.cases || []).forEach(c => {
     if (!c.shiftDate || c.shiftDate < cutoffStr) return;
     if (!_turnoverCaseEligible(c)) return;
-    if (excludeEndo && _isEndoProcedure(c.procedure)) return;
+    // NOTE: do NOT pre-filter endo cases here. We need them in the
+    // sorted list so an endo run between two non-endo cases breaks the
+    // chain (the pair-level filter below skips both sides, so a
+    // morning case ending at 09:00 and an afternoon case starting at
+    // 12:00 with three endo cases between them stops contributing a
+    // fake 3-hour turnover).
     const shift = data.shifts[c.shiftDate];
     if (!shift) return;
     if (!_turnoverDateEligible(c.shiftDate, !!shift.isHoliday)) return;
@@ -29270,6 +29275,10 @@ function _getUserTurnoverEntries(daysWindow, opts) {
       for (let i = 1; i < segCases.length; i++) {
         const prev = segCases[i - 1];
         const cur = segCases[i];
+        // Drop the pair entirely when either flank is an excluded
+        // (endo) case — the gap straddles excluded work, not real
+        // turnover.
+        if (excludeEndo && (_isEndoProcedure(prev.procedure) || _isEndoProcedure(cur.procedure))) continue;
         const prevEnd = timeToMinutes(prev.endTime);
         const curStart = timeToMinutes(cur.startTime);
         const gap = _turnoverGapMin(prevEnd, curStart);
@@ -29359,7 +29368,8 @@ function getSiteTurnoverStatsApproximate(siteId, opts) {
     const proc = String(sc.procedure || '');
     if (TURNOVER_CSECTION_RE.test(proc)) return;
     if (TURNOVER_BLOCK_RE.test(proc)) return;
-    if (excludeEndo && _isEndoProcedure(proc)) return;
+    // Endo cases stay in the sorted list and are filtered at pair
+    // time so they break the chain instead of bridging it.
     const sh = shiftLookup[sc.uid + '|' + sc.shiftDate];
     if (!sh) return;
     if (!_turnoverDateEligible(sc.shiftDate, false)) return;
@@ -29377,6 +29387,7 @@ function getSiteTurnoverStatsApproximate(siteId, opts) {
       return timeToMinutes(a.endTime) - timeToMinutes(b.endTime);
     });
     for (let i = 1; i < list.length; i++) {
+      if (excludeEndo && (_isEndoProcedure(list[i - 1].procedure) || _isEndoProcedure(list[i].procedure))) continue;
       const prevEnd = timeToMinutes(list[i - 1].endTime);
       const curStart = timeToMinutes(list[i].startTime);
       const gap = _turnoverGapMin(prevEnd, curStart);
@@ -29532,7 +29543,8 @@ function getGroupTurnoverStatsByLocation(siteId, opts) {
     const proc = String(sc.procedure || '');
     if (TURNOVER_CSECTION_RE.test(proc)) return;
     if (TURNOVER_BLOCK_RE.test(proc)) return;
-    if (excludeEndo && _isEndoProcedure(proc)) return;
+    // Endo cases stay in the sorted list and are filtered at pair
+    // time so they break the chain instead of bridging it.
     const sh = shiftLookup[sc.uid + '|' + sc.shiftDate];
     if (!sh) return;
     if (!_turnoverDateEligible(sc.shiftDate, false)) return;
@@ -29553,6 +29565,7 @@ function getGroupTurnoverStatsByLocation(siteId, opts) {
     for (let i = 1; i < list.length; i++) {
       const prev = list[i - 1];
       const cur = list[i];
+      if (excludeEndo && (_isEndoProcedure(prev.procedure) || _isEndoProcedure(cur.procedure))) continue;
       const prevSub = prev.subSiteId || '';
       const curSub = cur.subSiteId || '';
       if (!curSub || prevSub !== curSub) continue;
