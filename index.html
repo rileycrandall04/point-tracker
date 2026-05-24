@@ -2783,7 +2783,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <h2 style="margin:0;">This Week</h2>
       <div style="display:flex;align-items:center;gap:6px;">
         <button class="btn btn-sm btn-outline monetary-hide" id="weeklyToggleBtn" style="padding:2px 8px;font-size:0.7rem;min-width:32px;">$</button>
+        <button id="weeklyGearBtn" type="button" aria-label="Customize This Week" style="background:none;border:none;cursor:pointer;font-size:0.95rem;color:var(--text-dim);padding:2px 4px;line-height:1;">&#9881;</button>
       </div>
+    </div>
+    <div id="weeklyGearPanel" class="hidden" style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:0.74rem;color:var(--text);">
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" data-wkly-pref="weekTotal" style="width:14px;height:14px;margin:0;"> Week total</label>
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" data-wkly-pref="monthTotals" style="width:14px;height:14px;margin:0;"> Month totals</label>
     </div>
     <div style="position:relative;height:200px;margin:8px 0;">
       <canvas id="weeklyBarCanvas"></canvas>
@@ -22131,6 +22136,58 @@ function tickLiveUpdate() {
   } catch(e) { /* ticker resilience — don't stop interval on transient errors */ }
 }
 
+// Per-user toggles for the This Week card. Both summary lines default
+// to off so the card opens as just the graph; users can opt in via the
+// gear menu and the choice persists on settings.weeklyChartPrefs.
+const WEEKLY_CHART_PREF_DEFAULTS = { weekTotal: false, monthTotals: false };
+function getWeeklyChartPrefs() {
+  const saved = (settings && settings.weeklyChartPrefs) || {};
+  const out = {};
+  Object.keys(WEEKLY_CHART_PREF_DEFAULTS).forEach(k => {
+    out[k] = (k in saved) ? !!saved[k] : WEEKLY_CHART_PREF_DEFAULTS[k];
+  });
+  return out;
+}
+function setWeeklyChartPref(key, val) {
+  if (!settings.weeklyChartPrefs) settings.weeklyChartPrefs = {};
+  settings.weeklyChartPrefs[key] = !!val;
+  saveSettings(settings);
+}
+function _initWeeklyChartGear() {
+  const btn = document.getElementById('weeklyGearBtn');
+  const panel = document.getElementById('weeklyGearPanel');
+  if (!btn || !panel || btn._wired) return;
+  btn._wired = true;
+  const refresh = () => {
+    const prefs = getWeeklyChartPrefs();
+    panel.querySelectorAll('input[data-wkly-pref]').forEach(inp => {
+      inp.checked = !!prefs[inp.dataset.wklyPref];
+    });
+  };
+  refresh();
+  panel.querySelectorAll('input[data-wkly-pref]').forEach(inp => {
+    inp.addEventListener('change', () => {
+      setWeeklyChartPref(inp.dataset.wklyPref, inp.checked);
+      if (typeof renderWeeklyChart === 'function') renderWeeklyChart();
+    });
+  });
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    refresh();
+    panel.classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (panel.classList.contains('hidden')) return;
+    if (panel.contains(e.target) || btn.contains(e.target)) return;
+    panel.classList.add('hidden');
+  });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _initWeeklyChartGear);
+} else {
+  _initWeeklyChartGear();
+}
+
 function renderWeeklyChart() {
   const weekDates = getWeekDates(workingDate);
   const today = effectiveWorkDate();
@@ -22353,7 +22410,10 @@ function renderWeeklyChart() {
   // restart the bar animation.
   const _fp = JSON.stringify({
     weekDates, baseValues, pagerValues, floatValues,
-    calendarLabels, inProgressFlags, weeklyShowDollars, today
+    calendarLabels, inProgressFlags, weeklyShowDollars, today,
+    // Include the summary prefs so toggling them invalidates the
+    // cached paint and the summary text rerenders.
+    wkPrefs: (typeof getWeeklyChartPrefs === 'function') ? getWeeklyChartPrefs() : null
   });
   if (weeklyBarChart && _fp === _weeklyChartFingerprint) return;
   _weeklyChartFingerprint = _fp;
@@ -22544,13 +22604,19 @@ function renderWeeklyChart() {
   const monthName = new Date(workingDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' });
   const weekHrs = round2(hoursArr.reduce((a, b) => a + b, 0));
   const summaryEl = document.getElementById('weeklySummary');
-  summaryEl.innerHTML =
-    '<div>Week: ' + prefix + weekTotal.toFixed(2) + suffix + '  \u00B7  ' + weekHrs.toFixed(1) + ' hrs</div>' +
-    '<div style="margin-top:4px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;">' +
-      '<span>' + monthName + ' Total: <strong style="color:var(--accent);">' + prefix + monthTotal.toFixed(2) + suffix + '</strong></span>' +
-      '<span>Time (AR): <strong style="color:var(--text);">' + prefix + monthTime.toFixed(2) + suffix + '</strong></span>' +
-      '<span>Prod: <strong style="color:var(--text);">' + prefix + monthProd.toFixed(2) + suffix + '</strong></span>' +
-    '</div>';
+  const _wkPrefs = (typeof getWeeklyChartPrefs === 'function') ? getWeeklyChartPrefs() : { weekTotal: true, monthTotals: true };
+  let summaryHtml = '';
+  if (_wkPrefs.weekTotal) {
+    summaryHtml += '<div>Week: ' + prefix + weekTotal.toFixed(2) + suffix + '  \u00B7  ' + weekHrs.toFixed(1) + ' hrs</div>';
+  }
+  if (_wkPrefs.monthTotals) {
+    summaryHtml += '<div style="margin-top:4px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;">'
+      + '<span>' + monthName + ' Total: <strong style="color:var(--accent);">' + prefix + monthTotal.toFixed(2) + suffix + '</strong></span>'
+      + '<span>Time (AR): <strong style="color:var(--text);">' + prefix + monthTime.toFixed(2) + suffix + '</strong></span>'
+      + '<span>Prod: <strong style="color:var(--text);">' + prefix + monthProd.toFixed(2) + suffix + '</strong></span>'
+      + '</div>';
+  }
+  summaryEl.innerHTML = summaryHtml;
 }
 
 document.getElementById('weeklyToggleBtn').addEventListener('click', () => {
