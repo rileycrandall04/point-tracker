@@ -3104,24 +3104,11 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
   <!-- Turnover Time -->
   <div class="card" id="turnoverCard" style="padding:10px 14px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <span style="font-size:0.78rem;font-weight:600;">Turnover Time <span class="info-icon" data-tip="Minutes between case end and the next case start, within one continuous clock-in. Excludes labor / APS / acute pain / ICU-ER / shared cases, c-sections, nerve-block-only entries, NORA, ACS, OB-style shifts, SF1 daytime, weekends, and holidays. Window: trailing 90 days. Need 10 intervals to show a number.">i</span></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <span style="font-size:0.78rem;font-weight:600;">Turnover Time <span class="info-icon" data-tip="Minutes between case end and the next case start, within one continuous clock-in. Excludes labor / APS / acute pain / ICU-ER / shared cases, c-sections, nerve-block-only entries, NORA, ACS, OB-style shifts, SF1 daytime, weekends, and holidays. Window: trailing 90 days. Need 10 intervals to show a number. Group = macro-average across other contributors at this site (mean of each user's mean / median of each user's median).">i</span></span>
       <span style="font-size:0.68rem;color:var(--text-dim);">Past 90 days</span>
     </div>
-    <div style="background:var(--surface2);border-radius:8px;padding:8px 10px;">
-      <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px;">You</div>
-      <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
-        <span style="color:var(--text-dim);">Mean</span>
-        <span style="font-weight:600;color:var(--accent2);" id="turnoverYouMean">—</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
-        <span style="color:var(--text-dim);">Median</span>
-        <span style="font-weight:600;color:var(--accent);" id="turnoverYouMedian">—</span>
-      </div>
-      <div style="font-size:0.62rem;color:var(--text-dim);margin-top:4px;" id="turnoverYouCount">—</div>
-    </div>
-    <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;margin:10px 0 4px;">By Location</div>
-    <div id="turnoverByLocationList" style="display:flex;flex-direction:column;gap:4px;"></div>
+    <div id="turnoverByLocationList"></div>
   </div>
 
   <!-- Hours Trend -->
@@ -29459,81 +29446,172 @@ function _fmtTurnoverMin(m) {
   return h + 'h ' + (r < 10 ? '0' + r : r) + 'm';
 }
 
+// Approximate per-location group stats for a given site. Walks the shared
+// case + community shift caches, buckets by (uid, date), then counts only
+// the consecutive case pairs that share a subSiteId — those are the
+// turnover intervals "at" that location. Returns { [subSiteId]: { mean,
+// median, contributors, count } }. Excludes the current user (their own
+// numbers come from local data with precise time entries).
+function getGroupTurnoverStatsByLocation(siteId) {
+  if (!Array.isArray(sharedCasesCache) || sharedCasesCache.length === 0) return {};
+  if (!_communityStatsCache || !_communityStatsCache.byUid) return {};
+  const days = TURNOVER_WINDOW_DAYS;
+  const now = new Date();
+  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
+  const pad = n => String(n).padStart(2, '0');
+  const cutoffStr = cutoff.getFullYear() + '-' + pad(cutoff.getMonth() + 1) + '-' + pad(cutoff.getDate());
+
+  const shiftLookup = {};
+  Object.entries(_communityStatsCache.byUid).forEach(([uid, rows]) => {
+    rows.forEach(r => {
+      if (r.siteId !== siteId) return;
+      shiftLookup[uid + '|' + r.shiftDate] = r;
+    });
+  });
+
+  const myUid = currentUser ? currentUser.uid : null;
+  const byUidDate = {};
+  sharedCasesCache.forEach(sc => {
+    if (!sc || sc.siteId !== siteId) return;
+    if (myUid && sc.uid === myUid) return;
+    if (!sc.shiftDate || sc.shiftDate < cutoffStr) return;
+    if (sc.caseType !== 'standard') return;
+    if (!sc.startTime || !sc.endTime) return;
+    const proc = String(sc.procedure || '');
+    if (TURNOVER_CSECTION_RE.test(proc)) return;
+    if (TURNOVER_BLOCK_RE.test(proc)) return;
+    const sh = shiftLookup[sc.uid + '|' + sc.shiftDate];
+    if (!sh) return;
+    if (!_turnoverDateEligible(sc.shiftDate, false)) return;
+    const caseStartMin = timeToMinutes(sc.startTime);
+    if (_turnoverShiftExcluded(siteId, sh.assignmentType, caseStartMin, sc.shiftDate)) return;
+    (byUidDate[sc.uid + '|' + sc.shiftDate] = byUidDate[sc.uid + '|' + sc.shiftDate] || []).push(sc);
+  });
+
+  // { subSiteId: { uid: [gaps] } }
+  const byLocByUid = {};
+  for (const key in byUidDate) {
+    const uid = key.split('|')[0];
+    const list = byUidDate[key].slice().sort((a, b) => {
+      const am = timeToMinutes(a.startTime), bm = timeToMinutes(b.startTime);
+      if (am !== bm) return am - bm;
+      return timeToMinutes(a.endTime) - timeToMinutes(b.endTime);
+    });
+    for (let i = 1; i < list.length; i++) {
+      const prev = list[i - 1];
+      const cur = list[i];
+      const prevSub = prev.subSiteId || '';
+      const curSub = cur.subSiteId || '';
+      if (!curSub || prevSub !== curSub) continue;
+      const gap = _turnoverGapMin(timeToMinutes(prev.endTime), timeToMinutes(cur.startTime));
+      if (gap <= 0) continue;
+      if (!byLocByUid[curSub]) byLocByUid[curSub] = {};
+      if (!byLocByUid[curSub][uid]) byLocByUid[curSub][uid] = [];
+      byLocByUid[curSub][uid].push(gap);
+    }
+  }
+
+  const out = {};
+  Object.keys(byLocByUid).forEach(subId => {
+    const byUid = byLocByUid[subId];
+    const perUserStats = [];
+    let totalCount = 0;
+    Object.values(byUid).forEach(arr => {
+      const s = getTurnoverStats(arr);
+      if (s && s.count >= TURNOVER_MIN_INTERVALS) {
+        perUserStats.push(s);
+        totalCount += s.count;
+      }
+    });
+    if (perUserStats.length === 0) {
+      out[subId] = { mean: null, median: null, contributors: 0, count: 0 };
+      return;
+    }
+    const sumMean = perUserStats.reduce((a, s) => a + s.mean, 0);
+    const sumMedian = perUserStats.reduce((a, s) => a + s.median, 0);
+    out[subId] = {
+      mean: sumMean / perUserStats.length,
+      median: sumMedian / perUserStats.length,
+      contributors: perUserStats.length,
+      count: totalCount
+    };
+  });
+  return out;
+}
+
 function renderTurnoverCard() {
   const card = document.getElementById('turnoverCard');
   if (!card) return;
-  const youMean = document.getElementById('turnoverYouMean');
-  const youMedian = document.getElementById('turnoverYouMedian');
-  const youCount = document.getElementById('turnoverYouCount');
   const byLocList = document.getElementById('turnoverByLocationList');
+  if (!byLocList) return;
 
-  // YOU — local data across every location, instant.
-  const userEntries = _getUserTurnoverEntries();
-  const userIntervals = userEntries.map(e => e.gap);
-  const userStats = getTurnoverStats(userIntervals);
-  if (userStats && userStats.count >= TURNOVER_MIN_INTERVALS) {
-    youMean.textContent = _fmtTurnoverMin(userStats.mean);
-    youMedian.textContent = _fmtTurnoverMin(userStats.median);
-    youCount.textContent = userStats.count + ' interval' + (userStats.count === 1 ? '' : 's') + ' · last ' + TURNOVER_WINDOW_DAYS + 'd';
-  } else {
-    youMean.textContent = '—';
-    youMedian.textContent = '—';
-    youCount.textContent = userStats
-      ? userStats.count + '/' + TURNOVER_MIN_INTERVALS + ' intervals so far'
-      : 'No qualifying cases yet';
-  }
-
-  // BY LOCATION — one row per sub-site at the user's site, computed from
-  // the user's own data. We render every configured location so empty
-  // ones still show as "no data yet" instead of being silently dropped.
   const mySite = getCurrentSiteId();
   const subSites = (typeof getSubSitesForSite === 'function') ? getSubSitesForSite(mySite) : [];
-
   if (!subSites || subSites.length === 0) {
     byLocList.innerHTML = '<div style="font-size:0.7rem;color:var(--text-dim);padding:6px 10px;background:var(--surface2);border-radius:6px;">No locations configured for this site. Admins can add them under Admin &rarr; Locations.</div>';
     return;
   }
 
-  // Bucket the user's entries by subSiteId.
-  const buckets = {};
-  let untaggedIntervals = 0;
+  // Bucket the user's own intervals by location.
+  const userEntries = _getUserTurnoverEntries();
+  const myByLoc = {};
   userEntries.forEach(e => {
-    if (!e.subSiteId) { untaggedIntervals++; return; }
-    (buckets[e.subSiteId] = buckets[e.subSiteId] || []).push(e.gap);
+    if (!e.subSiteId) return;
+    (myByLoc[e.subSiteId] = myByLoc[e.subSiteId] || []).push(e.gap);
   });
 
-  // Render in admin-defined order; show all configured locations, even
-  // the ones the user hasn't worked at, so they know what's tracked.
-  let html = '';
+  // Approximate group stats per location.
+  const groupByLoc = getGroupTurnoverStatsByLocation(mySite);
+
+  // 5-column grid: Location | My Med | Group Med | My Mean | Group Mean
+  const gridStyle = 'display:grid;grid-template-columns:1fr 56px 56px 56px 56px;column-gap:8px;row-gap:4px;align-items:center;';
+  const headStyle = 'font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.4px;font-weight:600;';
+  const valStyle = 'font-size:0.78rem;font-weight:600;text-align:right;';
+  let html = '<div style="' + gridStyle + '">';
+  html += '<div style="' + headStyle + '">Location</div>'
+       + '<div style="' + headStyle + 'text-align:right;">My Med</div>'
+       + '<div style="' + headStyle + 'text-align:right;">Group Med</div>'
+       + '<div style="' + headStyle + 'text-align:right;">My Mean</div>'
+       + '<div style="' + headStyle + 'text-align:right;">Group Mean</div>';
   subSites.forEach(s => {
-    const list = buckets[s.id] || [];
-    const stats = getTurnoverStats(list);
-    let meanStr = '—', medianStr = '—', metaStr = '';
-    if (stats && stats.count >= TURNOVER_MIN_INTERVALS) {
-      meanStr = _fmtTurnoverMin(stats.mean);
-      medianStr = _fmtTurnoverMin(stats.median);
-      metaStr = stats.count + ' interval' + (stats.count === 1 ? '' : 's');
-    } else if (stats) {
-      metaStr = stats.count + '/' + TURNOVER_MIN_INTERVALS + ' intervals so far';
-    } else {
-      metaStr = 'No qualifying cases yet';
-    }
-    html += '<div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;background:var(--surface2);">'
-      + '<div style="min-width:0;">'
-      +   '<div style="font-size:0.78rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(s.label || s.id) + '</div>'
-      +   '<div style="font-size:0.6rem;color:var(--text-dim);margin-top:2px;">' + escHtml(metaStr) + '</div>'
-      + '</div>'
-      + '<div style="font-size:0.78rem;color:var(--accent2);font-weight:600;text-align:right;min-width:54px;">' + escHtml(meanStr) + ' <span style="font-size:0.6rem;color:var(--text-dim);font-weight:400;">mean</span></div>'
-      + '<div style="font-size:0.78rem;color:var(--accent);font-weight:600;text-align:right;min-width:54px;">' + escHtml(medianStr) + ' <span style="font-size:0.6rem;color:var(--text-dim);font-weight:400;">med</span></div>'
-      + '</div>';
+    const list = myByLoc[s.id] || [];
+    const myStats = getTurnoverStats(list);
+    const myMed = (myStats && myStats.count >= TURNOVER_MIN_INTERVALS) ? _fmtTurnoverMin(myStats.median) : '—';
+    const myMean = (myStats && myStats.count >= TURNOVER_MIN_INTERVALS) ? _fmtTurnoverMin(myStats.mean) : '—';
+    const g = groupByLoc[s.id];
+    const grpOk = g && g.contributors >= TURNOVER_PHASE_A_MIN_CONTRIBUTORS && g.mean != null;
+    const grpMed = grpOk ? _fmtTurnoverMin(g.median) : '—';
+    const grpMean = grpOk ? _fmtTurnoverMin(g.mean) : '—';
+    // Meta line under location: my interval count + group contributor count.
+    const myCount = myStats ? myStats.count : 0;
+    const grpCount = g ? (g.contributors || 0) : 0;
+    const metaParts = [];
+    metaParts.push('you ' + myCount + '/' + TURNOVER_MIN_INTERVALS);
+    metaParts.push('grp ' + grpCount + (grpOk ? '' : ('/' + TURNOVER_PHASE_A_MIN_CONTRIBUTORS)));
+    const meta = metaParts.join(' · ');
+    html += '<div style="min-width:0;padding:4px 0;border-top:1px solid var(--border);">'
+         +   '<div style="font-size:0.78rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(s.label || s.id) + '</div>'
+         +   '<div style="font-size:0.58rem;color:var(--text-dim);margin-top:1px;">' + escHtml(meta) + '</div>'
+         + '</div>'
+         + '<div style="' + valStyle + 'color:var(--accent);border-top:1px solid var(--border);padding:4px 0;">' + escHtml(myMed) + '</div>'
+         + '<div style="' + valStyle + 'color:var(--accent);opacity:0.75;border-top:1px solid var(--border);padding:4px 0;">' + escHtml(grpMed) + '</div>'
+         + '<div style="' + valStyle + 'color:var(--accent2);border-top:1px solid var(--border);padding:4px 0;">' + escHtml(myMean) + '</div>'
+         + '<div style="' + valStyle + 'color:var(--accent2);opacity:0.75;border-top:1px solid var(--border);padding:4px 0;">' + escHtml(grpMean) + '</div>';
   });
-  if (untaggedIntervals > 0) {
-    html += '<div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;background:var(--surface2);opacity:0.7;">'
-      + '<div><div style="font-size:0.78rem;font-weight:600;color:var(--text);">Untagged</div><div style="font-size:0.6rem;color:var(--text-dim);margin-top:2px;">' + untaggedIntervals + ' interval' + (untaggedIntervals === 1 ? '' : 's') + ' without a Location</div></div>'
-      + '<div></div><div></div>'
-      + '</div>';
-  }
+  html += '</div>';
   byLocList.innerHTML = html;
+
+  // Trigger lazy loads if data isn't ready yet. Re-render once they
+  // resolve so the placeholders fill in.
+  if (firestoreSyncEnabled && currentUser) {
+    if (!_communityStatsCache) {
+      loadCommunityStats(false);
+    }
+    if (typeof sharedCasesLoaded !== 'undefined' && !sharedCasesLoaded && typeof loadSharedCases === 'function') {
+      // sharedCases is loaded elsewhere on app boot; just bail and let the
+      // existing render hooks re-fire when it lands.
+    }
+  }
 }
 
 
