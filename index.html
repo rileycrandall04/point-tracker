@@ -3120,8 +3120,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
       </div>
       <div style="font-size:0.62rem;color:var(--text-dim);margin-top:4px;" id="turnoverYouCount">—</div>
     </div>
-    <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;margin:10px 0 4px;">By Site</div>
-    <div id="turnoverBySiteList" style="display:flex;flex-direction:column;gap:4px;"></div>
+    <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;margin:10px 0 4px;">By Location</div>
+    <div id="turnoverByLocationList" style="display:flex;flex-direction:column;gap:4px;"></div>
   </div>
 
   <!-- Hours Trend -->
@@ -29191,6 +29191,14 @@ function _turnoverGapMin(prevEnd, nextStart) {
 // Intervals from the current user's local data — precise (uses
 // per-segment clock-in windows). Returns an array of minute gaps.
 function getUserTurnoverIntervals(daysWindow) {
+  return _getUserTurnoverEntries(daysWindow).map(e => e.gap);
+}
+
+// Same as getUserTurnoverIntervals but each entry is { gap, subSiteId }
+// so callers can bucket by location. The subSiteId is the SECOND case in
+// the pair (the case being turned over INTO) since that's the location
+// the user is currently working at when the gap is measured.
+function _getUserTurnoverEntries(daysWindow) {
   const days = daysWindow || TURNOVER_WINDOW_DAYS;
   const now = new Date();
   const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
@@ -29209,7 +29217,7 @@ function getUserTurnoverIntervals(daysWindow) {
     (byDate[c.shiftDate] = byDate[c.shiftDate] || []).push(c);
   });
 
-  const intervals = [];
+  const entries = [];
   for (const dateStr in byDate) {
     const shift = data.shifts[dateStr];
     const segments = (shift.timeEntries || [])
@@ -29224,14 +29232,30 @@ function getUserTurnoverIntervals(daysWindow) {
     segments.forEach(seg => {
       const segCases = cases.filter(c => _turnoverMinIsInSegment(timeToMinutes(c.startTime), seg.startMin, seg.endMin));
       for (let i = 1; i < segCases.length; i++) {
-        const prevEnd = timeToMinutes(segCases[i - 1].endTime);
-        const curStart = timeToMinutes(segCases[i].startTime);
+        const prev = segCases[i - 1];
+        const cur = segCases[i];
+        const prevEnd = timeToMinutes(prev.endTime);
+        const curStart = timeToMinutes(cur.startTime);
         const gap = _turnoverGapMin(prevEnd, curStart);
-        if (gap > 0) intervals.push(gap);
+        if (gap <= 0) continue;
+        // Resolve the case's location at gap time: prefer the stamped
+        // subSiteId, then resolve via the shift's segments.
+        let subSiteId = cur.subSiteId || '';
+        if (!subSiteId && typeof subSiteIdForCase === 'function') {
+          subSiteId = subSiteIdForCase(shift, cur.startTime) || '';
+        }
+        // Only count gaps where both ends were at the same location — a
+        // location-change isn't really "turnover".
+        let prevSub = prev.subSiteId || '';
+        if (!prevSub && typeof subSiteIdForCase === 'function') {
+          prevSub = subSiteIdForCase(shift, prev.startTime) || '';
+        }
+        if (subSiteId && prevSub && subSiteId !== prevSub) continue;
+        entries.push({ gap, subSiteId });
       }
     });
   }
-  return intervals;
+  return entries;
 }
 
 function getTurnoverStats(intervals) {
@@ -29350,31 +29374,14 @@ async function loadSharedTurnoverStats(force) {
   if (!force && fresh) return _sharedTurnoverStatsCache;
   const mySite = getCurrentSiteId();
   try {
-    // Fetch every site's published stats so the Turnover card can list
-    // them all. Falls back to a per-site query if the cross-site read is
-    // blocked by Firestore rules (some deployments may scope reads).
-    let byUid = {};
-    let crossSiteOk = false;
-    try {
-      const snap = await db.collection('sharedTurnoverStats').get();
-      snap.forEach(doc => {
-        const d = doc.data() || {};
-        if (!d.uid) return;
-        byUid[d.uid] = d;
-      });
-      crossSiteOk = true;
-    } catch (errAll) {
-      console.warn('Cross-site sharedTurnoverStats read denied, falling back to current site:', errAll);
-    }
-    if (!crossSiteOk) {
-      const snap = await db.collection('sharedTurnoverStats').where('siteId', '==', mySite).get();
-      snap.forEach(doc => {
-        const d = doc.data() || {};
-        if (!d.uid || d.siteId !== mySite) return;
-        byUid[d.uid] = d;
-      });
-    }
-    _sharedTurnoverStatsCache = { ts: Date.now(), byUid, crossSiteOk };
+    const snap = await db.collection('sharedTurnoverStats').where('siteId', '==', mySite).get();
+    const byUid = {};
+    snap.forEach(doc => {
+      const d = doc.data() || {};
+      if (!d.uid || d.siteId !== mySite) return;
+      byUid[d.uid] = d;
+    });
+    _sharedTurnoverStatsCache = { ts: Date.now(), byUid };
     return _sharedTurnoverStatsCache;
   } catch (err) {
     console.warn('Shared turnover stats load failed:', err);
@@ -29458,10 +29465,11 @@ function renderTurnoverCard() {
   const youMean = document.getElementById('turnoverYouMean');
   const youMedian = document.getElementById('turnoverYouMedian');
   const youCount = document.getElementById('turnoverYouCount');
-  const bySiteList = document.getElementById('turnoverBySiteList');
+  const byLocList = document.getElementById('turnoverByLocationList');
 
-  // YOU — local data, instant.
-  const userIntervals = getUserTurnoverIntervals();
+  // YOU — local data across every location, instant.
+  const userEntries = _getUserTurnoverEntries();
+  const userIntervals = userEntries.map(e => e.gap);
   const userStats = getTurnoverStats(userIntervals);
   if (userStats && userStats.count >= TURNOVER_MIN_INTERVALS) {
     youMean.textContent = _fmtTurnoverMin(userStats.mean);
@@ -29475,72 +29483,57 @@ function renderTurnoverCard() {
       : 'No qualifying cases yet';
   }
 
-  // BY SITE — one row per known site using Phase C (shared aggregate) stats.
-  // Phase A approximation only works for the current site (its caches are
-  // single-site), so other sites stay "—" until they reach Phase C.
+  // BY LOCATION — one row per sub-site at the user's site, computed from
+  // the user's own data. We render every configured location so empty
+  // ones still show as "no data yet" instead of being silently dropped.
   const mySite = getCurrentSiteId();
-  const siteIds = Object.keys(sitesCache || {}).filter(id => id);
-  if (siteIds.length === 0 && mySite) siteIds.push(mySite);
-  // Sort: current site first, then alphabetical by display name.
-  siteIds.sort((a, b) => {
-    if (a === mySite && b !== mySite) return -1;
-    if (b === mySite && a !== mySite) return 1;
-    const an = (sitesCache[a] && sitesCache[a].name) || a;
-    const bn = (sitesCache[b] && sitesCache[b].name) || b;
-    return an.localeCompare(bn);
+  const subSites = (typeof getSubSitesForSite === 'function') ? getSubSitesForSite(mySite) : [];
+
+  if (!subSites || subSites.length === 0) {
+    byLocList.innerHTML = '<div style="font-size:0.7rem;color:var(--text-dim);padding:6px 10px;background:var(--surface2);border-radius:6px;">No locations configured for this site. Admins can add them under Admin &rarr; Locations.</div>';
+    return;
+  }
+
+  // Bucket the user's entries by subSiteId.
+  const buckets = {};
+  let untaggedIntervals = 0;
+  userEntries.forEach(e => {
+    if (!e.subSiteId) { untaggedIntervals++; return; }
+    (buckets[e.subSiteId] = buckets[e.subSiteId] || []).push(e.gap);
   });
 
+  // Render in admin-defined order; show all configured locations, even
+  // the ones the user hasn't worked at, so they know what's tracked.
   let html = '';
-  siteIds.forEach(sid => {
-    const name = (sitesCache[sid] && sitesCache[sid].name) || sid;
-    const isMine = sid === mySite;
+  subSites.forEach(s => {
+    const list = buckets[s.id] || [];
+    const stats = getTurnoverStats(list);
     let meanStr = '—', medianStr = '—', metaStr = '';
-    const phaseC = getSiteTurnoverStatsFromPhaseC(sid);
-    if (phaseC && phaseC.contributors >= TURNOVER_PHASE_C_MIN_CONTRIBUTORS) {
-      meanStr = _fmtTurnoverMin(phaseC.mean);
-      medianStr = _fmtTurnoverMin(phaseC.median);
-      metaStr = phaseC.contributors + ' contributors';
-    } else if (isMine) {
-      const approx = getSiteTurnoverStatsApproximate(sid);
-      if (approx && approx.contributors >= TURNOVER_PHASE_A_MIN_CONTRIBUTORS) {
-        meanStr = _fmtTurnoverMin(approx.mean);
-        medianStr = _fmtTurnoverMin(approx.median);
-        metaStr = approx.contributors + ' contributors · approx';
-      } else if (approx === null) {
-        metaStr = 'Loading…';
-      } else {
-        metaStr = (approx.contributors || 0) + '/' + TURNOVER_PHASE_A_MIN_CONTRIBUTORS + ' contributors';
-      }
+    if (stats && stats.count >= TURNOVER_MIN_INTERVALS) {
+      meanStr = _fmtTurnoverMin(stats.mean);
+      medianStr = _fmtTurnoverMin(stats.median);
+      metaStr = stats.count + ' interval' + (stats.count === 1 ? '' : 's');
+    } else if (stats) {
+      metaStr = stats.count + '/' + TURNOVER_MIN_INTERVALS + ' intervals so far';
     } else {
-      metaStr = phaseC
-        ? phaseC.contributors + '/' + TURNOVER_PHASE_C_MIN_CONTRIBUTORS + ' contributors'
-        : 'No data yet';
+      metaStr = 'No qualifying cases yet';
     }
-    const rowStyle = isMine
-      ? 'background:rgba(66,133,244,0.10);border:1px solid rgba(66,133,244,0.35);'
-      : 'background:var(--surface2);';
-    html += '<div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;' + rowStyle + '">'
+    html += '<div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;background:var(--surface2);">'
       + '<div style="min-width:0;">'
-      +   '<div style="font-size:0.78rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(name) + (isMine ? ' <span style="font-size:0.6rem;color:var(--primary);font-weight:600;letter-spacing:0.3px;">YOUR SITE</span>' : '') + '</div>'
-      +   (metaStr ? '<div style="font-size:0.6rem;color:var(--text-dim);margin-top:2px;">' + escHtml(metaStr) + '</div>' : '')
+      +   '<div style="font-size:0.78rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(s.label || s.id) + '</div>'
+      +   '<div style="font-size:0.6rem;color:var(--text-dim);margin-top:2px;">' + escHtml(metaStr) + '</div>'
       + '</div>'
       + '<div style="font-size:0.78rem;color:var(--accent2);font-weight:600;text-align:right;min-width:54px;">' + escHtml(meanStr) + ' <span style="font-size:0.6rem;color:var(--text-dim);font-weight:400;">mean</span></div>'
       + '<div style="font-size:0.78rem;color:var(--accent);font-weight:600;text-align:right;min-width:54px;">' + escHtml(medianStr) + ' <span style="font-size:0.6rem;color:var(--text-dim);font-weight:400;">med</span></div>'
       + '</div>';
   });
-  if (!html) html = '<div style="font-size:0.7rem;color:var(--text-dim);">No site data available.</div>';
-  bySiteList.innerHTML = html;
-
-  // Trigger lazy loads if data isn't ready yet. Re-render once they
-  // resolve so the placeholders fill in.
-  if (firestoreSyncEnabled && currentUser) {
-    if (!_communityStatsCache) {
-      loadCommunityStats(false);
-    }
-    if (!_sharedTurnoverStatsCache) {
-      loadSharedTurnoverStats(false).then(() => renderTurnoverCard()).catch(() => {});
-    }
+  if (untaggedIntervals > 0) {
+    html += '<div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;background:var(--surface2);opacity:0.7;">'
+      + '<div><div style="font-size:0.78rem;font-weight:600;color:var(--text);">Untagged</div><div style="font-size:0.6rem;color:var(--text-dim);margin-top:2px;">' + untaggedIntervals + ' interval' + (untaggedIntervals === 1 ? '' : 's') + ' without a Location</div></div>'
+      + '<div></div><div></div>'
+      + '</div>';
   }
+  byLocList.innerHTML = html;
 }
 
 
