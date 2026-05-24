@@ -22319,6 +22319,17 @@ function renderWeeklyChart() {
     }
   };
 
+  // Skip the destroy+recreate when every input is identical to the last
+  // paint. The post-login cascade re-calls renderToday several times; most
+  // of those re-renders feed the chart the same numbers and only serve to
+  // restart the bar animation.
+  const _fp = JSON.stringify({
+    weekDates, baseValues, pagerValues, floatValues,
+    calendarLabels, inProgressFlags, weeklyShowDollars, today
+  });
+  if (weeklyBarChart && _fp === _weeklyChartFingerprint) return;
+  _weeklyChartFingerprint = _fp;
+
   const canvas = document.getElementById('weeklyBarCanvas');
   if (weeklyBarChart) {
     weeklyBarChart.destroy();
@@ -22689,6 +22700,11 @@ document.getElementById('dayModal').addEventListener('click', (e) => {
 // DASHBOARD — Tabs & Rendering
 // ================================================================
 let weeklyBarChart = null;
+// Fingerprint of the last renderWeeklyChart() inputs. Skips the
+// destroy+recreate when nothing visible has changed — the post-login
+// cascade (loadCasesPhase2 / loadSites / loadAllSiteProcedureSamples)
+// all re-call renderToday, but usually with identical bar data.
+let _weeklyChartFingerprint = null;
 let weeklyShowDollars = false;
 // Date string of the bar whose tooltip should stay visible after a click. Set
 // in the chart's onClick handler so renderWeeklyChart can re-pin the tooltip
