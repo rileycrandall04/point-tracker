@@ -3106,7 +3106,13 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="card" id="turnoverCard" style="padding:10px 14px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
       <span style="font-size:0.78rem;font-weight:600;">Turnover Time <span class="info-icon" data-tip="Minutes between case end and the next case start, within one continuous clock-in. Excludes labor / APS / acute pain / ICU-ER / shared cases, c-sections, nerve-block-only entries, NORA, ACS, OB-style shifts, SF1 daytime, weekends, and holidays. Window: trailing 90 days. Need 10 intervals to show a number. Group = macro-average across other contributors at this site (mean of each user's mean / median of each user's median).">i</span></span>
-      <span style="font-size:0.68rem;color:var(--text-dim);">Past 90 days</span>
+      <span style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:0.68rem;color:var(--text-dim);">Past 90 days</span>
+        <button id="turnoverGearBtn" type="button" aria-label="Customize Turnover card" style="background:none;border:none;cursor:pointer;font-size:0.95rem;color:var(--text-dim);padding:2px 4px;line-height:1;">&#9881;</button>
+      </span>
+    </div>
+    <div id="turnoverGearPanel" class="hidden" style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-bottom:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:0.74rem;color:var(--text);">
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" data-tov-pref="excludeEndo" style="width:14px;height:14px;margin:0;"> Exclude endo (colonoscopy / EGD)</label>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
       <button class="tab-btn active" data-turnover-metric="median" onclick="switchTurnoverMetric('median')">Median</button>
@@ -3114,6 +3120,18 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </div>
     <div id="turnoverByLocationList"></div>
     <div id="turnoverCardFooter" style="font-size:0.62rem;color:var(--text-dim);margin-top:8px;line-height:1.4;"></div>
+  </div>
+
+  <!-- Turnover interval drill-down modal -->
+  <div class="modal-overlay hidden" id="turnoverIntervalsModal" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="modal" style="max-width:520px;">
+      <h2 id="turnoverIntervalsTitle" style="margin:0 0 4px;font-size:1rem;">Your Turnover Intervals</h2>
+      <p id="turnoverIntervalsSubtitle" style="font-size:0.72rem;color:var(--text-dim);margin:0 0 12px;"></p>
+      <div id="turnoverIntervalsBody" style="max-height:60vh;overflow-y:auto;border:1px solid var(--border);border-radius:6px;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline btn-sm" id="turnoverIntervalsClose">Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- Hours Trend -->
@@ -29142,6 +29160,13 @@ const TURNOVER_PHASE_C_MIN_CONTRIBUTORS = 10;
 const TURNOVER_PHASE_C_FRESH_DAYS = 30;
 const TURNOVER_CSECTION_RE = /\b(c[-\s\/]?section|cesarean|caesarean|c\/s)\b/i;
 const TURNOVER_BLOCK_RE = /\bblock(?:s)?\b/i;
+// Matches endoscopy procedures the user may want to exclude from
+// turnover (high case throughput skews the average). Colonoscopy, EGD,
+// EGD/colonoscopy combos, and the long-form spelling.
+const TURNOVER_ENDO_RE = /(colonoscopy|\begd\b|esophagogastroduodenoscopy)/i;
+function _isEndoProcedure(proc) {
+  return TURNOVER_ENDO_RE.test(String(proc || ''));
+}
 
 function _turnoverCaseEligible(c) {
   if (!c) return false;
@@ -29191,21 +29216,35 @@ function getUserTurnoverIntervals(daysWindow) {
   return _getUserTurnoverEntries(daysWindow).map(e => e.gap);
 }
 
-// Same as getUserTurnoverIntervals but each entry is { gap, subSiteId }
-// so callers can bucket by location. The subSiteId is the SECOND case in
-// the pair (the case being turned over INTO) since that's the location
-// the user is currently working at when the gap is measured.
-function _getUserTurnoverEntries(daysWindow) {
+function getTurnoverPrefs() {
+  const p = (settings && settings.turnoverPrefs) || {};
+  return { excludeEndo: !!p.excludeEndo };
+}
+function setTurnoverPref(key, val) {
+  if (!settings.turnoverPrefs) settings.turnoverPrefs = {};
+  settings.turnoverPrefs[key] = !!val;
+  saveSettings(settings);
+}
+
+// Each entry: { gap, subSiteId, date, prev, cur } where prev/cur carry
+// the minimal case info needed to drill into the modal interval list.
+// subSiteId comes from the second case in the pair (the case the user
+// is currently working at when the gap is measured). When excludeEndo
+// is on, colonoscopy/EGD cases are filtered out before bucketing.
+function _getUserTurnoverEntries(daysWindow, opts) {
   const days = daysWindow || TURNOVER_WINDOW_DAYS;
   const now = new Date();
   const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
   const pad = n => String(n).padStart(2, '0');
   const cutoffStr = cutoff.getFullYear() + '-' + pad(cutoff.getMonth() + 1) + '-' + pad(cutoff.getDate());
 
+  const excludeEndo = !!(opts && opts.excludeEndo);
+
   const byDate = {};
   (data.cases || []).forEach(c => {
     if (!c.shiftDate || c.shiftDate < cutoffStr) return;
     if (!_turnoverCaseEligible(c)) return;
+    if (excludeEndo && _isEndoProcedure(c.procedure)) return;
     const shift = data.shifts[c.shiftDate];
     if (!shift) return;
     if (!_turnoverDateEligible(c.shiftDate, !!shift.isHoliday)) return;
@@ -29235,20 +29274,20 @@ function _getUserTurnoverEntries(daysWindow) {
         const curStart = timeToMinutes(cur.startTime);
         const gap = _turnoverGapMin(prevEnd, curStart);
         if (gap <= 0) continue;
-        // Resolve the case's location at gap time: prefer the stamped
-        // subSiteId, then resolve via the shift's segments.
         let subSiteId = cur.subSiteId || '';
         if (!subSiteId && typeof subSiteIdForCase === 'function') {
           subSiteId = subSiteIdForCase(shift, cur.startTime) || '';
         }
-        // Only count gaps where both ends were at the same location — a
-        // location-change isn't really "turnover".
         let prevSub = prev.subSiteId || '';
         if (!prevSub && typeof subSiteIdForCase === 'function') {
           prevSub = subSiteIdForCase(shift, prev.startTime) || '';
         }
         if (subSiteId && prevSub && subSiteId !== prevSub) continue;
-        entries.push({ gap, subSiteId });
+        entries.push({
+          gap, subSiteId, date: dateStr,
+          prev: { id: prev.id, procedure: prev.procedure || '', startTime: prev.startTime, endTime: prev.endTime },
+          cur:  { id: cur.id,  procedure: cur.procedure  || '', startTime: cur.startTime,  endTime: cur.endTime }
+        });
       }
     });
   }
@@ -29291,9 +29330,10 @@ function getTurnoverStats(intervals) {
 // only carries overall start/end), so we treat each user's day as one
 // continuous window — slight over-count when they clock in/out mid-day.
 // Phase C replaces this once enough users publish their own stats.
-function getSiteTurnoverStatsApproximate(siteId) {
+function getSiteTurnoverStatsApproximate(siteId, opts) {
   if (!Array.isArray(sharedCasesCache) || sharedCasesCache.length === 0) return null;
   if (!_communityStatsCache || !_communityStatsCache.byUid) return null;
+  const excludeEndo = !!(opts && opts.excludeEndo);
   const days = TURNOVER_WINDOW_DAYS;
   const now = new Date();
   const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
@@ -29319,6 +29359,7 @@ function getSiteTurnoverStatsApproximate(siteId) {
     const proc = String(sc.procedure || '');
     if (TURNOVER_CSECTION_RE.test(proc)) return;
     if (TURNOVER_BLOCK_RE.test(proc)) return;
+    if (excludeEndo && _isEndoProcedure(proc)) return;
     const sh = shiftLookup[sc.uid + '|' + sc.shiftDate];
     if (!sh) return;
     if (!_turnoverDateEligible(sc.shiftDate, false)) return;
@@ -29462,9 +29503,10 @@ function _fmtTurnoverMin(m) {
 // turnover intervals "at" that location. Returns { [subSiteId]: { mean,
 // median, contributors, count } }. Excludes the current user (their own
 // numbers come from local data with precise time entries).
-function getGroupTurnoverStatsByLocation(siteId) {
+function getGroupTurnoverStatsByLocation(siteId, opts) {
   if (!Array.isArray(sharedCasesCache) || sharedCasesCache.length === 0) return {};
   if (!_communityStatsCache || !_communityStatsCache.byUid) return {};
+  const excludeEndo = !!(opts && opts.excludeEndo);
   const days = TURNOVER_WINDOW_DAYS;
   const now = new Date();
   const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
@@ -29490,6 +29532,7 @@ function getGroupTurnoverStatsByLocation(siteId) {
     const proc = String(sc.procedure || '');
     if (TURNOVER_CSECTION_RE.test(proc)) return;
     if (TURNOVER_BLOCK_RE.test(proc)) return;
+    if (excludeEndo && _isEndoProcedure(proc)) return;
     const sh = shiftLookup[sc.uid + '|' + sc.shiftDate];
     if (!sh) return;
     if (!_turnoverDateEligible(sc.shiftDate, false)) return;
@@ -29550,12 +29593,113 @@ function getGroupTurnoverStatsByLocation(siteId) {
 }
 
 let _turnoverMetric = 'median';
+// Stash of the most recent render's per-row interval entries so the
+// drill-down modal can read them without re-walking the dataset.
+//   { rowsByKey: { 'overall': [entry], '<subId>': [entry] }, metric }
+let _turnoverModalState = null;
+
 function switchTurnoverMetric(m) {
   _turnoverMetric = (m === 'mean') ? 'mean' : 'median';
   document.querySelectorAll('#turnoverCard [data-turnover-metric]').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-turnover-metric') === _turnoverMetric);
   });
   renderTurnoverCard();
+}
+
+function _initTurnoverGear() {
+  const btn = document.getElementById('turnoverGearBtn');
+  const panel = document.getElementById('turnoverGearPanel');
+  if (!btn || !panel || btn._wired) return;
+  btn._wired = true;
+  const refresh = () => {
+    const prefs = getTurnoverPrefs();
+    panel.querySelectorAll('input[data-tov-pref]').forEach(inp => {
+      inp.checked = !!prefs[inp.dataset.tovPref];
+    });
+  };
+  refresh();
+  panel.querySelectorAll('input[data-tov-pref]').forEach(inp => {
+    inp.addEventListener('change', () => {
+      setTurnoverPref(inp.dataset.tovPref, inp.checked);
+      renderTurnoverCard();
+    });
+  });
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    refresh();
+    panel.classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (panel.classList.contains('hidden')) return;
+    if (panel.contains(e.target) || btn.contains(e.target)) return;
+    panel.classList.add('hidden');
+  });
+  // Modal close + drill-down click delegation.
+  const closeBtn = document.getElementById('turnoverIntervalsClose');
+  if (closeBtn) closeBtn.addEventListener('click', () => {
+    document.getElementById('turnoverIntervalsModal').classList.add('hidden');
+  });
+  document.getElementById('turnoverByLocationList').addEventListener('click', (e) => {
+    const cell = e.target.closest('[data-tov-row]');
+    if (!cell) return;
+    _openTurnoverIntervalsModal(cell.getAttribute('data-tov-row'), cell.getAttribute('data-tov-label'));
+  });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _initTurnoverGear);
+} else {
+  _initTurnoverGear();
+}
+
+function _openTurnoverIntervalsModal(rowKey, label) {
+  if (!_turnoverModalState) return;
+  const list = _turnoverModalState.rowsByKey[rowKey] || [];
+  const modal = document.getElementById('turnoverIntervalsModal');
+  const titleEl = document.getElementById('turnoverIntervalsTitle');
+  const subEl = document.getElementById('turnoverIntervalsSubtitle');
+  const body = document.getElementById('turnoverIntervalsBody');
+  if (!modal || !body) return;
+  titleEl.textContent = 'Your turnover intervals — ' + (label || rowKey);
+  // Sort largest-first so outliers are at the top — those are the most
+  // likely candidates for a wrong end/start time.
+  const sorted = list.slice().sort((a, b) => b.gap - a.gap);
+  const med = (() => {
+    if (sorted.length === 0) return 0;
+    const s = sorted.slice().sort((a, b) => a.gap - b.gap);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 === 0 ? (s[mid - 1].gap + s[mid].gap) / 2 : s[mid].gap;
+  })();
+  const mean = sorted.length ? (sorted.reduce((a, e) => a + e.gap, 0) / sorted.length) : 0;
+  subEl.textContent = sorted.length + ' interval' + (sorted.length === 1 ? '' : 's')
+    + ' · median ' + _fmtTurnoverMin(med) + ' · mean ' + _fmtTurnoverMin(mean)
+    + ' · tap a row to open the case';
+  if (sorted.length === 0) {
+    body.innerHTML = '<div style="padding:14px;font-size:0.78rem;color:var(--text-dim);text-align:center;">No qualifying intervals.</div>';
+  } else {
+    let html = '';
+    sorted.forEach(e => {
+      const prevProc = escHtml(e.prev.procedure || '(no procedure)');
+      const curProc = escHtml(e.cur.procedure || '(no procedure)');
+      const dateStr = formatDateShort ? formatDateShort(e.date) : e.date;
+      html += '<div data-case-id="' + escHtml(e.cur.id) + '" style="display:grid;grid-template-columns:1fr 64px;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;">'
+           +   '<div style="min-width:0;">'
+           +     '<div style="font-size:0.7rem;color:var(--text-dim);">' + escHtml(dateStr) + '</div>'
+           +     '<div style="font-size:0.8rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + prevProc + ' <span style="color:var(--text-dim);">→</span> ' + curProc + '</div>'
+           +     '<div style="font-size:0.66rem;color:var(--text-dim);">' + escHtml(e.prev.endTime || '?') + ' &rarr; ' + escHtml(e.cur.startTime || '?') + '</div>'
+           +   '</div>'
+           +   '<div style="font-size:0.95rem;font-weight:700;color:var(--accent);text-align:right;">' + escHtml(_fmtTurnoverMin(e.gap)) + '</div>'
+           + '</div>';
+    });
+    body.innerHTML = html;
+    body.querySelectorAll('[data-case-id]').forEach(row => {
+      row.addEventListener('click', () => {
+        const id = row.getAttribute('data-case-id');
+        modal.classList.add('hidden');
+        if (typeof openCaseEdit === 'function' && id) openCaseEdit(id);
+      });
+    });
+  }
+  modal.classList.remove('hidden');
 }
 
 function renderTurnoverCard() {
@@ -29568,18 +29712,26 @@ function renderTurnoverCard() {
   const metric = _turnoverMetric === 'mean' ? 'mean' : 'median';
   const mySite = getCurrentSiteId();
   const subSites = (typeof getSubSitesForSite === 'function') ? getSubSitesForSite(mySite) : [];
+  const prefs = getTurnoverPrefs();
+  const opts = { excludeEndo: prefs.excludeEndo };
 
   // Per-location buckets from the user's intervals.
-  const userEntries = _getUserTurnoverEntries();
+  const userEntries = _getUserTurnoverEntries(undefined, opts);
   const myByLoc = {};
+  const myByLocEntries = {};
   userEntries.forEach(e => {
     if (!e.subSiteId) return;
     (myByLoc[e.subSiteId] = myByLoc[e.subSiteId] || []).push(e.gap);
+    (myByLocEntries[e.subSiteId] = myByLocEntries[e.subSiteId] || []).push(e);
   });
   const myAllIntervals = userEntries.map(e => e.gap);
 
-  const groupByLoc = (subSites && subSites.length > 0) ? getGroupTurnoverStatsByLocation(mySite) : {};
-  const groupOverallApprox = getSiteTurnoverStatsApproximate(mySite);
+  // Stash entries for the drill-down modal.
+  _turnoverModalState = { metric, rowsByKey: { overall: userEntries.slice() } };
+  Object.keys(myByLocEntries).forEach(k => { _turnoverModalState.rowsByKey[k] = myByLocEntries[k]; });
+
+  const groupByLoc = (subSites && subSites.length > 0) ? getGroupTurnoverStatsByLocation(mySite, opts) : {};
+  const groupOverallApprox = getSiteTurnoverStatsApproximate(mySite, opts);
   const groupOverallPhaseC = getSiteTurnoverStatsFromPhaseC(mySite);
 
   // 3-column grid: Location | Mine | Group
@@ -29610,7 +29762,7 @@ function renderTurnoverCard() {
     return '';
   };
 
-  const _renderRow = (label, myStats, groupStats, groupOk, isOverall) => {
+  const _renderRow = (label, myStats, groupStats, groupOk, isOverall, rowKey) => {
     const myReady = myStats && myStats.count >= TURNOVER_MIN_INTERVALS;
     const myVal = _pickVal(myStats, myReady);
     const grpVal = groupOk ? _pickVal(groupStats, true) : null;
@@ -29620,28 +29772,39 @@ function renderTurnoverCard() {
     const sub = !myReady && myStats ? (myStats.count + '/' + TURNOVER_MIN_INTERVALS + ' so far') : '';
     const labelStyle = 'font-size:0.84rem;font-weight:' + (isOverall ? '700' : '600') + ';color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
     const cellTop = renderedRows > 0 ? 'border-top:1px solid var(--border);' : '';
+    // Only the Mine cell is clickable — it's the one tied to drillable
+    // user data. The data-tov-row attribute keys into _turnoverModalState.
+    const hasMyData = myStats && myStats.count > 0;
+    const mineClickable = hasMyData
+      ? ' cursor:pointer;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px;text-decoration-color:rgba(102,187,106,0.45);'
+      : '';
+    const mineAttrs = hasMyData
+      ? ' data-tov-row="' + escHtml(rowKey) + '" data-tov-label="' + escHtml(label) + '" title="Tap to see intervals"'
+      : '';
     html += '<div style="' + cellTop + 'padding:8px 6px 8px 8px;' + tint + 'min-width:0;display:flex;flex-direction:column;justify-content:center;">'
          +   '<div style="' + labelStyle + '">' + escHtml(label) + '</div>'
          +   (sub ? '<div style="font-size:0.58rem;color:var(--text-dim);margin-top:1px;">' + escHtml(sub) + '</div>' : '')
          + '</div>'
-         + '<div style="' + cellTop + valStyle + 'color:var(--accent);' + tint + '">' + escHtml(myStr) + '</div>'
+         + '<div' + mineAttrs + ' style="' + cellTop + valStyle + 'color:var(--accent);' + tint + mineClickable + '">' + escHtml(myStr) + '</div>'
          + '<div style="' + cellTop + valStyle + 'color:var(--text-dim);' + tint + '">' + escHtml(grpStr) + '</div>';
     renderedRows++;
     if (myStats && myStats.count) myTotalCount = Math.max(myTotalCount, myStats.count);
     if (groupStats && groupStats.contributors) grpContribMax = Math.max(grpContribMax, groupStats.contributors);
   };
 
-  // Overall row — always renders.
+  // Overall row — always renders. Phase C aggregates are pre-computed
+  // server-side and can't honor the local "exclude endo" toggle, so we
+  // fall back to Phase A whenever the toggle is on for apples-to-apples.
   const myOverallStats = getTurnoverStats(myAllIntervals);
   let overallGroup = null, overallOk = false;
-  if (groupOverallPhaseC && groupOverallPhaseC.contributors >= TURNOVER_PHASE_C_MIN_CONTRIBUTORS) {
+  if (!prefs.excludeEndo && groupOverallPhaseC && groupOverallPhaseC.contributors >= TURNOVER_PHASE_C_MIN_CONTRIBUTORS) {
     overallGroup = groupOverallPhaseC; overallOk = true;
   } else if (groupOverallApprox && groupOverallApprox.contributors >= TURNOVER_PHASE_A_MIN_CONTRIBUTORS && groupOverallApprox.mean != null) {
     overallGroup = groupOverallApprox; overallOk = true;
   } else {
     overallGroup = groupOverallApprox || { contributors: 0 };
   }
-  _renderRow('Overall', myOverallStats, overallGroup, overallOk, true);
+  _renderRow('Overall', myOverallStats, overallGroup, overallOk, true, 'overall');
 
   // Per-location rows.
   if (subSites && subSites.length > 0) {
@@ -29650,7 +29813,7 @@ function renderTurnoverCard() {
       const myStats = getTurnoverStats(list);
       const g = groupByLoc[s.id];
       const groupOk = !!(g && g.contributors >= TURNOVER_PHASE_A_MIN_CONTRIBUTORS && g.mean != null);
-      _renderRow(s.label || s.id, myStats, g, groupOk, false);
+      _renderRow(s.label || s.id, myStats, g, groupOk, false, s.id);
     });
   }
   html += '</div>';
@@ -29662,6 +29825,7 @@ function renderTurnoverCard() {
     const bits = [];
     if (myOverallStats && myOverallStats.count) bits.push(myOverallStats.count + ' of your intervals');
     if (overallGroup && overallGroup.contributors) bits.push(overallGroup.contributors + ' group contributor' + (overallGroup.contributors === 1 ? '' : 's'));
+    if (prefs.excludeEndo) bits.push('endo excluded');
     let foot = bits.length ? bits.join(' · ') : '';
     if (!subSites || subSites.length === 0) {
       foot += (foot ? ' · ' : '') + 'Configure Locations under Admin &rarr; Locations to break out by sub-site.';
