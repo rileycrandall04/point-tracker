@@ -3108,7 +3108,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
       <span style="font-size:0.78rem;font-weight:600;">Turnover Time <span class="info-icon" data-tip="Minutes between case end and the next case start, within one continuous clock-in. Excludes labor / APS / acute pain / ICU-ER / shared cases, c-sections, nerve-block-only entries, NORA, ACS, OB-style shifts, SF1 daytime, weekends, and holidays. Window: trailing 90 days. Need 10 intervals to show a number. Group = macro-average across other contributors at this site (mean of each user's mean / median of each user's median).">i</span></span>
       <span style="font-size:0.68rem;color:var(--text-dim);">Past 90 days</span>
     </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+      <button class="tab-btn active" data-turnover-metric="median" onclick="switchTurnoverMetric('median')">Median</button>
+      <button class="tab-btn" data-turnover-metric="mean" onclick="switchTurnoverMetric('mean')">Mean</button>
+    </div>
     <div id="turnoverByLocationList"></div>
+    <div id="turnoverCardFooter" style="font-size:0.62rem;color:var(--text-dim);margin-top:8px;line-height:1.4;"></div>
   </div>
 
   <!-- Hours Trend -->
@@ -29544,16 +29549,27 @@ function getGroupTurnoverStatsByLocation(siteId) {
   return out;
 }
 
+let _turnoverMetric = 'median';
+function switchTurnoverMetric(m) {
+  _turnoverMetric = (m === 'mean') ? 'mean' : 'median';
+  document.querySelectorAll('#turnoverCard [data-turnover-metric]').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-turnover-metric') === _turnoverMetric);
+  });
+  renderTurnoverCard();
+}
+
 function renderTurnoverCard() {
   const card = document.getElementById('turnoverCard');
   if (!card) return;
   const byLocList = document.getElementById('turnoverByLocationList');
   if (!byLocList) return;
+  const footerEl = document.getElementById('turnoverCardFooter');
 
+  const metric = _turnoverMetric === 'mean' ? 'mean' : 'median';
   const mySite = getCurrentSiteId();
   const subSites = (typeof getSubSitesForSite === 'function') ? getSubSitesForSite(mySite) : [];
 
-  // Build per-location buckets from the user's intervals.
+  // Per-location buckets from the user's intervals.
   const userEntries = _getUserTurnoverEntries();
   const myByLoc = {};
   userEntries.forEach(e => {
@@ -29562,79 +29578,96 @@ function renderTurnoverCard() {
   });
   const myAllIntervals = userEntries.map(e => e.gap);
 
-  // Group stats: per-location approximation + site-wide approximation
-  // (the latter powers the Overall row, which always renders so the card
-  // is useful even on sites that haven't configured sub-sites yet).
   const groupByLoc = (subSites && subSites.length > 0) ? getGroupTurnoverStatsByLocation(mySite) : {};
   const groupOverallApprox = getSiteTurnoverStatsApproximate(mySite);
   const groupOverallPhaseC = getSiteTurnoverStatsFromPhaseC(mySite);
 
-  // 5-column grid: Location | My Med | Group Med | My Mean | Group Mean
-  const gridStyle = 'display:grid;grid-template-columns:1fr 56px 56px 56px 56px;column-gap:8px;row-gap:4px;align-items:center;';
-  const headStyle = 'font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.4px;font-weight:600;';
-  const valStyle = 'font-size:0.78rem;font-weight:600;text-align:right;';
+  // 3-column grid: Location | Mine | Group
+  const gridStyle = 'display:grid;grid-template-columns:1fr 72px 72px;column-gap:8px;align-items:stretch;';
+  const headStyle = 'font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.4px;font-weight:600;padding:0 0 4px;';
+  const valStyle = 'font-size:0.92rem;font-weight:700;text-align:right;padding:8px 6px;display:flex;align-items:center;justify-content:flex-end;';
+
   let html = '<div style="' + gridStyle + '">';
   html += '<div style="' + headStyle + '">Location</div>'
-       + '<div style="' + headStyle + 'text-align:right;">My Med</div>'
-       + '<div style="' + headStyle + 'text-align:right;">Group Med</div>'
-       + '<div style="' + headStyle + 'text-align:right;">My Mean</div>'
-       + '<div style="' + headStyle + 'text-align:right;">Group Mean</div>';
+       + '<div style="' + headStyle + 'text-align:right;">Mine</div>'
+       + '<div style="' + headStyle + 'text-align:right;">Group</div>';
 
-  const _renderRow = (label, myStats, groupStats, groupOk, sublabel) => {
-    const myReady = myStats && myStats.count >= TURNOVER_MIN_INTERVALS;
-    const myMed = myReady ? _fmtTurnoverMin(myStats.median) : '—';
-    const myMean = myReady ? _fmtTurnoverMin(myStats.mean) : '—';
-    const grpMed = groupOk ? _fmtTurnoverMin(groupStats.median) : '—';
-    const grpMean = groupOk ? _fmtTurnoverMin(groupStats.mean) : '—';
-    const myCount = myStats ? myStats.count : 0;
-    const grpCount = groupStats ? (groupStats.contributors || 0) : 0;
-    const minGrp = (groupStats && groupStats._phaseCMin) || TURNOVER_PHASE_A_MIN_CONTRIBUTORS;
-    const meta = sublabel != null ? sublabel
-      : ('you ' + myCount + '/' + TURNOVER_MIN_INTERVALS + ' · grp ' + grpCount + (groupOk ? '' : ('/' + minGrp)));
-    html += '<div style="min-width:0;padding:4px 0;border-top:1px solid var(--border);">'
-         +   '<div style="font-size:0.78rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(label) + '</div>'
-         +   (meta ? '<div style="font-size:0.58rem;color:var(--text-dim);margin-top:1px;">' + escHtml(meta) + '</div>' : '')
-         + '</div>'
-         + '<div style="' + valStyle + 'color:var(--accent);border-top:1px solid var(--border);padding:4px 0;">' + escHtml(myMed) + '</div>'
-         + '<div style="' + valStyle + 'color:var(--accent);opacity:0.75;border-top:1px solid var(--border);padding:4px 0;">' + escHtml(grpMed) + '</div>'
-         + '<div style="' + valStyle + 'color:var(--accent2);border-top:1px solid var(--border);padding:4px 0;">' + escHtml(myMean) + '</div>'
-         + '<div style="' + valStyle + 'color:var(--accent2);opacity:0.75;border-top:1px solid var(--border);padding:4px 0;">' + escHtml(grpMean) + '</div>';
+  let renderedRows = 0;
+  let myTotalCount = 0;
+  let grpContribMax = 0;
+
+  const _pickVal = (stats, ready) => {
+    if (!stats || !ready) return null;
+    return metric === 'mean' ? stats.mean : stats.median;
   };
 
-  // Overall row — always renders. Prefer the precise Phase C aggregate
-  // for the group when available; fall back to the Phase A approximation.
+  const _rowTint = (myVal, grpVal) => {
+    if (myVal == null || grpVal == null || grpVal <= 0) return '';
+    const ratio = myVal / grpVal;
+    // 5% margin so micro-differences don't trigger color.
+    if (ratio <= 0.95) return 'background:rgba(102,187,106,0.10);'; // faster — green
+    if (ratio >= 1.05) return 'background:rgba(245,166,35,0.10);';  // slower — amber
+    return '';
+  };
+
+  const _renderRow = (label, myStats, groupStats, groupOk, isOverall) => {
+    const myReady = myStats && myStats.count >= TURNOVER_MIN_INTERVALS;
+    const myVal = _pickVal(myStats, myReady);
+    const grpVal = groupOk ? _pickVal(groupStats, true) : null;
+    const myStr = myVal != null ? _fmtTurnoverMin(myVal) : '—';
+    const grpStr = grpVal != null ? _fmtTurnoverMin(grpVal) : '—';
+    const tint = _rowTint(myVal, grpVal);
+    const sub = !myReady && myStats ? (myStats.count + '/' + TURNOVER_MIN_INTERVALS + ' so far') : '';
+    const labelStyle = 'font-size:0.84rem;font-weight:' + (isOverall ? '700' : '600') + ';color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    const cellTop = renderedRows > 0 ? 'border-top:1px solid var(--border);' : '';
+    html += '<div style="' + cellTop + 'padding:8px 6px 8px 8px;' + tint + 'min-width:0;display:flex;flex-direction:column;justify-content:center;">'
+         +   '<div style="' + labelStyle + '">' + escHtml(label) + '</div>'
+         +   (sub ? '<div style="font-size:0.58rem;color:var(--text-dim);margin-top:1px;">' + escHtml(sub) + '</div>' : '')
+         + '</div>'
+         + '<div style="' + cellTop + valStyle + 'color:var(--accent);' + tint + '">' + escHtml(myStr) + '</div>'
+         + '<div style="' + cellTop + valStyle + 'color:var(--text-dim);' + tint + '">' + escHtml(grpStr) + '</div>';
+    renderedRows++;
+    if (myStats && myStats.count) myTotalCount = Math.max(myTotalCount, myStats.count);
+    if (groupStats && groupStats.contributors) grpContribMax = Math.max(grpContribMax, groupStats.contributors);
+  };
+
+  // Overall row — always renders.
   const myOverallStats = getTurnoverStats(myAllIntervals);
-  let overallGroup = null;
-  let overallOk = false;
+  let overallGroup = null, overallOk = false;
   if (groupOverallPhaseC && groupOverallPhaseC.contributors >= TURNOVER_PHASE_C_MIN_CONTRIBUTORS) {
-    overallGroup = groupOverallPhaseC;
-    overallOk = true;
+    overallGroup = groupOverallPhaseC; overallOk = true;
   } else if (groupOverallApprox && groupOverallApprox.contributors >= TURNOVER_PHASE_A_MIN_CONTRIBUTORS && groupOverallApprox.mean != null) {
-    overallGroup = groupOverallApprox;
-    overallOk = true;
+    overallGroup = groupOverallApprox; overallOk = true;
   } else {
     overallGroup = groupOverallApprox || { contributors: 0 };
   }
-  _renderRow('Overall', myOverallStats, overallGroup, overallOk);
+  _renderRow('Overall', myOverallStats, overallGroup, overallOk, true);
 
-  // Per-location rows (only if the site has sub-sites configured).
+  // Per-location rows.
   if (subSites && subSites.length > 0) {
     subSites.forEach(s => {
       const list = myByLoc[s.id] || [];
       const myStats = getTurnoverStats(list);
       const g = groupByLoc[s.id];
       const groupOk = !!(g && g.contributors >= TURNOVER_PHASE_A_MIN_CONTRIBUTORS && g.mean != null);
-      _renderRow(s.label || s.id, myStats, g, groupOk);
+      _renderRow(s.label || s.id, myStats, g, groupOk, false);
     });
   }
   html += '</div>';
-
-  // Hint when no sub-sites configured — admin can add them to unlock
-  // the per-location breakdown.
-  if (!subSites || subSites.length === 0) {
-    html += '<div style="font-size:0.62rem;color:var(--text-dim);margin-top:8px;line-height:1.4;">Configure Locations under Admin &rarr; Locations to break out turnover by sub-site.</div>';
-  }
   byLocList.innerHTML = html;
+
+  // Single card-level footer collects the counts that used to clutter
+  // each row, plus a nudge for sites without sub-sites configured.
+  if (footerEl) {
+    const bits = [];
+    if (myOverallStats && myOverallStats.count) bits.push(myOverallStats.count + ' of your intervals');
+    if (overallGroup && overallGroup.contributors) bits.push(overallGroup.contributors + ' group contributor' + (overallGroup.contributors === 1 ? '' : 's'));
+    let foot = bits.length ? bits.join(' · ') : '';
+    if (!subSites || subSites.length === 0) {
+      foot += (foot ? ' · ' : '') + 'Configure Locations under Admin &rarr; Locations to break out by sub-site.';
+    }
+    footerEl.innerHTML = foot;
+  }
 
   // Trigger lazy loads if data isn't ready yet. Re-render once they
   // resolve so the placeholders fill in.
