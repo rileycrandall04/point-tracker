@@ -32501,172 +32501,67 @@ function markAdminGroupDirty(input) {
   input.style.borderColor = 'var(--primary)';
 }
 
-// ---- Lightweight autocomplete for the admin case-edit inputs ----
-// Mirrors the case-entry-screen suggestion dropdowns (procedure + surgeon)
-// without the side effects (ASA code / base units autofill, "X. LastName"
-// rewrite) that only make sense on the main case form. One shared floating
-// dropdown follows the focused input — keeps the DOM small and avoids
-// z-index trouble inside the scrollable Edit-Cases modal.
-let _inlineACInputEl = null;
-let _inlineACGetMatches = null;
-let _inlineACActiveIdx = -1;
-let _inlineACBox = null;
-// Set during a programmatic selection so the synthetic 'input' event we
-// dispatch to wake up downstream dirty-tracking doesn't immediately
-// reopen the dropdown the user just dismissed by picking an item.
-let _inlineACSuppressShow = false;
+// ---- Autocomplete for the admin case-edit inputs ----
+// Uses the browser's native <datalist>. Earlier revisions used a custom
+// shared floating dropdown which had brittle dismissal behavior on
+// mobile (the box could get parked and never close, even with
+// outside-click handlers). Native datalist hands the entire show /
+// filter / select / dismiss lifecycle to the browser — no shared state,
+// no event-handler races, identical behavior on mouse and touch.
+// Trade-off: counts/metadata can't be displayed alongside option names,
+// but the bulk-rename tool only needs the names themselves.
+function _ensureAdminACDatalists() {
+  let surgList = document.getElementById('adminACSurgeonList');
+  if (!surgList) {
+    surgList = document.createElement('datalist');
+    surgList.id = 'adminACSurgeonList';
+    document.body.appendChild(surgList);
+  }
+  let procList = document.getElementById('adminACProcedureList');
+  if (!procList) {
+    procList = document.createElement('datalist');
+    procList.id = 'adminACProcedureList';
+    document.body.appendChild(procList);
+  }
 
-function _inlineACApplySelection(item) {
-  if (!item || !_inlineACInputEl) return;
-  _inlineACSuppressShow = true;
-  _inlineACInputEl.value = item.dataset.name;
-  _inlineACInputEl.dispatchEvent(new Event('input', { bubbles: true }));
-  _inlineACHide();
-  // The synchronous dispatch above is only one re-show vector. On touch
-  // devices the synthetic event chain (touchend → mousedown → mouseup →
-  // click) can deliver a click to the input *after* the dropdown was
-  // hidden, which fires the focus handler and calls show() again. Keep
-  // the suppress flag set across that whole chain — a single tick is
-  // enough — and clear it once the dust settles.
-  setTimeout(() => { _inlineACSuppressShow = false; }, 250);
-}
-
-function _inlineACEnsureBox() {
-  if (_inlineACBox) return _inlineACBox;
-  const box = document.createElement('div');
-  box.id = 'inlineACBox';
-  box.style.cssText = 'position:absolute;display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.4);font-size:0.78rem;max-height:240px;overflow-y:auto;z-index:99999;min-width:200px;';
-  document.body.appendChild(box);
-  box.addEventListener('mousedown', e => {
-    const item = e.target.closest('.inline-ac-item');
-    if (!item) return;
-    e.preventDefault(); // keep focus on the input so blur-hide doesn't race
-    _inlineACApplySelection(item);
-  });
-  // Outside-click dismissal — without this the dropdown stays parked
-  // wherever it last showed. One shared box is reused across every
-  // autocompleted input, so focus-shifting alone can't dismiss it; the
-  // user needs a way to close it by tapping anything that isn't the box
-  // or the currently-attached input.
-  document.addEventListener('pointerdown', (e) => {
-    if (box.style.display === 'none') return;
-    if (box.contains(e.target)) return;
-    if (_inlineACInputEl && _inlineACInputEl === e.target) return;
-    _inlineACHide();
-  }, true);
-  return box;
-}
-
-function _inlineACShow() {
-  if (_inlineACSuppressShow) return;
-  if (!_inlineACInputEl || !_inlineACGetMatches) return;
-  const query = (_inlineACInputEl.value || '').trim().toLowerCase();
-  if (!query) { _inlineACHide(); return; }
-  const matches = _inlineACGetMatches(query).slice(0, 8);
-  if (matches.length === 0) { _inlineACHide(); return; }
-  const box = _inlineACEnsureBox();
-  _inlineACActiveIdx = -1;
-  box.innerHTML = matches.map((m, i) =>
-    '<div class="inline-ac-item" data-idx="' + i + '" data-name="' + escHtml(m.name) + '" style="padding:6px 10px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;">' +
-      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(m.name) + '</span>' +
-      (m.meta ? '<span style="color:var(--text-dim);font-size:0.7rem;flex:none;">' + escHtml(m.meta) + '</span>' : '') +
-    '</div>'
-  ).join('');
-  const r = _inlineACInputEl.getBoundingClientRect();
-  box.style.left = (window.scrollX + r.left) + 'px';
-  box.style.top  = (window.scrollY + r.bottom + 2) + 'px';
-  box.style.minWidth = r.width + 'px';
-  box.style.display = 'block';
-}
-
-function _inlineACHide() {
-  if (_inlineACBox) _inlineACBox.style.display = 'none';
-  _inlineACActiveIdx = -1;
-}
-
-function attachInlineAutocomplete(input, getMatches) {
-  if (!input || input._inlineACAttached) return;
-  input._inlineACAttached = true;
-  input.setAttribute('autocomplete', 'off');
-  input.addEventListener('focus', () => {
-    _inlineACInputEl = input;
-    _inlineACGetMatches = getMatches;
-    if ((input.value || '').trim()) _inlineACShow();
-  });
-  input.addEventListener('input', () => {
-    _inlineACInputEl = input;
-    _inlineACGetMatches = getMatches;
-    _inlineACShow();
-  });
-  // Defer the hide so a click on a dropdown item registers first.
-  input.addEventListener('blur', () => {
-    setTimeout(() => { if (_inlineACInputEl === input) _inlineACHide(); }, 120);
-  });
-  input.addEventListener('keydown', e => {
-    if (!_inlineACBox || _inlineACBox.style.display === 'none') return;
-    const items = _inlineACBox.querySelectorAll('.inline-ac-item');
-    if (items.length === 0) return;
-    const setActive = i => items.forEach((el, idx) =>
-      el.style.background = (idx === i) ? 'var(--surface2)' : '');
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      _inlineACActiveIdx = Math.min(_inlineACActiveIdx + 1, items.length - 1);
-      setActive(_inlineACActiveIdx);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      _inlineACActiveIdx = Math.max(_inlineACActiveIdx - 1, 0);
-      setActive(_inlineACActiveIdx);
-    } else if (e.key === 'Enter' && _inlineACActiveIdx >= 0) {
-      e.preventDefault();
-      _inlineACApplySelection(items[_inlineACActiveIdx]);
-    } else if (e.key === 'Escape') {
-      _inlineACHide();
-    }
-  });
-}
-
-function _adminACProcedureMatches(query) {
-  const hist = (typeof getProcHistory === 'function') ? getProcHistory() : {};
-  return Object.entries(hist)
-    .filter(([name]) => name.toLowerCase().includes(query))
-    .sort((a, b) => b[1].count - a[1].count)
-    .map(([name, d]) => ({ name, meta: '(' + d.count + ')' }));
-}
-
-// Surgeon history is closure-scoped inside the case-entry IIFE; rebuild
-// the same map here against data.cases + sharedCasesCache.
-function _adminACSurgeonMatches(query) {
-  const map = {};
+  // Surgeon names from local + community cases, sorted by frequency
+  // (most-used first — browsers render datalist options in source order).
+  const surgeonMap = {};
   const norm = (typeof normalizeSurgeonName === 'function')
     ? normalizeSurgeonName
     : (s => (s || '').trim());
   (data.cases || []).forEach(c => {
     const name = norm((c.notes || '').trim());
-    if (!name) return;
-    map[name] = (map[name] || 0) + 1;
+    if (name) surgeonMap[name] = (surgeonMap[name] || 0) + 1;
   });
   if (typeof sharedCasesLoaded !== 'undefined' && sharedCasesLoaded && Array.isArray(sharedCasesCache)) {
     const myUid = currentUser ? currentUser.uid : '';
     sharedCasesCache.forEach(sc => {
       if (sc.uid === myUid) return;
       const name = norm((sc.surgeon || '').trim());
-      if (!name) return;
-      map[name] = (map[name] || 0) + 1;
+      if (name) surgeonMap[name] = (surgeonMap[name] || 0) + 1;
     });
   }
-  return Object.entries(map)
-    .filter(([name]) => name.toLowerCase().includes(query))
-    .sort((a, b) => b[1] - a[1])
-    .map(([name, count]) => ({ name, meta: '(' + count + ')' }));
+  const surgeons = Object.entries(surgeonMap).sort((a, b) => b[1] - a[1]).map(([n]) => n);
+  surgList.innerHTML = surgeons.map(n => '<option value="' + escHtml(n) + '">').join('');
+
+  // Procedure names from the same shared history helper the case-entry
+  // screen uses.
+  const hist = (typeof getProcHistory === 'function') ? getProcHistory() : {};
+  const procs = Object.entries(hist).sort((a, b) => b[1].count - a[1].count).map(([n]) => n);
+  procList.innerHTML = procs.map(n => '<option value="' + escHtml(n) + '">').join('');
 }
 
 function _adminAttachACToContainer(containerEl) {
   if (!containerEl) return;
+  _ensureAdminACDatalists();
   containerEl.querySelectorAll('input[data-field="surgeon"]').forEach(inp => {
-    attachInlineAutocomplete(inp, _adminACSurgeonMatches);
+    inp.setAttribute('list', 'adminACSurgeonList');
+    inp.setAttribute('autocomplete', 'off');
   });
   containerEl.querySelectorAll('input[data-field="procedure"]').forEach(inp => {
-    attachInlineAutocomplete(inp, _adminACProcedureMatches);
+    inp.setAttribute('list', 'adminACProcedureList');
+    inp.setAttribute('autocomplete', 'off');
   });
 }
 
