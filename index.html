@@ -4331,6 +4331,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
           </p>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="btn btn-sm hidden" id="adminRulesDeleteSelectedBtn" onclick="adminRulesDeleteSelected()" style="background:var(--surface2);color:var(--accent2);">Delete selected</button>
+            <button class="btn btn-sm" onclick="adminRulesCopySummary()" style="background:var(--surface2);color:var(--text);" title="Copy a plain-text summary of every visible shift rule at this site to the clipboard.">Copy summary</button>
             <button class="btn btn-primary btn-sm" onclick="adminRulesOpenModal(null)">+ Add shift type</button>
           </div>
         </div>
@@ -8801,6 +8802,100 @@ function _adminRulesDescribe(rule, key) {
   return '<ul style="margin:4px 0 0 0;padding-left:18px;line-height:1.45;">'
        + lines.map(l => '<li>' + l + '</li>').join('')
        + '</ul>';
+}
+
+// Plain-text twin of _adminRulesDescribe. Same content/order, no HTML.
+// Used by "Copy summary" so the pasted text reads cleanly in plain editors.
+function _adminRulesDescribePlain(rule, key) {
+  if (!rule) return '  - (no rule)';
+  const lines = [];
+  const arMode = rule.arRate && rule.arRate.mode;
+  if (arMode === 'general') lines.push('Base AR rate: 20 pts/hr.');
+  else if (arMode === 'ob') lines.push('Base AR rate: 13 pts/hr. Non-OR case production is doubled.');
+  else if (arMode === 'sf1') lines.push('Base AR rate: Unrestricted OB (13 pts/hr restricted hours, 20 pts/hr unrestricted hours). Non-OR case production is doubled.');
+  else if (arMode === 'none' || arMode == null) lines.push('Base AR rate: none.');
+  else lines.push('Base AR rate: ' + arMode + '.');
+
+  if (rule.pagerWindow) {
+    const wd = rule.pagerWindow.weekday, we = rule.pagerWindow.weekend;
+    const parts = [];
+    if (wd) parts.push(_fmtHours(wd.end - wd.start) + ' weekday'); else parts.push('none weekday');
+    if (we) parts.push(_fmtHours(we.end - we.start) + ' weekend/holiday'); else parts.push('none weekend');
+    lines.push('Unrestricted call (paid 3.5 pts/hr): ' + parts.join(', ') + '.');
+  }
+
+  if (rule.productionMultiplier && rule.productionMultiplier !== 1) {
+    lines.push('Production multiplier: x' + rule.productionMultiplier + ' on non-OR case points.');
+  }
+  if (rule.flatPoints) lines.push('Flat points: ' + rule.flatPoints + ' (paid regardless of duration).');
+  if (rule.floatBonus)  lines.push('Float bonus: +' + rule.floatBonus + ' pts.');
+  if (rule.cardiacBonus) lines.push('Exposes a cardiac subspecialty toggle on shift entry (+45 pts/day when checked).');
+  if (rule.liverBonus)   lines.push('Exposes a liver subspecialty toggle on shift entry (+45 pts/day when checked).');
+  if (rule.noProductivity && !rule.unrestrictedCallEntry) lines.push('No productivity - pay is flat points only; no AR or case points.');
+  if (rule.unrestrictedCallEntry) lines.push('User enters unrestricted call hours manually on the shift form (paid 3.5 pts/hr).');
+
+  if (key === 'cardiac_liver') {
+    lines.push('Engine auto-adds the +45 pt subspecialty bonus; base totals are 94 pts weekday / 129 pts weekend.');
+  }
+  if (key === 'OR' || key === 'OR_float') {
+    lines.push('Engine adds a 4 hr / 80 pt minimum on weekday non-holidays.');
+  }
+
+  return lines.map(l => '  - ' + l).join('\n');
+}
+
+// Resolve a shift-type ID against the current draft, mirroring
+// getResolvedShiftRules() but reading from adminRulesDraft so the
+// summary reflects unsaved edits.
+function _adminRulesResolveDraftRule(typeId) {
+  const override = (adminRulesDraft.shiftRulesOverride || {})[typeId];
+  if (!override) return DEFAULT_SHIFT_RULES[typeId] || null;
+  let base = DEFAULT_SHIFT_RULES[typeId] || {};
+  let layer = override;
+  if (override.inherit_uvh && DEFAULT_SHIFT_RULES[override.inherit_uvh]) {
+    base = DEFAULT_SHIFT_RULES[override.inherit_uvh];
+    const { inherit_uvh, ...rest } = override;
+    layer = rest;
+  }
+  return _deepMerge(base, layer);
+}
+
+function adminRulesCopySummary() {
+  const siteId = adminRulesSiteId;
+  const siteName = (sitesCache[siteId] && sitesCache[siteId].name) || siteId || 'site';
+  const draftVisible = adminRulesDraft.visibleShiftTypes || [];
+  const overrideIds = Object.keys(adminRulesDraft.shiftRulesOverride || {});
+  const ids = draftVisible.length > 0
+    ? draftVisible.slice().sort()
+    : overrideIds.slice().sort();
+
+  const heading = 'Shift rules — ' + siteName;
+  const out = [heading, '='.repeat(Math.min(60, heading.length)), ''];
+
+  if (ids.length === 0) {
+    out.push('(No visible shift types configured for this site.)');
+  } else {
+    for (const id of ids) {
+      const rule = _adminRulesResolveDraftRule(id);
+      const label = _adminRulesLabelFor(id);
+      out.push(label + ' [' + id + ']');
+      const inh = adminRulesDraft.shiftRulesOverride[id]
+        && adminRulesDraft.shiftRulesOverride[id].inherit_uvh;
+      if (inh) out.push('  (inherits from ' + inh + ')');
+      out.push(_adminRulesDescribePlain(rule, id));
+      out.push('');
+    }
+  }
+
+  const text = out.join('\n').replace(/\s+$/, '') + '\n';
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => showToast('Site rules summary copied (' + ids.length + ' shift' + (ids.length === 1 ? '' : 's') + ')'),
+      () => showToast('Copy failed — clipboard blocked')
+    );
+  } else {
+    showToast('Clipboard API not available in this browser');
+  }
 }
 
 function _fmtMin(min) {
@@ -20800,6 +20895,20 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   // falls into. Empty when the site doesn't use sub-sites or the
   // segment is untagged — analytics that filter by location will skip it.
   caseData.subSiteId = subSiteIdForCase(data.shifts[date], caseData.startTime);
+  // When the site uses sub-sites and this shift type isn't admin-marked
+  // exempt, a case must resolve to a concrete location. Empty means the
+  // case's start time fell outside every time-entry segment with a
+  // Location pick (or the shift has no covering entry yet) — block the
+  // save so the case doesn't silently become invisible to location filters.
+  const _saveCaseShift = data.shifts[date];
+  if (siteHasSubSites(_saveCaseShift.siteId)
+      && !isLocationExemptForType(_saveCaseShift.siteId, _saveCaseShift.assignmentType)
+      && !caseData.subSiteId) {
+    showToast(caseData.startTime
+      ? 'Pick a Location on the time entry covering ' + caseData.startTime
+      : 'Pick a Location on the shift before adding this case');
+    return;
+  }
   data.cases.push(caseData);
   saveData(data);
   writeSharedCase(caseData, data.shifts[date]);
@@ -32346,6 +32455,7 @@ function renderAdminCaseSearch(mode) {
   // Store groups for save handler
   window._adminSearchGroups = sorted;
   el.innerHTML = html;
+  _adminAttachACToContainer(el);
 }
 
 function toggleAdminCaseGroup(id) {
@@ -32357,6 +32467,150 @@ function markAdminGroupDirty(input) {
   const saveBtn = document.getElementById('acsg_save_' + input.dataset.group);
   if (saveBtn) saveBtn.style.display = 'block';
   input.style.borderColor = 'var(--primary)';
+}
+
+// ---- Lightweight autocomplete for the admin case-edit inputs ----
+// Mirrors the case-entry-screen suggestion dropdowns (procedure + surgeon)
+// without the side effects (ASA code / base units autofill, "X. LastName"
+// rewrite) that only make sense on the main case form. One shared floating
+// dropdown follows the focused input — keeps the DOM small and avoids
+// z-index trouble inside the scrollable Edit-Cases modal.
+let _inlineACInputEl = null;
+let _inlineACGetMatches = null;
+let _inlineACActiveIdx = -1;
+let _inlineACBox = null;
+
+function _inlineACEnsureBox() {
+  if (_inlineACBox) return _inlineACBox;
+  const box = document.createElement('div');
+  box.id = 'inlineACBox';
+  box.style.cssText = 'position:absolute;display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.4);font-size:0.78rem;max-height:240px;overflow-y:auto;z-index:99999;min-width:200px;';
+  document.body.appendChild(box);
+  box.addEventListener('mousedown', e => {
+    const item = e.target.closest('.inline-ac-item');
+    if (!item || !_inlineACInputEl) return;
+    e.preventDefault(); // keep focus on the input so blur-hide doesn't race
+    _inlineACInputEl.value = item.dataset.name;
+    _inlineACInputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    _inlineACInputEl.focus();
+    _inlineACHide();
+  });
+  return box;
+}
+
+function _inlineACShow() {
+  if (!_inlineACInputEl || !_inlineACGetMatches) return;
+  const query = (_inlineACInputEl.value || '').trim().toLowerCase();
+  if (!query) { _inlineACHide(); return; }
+  const matches = _inlineACGetMatches(query).slice(0, 8);
+  if (matches.length === 0) { _inlineACHide(); return; }
+  const box = _inlineACEnsureBox();
+  _inlineACActiveIdx = -1;
+  box.innerHTML = matches.map((m, i) =>
+    '<div class="inline-ac-item" data-idx="' + i + '" data-name="' + escHtml(m.name) + '" style="padding:6px 10px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;">' +
+      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(m.name) + '</span>' +
+      (m.meta ? '<span style="color:var(--text-dim);font-size:0.7rem;flex:none;">' + escHtml(m.meta) + '</span>' : '') +
+    '</div>'
+  ).join('');
+  const r = _inlineACInputEl.getBoundingClientRect();
+  box.style.left = (window.scrollX + r.left) + 'px';
+  box.style.top  = (window.scrollY + r.bottom + 2) + 'px';
+  box.style.minWidth = r.width + 'px';
+  box.style.display = 'block';
+}
+
+function _inlineACHide() {
+  if (_inlineACBox) _inlineACBox.style.display = 'none';
+  _inlineACActiveIdx = -1;
+}
+
+function attachInlineAutocomplete(input, getMatches) {
+  if (!input || input._inlineACAttached) return;
+  input._inlineACAttached = true;
+  input.setAttribute('autocomplete', 'off');
+  input.addEventListener('focus', () => {
+    _inlineACInputEl = input;
+    _inlineACGetMatches = getMatches;
+    if ((input.value || '').trim()) _inlineACShow();
+  });
+  input.addEventListener('input', () => {
+    _inlineACInputEl = input;
+    _inlineACGetMatches = getMatches;
+    _inlineACShow();
+  });
+  // Defer the hide so a click on a dropdown item registers first.
+  input.addEventListener('blur', () => {
+    setTimeout(() => { if (_inlineACInputEl === input) _inlineACHide(); }, 120);
+  });
+  input.addEventListener('keydown', e => {
+    if (!_inlineACBox || _inlineACBox.style.display === 'none') return;
+    const items = _inlineACBox.querySelectorAll('.inline-ac-item');
+    if (items.length === 0) return;
+    const setActive = i => items.forEach((el, idx) =>
+      el.style.background = (idx === i) ? 'var(--surface2)' : '');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      _inlineACActiveIdx = Math.min(_inlineACActiveIdx + 1, items.length - 1);
+      setActive(_inlineACActiveIdx);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _inlineACActiveIdx = Math.max(_inlineACActiveIdx - 1, 0);
+      setActive(_inlineACActiveIdx);
+    } else if (e.key === 'Enter' && _inlineACActiveIdx >= 0) {
+      e.preventDefault();
+      const sel = items[_inlineACActiveIdx];
+      input.value = sel.dataset.name;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      _inlineACHide();
+    } else if (e.key === 'Escape') {
+      _inlineACHide();
+    }
+  });
+}
+
+function _adminACProcedureMatches(query) {
+  const hist = (typeof getProcHistory === 'function') ? getProcHistory() : {};
+  return Object.entries(hist)
+    .filter(([name]) => name.toLowerCase().includes(query))
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([name, d]) => ({ name, meta: '(' + d.count + ')' }));
+}
+
+// Surgeon history is closure-scoped inside the case-entry IIFE; rebuild
+// the same map here against data.cases + sharedCasesCache.
+function _adminACSurgeonMatches(query) {
+  const map = {};
+  const norm = (typeof normalizeSurgeonName === 'function')
+    ? normalizeSurgeonName
+    : (s => (s || '').trim());
+  (data.cases || []).forEach(c => {
+    const name = norm((c.notes || '').trim());
+    if (!name) return;
+    map[name] = (map[name] || 0) + 1;
+  });
+  if (typeof sharedCasesLoaded !== 'undefined' && sharedCasesLoaded && Array.isArray(sharedCasesCache)) {
+    const myUid = currentUser ? currentUser.uid : '';
+    sharedCasesCache.forEach(sc => {
+      if (sc.uid === myUid) return;
+      const name = norm((sc.surgeon || '').trim());
+      if (!name) return;
+      map[name] = (map[name] || 0) + 1;
+    });
+  }
+  return Object.entries(map)
+    .filter(([name]) => name.toLowerCase().includes(query))
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name, meta: '(' + count + ')' }));
+}
+
+function _adminAttachACToContainer(containerEl) {
+  if (!containerEl) return;
+  containerEl.querySelectorAll('input[data-field="surgeon"]').forEach(inp => {
+    attachInlineAutocomplete(inp, _adminACSurgeonMatches);
+  });
+  containerEl.querySelectorAll('input[data-field="procedure"]').forEach(inp => {
+    attachInlineAutocomplete(inp, _adminACProcedureMatches);
+  });
 }
 
 async function saveAdminCaseGroup(groupIdx) {
@@ -32848,6 +33102,7 @@ function renderSCEList() {
     html += `</div></div></div>`;
   });
   el.innerHTML = html;
+  _adminAttachACToContainer(el);
 }
 
 function markSCEDirty(input) {
