@@ -32511,6 +32511,22 @@ let _inlineACInputEl = null;
 let _inlineACGetMatches = null;
 let _inlineACActiveIdx = -1;
 let _inlineACBox = null;
+// Set during a programmatic selection so the synthetic 'input' event we
+// dispatch to wake up downstream dirty-tracking doesn't immediately
+// reopen the dropdown the user just dismissed by picking an item.
+let _inlineACSuppressShow = false;
+
+function _inlineACApplySelection(item) {
+  if (!item || !_inlineACInputEl) return;
+  _inlineACSuppressShow = true;
+  try {
+    _inlineACInputEl.value = item.dataset.name;
+    _inlineACInputEl.dispatchEvent(new Event('input', { bubbles: true }));
+  } finally {
+    _inlineACSuppressShow = false;
+  }
+  _inlineACHide();
+}
 
 function _inlineACEnsureBox() {
   if (_inlineACBox) return _inlineACBox;
@@ -32520,17 +32536,15 @@ function _inlineACEnsureBox() {
   document.body.appendChild(box);
   box.addEventListener('mousedown', e => {
     const item = e.target.closest('.inline-ac-item');
-    if (!item || !_inlineACInputEl) return;
+    if (!item) return;
     e.preventDefault(); // keep focus on the input so blur-hide doesn't race
-    _inlineACInputEl.value = item.dataset.name;
-    _inlineACInputEl.dispatchEvent(new Event('input', { bubbles: true }));
-    _inlineACInputEl.focus();
-    _inlineACHide();
+    _inlineACApplySelection(item);
   });
   return box;
 }
 
 function _inlineACShow() {
+  if (_inlineACSuppressShow) return;
   if (!_inlineACInputEl || !_inlineACGetMatches) return;
   const query = (_inlineACInputEl.value || '').trim().toLowerCase();
   if (!query) { _inlineACHide(); return; }
@@ -32590,10 +32604,7 @@ function attachInlineAutocomplete(input, getMatches) {
       setActive(_inlineACActiveIdx);
     } else if (e.key === 'Enter' && _inlineACActiveIdx >= 0) {
       e.preventDefault();
-      const sel = items[_inlineACActiveIdx];
-      input.value = sel.dataset.name;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      _inlineACHide();
+      _inlineACApplySelection(items[_inlineACActiveIdx]);
     } else if (e.key === 'Escape') {
       _inlineACHide();
     }
