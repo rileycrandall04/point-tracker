@@ -20895,6 +20895,20 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   // falls into. Empty when the site doesn't use sub-sites or the
   // segment is untagged — analytics that filter by location will skip it.
   caseData.subSiteId = subSiteIdForCase(data.shifts[date], caseData.startTime);
+  // When the site uses sub-sites and this shift type isn't admin-marked
+  // exempt, a case must resolve to a concrete location. Empty means the
+  // case's start time fell outside every time-entry segment with a
+  // Location pick (or the shift has no covering entry yet) — block the
+  // save so the case doesn't silently become invisible to location filters.
+  const _saveCaseShift = data.shifts[date];
+  if (siteHasSubSites(_saveCaseShift.siteId)
+      && !isLocationExemptForType(_saveCaseShift.siteId, _saveCaseShift.assignmentType)
+      && !caseData.subSiteId) {
+    showToast(caseData.startTime
+      ? 'Pick a Location on the time entry covering ' + caseData.startTime
+      : 'Pick a Location on the shift before adding this case');
+    return;
+  }
   data.cases.push(caseData);
   saveData(data);
   writeSharedCase(caseData, data.shifts[date]);
@@ -32441,6 +32455,7 @@ function renderAdminCaseSearch(mode) {
   // Store groups for save handler
   window._adminSearchGroups = sorted;
   el.innerHTML = html;
+  _adminAttachACToContainer(el);
 }
 
 function toggleAdminCaseGroup(id) {
@@ -32452,6 +32467,150 @@ function markAdminGroupDirty(input) {
   const saveBtn = document.getElementById('acsg_save_' + input.dataset.group);
   if (saveBtn) saveBtn.style.display = 'block';
   input.style.borderColor = 'var(--primary)';
+}
+
+// ---- Lightweight autocomplete for the admin case-edit inputs ----
+// Mirrors the case-entry-screen suggestion dropdowns (procedure + surgeon)
+// without the side effects (ASA code / base units autofill, "X. LastName"
+// rewrite) that only make sense on the main case form. One shared floating
+// dropdown follows the focused input — keeps the DOM small and avoids
+// z-index trouble inside the scrollable Edit-Cases modal.
+let _inlineACInputEl = null;
+let _inlineACGetMatches = null;
+let _inlineACActiveIdx = -1;
+let _inlineACBox = null;
+
+function _inlineACEnsureBox() {
+  if (_inlineACBox) return _inlineACBox;
+  const box = document.createElement('div');
+  box.id = 'inlineACBox';
+  box.style.cssText = 'position:absolute;display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.4);font-size:0.78rem;max-height:240px;overflow-y:auto;z-index:99999;min-width:200px;';
+  document.body.appendChild(box);
+  box.addEventListener('mousedown', e => {
+    const item = e.target.closest('.inline-ac-item');
+    if (!item || !_inlineACInputEl) return;
+    e.preventDefault(); // keep focus on the input so blur-hide doesn't race
+    _inlineACInputEl.value = item.dataset.name;
+    _inlineACInputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    _inlineACInputEl.focus();
+    _inlineACHide();
+  });
+  return box;
+}
+
+function _inlineACShow() {
+  if (!_inlineACInputEl || !_inlineACGetMatches) return;
+  const query = (_inlineACInputEl.value || '').trim().toLowerCase();
+  if (!query) { _inlineACHide(); return; }
+  const matches = _inlineACGetMatches(query).slice(0, 8);
+  if (matches.length === 0) { _inlineACHide(); return; }
+  const box = _inlineACEnsureBox();
+  _inlineACActiveIdx = -1;
+  box.innerHTML = matches.map((m, i) =>
+    '<div class="inline-ac-item" data-idx="' + i + '" data-name="' + escHtml(m.name) + '" style="padding:6px 10px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;">' +
+      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(m.name) + '</span>' +
+      (m.meta ? '<span style="color:var(--text-dim);font-size:0.7rem;flex:none;">' + escHtml(m.meta) + '</span>' : '') +
+    '</div>'
+  ).join('');
+  const r = _inlineACInputEl.getBoundingClientRect();
+  box.style.left = (window.scrollX + r.left) + 'px';
+  box.style.top  = (window.scrollY + r.bottom + 2) + 'px';
+  box.style.minWidth = r.width + 'px';
+  box.style.display = 'block';
+}
+
+function _inlineACHide() {
+  if (_inlineACBox) _inlineACBox.style.display = 'none';
+  _inlineACActiveIdx = -1;
+}
+
+function attachInlineAutocomplete(input, getMatches) {
+  if (!input || input._inlineACAttached) return;
+  input._inlineACAttached = true;
+  input.setAttribute('autocomplete', 'off');
+  input.addEventListener('focus', () => {
+    _inlineACInputEl = input;
+    _inlineACGetMatches = getMatches;
+    if ((input.value || '').trim()) _inlineACShow();
+  });
+  input.addEventListener('input', () => {
+    _inlineACInputEl = input;
+    _inlineACGetMatches = getMatches;
+    _inlineACShow();
+  });
+  // Defer the hide so a click on a dropdown item registers first.
+  input.addEventListener('blur', () => {
+    setTimeout(() => { if (_inlineACInputEl === input) _inlineACHide(); }, 120);
+  });
+  input.addEventListener('keydown', e => {
+    if (!_inlineACBox || _inlineACBox.style.display === 'none') return;
+    const items = _inlineACBox.querySelectorAll('.inline-ac-item');
+    if (items.length === 0) return;
+    const setActive = i => items.forEach((el, idx) =>
+      el.style.background = (idx === i) ? 'var(--surface2)' : '');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      _inlineACActiveIdx = Math.min(_inlineACActiveIdx + 1, items.length - 1);
+      setActive(_inlineACActiveIdx);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _inlineACActiveIdx = Math.max(_inlineACActiveIdx - 1, 0);
+      setActive(_inlineACActiveIdx);
+    } else if (e.key === 'Enter' && _inlineACActiveIdx >= 0) {
+      e.preventDefault();
+      const sel = items[_inlineACActiveIdx];
+      input.value = sel.dataset.name;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      _inlineACHide();
+    } else if (e.key === 'Escape') {
+      _inlineACHide();
+    }
+  });
+}
+
+function _adminACProcedureMatches(query) {
+  const hist = (typeof getProcHistory === 'function') ? getProcHistory() : {};
+  return Object.entries(hist)
+    .filter(([name]) => name.toLowerCase().includes(query))
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([name, d]) => ({ name, meta: '(' + d.count + ')' }));
+}
+
+// Surgeon history is closure-scoped inside the case-entry IIFE; rebuild
+// the same map here against data.cases + sharedCasesCache.
+function _adminACSurgeonMatches(query) {
+  const map = {};
+  const norm = (typeof normalizeSurgeonName === 'function')
+    ? normalizeSurgeonName
+    : (s => (s || '').trim());
+  (data.cases || []).forEach(c => {
+    const name = norm((c.notes || '').trim());
+    if (!name) return;
+    map[name] = (map[name] || 0) + 1;
+  });
+  if (typeof sharedCasesLoaded !== 'undefined' && sharedCasesLoaded && Array.isArray(sharedCasesCache)) {
+    const myUid = currentUser ? currentUser.uid : '';
+    sharedCasesCache.forEach(sc => {
+      if (sc.uid === myUid) return;
+      const name = norm((sc.surgeon || '').trim());
+      if (!name) return;
+      map[name] = (map[name] || 0) + 1;
+    });
+  }
+  return Object.entries(map)
+    .filter(([name]) => name.toLowerCase().includes(query))
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name, meta: '(' + count + ')' }));
+}
+
+function _adminAttachACToContainer(containerEl) {
+  if (!containerEl) return;
+  containerEl.querySelectorAll('input[data-field="surgeon"]').forEach(inp => {
+    attachInlineAutocomplete(inp, _adminACSurgeonMatches);
+  });
+  containerEl.querySelectorAll('input[data-field="procedure"]').forEach(inp => {
+    attachInlineAutocomplete(inp, _adminACProcedureMatches);
+  });
 }
 
 async function saveAdminCaseGroup(groupIdx) {
@@ -32943,6 +33102,7 @@ function renderSCEList() {
     html += `</div></div></div>`;
   });
   el.innerHTML = html;
+  _adminAttachACToContainer(el);
 }
 
 function markSCEDirty(input) {
