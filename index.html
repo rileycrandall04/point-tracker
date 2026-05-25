@@ -3108,23 +3108,31 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 
   <!-- Turnover Time -->
-  <div class="card" id="turnoverCard" style="padding:10px 14px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+  <div class="card collapse-section" id="turnoverCard" style="padding:10px 14px;">
+    <div class="collapse-header" onclick="toggleCollapse('turnover')" style="border-bottom:none;min-height:auto;padding:4px 0;">
       <span style="font-size:0.78rem;font-weight:600;">Turnover Time <span class="info-icon" data-tip="Minutes between case end and the next case start, within one continuous clock-in. Excludes labor / APS / acute pain / ICU-ER / shared cases, c-sections, nerve-block-only entries, NORA, ACS, OB-style shifts, SF1 daytime, weekends, and holidays. Window: trailing 90 days. Need 10 intervals to show a number. Group = macro-average across other contributors at this site (mean of each user's mean / median of each user's median).">i</span></span>
-      <span style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:0.68rem;color:var(--text-dim);">Past 90 days</span>
-        <button id="turnoverGearBtn" type="button" aria-label="Customize Turnover card" style="background:none;border:none;cursor:pointer;font-size:0.95rem;color:var(--text-dim);padding:2px 4px;line-height:1;">&#9881;</button>
+      <span style="display:flex;align-items:center;gap:10px;">
+        <span id="turnoverOverallInline" style="font-size:0.92rem;font-weight:700;color:var(--accent);">&mdash;</span>
+        <span class="arrow" id="turnoverArrow">&#9660;</span>
       </span>
     </div>
-    <div id="turnoverGearPanel" class="hidden" style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-bottom:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:0.74rem;color:var(--text);">
-      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" data-tov-pref="excludeEndo" style="width:14px;height:14px;margin:0;"> Exclude endo (colonoscopy / EGD)</label>
+    <div class="collapse-body" id="turnoverBody">
+      <div style="padding-top:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:0.68rem;color:var(--text-dim);">Past 90 days</span>
+          <button id="turnoverGearBtn" type="button" aria-label="Customize Turnover card" style="background:none;border:none;cursor:pointer;font-size:0.95rem;color:var(--text-dim);padding:2px 4px;line-height:1;">&#9881;</button>
+        </div>
+        <div id="turnoverGearPanel" class="hidden" style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-bottom:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:0.74rem;color:var(--text);">
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" data-tov-pref="excludeEndo" style="width:14px;height:14px;margin:0;"> Exclude endo (colonoscopy / EGD)</label>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+          <button class="tab-btn active" data-turnover-metric="median" onclick="switchTurnoverMetric('median')">Median</button>
+          <button class="tab-btn" data-turnover-metric="mean" onclick="switchTurnoverMetric('mean')">Mean</button>
+        </div>
+        <div id="turnoverByLocationList"></div>
+        <div id="turnoverCardFooter" style="font-size:0.62rem;color:var(--text-dim);margin-top:8px;line-height:1.4;"></div>
+      </div>
     </div>
-    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
-      <button class="tab-btn active" data-turnover-metric="median" onclick="switchTurnoverMetric('median')">Median</button>
-      <button class="tab-btn" data-turnover-metric="mean" onclick="switchTurnoverMetric('mean')">Mean</button>
-    </div>
-    <div id="turnoverByLocationList"></div>
-    <div id="turnoverCardFooter" style="font-size:0.62rem;color:var(--text-dim);margin-top:8px;line-height:1.4;"></div>
   </div>
 
   <!-- Turnover interval drill-down modal -->
@@ -22975,7 +22983,8 @@ function toggleCollapse(sectionId) {
     importScan: 'importScanBody',
     earningsEst: 'earningsEstBody',
     paycheckTrack: 'paycheckTrackBody',
-    annualTax: 'annualTaxBody'
+    annualTax: 'annualTaxBody',
+    turnover: 'turnoverBody'
   };
   const arrowMap = {
     deScan: 'deScanArrow',
@@ -22984,7 +22993,8 @@ function toggleCollapse(sectionId) {
     importScan: 'importScanArrow',
     earningsEst: 'earningsEstArrow',
     paycheckTrack: 'paycheckTrackArrow',
-    annualTax: 'annualTaxArrow'
+    annualTax: 'annualTaxArrow',
+    turnover: 'turnoverArrow'
   };
   const body = document.getElementById(bodyMap[sectionId]);
   const arrow = document.getElementById(arrowMap[sectionId]);
@@ -29816,15 +29826,27 @@ function _initTurnoverGear() {
       renderTurnoverCard();
     });
   });
+  // Toggling the gear panel changes the body's natural height; if the
+  // card is in its expanded collapse state, recompute max-height so the
+  // panel isn't clipped by the parent's transition target.
+  const _syncParentCollapse = () => {
+    const body = document.getElementById('turnoverBody');
+    if (!body) return;
+    if (body.style.maxHeight && body.style.maxHeight !== '0px') {
+      body.style.maxHeight = body.scrollHeight + 'px';
+    }
+  };
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     refresh();
     panel.classList.toggle('hidden');
+    _syncParentCollapse();
   });
   document.addEventListener('click', (e) => {
     if (panel.classList.contains('hidden')) return;
     if (panel.contains(e.target) || btn.contains(e.target)) return;
     panel.classList.add('hidden');
+    _syncParentCollapse();
   });
   // Modal close + drill-down click delegation.
   const closeBtn = document.getElementById('turnoverIntervalsClose');
@@ -29997,6 +30019,16 @@ function renderTurnoverCard() {
     overallGroup = groupOverallApprox || { contributors: 0 };
   }
   _renderRow('Overall', myOverallStats, overallGroup, overallOk, true, 'overall');
+
+  // Card stays collapsed by default — mirror the Overall "Mine" value in
+  // the header so the user sees their own number without expanding.
+  const inlineEl = document.getElementById('turnoverOverallInline');
+  if (inlineEl) {
+    const myReady = myOverallStats && myOverallStats.count >= TURNOVER_MIN_INTERVALS;
+    const myVal = _pickVal(myOverallStats, myReady);
+    inlineEl.textContent = myVal != null ? _fmtTurnoverMin(myVal) : '—';
+    inlineEl.style.color = myVal != null ? 'var(--accent)' : 'var(--text-dim)';
+  }
 
   // Per-location rows.
   if (subSites && subSites.length > 0) {
