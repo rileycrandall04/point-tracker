@@ -32543,6 +32543,17 @@ function _inlineACEnsureBox() {
     e.preventDefault(); // keep focus on the input so blur-hide doesn't race
     _inlineACApplySelection(item);
   });
+  // Outside-click dismissal — without this the dropdown stays parked
+  // wherever it last showed. One shared box is reused across every
+  // autocompleted input, so focus-shifting alone can't dismiss it; the
+  // user needs a way to close it by tapping anything that isn't the box
+  // or the currently-attached input.
+  document.addEventListener('pointerdown', (e) => {
+    if (box.style.display === 'none') return;
+    if (box.contains(e.target)) return;
+    if (_inlineACInputEl && _inlineACInputEl === e.target) return;
+    _inlineACHide();
+  }, true);
   return box;
 }
 
