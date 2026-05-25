@@ -32519,13 +32519,16 @@ let _inlineACSuppressShow = false;
 function _inlineACApplySelection(item) {
   if (!item || !_inlineACInputEl) return;
   _inlineACSuppressShow = true;
-  try {
-    _inlineACInputEl.value = item.dataset.name;
-    _inlineACInputEl.dispatchEvent(new Event('input', { bubbles: true }));
-  } finally {
-    _inlineACSuppressShow = false;
-  }
+  _inlineACInputEl.value = item.dataset.name;
+  _inlineACInputEl.dispatchEvent(new Event('input', { bubbles: true }));
   _inlineACHide();
+  // The synchronous dispatch above is only one re-show vector. On touch
+  // devices the synthetic event chain (touchend → mousedown → mouseup →
+  // click) can deliver a click to the input *after* the dropdown was
+  // hidden, which fires the focus handler and calls show() again. Keep
+  // the suppress flag set across that whole chain — a single tick is
+  // enough — and clear it once the dust settles.
+  setTimeout(() => { _inlineACSuppressShow = false; }, 250);
 }
 
 function _inlineACEnsureBox() {
