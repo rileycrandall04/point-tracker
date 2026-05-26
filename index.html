@@ -31006,6 +31006,17 @@ function renderTimeTab() {
   if (timeTitleEl) timeTitleEl.textContent = _userName ? (_userName + "'s Time Summary") : 'Time Summary';
   const assignTitleEl = document.getElementById('assignDataTitle');
   if (assignTitleEl) assignTitleEl.textContent = _userName ? (_userName + "'s Personal Assignment Data") : 'Personal Assignment Data';
+  // Refresh sitesCache so admin-side Locations edits made in the same
+  // session show up on the Turnover card. Debounced to once per minute
+  // so tab-flipping doesn't hammer Firestore.
+  const _now = Date.now();
+  if (typeof loadSites === 'function' && firestoreSyncEnabled && currentUser
+      && (!window._timeTabSitesReloadedAt || _now - window._timeTabSitesReloadedAt > 60000)) {
+    window._timeTabSitesReloadedAt = _now;
+    loadSites().then(() => {
+      try { renderTurnoverCard(); } catch (e) {}
+    }).catch(() => {});
+  }
   renderTimeSummary();
   renderTurnoverCard();
   renderProductionTrend();
