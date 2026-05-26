@@ -38772,6 +38772,15 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+// When the tab is restored from the browser's back/forward cache (bfcache),
+// the DOM is frozen at whatever state it was in when suspended, and
+// onAuthStateChanged often doesn't re-fire — so a half-rendered loading
+// state can stick around until the user manually refreshes. Force a reload
+// so we boot cleanly from a known state.
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) location.reload();
+});
+
 // ================================================================
 // INIT
 // ================================================================
