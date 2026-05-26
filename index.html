@@ -13113,7 +13113,10 @@ function getEffectiveCalendarMapping(title, siteId) {
 function getSubSitesForSite(siteId) {
   if (!siteId) siteId = getCurrentSiteId();
   const list = sitesCache[siteId] && sitesCache[siteId].subSites;
-  return Array.isArray(list) ? list.slice() : [];
+  // Filter out null / malformed entries so a single bad row in the
+  // Firestore doc can't halt the .forEach in callers like the Turnover
+  // card (which would have rendered only the rows before the bad one).
+  return Array.isArray(list) ? list.filter(s => s && s.id) : [];
 }
 
 function siteHasSubSites(siteId) {
@@ -13239,11 +13242,23 @@ async function persistSubSiteConfig(siteId, subSites, subSiteDefaults) {
 let _adminLocationsState = null;
 
 function _adminLocationsResetState(siteId) {
+  const subSites = getSubSitesForSite(siteId);
+  const defaults = { ...getSubSiteDefaults(siteId) };
   _adminLocationsState = {
     siteId,
-    subSites: getSubSitesForSite(siteId),
-    defaults: { ...getSubSiteDefaults(siteId) }
+    subSites,
+    defaults,
+    // Snapshot of the last-saved state so the editor can detect unsaved
+    // changes and show a banner (so users don't think clicking elsewhere
+    // is enough — they have to hit Save Changes).
+    _initialFingerprint: JSON.stringify({ subSites, defaults })
   };
+}
+
+function _adminLocationsDirty() {
+  if (!_adminLocationsState) return false;
+  const cur = JSON.stringify({ subSites: _adminLocationsState.subSites, defaults: _adminLocationsState.defaults });
+  return cur !== _adminLocationsState._initialFingerprint;
 }
 
 function _adminLocationsMakeId(label, existing) {
@@ -13271,6 +13286,12 @@ function renderAdminLocations() {
 
   let html = '';
   html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Site: <strong>' + escapeHtml((sitesCache[siteId] && sitesCache[siteId].name) || siteId) + '</strong></div>';
+
+  // Unsaved-changes banner — protects against the easy mistake of
+  // adding locations, navigating away, and assuming they're saved.
+  if (_adminLocationsDirty()) {
+    html += '<div style="font-size:0.72rem;color:#000;background:rgba(245,166,35,0.85);border-radius:4px;padding:6px 10px;margin-bottom:8px;font-weight:600;">Unsaved changes — click <em>Save Changes</em> below to apply.</div>';
+  }
 
   // ----- Locations list -----
   html += '<div style="font-weight:600;font-size:0.82rem;margin-bottom:4px;">Locations</div>';
@@ -13369,7 +13390,18 @@ async function saveAdminLocations() {
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     await persistSubSiteConfig(_adminLocationsState.siteId, _adminLocationsState.subSites, _adminLocationsState.defaults);
+    // Reset the dirty-detection fingerprint to the now-persisted state.
+    _adminLocationsState._initialFingerprint = JSON.stringify({
+      subSites: _adminLocationsState.subSites,
+      defaults: _adminLocationsState.defaults
+    });
     showToast('Locations saved');
+    renderAdminLocations();
+    // Re-render the Turnover card so the new locations show up there
+    // without waiting for a tab visit / refresh.
+    if (typeof renderTurnoverCard === 'function') {
+      try { renderTurnoverCard(); } catch (e) {}
+    }
   } catch (err) {
     console.error('Locations save failed:', err);
     showToast('Save failed: ' + (err.message || err));
@@ -30050,6 +30082,12 @@ function renderTurnoverCard() {
     if (myOverallStats && myOverallStats.count) bits.push(myOverallStats.count + ' of your intervals');
     if (overallGroup && overallGroup.contributors) bits.push(overallGroup.contributors + ' group contributor' + (overallGroup.contributors === 1 ? '' : 's'));
     if (prefs.excludeEndo) bits.push('endo excluded');
+    // Show how many sub-sites we loaded for the current site so a mismatch
+    // with Admin → Locations is visible at a glance (e.g. admin shows 4
+    // but the card claims 1 → sitesCache is stale / Firestore disagrees).
+    if (subSites && subSites.length > 0) {
+      bits.push(subSites.length + ' location' + (subSites.length === 1 ? '' : 's') + ' loaded');
+    }
     let foot = bits.length ? bits.join(' · ') : '';
     if (!subSites || subSites.length === 0) {
       foot += (foot ? ' · ' : '') + 'Configure Locations under Admin &rarr; Locations to break out by sub-site.';
