@@ -38483,15 +38483,28 @@ auth.onAuthStateChanged(async (user) => {
       }
     }
 
-    // Load data from Firestore
-    const result = await loadFromFirestore(user.uid);
-    await loadSettingsFromFirestore(user.uid);
+    // Load data from Firestore — race against a watchdog timeout. Without
+    // this, a hung Firestore .get() (e.g. mobile network reconnect after
+    // idle) leaves us awaiting forever; the synchronous pt_signedIn hint
+    // already hid the auth overlay, so the user sees a populated-but-empty
+    // app shell with no signal that anything is wrong. On timeout, treat
+    // it like a load error: keep sync OFF, run initApp() so the UI is at
+    // least interactive against local data, and toast the user to reload.
+    const LOAD_TIMEOUT_MS = 10000;
+    const result = await Promise.race([
+      (async () => {
+        const r = await loadFromFirestore(user.uid);
+        await loadSettingsFromFirestore(user.uid);
+        return r;
+      })(),
+      new Promise(resolve => setTimeout(() => resolve('timeout'), LOAD_TIMEOUT_MS))
+    ]);
 
     // If the data read failed, keep sync OFF and skip the migrate pass.
     // migrateData() ends with saveData(), and loadFromFirestore has reset
     // `data` to empty on error — saving that would clobber the cloud doc we
     // simply couldn't fetch. A reload retries the read.
-    const loadFailed = (result === 'error');
+    const loadFailed = (result === 'error' || result === 'timeout');
     firestoreSyncEnabled = !loadFailed;
     // Seed the shared-shifts diff cache once per session so subsequent
     // saves only write what changed. Fire-and-forget; sync functions
@@ -38504,7 +38517,12 @@ auth.onAuthStateChanged(async (user) => {
     // Re-run migration & init with cloud data
     if (!loadFailed) migrateData(data);
     initApp();
-    if (loadFailed) showToast('Could not load your data — reload to retry. Nothing was saved.');
+    if (loadFailed) {
+      const msg = result === 'timeout'
+        ? 'Loading is slow — tap to reload to retry.'
+        : 'Could not load your data — reload to retry. Nothing was saved.';
+      showToast(msg);
+    }
 
     // Admin cards live on the dedicated Admin page (renderAdminPage()).
     // Pre-fill the Claude API key so when the app_owner opens the Admin
