@@ -32406,7 +32406,7 @@ function renderCollectiveCases() {
     html += `<div class="proc-case-item"><span>${escHtml(label)}</span><span>${count} case${count !== 1 ? 's' : ''}</span></div>`;
   });
   html += `</div>`;
-  if (isAppOwner()) {
+  if (isSiteAdmin()) {
     html += `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">`;
     html += `<div style="font-weight:600;font-size:0.85rem;margin-bottom:8px;">Admin: Search & Edit Cases</div>`;
     html += `<input type="text" id="adminCaseSearch" placeholder="Search surgeon or procedure..." autocomplete="off" style="width:100%;padding:8px 10px;font-size:0.85rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="renderAdminCaseSearch()">`;
@@ -32428,7 +32428,10 @@ function renderCollectiveCases() {
 let adminSearchDirty = {};  // { docId_or_caseId: { surgeon?, procedure? } }
 
 function renderAdminCaseSearch(mode) {
-  if (!isAppOwner()) return;
+  // Site admins are allowed; the underlying sharedCasesCache is already
+  // scoped to getCurrentSiteId() at load time, so a site admin can only
+  // see + edit cases at their own site.
+  if (!isSiteAdmin()) return;
   const el = document.getElementById('adminCaseSearchResults');
   if (!el) return;
   const query = (document.getElementById('adminCaseSearch') || {}).value;
@@ -32624,7 +32627,7 @@ function _adminAttachACToContainer(containerEl) {
 }
 
 async function saveAdminCaseGroup(groupIdx) {
-  if (!isAppOwner() || !window._adminSearchGroups) return;
+  if (!isSiteAdmin() || !window._adminSearchGroups) return;
   const group = window._adminSearchGroups[groupIdx];
   if (!group) return;
 
@@ -32994,7 +32997,9 @@ let sceSelected = new Set();
 let sceDirty = new Set();
 
 function openSurgeonCaseEditor() {
-  if (!isAppOwner()) return;
+  // Site admins are allowed alongside app owners — sharedCasesCache is
+  // already site-scoped so they can only edit their own site's cases.
+  if (!isSiteAdmin()) return;
   const myUid = currentUser ? currentUser.uid : '';
   const admin = true;
   const uidLabels = {};
