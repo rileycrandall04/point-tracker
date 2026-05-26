@@ -4584,6 +4584,30 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </details>
   </div>
 
+  <!-- Case & Surgeon Names editor — visible to site admins (their site)
+       and the app owner. Moved here from the Procedure Lookup card so
+       the editing tools sit with the rest of the admin tooling. -->
+  <div class="card hidden" id="adminCaseNamesCard" style="margin-top:12px;">
+    <details class="adm-fold adm-card-fold">
+      <summary><h2 style="margin:0;">Case & Surgeon Names</h2></summary>
+      <div class="adm-fold-body">
+        <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 12px 0;line-height:1.4;">
+          Search and bulk-rename surgeons or procedures across your site, or jump into a case-by-case editor. Use Surgeon Mappings to merge variants (e.g. "T. Cook" / "Tim Cook") under one canonical name.
+        </p>
+        <input type="text" id="adminCaseSearch" placeholder="Search surgeon or procedure..." autocomplete="off" style="width:100%;padding:8px 10px;font-size:0.85rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="renderAdminCaseSearch()">
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button class="btn btn-outline btn-sm" onclick="renderAdminCaseSearch('surgeons')" style="flex:1;font-size:0.72rem;padding:4px 6px;">All Surgeons</button>
+          <button class="btn btn-outline btn-sm" onclick="renderAdminCaseSearch('procedures')" style="flex:1;font-size:0.72rem;padding:4px 6px;">All Procedures</button>
+        </div>
+        <div id="adminCaseSearchResults" style="margin-top:8px;"></div>
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
+          <button class="btn btn-outline btn-sm" onclick="openSurgeonCaseEditor()" style="width:100%;font-size:0.8rem;">&#9998; Edit Case Names</button>
+          <button class="btn btn-outline btn-sm" onclick="openSurgeonMappingModal()" style="width:100%;font-size:0.8rem;">&#128279; Manage Surgeon Mappings</button>
+        </div>
+      </div>
+    </details>
+  </div>
+
   <!-- Admin User Lookup (admin only) -->
   <div class="card hidden" id="adminUserLookupCard" style="margin-top:12px;">
     <details class="adm-fold adm-card-fold">
@@ -15768,6 +15792,7 @@ function renderAdminPage() {
   showAnyAdmin('adminMultiSiteCard');
   showAnyAdmin('adminLocationsCard');
   if (isOwner || isSAdmin) renderAdminLocations();
+  showAnyAdmin('adminCaseNamesCard');
   showOwnerOnly('adminUserLookupCard');
   showOwnerOnly('adminProcedureMappingsCard');
   if (isOwner) renderAdminProcedureMappings();
@@ -32406,21 +32431,9 @@ function renderCollectiveCases() {
     html += `<div class="proc-case-item"><span>${escHtml(label)}</span><span>${count} case${count !== 1 ? 's' : ''}</span></div>`;
   });
   html += `</div>`;
-  if (isSiteAdmin()) {
-    html += `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">`;
-    html += `<div style="font-weight:600;font-size:0.85rem;margin-bottom:8px;">Admin: Search & Edit Cases</div>`;
-    html += `<input type="text" id="adminCaseSearch" placeholder="Search surgeon or procedure..." autocomplete="off" style="width:100%;padding:8px 10px;font-size:0.85rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="renderAdminCaseSearch()">`;
-    html += `<div style="display:flex;gap:6px;margin-top:6px;">`;
-    html += `<button class="btn btn-outline btn-sm" onclick="renderAdminCaseSearch('surgeons')" style="flex:1;font-size:0.72rem;padding:4px 6px;">All Surgeons</button>`;
-    html += `<button class="btn btn-outline btn-sm" onclick="renderAdminCaseSearch('procedures')" style="flex:1;font-size:0.72rem;padding:4px 6px;">All Procedures</button>`;
-    html += `</div>`;
-    html += `<div id="adminCaseSearchResults" style="margin-top:8px;"></div>`;
-    html += `</div>`;
-    html += `<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">`;
-    html += `<button class="btn btn-outline btn-sm" onclick="openSurgeonCaseEditor()" style="width:100%;font-size:0.8rem;">&#9998; Edit Case Names</button>`;
-    html += `<button class="btn btn-outline btn-sm" onclick="openSurgeonMappingModal()" style="width:100%;font-size:0.8rem;">&#128279; Manage Surgeon Mappings</button>`;
-    html += `</div>`;
-  }
+  // The admin "Search & Edit Cases" block used to live here. It moved
+  // to its own card on the Admin page (#adminCaseNamesCard) so the
+  // Procedure Lookup card stays focused on viewing, not editing.
   el.innerHTML = html;
 }
 
