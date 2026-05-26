@@ -4246,7 +4246,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <!-- Admin Multi-Site Management (admin only) -->
   <div class="card hidden" id="adminMultiSiteCard" style="margin-top:12px;">
     <details class="adm-fold adm-card-fold">
-      <summary><h2 style="margin:0;">Multi-Site Admin</h2></summary>
+      <summary><h2 id="adminMultiSiteCardTitle" style="margin:0;">Multi-Site Admin</h2></summary>
       <div class="adm-fold-body">
     <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0;flex-wrap:wrap;">
       <button class="btn btn-sm" id="adminMSTabUsers" onclick="adminMSSetTab('users')"
@@ -15775,16 +15775,25 @@ function renderAdminPage() {
   if (isOwner) renderAdminTipViewer();
 
   // Within the Multi-Site Admin card, default tab + which tabs are visible:
+  const titleEl = document.getElementById('adminMultiSiteCardTitle');
   if (isSAdmin && !isOwner) {
-    // Site admin: hide Test cleanup tab; default to Users; Sites tab is
-    // visible but the Lock/Unlock controls are gated client-side.
-    const testTab = document.getElementById('adminMSTabTest');
-    if (testTab) testTab.style.display = 'none';
-    const testPane = document.getElementById('adminMSTestPane');
-    if (testPane) testPane.classList.add('hidden');
+    // Site admin: only the Shift Rules tab is exposed. Rename the card
+    // so site admins don't see "Multi-Site" branding for what is, for
+    // them, a single-site rules editor.
+    if (titleEl) titleEl.textContent = 'Site Admin';
+    ['adminMSTabUsers','adminMSTabActivity','adminMSTabSites','adminMSTabTest','adminMSTabMigration','adminMSTabScalingTest'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.style.display = 'none';
+    });
+    const rulesTab = document.getElementById('adminMSTabRules');
+    if (rulesTab) rulesTab.style.display = '';
+    if (typeof adminMSSetTab === 'function') adminMSSetTab('rules');
   } else if (isOwner) {
-    const testTab = document.getElementById('adminMSTabTest');
-    if (testTab) testTab.style.display = '';
+    if (titleEl) titleEl.textContent = 'Multi-Site Admin';
+    ['adminMSTabUsers','adminMSTabActivity','adminMSTabSites','adminMSTabRules','adminMSTabTest','adminMSTabMigration','adminMSTabScalingTest'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.style.display = '';
+    });
   }
 
   renderAdminPrivilegesList(isOwner, isSAdmin);
