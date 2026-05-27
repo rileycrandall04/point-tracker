@@ -39365,17 +39365,38 @@ initApp();
 </div>
 <script>
 (function() {
+  function readCurrentUser() {
+    try {
+      if (typeof firebase !== 'undefined' && firebase.auth) {
+        var u = firebase.auth().currentUser;
+        if (u) return u.email || u.uid;
+      }
+    } catch (e) {}
+    return '(not signed in)';
+  }
+  function readStoredData() {
+    // Top-level `let data` isn't on window, so read the snapshot the app
+    // keeps in localStorage as a proxy for current in-memory state.
+    try {
+      var raw = localStorage.getItem('mwa_point_tracker');
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) { return null; }
+  }
   function renderBootLog() {
     var logs = window.__bootLog || [];
+    var stored = readStoredData();
     var meta = [
       'when: ' + new Date().toISOString(),
-      'user: ' + (window.currentUser ? (window.currentUser.email || window.currentUser.uid) : '(not signed in)'),
-      'cases: ' + (window.data && window.data.cases ? window.data.cases.length : 'n/a'),
-      'shifts: ' + (window.data && window.data.shifts ? Object.keys(window.data.shifts).length : 'n/a'),
-      'firestoreSyncEnabled: ' + (typeof window.firestoreSyncEnabled !== 'undefined' ? window.firestoreSyncEnabled : 'n/a'),
+      'user: ' + readCurrentUser(),
+      'cases (stored): ' + (stored && Array.isArray(stored.cases) ? stored.cases.length : 'n/a'),
+      'shifts (stored): ' + (stored && stored.shifts ? Object.keys(stored.shifts).length : 'n/a'),
+      'auth overlay hidden: ' + (function(){ var o = document.getElementById('authOverlay'); return o ? o.classList.contains('hidden') : 'n/a'; })(),
+      'initial loader present: ' + (!!document.getElementById('initialLoader')),
       'navigator.onLine: ' + navigator.onLine,
       'visibilityState: ' + document.visibilityState,
       'localStorage size: ' + (function(){ try { return JSON.stringify(localStorage).length; } catch(e){ return 'n/a'; }})() + ' chars',
+      'user agent: ' + (navigator.userAgent || '').slice(0, 80),
       ''
     ].join('\n');
     var lines = logs.map(function(e) {
