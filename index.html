@@ -8382,9 +8382,11 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
       html += '<button class="btn btn-sm" onclick="adminMSRebuildBlobFromSub(\'' + uid + '\')" style="background:var(--primary);color:#fff;">Rebuild blob &larr; sub</button>';
       html += '<button class="btn btn-sm" onclick="adminMSForceSignOut(\'' + uid + '\')" style="background:var(--surface);color:var(--accent2);">Force re-sign-in</button>';
       html += '<button class="btn btn-sm" onclick="adminMSShowUserDiagnostics(\'' + uid + '\')" style="background:var(--surface2);color:var(--text);">Recent diagnostics</button>';
+      html += '<button class="btn btn-sm" onclick="adminMSShowUserFlags(\'' + uid + '\')" style="background:var(--surface2);color:var(--text);">Show settings</button>';
       html += '</div>';
       html += '<div id="adminMSDriftDetail_' + uid + '" style="font-size:0.72rem;color:var(--text-dim);"></div>';
       html += '<div id="adminMSUserDiagBox_' + uid + '" style="font-size:0.72rem;margin-top:6px;"></div>';
+      html += '<div id="adminMSUserFlagsBox_' + uid + '" style="font-size:0.72rem;margin-top:6px;"></div>';
       html += '<p style="font-size:0.7rem;color:var(--text-dim);margin:6px 0 10px 0;">Inspect first to see which case IDs differ. Reconcile makes the subcollection an exact mirror of the blob (writes missing, deletes extras). Force re-sign-in arms a signal that, on the user\'s next app open, signs them out and clears their service worker + caches so they pick up the latest version. Only works if the user has at least v344 cached — users on older code won\'t see the signal.</p>';
     } else {
       html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">User has not logged in since the new per-case sync system shipped. Click below to force-migrate their cases from this admin session.</p>';
@@ -8727,6 +8729,61 @@ async function adminMSShowUserDiagnostics(uid) {
     outEl.innerHTML = html;
   } catch (err) {
     outEl.innerHTML = '<span style="color:var(--accent2);">Diagnostics load failed: ' + escapeHtml(err.message || String(err)) + '</span>';
+  }
+}
+
+// Owner: surface the drift-relevant flags on a user's settings + profile
+// docs. Lets us distinguish a "kill switch set" root cause from a stale-
+// client root cause without guessing — they look identical in the drift
+// list but call for very different fixes.
+async function adminMSShowUserFlags(uid) {
+  const outEl = document.getElementById('adminMSUserFlagsBox_' + uid);
+  if (!outEl) return;
+  if (!isAppOwner() && !isLegacyAdmin()) {
+    outEl.innerHTML = '<span style="color:var(--accent2);">Owner only.</span>';
+    return;
+  }
+  outEl.innerHTML = '<span style="color:var(--text-dim);">Loading settings…</span>';
+  try {
+    const [settingsDoc, profileDoc] = await Promise.all([
+      db.collection('users').doc(uid).collection('data').doc('settings').get(),
+      db.collection('userProfiles').doc(uid).get()
+    ]);
+    const s = settingsDoc.exists ? (settingsDoc.data() || {}) : null;
+    const p = profileDoc.exists ? (profileDoc.data() || {}) : {};
+    const dualWriteOff = s && s.dualWriteCasesEnabled === false;
+    const backfilled = !!(s && s.casesBackfilledV1);
+    let html = '<div style="margin-top:4px;border:1px solid var(--border);border-radius:6px;padding:8px 10px;background:var(--surface);">';
+    html += '<div style="font-size:0.74rem;font-weight:600;color:var(--text);margin-bottom:6px;">Settings + profile flags</div>';
+    if (dualWriteOff) {
+      html += '<div style="background:rgba(239,68,68,0.12);border:1px solid var(--accent2);border-radius:6px;padding:6px 8px;margin-bottom:6px;color:var(--accent2);font-weight:600;">'
+        + '&#9888; settings.dualWriteCasesEnabled = FALSE — every writeCaseDoc on this account is silently skipped. Likely root cause of persistent drift. Flip it to true / remove the field to fix.'
+        + '</div>';
+    }
+    const rows = [
+      ['settings.dualWriteCasesEnabled', s == null ? '(no settings doc)' : (s.dualWriteCasesEnabled === undefined ? 'undefined (default true)' : String(s.dualWriteCasesEnabled))],
+      ['settings.casesBackfilledV1', s == null ? '(no settings doc)' : (backfilled ? 'true' : 'false / undefined')],
+      ['settings.casesBackfilledV1At', (s && s.casesBackfilledV1At) || '(none)'],
+      ['settings.casesLastSyncedAt', (s && s.casesLastSyncedAt) || '(none)'],
+      ['settings.shareData', s == null ? '(no settings doc)' : (s.shareData === undefined ? 'undefined (default true)' : String(s.shareData))],
+      ['profile.runningVersion', p.runningVersion || '(unknown)'],
+      ['profile.runningVersionAt', p.runningVersionAt || '(none)'],
+      ['profile.useSubcollectionReads', p.useSubcollectionReads === undefined ? 'undefined' : String(p.useSubcollectionReads)],
+      ['profile.useSubcollectionReadsDisabled', p.useSubcollectionReadsDisabled === undefined ? 'undefined' : String(p.useSubcollectionReadsDisabled)],
+      ['profile.lastSignIn', p.lastSignIn || '(none)'],
+      ['profile.forceSignOutAt', p.forceSignOutAt || '(not armed)']
+    ];
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.7rem;">';
+    for (const [k, v] of rows) {
+      html += '<tr style="border-bottom:1px solid rgba(71,85,105,0.15);">';
+      html += '<td style="padding:3px 6px;color:var(--text-dim);font-family:monospace;white-space:nowrap;">' + escapeHtml(k) + '</td>';
+      html += '<td style="padding:3px 6px;color:var(--text);font-family:monospace;word-break:break-all;">' + escapeHtml(String(v)) + '</td>';
+      html += '</tr>';
+    }
+    html += '</table></div>';
+    outEl.innerHTML = html;
+  } catch (err) {
+    outEl.innerHTML = '<span style="color:var(--accent2);">Settings load failed: ' + escapeHtml(err.message || String(err)) + '</span>';
   }
 }
 
