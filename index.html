@@ -8,6 +8,34 @@
 <meta name="theme-color" content="#0f172a">
 <title>MWA Point Tracker</title>
 <link rel="manifest" href="manifest.json">
+<script>
+  // Capture console output to an in-memory ring buffer so the in-app boot
+  // log viewer (5-tap the loader spinner or the header syringe logo) can
+  // surface what happened during boot. Critical for debugging the mobile-
+  // PWA blank-shell bug since DevTools isn't reachable from a saved-to-
+  // homescreen install. Installed in <head> so we catch the earliest log
+  // output — before any other script runs.
+  (function() {
+    var BUFFER_MAX = 300;
+    window.__bootLog = [];
+    var orig = { log: console.log, warn: console.warn, error: console.error };
+    function capture(level, args) {
+      try {
+        var msg = Array.prototype.map.call(args, function(a) {
+          if (typeof a === 'string') return a;
+          if (a instanceof Error) return a.message + (a.stack ? '\n' + a.stack : '');
+          try { return JSON.stringify(a); } catch (e) { return String(a); }
+        }).join(' ');
+        window.__bootLog.push({ t: Date.now(), level: level, msg: msg });
+        if (window.__bootLog.length > BUFFER_MAX) window.__bootLog.shift();
+      } catch (e) {}
+    }
+    console.log = function() { capture('log', arguments); orig.log.apply(console, arguments); };
+    console.warn = function() { capture('warn', arguments); orig.warn.apply(console, arguments); };
+    console.error = function() { capture('error', arguments); orig.error.apply(console, arguments); };
+    console.log('[boot] capture installed', new Date().toISOString());
+  })();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/tesseract.min.js"></script>
@@ -39317,6 +39345,105 @@ initApp();
     const overlay = document.getElementById('authOverlay');
     if (overlay && !overlay.classList.contains('hidden')) startAnim();
   }).observe(document.getElementById('authOverlay'), { attributes: true, attributeFilter: ['class'] });
+})();
+</script>
+
+<!-- ===== BOOT LOG VIEWER ===== -->
+<!-- Opened by 5-tap on the loader spinner (pre-init) or the header
+     syringe logo (post-init). Surfaces the captured console output for
+     debugging the mobile-PWA blank-shell bug. -->
+<div id="bootLogViewer" class="hidden" style="position:fixed;inset:0;z-index:100001;background:#000;color:#eee;font-family:monospace;font-size:11px;display:flex;flex-direction:column;">
+  <div style="padding:10px;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;gap:8px;">
+    <strong style="color:#f59e0b;">Boot diagnostics</strong>
+    <div style="display:flex;gap:6px;">
+      <button id="bootLogCopyBtn" type="button" style="background:#222;color:#eee;border:1px solid #444;padding:5px 10px;border-radius:4px;font-size:11px;cursor:pointer;">Copy</button>
+      <button id="bootLogRefreshBtn" type="button" style="background:#222;color:#eee;border:1px solid #444;padding:5px 10px;border-radius:4px;font-size:11px;cursor:pointer;">Refresh</button>
+      <button id="bootLogCloseBtn" type="button" style="background:#222;color:#eee;border:1px solid #444;padding:5px 10px;border-radius:4px;font-size:11px;cursor:pointer;">Close</button>
+    </div>
+  </div>
+  <pre id="bootLogContent" style="flex:1;overflow:auto;padding:10px;margin:0;white-space:pre-wrap;word-break:break-word;line-height:1.4;"></pre>
+</div>
+<script>
+(function() {
+  function renderBootLog() {
+    var logs = window.__bootLog || [];
+    var meta = [
+      'when: ' + new Date().toISOString(),
+      'user: ' + (window.currentUser ? (window.currentUser.email || window.currentUser.uid) : '(not signed in)'),
+      'cases: ' + (window.data && window.data.cases ? window.data.cases.length : 'n/a'),
+      'shifts: ' + (window.data && window.data.shifts ? Object.keys(window.data.shifts).length : 'n/a'),
+      'firestoreSyncEnabled: ' + (typeof window.firestoreSyncEnabled !== 'undefined' ? window.firestoreSyncEnabled : 'n/a'),
+      'navigator.onLine: ' + navigator.onLine,
+      'visibilityState: ' + document.visibilityState,
+      'localStorage size: ' + (function(){ try { return JSON.stringify(localStorage).length; } catch(e){ return 'n/a'; }})() + ' chars',
+      ''
+    ].join('\n');
+    var lines = logs.map(function(e) {
+      var ts = new Date(e.t).toISOString().slice(11, 23);
+      return '[' + ts + '] ' + e.level.toUpperCase() + ' ' + e.msg;
+    }).join('\n');
+    return meta + (lines || '(no log entries)');
+  }
+  function show() {
+    var el = document.getElementById('bootLogContent');
+    if (el) el.textContent = renderBootLog();
+    var overlay = document.getElementById('bootLogViewer');
+    if (overlay) overlay.classList.remove('hidden');
+  }
+  function hide() {
+    var overlay = document.getElementById('bootLogViewer');
+    if (overlay) overlay.classList.add('hidden');
+  }
+  window.showBootLog = show;
+  window.hideBootLog = hide;
+
+  // 5-tap gesture: works on the loader spinner pre-init OR on the header
+  // syringe logo post-init. Taps must be within 700ms of each other.
+  var taps = [];
+  document.addEventListener('click', function(e) {
+    var loader = document.getElementById('initialLoader');
+    var headerLogo = document.querySelector('header > svg');
+    var inLoader = loader && !loader.classList.contains('hidden') && loader.contains(e.target);
+    var inLogo = headerLogo && headerLogo.contains(e.target);
+    if (!inLoader && !inLogo) {
+      taps = [];
+      return;
+    }
+    var now = Date.now();
+    taps = taps.filter(function(t) { return now - t < 700; });
+    taps.push(now);
+    if (taps.length >= 5) {
+      taps = [];
+      show();
+    }
+  }, true);
+
+  function wireButtons() {
+    var closeBtn = document.getElementById('bootLogCloseBtn');
+    if (closeBtn) closeBtn.addEventListener('click', hide);
+    var refreshBtn = document.getElementById('bootLogRefreshBtn');
+    if (refreshBtn) refreshBtn.addEventListener('click', function() {
+      var el = document.getElementById('bootLogContent');
+      if (el) el.textContent = renderBootLog();
+    });
+    var copyBtn = document.getElementById('bootLogCopyBtn');
+    if (copyBtn) copyBtn.addEventListener('click', function() {
+      var text = renderBootLog();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+          copyBtn.textContent = 'Copied!';
+          setTimeout(function() { copyBtn.textContent = 'Copy'; }, 1500);
+        }).catch(function() { copyBtn.textContent = 'Copy failed'; });
+      } else {
+        copyBtn.textContent = 'Clipboard unavailable';
+      }
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wireButtons);
+  } else {
+    wireButtons();
+  }
 })();
 </script>
 
