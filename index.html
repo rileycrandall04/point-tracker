@@ -1821,8 +1821,10 @@ input.mil-time.invalid {
   z-index: 10000;
   background: var(--bg);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 18px;
 }
 .initial-loader-spinner {
   width: 40px;
@@ -1831,6 +1833,24 @@ input.mil-time.invalid {
   border-top-color: #f59e0b;
   border-radius: 50%;
   animation: il-spin 0.7s linear infinite;
+}
+.initial-loader-stuck-msg {
+  color: rgba(255,255,255,0.55);
+  font-size: 0.78rem;
+  text-align: center;
+  padding: 0 24px;
+  line-height: 1.4;
+  max-width: 280px;
+}
+.initial-loader-stuck-msg button {
+  background: #222;
+  color: #f59e0b;
+  border: 1px solid #444;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  margin-top: 10px;
+  cursor: pointer;
 }
 @keyframes il-spin {
   to { transform: rotate(360deg); }
@@ -1993,15 +2013,27 @@ body.hide-monetary .monetary-hide { display: none !important; }
      screen for the first second of boot. Hidden by hideInitialLoader(). -->
 <div id="initialLoader" class="initial-loader" aria-hidden="true">
   <div class="initial-loader-spinner"></div>
+  <div id="initialLoaderStuckMsg" class="initial-loader-stuck-msg hidden">
+    Sign-in is taking longer than usual.
+    <br>
+    <button type="button" onclick="location.reload()">Tap to reload</button>
+  </div>
 </div>
 <script>
   function hideInitialLoader() {
     const el = document.getElementById('initialLoader');
     if (el) el.remove();
   }
-  // Defensive fallback: if onAuthStateChanged never fires (fatal boot
-  // error, etc.), drop the loader after 30s so the user can at least
-  // see and interact with the underlying state.
+  // After 8s with the loader still up, reveal a "Tap to reload" escape so
+  // the user isn't trapped if onAuthStateChanged never fires (Firebase auth
+  // restoration hung, IndexedDB locked, etc.). The 30s defensive hide still
+  // runs as a final fallback.
+  setTimeout(function() {
+    var msg = document.getElementById('initialLoaderStuckMsg');
+    if (msg && document.getElementById('initialLoader')) {
+      msg.classList.remove('hidden');
+    }
+  }, 8000);
   setTimeout(hideInitialLoader, 30000);
 </script>
 
