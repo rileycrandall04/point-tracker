@@ -8485,11 +8485,19 @@ async function adminMSShowUserDiagnostics(uid) {
         const d = r.data;
         const when = d.timestamp ? new Date(d.timestamp).toLocaleString() : '?';
         const bits = [];
+        if (d.caseId) bits.push('case=' + String(d.caseId).slice(0, 14));
+        if (d.reason) bits.push('reason=' + d.reason);
+        if (d.shiftDate) bits.push('shift=' + d.shiftDate);
+        if (d.procedure) bits.push('proc=' + d.procedure);
+        if (d.caseTimestamp) bits.push('addedAt=' + d.caseTimestamp);
+        if (d.ageHours !== undefined && d.ageHours !== null) bits.push('age=' + d.ageHours + 'h');
+        if (d.wrote !== undefined) bits.push('wrote=' + d.wrote);
         if (d.blobCount !== undefined) bits.push('blob=' + d.blobCount);
         if (d.subCount !== undefined) bits.push('sub=' + d.subCount);
         if (d.error) bits.push('err=' + String(d.error).slice(0, 80));
         if (d.errorCode) bits.push('code=' + d.errorCode);
         if (d.caller) bits.push('@' + d.caller);
+        if (d.deferredAt) bits.push('flushed=' + d.deferredAt);
         if (d.swCacheVersion) bits.push('v=' + d.swCacheVersion);
         html += '<tr style="border-bottom:1px solid rgba(71,85,105,0.15);vertical-align:top;">';
         html += '<td style="padding:3px 6px;white-space:nowrap;">' + escapeHtml(when) + '</td>';
@@ -10664,12 +10672,74 @@ function isCaseDualWriteEnabled() {
   return settings.dualWriteCasesEnabled !== false;
 }
 
-function writeCaseDoc(caseData) {
+// Records a gate-skip event for forensic diagnosis. logScalingDiagnostic
+// requires sync + currentUser, so for the very common "sync off" skip we
+// must queue locally and flush on next sync establishment — otherwise we'd
+// lose the evidence that explains blob-only drift in offline windows.
+function _recordWriteSkip(caseId, reason) {
+  if (firestoreSyncEnabled && currentUser) {
+    try {
+      logScalingDiagnostic('write_case_doc_skipped', { caseId: caseId || '', reason: reason });
+    } catch (_) {}
+    return;
+  }
+  try {
+    const raw = localStorage.getItem('pending_skip_log');
+    const arr = raw ? JSON.parse(raw) : [];
+    arr.push({ caseId: caseId || '', reason: reason, timestamp: new Date().toISOString() });
+    if (arr.length > 200) arr.splice(0, arr.length - 200);
+    localStorage.setItem('pending_skip_log', JSON.stringify(arr));
+  } catch (_) {}
+}
+
+// Drain locally-queued gate-skip events into scalingDiagnostics once sync is
+// up. Preserves the original timestamp on each entry so the audit trail is
+// accurate even if the flush happens minutes/hours later.
+function flushPendingSkipLog() {
   if (!firestoreSyncEnabled || !currentUser) return;
-  if (!isCaseDualWriteEnabled()) return;
-  if (!caseData || !caseData.id) return;
+  let arr = null;
+  try {
+    const raw = localStorage.getItem('pending_skip_log');
+    arr = raw ? JSON.parse(raw) : null;
+  } catch (_) {}
+  if (!arr || arr.length === 0) { try { localStorage.removeItem('pending_skip_log'); } catch (_) {} return; }
+  for (const e of arr) {
+    try {
+      const doc = {
+        uid: currentUser.uid,
+        email: (currentUserProfile && currentUserProfile.email) || '',
+        type: 'write_case_doc_skipped',
+        timestamp: e.timestamp || new Date().toISOString(),
+        deferredAt: new Date().toISOString(),
+        userAgent: (navigator && navigator.userAgent) || '',
+        swCacheVersion: _adminMSViewerCacheVersion || PHASE2_SW_VERSION_TAG,
+        caseId: e.caseId || '',
+        reason: e.reason || ''
+      };
+      db.collection('scalingDiagnostics').add(doc).catch(err => {
+        console.error('flushPendingSkipLog write failed:', err);
+      });
+    } catch (_) {}
+  }
+  try { localStorage.removeItem('pending_skip_log'); } catch (_) {}
+}
+
+function writeCaseDoc(caseData) {
+  const caseId = (caseData && caseData.id) || '';
+  if (!firestoreSyncEnabled || !currentUser) {
+    _recordWriteSkip(caseId, !currentUser ? 'no_user' : 'sync_off');
+    return;
+  }
+  if (!isCaseDualWriteEnabled()) {
+    _recordWriteSkip(caseId, 'dual_write_off');
+    return;
+  }
+  if (!caseId) {
+    _recordWriteSkip('', 'no_case_id');
+    return;
+  }
   const ref = db.collection('users').doc(currentUser.uid)
-    .collection('cases').doc(caseData.id);
+    .collection('cases').doc(caseId);
   const payload = JSON.parse(JSON.stringify(caseData));
   payload.updatedAt = new Date().toISOString();
   ref.set(payload).catch(err => {
@@ -10680,7 +10750,7 @@ function writeCaseDoc(caseData) {
     logScalingDiagnostic('write_case_doc_failed', {
       error: String((err && err.message) || err),
       errorCode: (err && err.code) || '',
-      caseId: caseData.id,
+      caseId: caseId,
       caller: 'writeCaseDoc'
     });
   });
@@ -10769,6 +10839,18 @@ async function reconcileSubFromBlobOnLoad() {
     }
     console.log('[reconcileSubFromBlob] Wrote ' + written + ' blob-only case(s) to subcollection');
     logScalingDiagnostic('on_load_sub_reconcile', { wrote: written });
+    // Per-case forensic record so we can correlate each blob-only case with
+    // when it was originally added (caseTimestamp) and any nearby skip log.
+    // Capped to keep the diagnostics collection from exploding on huge syncs.
+    for (const c of missing.slice(0, 50)) {
+      logScalingDiagnostic('reconcile_healed_blob_only', {
+        caseId: c.id,
+        caseTimestamp: c.timestamp || '',
+        shiftDate: c.shiftDate || '',
+        procedure: (c.procedure || c.caseType || '').toString().slice(0, 60),
+        ageHours: c.timestamp ? Math.round((Date.now() - new Date(c.timestamp).getTime()) / 3600000) : null
+      });
+    }
   } catch (err) {
     console.error('[reconcileSubFromBlob] failed:', err);
   }
@@ -38711,6 +38793,10 @@ auth.onAuthStateChanged(async (user) => {
     hideSessionExpiredBanner();
     updateAccountUI(user);
     document.getElementById('authOverlay').classList.add('hidden');
+    // Now that sync is up, drain any gate-skip events the client queued
+    // locally during a previous sync-off window. Lets us see which cases
+    // were touched by writeCaseDoc-with-sync-off in past sessions.
+    if (typeof flushPendingSkipLog === 'function') flushPendingSkipLog();
 
     // Re-run migration & init with cloud data
     migrateData(data);
