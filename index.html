@@ -33,6 +33,32 @@
     console.log = function() { capture('log', arguments); orig.log.apply(console, arguments); };
     console.warn = function() { capture('warn', arguments); orig.warn.apply(console, arguments); };
     console.error = function() { capture('error', arguments); orig.error.apply(console, arguments); };
+    // Capture uncaught synchronous errors. console.error hooks above only see
+    // calls that the app's code makes — they don't see exceptions that
+    // propagated up to the browser. These are the most likely culprits for
+    // the mobile-PWA blank-shell bug: an exception inside initApp() or the
+    // post-init cascade that silently stops the boot chain.
+    window.addEventListener('error', function(ev) {
+      try {
+        capture('uncaught', [
+          (ev.message || 'Uncaught error') +
+          ' @ ' + (ev.filename || '?') + ':' + (ev.lineno || '?') + ':' + (ev.colno || '?') +
+          (ev.error && ev.error.stack ? '\n' + ev.error.stack : '')
+        ]);
+      } catch (e) {}
+    });
+    // Capture unhandled async rejections. The auth handler is an async
+    // function; if anything inside it throws and isn't caught, the rejection
+    // ends up here instead of console.error.
+    window.addEventListener('unhandledrejection', function(ev) {
+      try {
+        var r = ev.reason;
+        var msg = r instanceof Error
+          ? (r.message + (r.stack ? '\n' + r.stack : ''))
+          : (typeof r === 'string' ? r : JSON.stringify(r));
+        capture('unhandled-rejection', [msg]);
+      } catch (e) {}
+    });
     console.log('[boot] capture installed', new Date().toISOString());
   })();
 </script>
@@ -38958,8 +38984,11 @@ auth.onAuthStateChanged(async (user) => {
     if (typeof flushPendingSkipLog === 'function') flushPendingSkipLog();
 
     // Re-run migration & init with cloud data
+    console.log('[boot] pre-migrate');
     migrateData(data);
+    console.log('[boot] pre-init');
     initApp();
+    console.log('[boot] post-init', { cases: data.cases.length, shifts: Object.keys(data.shifts).length });
     hideInitialLoader();
     // Defensive backstop for sub-only go-live: fire-and-forget reconcile
     // that writes any blob-only cases into the per-case subcollection so
@@ -38978,6 +39007,7 @@ auth.onAuthStateChanged(async (user) => {
     }
     // Show the Admin drawer entry once we know the user has any admin role.
     refreshAdminDrawerVisibility();
+    console.log('[boot] cascade-ready');
 
     // Daily feature tips: opt-in modal on first sign-in after deploy, or a
     // single tip on subsequent days when the user has opted in.
