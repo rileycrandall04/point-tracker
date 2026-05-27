@@ -3806,6 +3806,27 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </details>
   </div>
 
+  <!-- Excel Template (Shifts + Cases) -->
+  <div class="card" style="margin-top:12px;">
+    <h2>Excel Template</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Download a pre-formatted Excel workbook with two sheets &mdash; <strong>Shifts</strong> and <strong>Cases</strong> &mdash; then fill in your prior data and upload it on the Import page. Cases link to shifts automatically by date.
+    </p>
+    <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
+      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">What's in the template</summary>
+      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;line-height:1.6;">
+        <strong>Sheet 1 &mdash; Shifts:</strong><br>
+        <code style="font-size:0.7rem;">Date | Start | End</code><br>
+        One row per shift. Dates with an existing shift in the app are skipped.<br><br>
+        <strong>Sheet 2 &mdash; Cases:</strong><br>
+        <code style="font-size:0.7rem;">Date | Procedure | ASA Code | Base Units | Physical Status | Start | End | Surgeon | Emergency | Shared</code><br>
+        One row per case. Cases attach to the shift on the same date. If no shift exists, a placeholder shift is auto-created.<br><br>
+        Times accept H:MM AM/PM, 24-hour HH:MM, or Excel time cells. Dates accept M/D, M/D/YYYY, or Excel date cells.
+      </div>
+    </details>
+    <button class="btn btn-primary" id="downloadTemplateBtn" style="width:100%;">Download Excel Template</button>
+  </div>
+
   <!-- Owner-only: restore data doc from a restored backup database -->
   <div class="card hidden" id="ownerRecoveryCard" style="margin-top:12px;">
     <h2>Restore from backup database</h2>
@@ -3885,7 +3906,8 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <h2>Import Cases</h2>
     <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
       Upload cases from Excel (.xlsx), CSV (Google Sheet export), PDF (Charge Detail), or screenshot.
-      Duplicate cases (same date + start time) will be skipped.
+      If the workbook also has a <strong>Shifts</strong> sheet (see the Excel Template on the Settings page), those shifts will be imported too.
+      Duplicate cases (same date + start time) and dates with an existing shift are skipped.
     </p>
     <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
       <summary style="cursor:pointer;color:var(--accent);font-weight:600;">Recommended Excel column format</summary>
@@ -35346,8 +35368,13 @@ function parseExcelTime(val) {
     const m = totalMin % 60;
     return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
   }
-  // String like "7:00" or "13:01"
   const s = String(val).trim();
+  // AM/PM string (e.g. "7:00 AM", "5:30 PM") — delegate to the AM/PM converter
+  if (/AM|PM/i.test(s)) {
+    const mil = convertAMPMToMilitary(s);
+    if (mil) return mil;
+  }
+  // 24-hour string like "7:00" or "13:01"
   if (s.includes(':')) {
     const [h, m] = s.split(':').map(Number);
     return String(h).padStart(2,'0') + ':' + String(m || 0).padStart(2,'0');
@@ -36424,6 +36451,44 @@ document.getElementById('cancelImport').addEventListener('click', () => {
 });
 
 // ================================================================
+// EXCEL IMPORT TEMPLATE (Shifts + Cases)
+// ================================================================
+function downloadImportTemplate() {
+  // Build sample dates relative to today so the template feels current
+  const today = new Date();
+  const fmt = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const d1 = new Date(today); d1.setDate(d1.getDate() - 7);
+  const d2 = new Date(today); d2.setDate(d2.getDate() - 6);
+
+  const shiftRows = [
+    ['Date', 'Start', 'End'],
+    [fmt(d1), '07:00', '17:00'],
+    [fmt(d2), '07:00', '15:30']
+  ];
+
+  const caseRows = [
+    ['Date', 'Procedure', 'ASA Code', 'Base Units', 'Physical Status', 'Start', 'End', 'Surgeon', 'Emergency', 'Shared'],
+    [fmt(d1), 'Lap Chole', '00790', 7, 'P2', '07:30', '09:15', 'Smith', '', ''],
+    [fmt(d1), 'Total Knee', '01402', 7, 'P3', '10:00', '12:45', 'Jones', '', ''],
+    [fmt(d2), 'Open AAA', '00882', 15, 'P4', '08:00', '13:30', 'Lee', 'Y', '']
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const shiftsSheet = XLSX.utils.aoa_to_sheet(shiftRows);
+  const casesSheet = XLSX.utils.aoa_to_sheet(caseRows);
+  shiftsSheet['!cols'] = [{ wch: 12 }, { wch: 8 }, { wch: 8 }];
+  casesSheet['!cols'] = [
+    { wch: 12 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 14 },
+    { wch: 8 }, { wch: 8 }, { wch: 14 }, { wch: 10 }, { wch: 8 }
+  ];
+  XLSX.utils.book_append_sheet(wb, shiftsSheet, 'Shifts');
+  XLSX.utils.book_append_sheet(wb, casesSheet, 'Cases');
+  XLSX.writeFile(wb, 'mwa-tracker-import-template.xlsx');
+}
+
+document.getElementById('downloadTemplateBtn')?.addEventListener('click', downloadImportTemplate);
+
+// ================================================================
 // CSV CASE IMPORT (Google Sheet export)
 // ================================================================
 document.getElementById('csvUploadArea').addEventListener('click', () => document.getElementById('csvFile').click());
@@ -36669,14 +36734,23 @@ function parseGoogleSheetCSV(text) {
 
 function showCSVImportConfirmation(result) {
   const { cases, months } = result;
+  const incomingShifts = Array.isArray(result.shifts) ? result.shifts : [];
 
   // Check for duplicates
   const existingKeys = new Set(data.cases.map(c => c.shiftDate + '|' + c.startTime));
   const newCases = cases.filter(c => !existingKeys.has(c.shiftDate + '|' + c.startTime));
   const dupes = cases.length - newCases.length;
 
-  if (newCases.length === 0) {
-    showToast(`All ${cases.length} cases already exist`);
+  // Filter incoming shifts: skip dates that already have a shift
+  const newShifts = incomingShifts.filter(s => !data.shifts[s.date]);
+  const shiftDupes = incomingShifts.length - newShifts.length;
+
+  if (newCases.length === 0 && newShifts.length === 0) {
+    if (incomingShifts.length > 0 || cases.length > 0) {
+      showToast(`Nothing new to import (${cases.length} case${cases.length === 1 ? '' : 's'}, ${incomingShifts.length} shift${incomingShifts.length === 1 ? '' : 's'} already exist)`);
+    } else {
+      showToast('No cases or shifts found');
+    }
     return;
   }
 
@@ -36687,15 +36761,50 @@ function showCSVImportConfirmation(result) {
       months.map(m => `<li>${m.label}: ${m.count} case${m.count > 1 ? 's' : ''}</li>`).join('') + '</ul>';
   }
 
-  const body = document.getElementById('importConfirmBody');
-  body.innerHTML = `<p>Found <strong>${cases.length}</strong> cases across <strong>${monthLabel}</strong>.</p>` +
-    monthBreakdown +
-    (dupes > 0 ? `<p style="font-size:0.8rem;color:var(--text-dim);">${dupes} duplicate${dupes > 1 ? 's' : ''} will be skipped.</p>` : '') +
-    `<p>Import <strong>${newCases.length}</strong> new case${newCases.length > 1 ? 's' : ''}?</p>`;
-  document.getElementById('importConfirmTitle').textContent = 'Import Cases';
+  let summary = '';
+  if (newShifts.length > 0) {
+    summary += `<p>Found <strong>${newShifts.length}</strong> new shift${newShifts.length === 1 ? '' : 's'}` +
+      (shiftDupes > 0 ? ` <span style="font-size:0.8rem;color:var(--text-dim);">(${shiftDupes} already exist)</span>` : '') +
+      `.</p>`;
+  }
+  if (cases.length > 0) {
+    summary += `<p>Found <strong>${cases.length}</strong> case${cases.length === 1 ? '' : 's'} across <strong>${monthLabel}</strong>.</p>` +
+      monthBreakdown +
+      (dupes > 0 ? `<p style="font-size:0.8rem;color:var(--text-dim);">${dupes} duplicate case${dupes === 1 ? '' : 's'} will be skipped.</p>` : '');
+  }
+  const parts = [];
+  if (newShifts.length > 0) parts.push(`<strong>${newShifts.length}</strong> shift${newShifts.length === 1 ? '' : 's'}`);
+  if (newCases.length > 0) parts.push(`<strong>${newCases.length}</strong> case${newCases.length === 1 ? '' : 's'}`);
+  summary += `<p>Import ${parts.join(' and ')}?</p>`;
+
+  document.getElementById('importConfirmBody').innerHTML = summary;
+  document.getElementById('importConfirmTitle').textContent = newShifts.length > 0 ? 'Import Shifts & Cases' : 'Import Cases';
 
   pendingImportAction = () => {
-    // Create placeholder shifts for dates without one
+    // 1) Create shifts from the Shifts sheet first, so cases can attach to them
+    let shiftsFromSheet = 0;
+    newShifts.forEach(s => {
+      const st = s.startTime || '07:00';
+      const en = s.endTime || '17:00';
+      data.shifts[s.date] = {
+        date: s.date,
+        assignmentType: 'OR',
+        siteId: getCurrentSiteId(),
+        startTime: st,
+        endTime: en,
+        timeEntries: [{ start: st, end: en }],
+        isHoliday: false,
+        forcedOff: false,
+        subspecCoverage: false,
+        teeCount: 0,
+        supervisionStart: '', supervisionEnd: '',
+        preCallStart: '', preCallEnd: '',
+        tempCoverage: []
+      };
+      shiftsFromSheet++;
+    });
+
+    // 2) Create placeholder shifts for case dates that still have no shift
     const caseDates = {};
     newCases.forEach(c => {
       if (!caseDates[c.shiftDate]) caseDates[c.shiftDate] = { earliest: '23:59', latest: '00:00' };
@@ -36703,21 +36812,21 @@ function showCSVImportConfirmation(result) {
       if (c.endTime && c.endTime > caseDates[c.shiftDate].latest) caseDates[c.shiftDate].latest = c.endTime;
     });
 
-    let shiftsCreated = 0;
+    let placeholdersCreated = 0;
     Object.keys(caseDates).forEach(date => {
       if (!data.shifts[date]) {
         const st = caseDates[date].earliest || '07:00';
         const en = caseDates[date].latest || '17:00';
         data.shifts[date] = {
           date, assignmentType: 'OR',
-          siteId: data.shifts[date]?.siteId || getCurrentSiteId(),
+          siteId: getCurrentSiteId(),
           startTime: st, endTime: en,
           timeEntries: [{ start: st, end: en }],
           isHoliday: false,
           forcedOff: false, subspecCoverage: false,
           teeCount: 0, supervisionStart: '', supervisionEnd: '', preCallStart: '', preCallEnd: '', tempCoverage: []
         };
-        shiftsCreated++;
+        placeholdersCreated++;
       }
     });
 
@@ -36726,7 +36835,12 @@ function showCSVImportConfirmation(result) {
     saveData(data);
     newCases.forEach(c => { writeSharedCase(c, data.shifts[c.shiftDate]); writeCaseDoc(c); });
     updateHeaderPoints();
-    showToast(`Imported ${newCases.length} cases` + (shiftsCreated > 0 ? ` and created ${shiftsCreated} placeholder shifts` : ''));
+
+    const bits = [];
+    if (newCases.length > 0) bits.push(`${newCases.length} case${newCases.length === 1 ? '' : 's'}`);
+    if (shiftsFromSheet > 0) bits.push(`${shiftsFromSheet} shift${shiftsFromSheet === 1 ? '' : 's'}`);
+    if (placeholdersCreated > 0) bits.push(`${placeholdersCreated} placeholder shift${placeholdersCreated === 1 ? '' : 's'}`);
+    showToast('Imported ' + bits.join(' + '));
   };
 
   document.getElementById('importConfirmModal').classList.remove('hidden');
@@ -36735,14 +36849,28 @@ function showCSVImportConfirmation(result) {
 async function parseCaseExcel(file) {
   const arrayBuffer = await file.arrayBuffer();
   const wb = XLSX.read(arrayBuffer, { type: 'array' });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-  if (rows.length === 0) return { cases: [], months: [] };
+
+  // Locate sheets by name (case-insensitive), with fallbacks
+  const findSheet = (...names) => {
+    for (const n of names) {
+      const match = wb.SheetNames.find(sn => sn.toLowerCase() === n.toLowerCase());
+      if (match) return wb.Sheets[match];
+    }
+    return null;
+  };
+  const casesSheet = findSheet('Cases', 'Case') || wb.Sheets[wb.SheetNames[0]];
+  const shiftsSheet = findSheet('Shifts', 'Shift');
+
+  // Parse optional Shifts sheet
+  const shifts = shiftsSheet ? parseShiftsSheetRows(XLSX.utils.sheet_to_json(shiftsSheet, { defval: '' })) : [];
+
+  const rows = XLSX.utils.sheet_to_json(casesSheet, { defval: '' });
+  if (rows.length === 0) return { cases: [], shifts, months: [] };
 
   // Flexible column header matching
   const headers = Object.keys(rows[0]);
   const findCol = (...patterns) => headers.find(h => patterns.some(p => h.toLowerCase().includes(p.toLowerCase()))) || '';
-  const dateCol = findCol('date', 'dos', 'Date');
+  const dateCol = findCol('date', 'dos');
   const surgeonCol = findCol('surgeon', 'provider', 'attending');
   const unitsCol = findCol('units', 'points', 'base');
   const startCol = findCol('start', 'begin');
@@ -36751,6 +36879,8 @@ async function parseCaseExcel(file) {
   const sharedCol = findCol('shared', 'split');
   const procCol = findCol('procedure', 'proc', 'description', 'case');
   const asaCol = findCol('asa code', 'asa', 'cpt');
+  const psCol = findCol('physical status', 'physical', 'asa class', 'asa status');
+  const emergencyCol = findCol('emergency');
 
   if (!dateCol) throw new Error('No date column found. Expected: Date, DOS, or similar.');
 
@@ -36766,21 +36896,35 @@ async function parseCaseExcel(file) {
     const endTime = endCol ? parseExcelTime(row[endCol]) : '';
     if (baseUnits <= 0 && !startTime) continue;
 
-    const surgeon = surgeonCol ? String(row[surgeonCol]) : '';
+    const surgeon = surgeonCol ? String(row[surgeonCol]).trim() : '';
     const modifiers = modCol ? String(row[modCol]) : '';
-    const shared = sharedCol ? String(row[sharedCol]) : '';
-    const procedure = procCol ? String(row[procCol]) : '';
+    const sharedRaw = sharedCol ? String(row[sharedCol]).trim() : '';
+    const procedure = procCol ? String(row[procCol]).trim() : '';
     const asaCode = asaCol ? String(row[asaCol]).trim() : '';
+    const psRaw = psCol ? String(row[psCol]).trim() : '';
+    const emergencyRaw = emergencyCol ? String(row[emergencyCol]).trim() : '';
 
-    const isEmergency = /\bE\b/i.test(modifiers);
-    let physicalStatus = 'P3';
-    const psMatch = modifiers.match(/\b([45])\b/);
-    if (psMatch) physicalStatus = 'P' + psMatch[1];
+    // Emergency: dedicated column wins, otherwise look for "E" in modifiers
+    const isEmergency = emergencyCol
+      ? /^(y|yes|true|1|e)$/i.test(emergencyRaw)
+      : /\bE\b/i.test(modifiers);
+
+    // Physical status: dedicated column wins, otherwise scan modifiers
+    let physicalStatus = 'P2';
+    if (psRaw) {
+      const m = psRaw.match(/([1-6])/);
+      if (m) physicalStatus = 'P' + m[1];
+    } else {
+      const psMatch = modifiers.match(/\b([1-6])\b/);
+      if (psMatch) physicalStatus = 'P' + psMatch[1];
+    }
+
+    const isSharedCase = /^(y|yes|true|1)$/i.test(sharedRaw);
 
     cases.push({
       id: genId(),
       caseType: 'standard',
-      procedure: procedure,
+      procedure: procedure || surgeon,
       asaCode: asaCode,
       baseUnits: baseUnits,
       physicalStatus: physicalStatus,
@@ -36788,23 +36932,50 @@ async function parseCaseExcel(file) {
       endTime: endTime,
       shiftDate: dateStr,
       isEmergency: isEmergency,
-      isMedicalProcedure: false,
-      medicalProcedureUnits: 0,
+      isMedicalProc: false,
+      medicalUnits: 0,
       isAcutePain: false,
       acutePainUnits: 0,
       isHighRiskPeds: false,
       isORCase: false,
+      isSharedCase: isSharedCase,
+      sharedStartupPct: isSharedCase ? 50 : 100,
       nerveBlock: 'none',
-      centralLine: false,
-      arterialLine: false,
-      pac: false,
-      teeAddOn: false,
-      thoracicEpidural: false,
-      notes: surgeon + (shared && /^y/i.test(shared) ? ' (shared)' : ''),
+      hasCentralLine: false,
+      hasArterialLine: false,
+      hasPAC: false,
+      hasTEEAddOn: false,
+      hasITMorphine: false,
+      hasThoracicEpidural: false,
+      notes: surgeon,
       timestamp: new Date().toISOString()
     });
   }
-  return { cases, months: buildCaseMonthSummary(cases) };
+  return { cases, shifts, months: buildCaseMonthSummary(cases) };
+}
+
+// Parse rows from the optional "Shifts" sheet in the import template.
+// Expected columns (flexible): Date, Start, End.
+function parseShiftsSheetRows(rows) {
+  if (!rows || rows.length === 0) return [];
+  const headers = Object.keys(rows[0]);
+  const findCol = (...patterns) => headers.find(h => patterns.some(p => h.toLowerCase().includes(p.toLowerCase()))) || '';
+  const dateCol = findCol('date', 'dos');
+  const startCol = findCol('start', 'begin', 'clock in');
+  const endCol = findCol('end', 'stop', 'finish', 'clock out');
+  if (!dateCol) return [];
+
+  const shifts = [];
+  for (const row of rows) {
+    const dateVal = row[dateCol];
+    if (!dateVal && dateVal !== 0) continue;
+    const dateStr = parseExcelDate(dateVal);
+    if (!dateStr || dateStr.length !== 10) continue;
+    const startTime = startCol ? parseExcelTime(row[startCol]) : '';
+    const endTime = endCol ? parseExcelTime(row[endCol]) : '';
+    shifts.push({ date: dateStr, startTime, endTime });
+  }
+  return shifts;
 }
 
 async function parseCasePDF(file) {
@@ -36825,18 +36996,21 @@ async function parseCasePDF(file) {
       endTime: pc.endTime || '',
       shiftDate: pc.date,
       isEmergency: false,
-      isMedicalProcedure: false,
-      medicalProcedureUnits: 0,
+      isMedicalProc: false,
+      medicalUnits: 0,
       isAcutePain: false,
       acutePainUnits: 0,
       isHighRiskPeds: false,
       isORCase: false,
+      isSharedCase: false,
+      sharedStartupPct: 100,
       nerveBlock: 'none',
-      centralLine: false,
-      arterialLine: false,
-      pac: false,
-      teeAddOn: false,
-      thoracicEpidural: false,
+      hasCentralLine: false,
+      hasArterialLine: false,
+      hasPAC: false,
+      hasTEEAddOn: false,
+      hasITMorphine: false,
+      hasThoracicEpidural: false,
       notes: pc.cptCode ? 'CPT ' + pc.cptCode : '',
       timestamp: new Date().toISOString()
     });
