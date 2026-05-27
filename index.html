@@ -3806,6 +3806,27 @@ body.hide-monetary .monetary-hide { display: none !important; }
     </details>
   </div>
 
+  <!-- Excel Template (Shifts + Cases) -->
+  <div class="card" style="margin-top:12px;">
+    <h2>Excel Template</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Download a pre-formatted Excel workbook with two sheets &mdash; <strong>Shifts</strong> and <strong>Cases</strong> &mdash; then fill in your prior data and upload it on the Import page. Cases link to shifts automatically by date.
+    </p>
+    <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
+      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">What's in the template</summary>
+      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;line-height:1.6;">
+        <strong>Sheet 1 &mdash; Shifts:</strong><br>
+        <code style="font-size:0.7rem;">Date | Start | End</code><br>
+        One row per shift. Dates with an existing shift in the app are skipped.<br><br>
+        <strong>Sheet 2 &mdash; Cases:</strong><br>
+        <code style="font-size:0.7rem;">Date | Procedure | ASA Code | Base Units | Physical Status | Start | End | Surgeon | Emergency | Shared</code><br>
+        One row per case. Cases attach to the shift on the same date. If no shift exists, a placeholder shift is auto-created.<br><br>
+        Times accept H:MM AM/PM, 24-hour HH:MM, or Excel time cells. Dates accept M/D, M/D/YYYY, or Excel date cells.
+      </div>
+    </details>
+    <button class="btn btn-primary" id="downloadTemplateBtn" style="width:100%;">Download Excel Template</button>
+  </div>
+
   <!-- Owner-only: restore data doc from a restored backup database -->
   <div class="card hidden" id="ownerRecoveryCard" style="margin-top:12px;">
     <h2>Restore from backup database</h2>
@@ -3847,27 +3868,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
 
 <!-- IMPORT PAGE -->
 <div class="page" id="page-import">
-  <!-- Excel Template (Shifts + Cases) -->
-  <div class="card">
-    <h2>Excel Template</h2>
-    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-      Download a pre-formatted Excel workbook with two sheets &mdash; <strong>Shifts</strong> and <strong>Cases</strong> &mdash; then fill in your prior data and re-upload below. Cases link to shifts automatically by date.
-    </p>
-    <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
-      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">What's in the template</summary>
-      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;line-height:1.6;">
-        <strong>Sheet 1 &mdash; Shifts:</strong><br>
-        <code style="font-size:0.7rem;">Date | Start | End</code><br>
-        One row per shift. Dates with an existing shift in the app are skipped.<br><br>
-        <strong>Sheet 2 &mdash; Cases:</strong><br>
-        <code style="font-size:0.7rem;">Date | Procedure | ASA Code | Base Units | Physical Status | Start | End | Surgeon | Emergency | Shared</code><br>
-        One row per case. Cases attach to the shift on the same date. If no shift exists, a placeholder shift is auto-created.<br><br>
-        Times accept H:MM AM/PM, 24-hour HH:MM, or Excel time cells. Dates accept M/D, M/D/YYYY, or Excel date cells.
-      </div>
-    </details>
-    <button class="btn btn-primary" id="downloadTemplateBtn" style="width:100%;">Download Excel Template</button>
-  </div>
-
   <!-- Import Shifts from QGenda -->
   <div class="card">
     <h2>Import Shifts from QGenda</h2>
@@ -3906,7 +3906,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <h2>Import Cases</h2>
     <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
       Upload cases from Excel (.xlsx), CSV (Google Sheet export), PDF (Charge Detail), or screenshot.
-      If the workbook also has a <strong>Shifts</strong> sheet (as in the template above), those shifts will be imported too.
+      If the workbook also has a <strong>Shifts</strong> sheet (see the Excel Template on the Settings page), those shifts will be imported too.
       Duplicate cases (same date + start time) and dates with an existing shift are skipped.
     </p>
     <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
