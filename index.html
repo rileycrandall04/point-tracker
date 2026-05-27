@@ -11824,8 +11824,31 @@ function hideSessionExpiredBanner() {
 
 async function loadFromFirestore(uid) {
   try {
-    const dataDoc = await db.collection('users').doc(uid).collection('data').doc('data').get();
-    const settingsDoc = await db.collection('users').doc(uid).collection('data').doc('settings').get();
+    // Force server-first reads on initial load. Firestore's default is
+    // cache-first — fine in steady-state but disastrous on a post-idle
+    // reload: a stale/empty offline cache returns success with `exists`
+    // true but empty fields, we return 'loaded' with empty data, and the
+    // UI populates with zeros. Server-first guarantees either fresh data
+    // or a network error (caught below); cache fallback keeps offline
+    // use working when the network truly is unreachable.
+    async function getDoc(docRef) {
+      try {
+        return await docRef.get({ source: 'server' });
+      } catch (netErr) {
+        console.warn('[boot] server read failed, falling back to cache:', netErr && netErr.code);
+        return await docRef.get({ source: 'cache' });
+      }
+    }
+    const dataRef = db.collection('users').doc(uid).collection('data').doc('data');
+    const settingsRef = db.collection('users').doc(uid).collection('data').doc('settings');
+    const dataDoc = await getDoc(dataRef);
+    const settingsDoc = await getDoc(settingsRef);
+    console.log('[boot] firestore load:', {
+      dataExists: dataDoc.exists,
+      fromCache: dataDoc.metadata && dataDoc.metadata.fromCache,
+      blobCases: (dataDoc.exists && Array.isArray(dataDoc.data().cases)) ? dataDoc.data().cases.length : 0,
+      blobShifts: (dataDoc.exists && dataDoc.data().shifts) ? Object.keys(dataDoc.data().shifts).length : 0
+    });
 
     if (dataDoc.exists) {
       const d = dataDoc.data();
@@ -38823,6 +38846,13 @@ auth.onAuthStateChanged(async (user) => {
     // simply couldn't fetch. A reload retries the read.
     const loadFailed = (result === 'error' || result === 'timeout');
     firestoreSyncEnabled = !loadFailed;
+    console.log('[boot] post-load state:', {
+      result,
+      loadFailed,
+      casesCount: (data.cases || []).length,
+      shiftsCount: Object.keys(data.shifts || {}).length,
+      hasLocalCache: !!localStorage.getItem(STORAGE_KEY)
+    });
     if (loadFailed) {
       // Re-show the auth overlay with an error message so the user has an
       // obvious "tap Sign in to retry" path instead of staring at a
@@ -39107,11 +39137,15 @@ function reloadCommunityData() {
 }
 
 // Session guard: refresh auth token when user returns after extended absence
-let lastHiddenAt = 0;
+// Start as null (not 0) so we only act on transitions where we actually
+// observed a `hidden` event first. With `0`, a stray `visible` event on a
+// freshly-loaded page computes elapsed = Date.now() (millions of ms),
+// which would falsely trigger the 5-min reload mid-boot.
+let lastHiddenAt = null;
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     lastHiddenAt = Date.now();
-  } else if (currentUser) {
+  } else if (currentUser && lastHiddenAt !== null) {
     const elapsed = Date.now() - lastHiddenAt;
     if (elapsed > 5 * 60 * 1000) {
       // After 5+ min hidden, the in-memory data + Firestore connection are
