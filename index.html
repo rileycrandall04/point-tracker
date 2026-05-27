@@ -8165,8 +8165,10 @@ function renderAdminMSUserCard(uid, profile, userSiteId) {
       html += '<button class="btn btn-sm" onclick="adminMSReconcileToBlob(\'' + uid + '\')" style="background:var(--accent2);color:#1e293b;">Reconcile to blob</button>';
       html += '<button class="btn btn-sm" onclick="adminMSRebuildBlobFromSub(\'' + uid + '\')" style="background:var(--primary);color:#fff;">Rebuild blob &larr; sub</button>';
       html += '<button class="btn btn-sm" onclick="adminMSForceSignOut(\'' + uid + '\')" style="background:var(--surface);color:var(--accent2);">Force re-sign-in</button>';
+      html += '<button class="btn btn-sm" onclick="adminMSShowUserDiagnostics(\'' + uid + '\')" style="background:var(--surface2);color:var(--text);">Recent diagnostics</button>';
       html += '</div>';
       html += '<div id="adminMSDriftDetail_' + uid + '" style="font-size:0.72rem;color:var(--text-dim);"></div>';
+      html += '<div id="adminMSUserDiagBox_' + uid + '" style="font-size:0.72rem;margin-top:6px;"></div>';
       html += '<p style="font-size:0.7rem;color:var(--text-dim);margin:6px 0 10px 0;">Inspect first to see which case IDs differ. Reconcile makes the subcollection an exact mirror of the blob (writes missing, deletes extras). Force re-sign-in arms a signal that, on the user\'s next app open, signs them out and clears their service worker + caches so they pick up the latest version. Only works if the user has at least v344 cached — users on older code won\'t see the signal.</p>';
     } else {
       html += '<p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 8px 0;">User has not logged in since the new per-case sync system shipped. Click below to force-migrate their cases from this admin session.</p>';
@@ -8424,6 +8426,83 @@ async function adminMSRebuildBlobFromSub(uid) {
     showToast('Blob rebuilt from subcollection (' + res.newCount + ' cases)');
   } catch (err) {
     detailEl.innerHTML = '<span style="color:var(--accent2);">Rebuild failed: ' + escapeHtml(err.message || String(err)) + '</span>';
+  }
+}
+
+// Owner: dump recent scalingDiagnostics entries scoped to one user. Used to
+// root-cause case-drift events — write_case_doc_failed entries here name
+// the exact case id + error code that didn't make it to the subcollection.
+// No composite index needed: query by uid, sort client-side.
+async function adminMSShowUserDiagnostics(uid) {
+  const outEl = document.getElementById('adminMSUserDiagBox_' + uid);
+  if (!outEl) return;
+  if (!isAppOwner() && !isLegacyAdmin()) {
+    outEl.innerHTML = '<span style="color:var(--accent2);">Owner only.</span>';
+    return;
+  }
+  outEl.innerHTML = '<span style="color:var(--text-dim);">Loading diagnostics for this user…</span>';
+  try {
+    const snap = await db.collection('scalingDiagnostics').where('uid', '==', uid).limit(200).get();
+    if (snap.empty) {
+      outEl.innerHTML = '<span style="color:var(--text-dim);">No diagnostic entries for this user. (Either no failures logged, or pruned past the 30-day retention.)</span>';
+      return;
+    }
+    const rows = [];
+    snap.forEach(d => rows.push({ id: d.id, data: d.data() || {} }));
+    rows.sort((a, b) => (b.data.timestamp || '').localeCompare(a.data.timestamp || ''));
+    // Bucket by type so write_case_doc_failed jumps out at the top.
+    const failed = rows.filter(r => r.data.type === 'write_case_doc_failed');
+    const others = rows.filter(r => r.data.type !== 'write_case_doc_failed');
+    let html = '<div style="margin-top:4px;border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--surface);">';
+    html += '<div style="font-size:0.74rem;font-weight:600;color:var(--text);margin-bottom:4px;">Diagnostics for ' + escapeHtml(uid) + ' &mdash; ' + rows.length + ' entr' + (rows.length !== 1 ? 'ies' : 'y') + '</div>';
+    if (failed.length > 0) {
+      html += '<div style="font-size:0.72rem;font-weight:600;color:var(--accent2);margin:6px 0 2px;">Per-case write failures (' + failed.length + ')</div>';
+      html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="width:100%;border-collapse:collapse;font-size:0.7rem;min-width:520px;">';
+      html += '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);">';
+      html += '<th style="padding:3px 6px;">When</th><th style="padding:3px 6px;">Case ID</th><th style="padding:3px 6px;">Error code</th><th style="padding:3px 6px;">Error</th>';
+      html += '</tr></thead><tbody>';
+      for (const r of failed.slice(0, 50)) {
+        const d = r.data;
+        const when = d.timestamp ? new Date(d.timestamp).toLocaleString() : '?';
+        html += '<tr style="border-bottom:1px solid rgba(71,85,105,0.15);vertical-align:top;">';
+        html += '<td style="padding:3px 6px;white-space:nowrap;">' + escapeHtml(when) + '</td>';
+        html += '<td style="padding:3px 6px;font-family:monospace;">' + escapeHtml(d.caseId || '') + '</td>';
+        html += '<td style="padding:3px 6px;">' + escapeHtml(d.errorCode || '') + '</td>';
+        html += '<td style="padding:3px 6px;color:var(--text-dim);">' + escapeHtml(String(d.error || '').slice(0, 160)) + '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+    } else {
+      html += '<div style="font-size:0.72rem;color:var(--text-dim);margin:4px 0;">No per-case write failures logged for this user.</div>';
+    }
+    if (others.length > 0) {
+      html += '<div style="font-size:0.72rem;font-weight:600;color:var(--text);margin:8px 0 2px;">Other entries (' + others.length + ')</div>';
+      html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="width:100%;border-collapse:collapse;font-size:0.7rem;min-width:520px;">';
+      html += '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);">';
+      html += '<th style="padding:3px 6px;">When</th><th style="padding:3px 6px;">Type</th><th style="padding:3px 6px;">Detail</th>';
+      html += '</tr></thead><tbody>';
+      for (const r of others.slice(0, 50)) {
+        const d = r.data;
+        const when = d.timestamp ? new Date(d.timestamp).toLocaleString() : '?';
+        const bits = [];
+        if (d.blobCount !== undefined) bits.push('blob=' + d.blobCount);
+        if (d.subCount !== undefined) bits.push('sub=' + d.subCount);
+        if (d.error) bits.push('err=' + String(d.error).slice(0, 80));
+        if (d.errorCode) bits.push('code=' + d.errorCode);
+        if (d.caller) bits.push('@' + d.caller);
+        if (d.swCacheVersion) bits.push('v=' + d.swCacheVersion);
+        html += '<tr style="border-bottom:1px solid rgba(71,85,105,0.15);vertical-align:top;">';
+        html += '<td style="padding:3px 6px;white-space:nowrap;">' + escapeHtml(when) + '</td>';
+        html += '<td style="padding:3px 6px;">' + escapeHtml(d.type || '?') + '</td>';
+        html += '<td style="padding:3px 6px;color:var(--text-dim);">' + escapeHtml(bits.join(' · ')) + '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+    }
+    html += '</div>';
+    outEl.innerHTML = html;
+  } catch (err) {
+    outEl.innerHTML = '<span style="color:var(--accent2);">Diagnostics load failed: ' + escapeHtml(err.message || String(err)) + '</span>';
   }
 }
 
