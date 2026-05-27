@@ -38245,9 +38245,11 @@ document.getElementById('googleSignInBtn').addEventListener('click', async () =>
   errEl.innerHTML = '';
   loadEl.classList.remove('hidden');
   btn.disabled = true;
-  // If signInWithPopup neither resolves nor rejects within 90s, force
+  // If signInWithPopup neither resolves nor rejects within 30s, force
   // the UI back into a clickable state so the user can retry without
-  // reloading the page.
+  // reloading the page. 30s is a comfortable upper bound for a normal
+  // Google account-picker flow; longer than that and Firebase has
+  // almost certainly lost the popup.
   const watchdog = setTimeout(() => {
     if (!_signInInProgress) return;
     _signInInProgress = false;
@@ -38256,7 +38258,7 @@ document.getElementById('googleSignInBtn').addEventListener('click', async () =>
     errEl.innerHTML = '<strong>Sign-in didn’t finish.</strong>'
       + '<div style="margin-top:4px;">If the Google popup closed without completing, tap <strong>Sign in with Google</strong> again to retry.</div>';
     errEl.classList.remove('hidden');
-  }, 90000);
+  }, 30000);
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
     await auth.signInWithPopup(provider);
@@ -38506,6 +38508,22 @@ auth.onAuthStateChanged(async (user) => {
     // simply couldn't fetch. A reload retries the read.
     const loadFailed = (result === 'error' || result === 'timeout');
     firestoreSyncEnabled = !loadFailed;
+    if (loadFailed) {
+      // Re-show the auth overlay with an error message so the user has an
+      // obvious "tap Sign in to retry" path instead of staring at a
+      // populated-but-empty app shell. Skip the rest of init; clicking
+      // Sign in re-fires onAuthStateChanged and we re-enter this handler.
+      const overlay = document.getElementById('authOverlay');
+      if (overlay) overlay.classList.remove('hidden');
+      const errEl = document.getElementById('authError');
+      if (errEl) {
+        const title = result === 'timeout' ? 'Loading is slow.' : 'Couldn’t load your data.';
+        errEl.innerHTML = '<strong>' + title + '</strong>'
+          + '<div style="margin-top:4px;">Tap <strong>Sign in with Google</strong> below to retry.</div>';
+        errEl.classList.remove('hidden');
+      }
+      return;
+    }
     // Seed the shared-shifts diff cache once per session so subsequent
     // saves only write what changed. Fire-and-forget; sync functions
     // await this promise before running.
@@ -38515,14 +38533,8 @@ auth.onAuthStateChanged(async (user) => {
     document.getElementById('authOverlay').classList.add('hidden');
 
     // Re-run migration & init with cloud data
-    if (!loadFailed) migrateData(data);
+    migrateData(data);
     initApp();
-    if (loadFailed) {
-      const msg = result === 'timeout'
-        ? 'Loading is slow — tap to reload to retry.'
-        : 'Could not load your data — reload to retry. Nothing was saved.';
-      showToast(msg);
-    }
 
     // Admin cards live on the dedicated Admin page (renderAdminPage()).
     // Pre-fill the Claude API key so when the app_owner opens the Admin
