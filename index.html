@@ -22621,6 +22621,21 @@ if (document.readyState === 'loading') {
 }
 
 function renderWeeklyChart() {
+  // Chart.js paints at the canvas's current size. If the canvas isn't laid
+  // out yet (e.g. parent page hidden during the post-login cascade, or the
+  // post-idle reload happens before layout settles), the chart locks in at
+  // zero dimensions and the bars never appear even after the panel becomes
+  // visible. Bail without caching the fingerprint so a later call in the
+  // cascade retries.
+  const _canvasEl = document.getElementById('weeklyBarCanvas');
+  if (!_canvasEl || _canvasEl.clientWidth === 0) return;
+  // If a previous call painted at a different size (typically: ran while
+  // the canvas was hidden and locked in at zero width), invalidate the
+  // fingerprint cache so we force a redraw at the current real size.
+  if (weeklyBarChart && weeklyBarChart.width !== _canvasEl.clientWidth) {
+    _weeklyChartFingerprint = null;
+  }
+
   const weekDates = getWeekDates(workingDate);
   const today = effectiveWorkDate();
   const labels = weekDates.map(d => {
