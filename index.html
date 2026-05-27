@@ -10607,6 +10607,94 @@ function writeCaseDoc(caseData) {
   });
 }
 
+// Best-effort batched mirror of every case in `data.cases` to the per-case
+// subcollection. Used by paths that replace data.cases wholesale (Import
+// JSON, Restore from backup database) so those cases don't end up blob-only
+// — which would silently disappear after the sub-only cutover. Idempotent
+// (set overwrites by id). Returns a summary so callers can surface status.
+async function mirrorAllCasesToSub() {
+  if (!firestoreSyncEnabled || !currentUser) return { written: 0, skipped: 'sync_off' };
+  if (!isCaseDualWriteEnabled()) return { written: 0, skipped: 'dual_write_off' };
+  const uid = currentUser.uid;
+  const cases = (data.cases || []).filter(c => c && c.id);
+  if (cases.length === 0) return { written: 0 };
+  const batchSize = 400;
+  let written = 0;
+  for (let i = 0; i < cases.length; i += batchSize) {
+    const slice = cases.slice(i, i + batchSize);
+    const batch = db.batch();
+    slice.forEach(c => {
+      const ref = db.collection('users').doc(uid).collection('cases').doc(c.id);
+      const payload = JSON.parse(JSON.stringify(c));
+      payload.updatedAt = new Date().toISOString();
+      batch.set(ref, payload);
+    });
+    try {
+      await batch.commit();
+      written += slice.length;
+    } catch (err) {
+      console.error('mirrorAllCasesToSub batch error:', err);
+      logScalingDiagnostic('mirror_all_batch_failed', {
+        error: String((err && err.message) || err),
+        errorCode: (err && err.code) || ''
+      });
+    }
+  }
+  return { written };
+}
+
+// Defensive on-load reconciliation: at startup, read the blob and the
+// per-case subcollection straight from Firestore, and write any case that's
+// in the blob but missing from the sub. Backstops the four known ways a
+// case can land blob-only — failed per-case writes (no retry today),
+// adds during a sync-disabled window, paths that bypass writeCaseDoc
+// (Import JSON / Restore tool / etc.), and the per-user opt-out flag. Read
+// only; never deletes from the sub.
+async function reconcileSubFromBlobOnLoad() {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (!isCaseDualWriteEnabled()) return;
+  if (!settings || settings.casesBackfilledV1 !== true) return; // not migrated yet
+  try {
+    const uid = currentUser.uid;
+    const [blobSnap, subSnap] = await Promise.all([
+      db.collection('users').doc(uid).collection('data').doc('data').get(),
+      db.collection('users').doc(uid).collection('cases').get()
+    ]);
+    const blobCases = (blobSnap.exists ? (blobSnap.data() || {}).cases : []) || [];
+    const subIds = new Set();
+    subSnap.forEach(d => { if (d.id) subIds.add(d.id); });
+    const missing = blobCases.filter(c => c && c.id && !subIds.has(c.id));
+    if (missing.length === 0) return;
+    const batchSize = 400;
+    let written = 0;
+    for (let i = 0; i < missing.length; i += batchSize) {
+      const slice = missing.slice(i, i + batchSize);
+      const batch = db.batch();
+      slice.forEach(c => {
+        const ref = db.collection('users').doc(uid).collection('cases').doc(c.id);
+        const payload = JSON.parse(JSON.stringify(c));
+        payload.updatedAt = new Date().toISOString();
+        batch.set(ref, payload);
+      });
+      try {
+        await batch.commit();
+        written += slice.length;
+      } catch (err) {
+        console.error('[reconcileSubFromBlob] batch error:', err);
+        logScalingDiagnostic('on_load_sub_reconcile_batch_failed', {
+          error: String((err && err.message) || err),
+          errorCode: (err && err.code) || ''
+        });
+        return;
+      }
+    }
+    console.log('[reconcileSubFromBlob] Wrote ' + written + ' blob-only case(s) to subcollection');
+    logScalingDiagnostic('on_load_sub_reconcile', { wrote: written });
+  } catch (err) {
+    console.error('[reconcileSubFromBlob] failed:', err);
+  }
+}
+
 function deleteCaseDoc(caseId) {
   if (!firestoreSyncEnabled || !currentUser) return;
   if (!isCaseDualWriteEnabled()) return;
@@ -34004,6 +34092,11 @@ document.getElementById('importFile').addEventListener('change', (e) => {
           migrateData(data); // handles timeEntries migration for old format
           saveData(data);
           syncAllSharedCases();
+          // Mirror every imported case into the per-case subcollection so
+          // they don't end up blob-only after the sub-only cutover.
+          mirrorAllCasesToSub().then(r => {
+            if (r && r.written) console.log('[import] Mirrored ' + r.written + ' case(s) to subcollection');
+          });
           updateHeaderPoints();
           showToast('Data imported!');
           renderHistory();
@@ -38362,9 +38455,17 @@ async function restoreFromRecoveryDb() {
     migrateData(data);
     saveData(data);
     if (typeof syncAllSharedCases === 'function') syncAllSharedCases();
+    // Also mirror the restored cases into the per-case subcollection so
+    // sub-only readers see them too (avoids restored cases being blob-only).
+    let subMirrored = 0;
+    if (typeof mirrorAllCasesToSub === 'function') {
+      try { const r = await mirrorAllCasesToSub(); subMirrored = (r && r.written) || 0; } catch (_) {}
+    }
     if (typeof updateHeaderPoints === 'function') updateHeaderPoints();
     if (typeof renderHistory === 'function') renderHistory();
-    setStatus('Restored ' + caseCount + ' cases and ' + shiftCount + ' shifts. Reload the app to see everything.');
+    setStatus('Restored ' + caseCount + ' cases and ' + shiftCount + ' shifts'
+      + (subMirrored ? ' (' + subMirrored + ' mirrored to subcollection)' : '')
+      + '. Reload the app to see everything.');
   } catch (err) {
     console.error('Recovery failed:', err);
     setStatus('Failed: ' + ((err && err.message) || err), true);
@@ -38535,6 +38636,13 @@ auth.onAuthStateChanged(async (user) => {
     // Re-run migration & init with cloud data
     migrateData(data);
     initApp();
+    // Defensive backstop for sub-only go-live: fire-and-forget reconcile
+    // that writes any blob-only cases into the per-case subcollection so
+    // failed writes / bypass paths / sync-disabled windows self-heal.
+    // We're already past the loadFailed early-return above, so no extra gate.
+    if (typeof reconcileSubFromBlobOnLoad === 'function') {
+      reconcileSubFromBlobOnLoad();
+    }
 
     // Admin cards live on the dedicated Admin page (renderAdminPage()).
     // Pre-fill the Claude API key so when the app_owner opens the Admin
