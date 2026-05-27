@@ -1834,6 +1834,18 @@ input.mil-time.invalid {
   border-radius: 50%;
   animation: il-spin 0.7s linear infinite;
 }
+.initial-loader-text {
+  color: rgba(255,255,255,0.55);
+  font-size: 0.85rem;
+  font-style: italic;
+  text-align: center;
+  min-height: 1.2em;
+  padding: 0 24px;
+  transition: opacity 0.4s ease;
+}
+.initial-loader-text.fade {
+  opacity: 0;
+}
 .initial-loader-stuck-msg {
   color: rgba(255,255,255,0.55);
   font-size: 0.78rem;
@@ -2013,6 +2025,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
      screen for the first second of boot. Hidden by hideInitialLoader(). -->
 <div id="initialLoader" class="initial-loader" aria-hidden="true">
   <div class="initial-loader-spinner"></div>
+  <div id="initialLoaderText" class="initial-loader-text"></div>
   <div id="initialLoaderStuckMsg" class="initial-loader-stuck-msg hidden">
     Sign-in is taking longer than usual.
     <br>
@@ -2035,6 +2048,38 @@ body.hide-monetary .monetary-hide { display: none !important; }
     }
   }, 8000);
   setTimeout(hideInitialLoader, 30000);
+  // Cycle anesthesia-flavored phrases under the spinner while boot is in
+  // progress. Shuffled so it doesn't always start with the same line.
+  (function() {
+    var phrases = [
+      'Drawing up propofol...',
+      'Intubating...',
+      'Getting Loss of Resistance...',
+      'Raising the bed...',
+      'Giving cefazolin...',
+      'Threading the guidewire...',
+      'Getting consent...',
+      'Giving more roc...',
+      'Waiting for room turnover...'
+    ];
+    for (var i = phrases.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = phrases[i]; phrases[i] = phrases[j]; phrases[j] = tmp;
+    }
+    var textEl = document.getElementById('initialLoaderText');
+    if (!textEl) return;
+    textEl.textContent = phrases[0];
+    var idx = 0;
+    setInterval(function() {
+      if (!document.getElementById('initialLoader')) return;
+      textEl.classList.add('fade');
+      setTimeout(function() {
+        idx = (idx + 1) % phrases.length;
+        textEl.textContent = phrases[idx];
+        textEl.classList.remove('fade');
+      }, 400);
+    }, 2400);
+  })();
 </script>
 
 <!-- Demo mode banner -->
