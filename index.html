@@ -39058,16 +39058,14 @@ document.addEventListener('visibilitychange', () => {
   } else if (currentUser) {
     const elapsed = Date.now() - lastHiddenAt;
     if (elapsed > 5 * 60 * 1000) {
-      currentUser.getIdToken(true).then(() => {
-        firestoreSyncEnabled = true;
-        hideSessionExpiredBanner();
-        showToast('Session refreshed');
-        // Reload community data after idle
-        reloadCommunityData();
-      }).catch(() => {
-        firestoreSyncEnabled = false;
-        showSessionExpiredBanner();
-      });
+      // After 5+ min hidden, the in-memory data + Firestore connection are
+      // unreliable enough that we'd rather boot from a known-good state
+      // than try to repair piecemeal. Reports of returning to a populated-
+      // but-empty app shell (blank date, 0 pts, no cases) trace to this
+      // path silently failing to refresh the user's `data` object. A full
+      // reload re-runs onAuthStateChanged → loadFromFirestore → initApp.
+      location.reload();
+      return;
     } else if (elapsed > 30 * 1000) {
       // Even for shorter idle periods (>30s), refresh community data
       reloadCommunityData();
