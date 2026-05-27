@@ -6809,6 +6809,19 @@ async function adminLoadUserVersions() {
         + '<span style="font-size:0.7rem;color:var(--text-dim);margin-left:8px;">'
         + 'Non-destructive — they re-auth onto the latest build. Stranded users still need Fix &amp; re-sync first.</span></div>';
     }
+    // Broader sweep that also targets the "unknown" column. Stamping a
+    // pre-v344 user is a no-op (their cached code doesn't check the flag),
+    // so this is a best-effort: anyone we can reach, we reach.
+    const allStaleN = users.filter(u => !u.stranded && (u.verNum === null || u.behind > 0)).length;
+    if (allStaleN > 0 && allStaleN > kickableN) {
+      html += '<div style="margin-bottom:8px;">'
+        + '<button class="btn btn-sm" style="background:var(--surface);color:var(--accent2);" '
+        + 'onclick="adminBulkForceSignOutAllStale()">Force sign-out all '
+        + allStaleN + ' stale + unknown (best-effort)</button>'
+        + '<span style="font-size:0.7rem;color:var(--text-dim);margin-left:8px;">'
+        + 'Includes the &quot;unknown&quot; column. v344+ users respond; pre-v344 are a no-op '
+        + '(they\'ll refresh naturally via SW update). Stranded users skipped.</span></div>';
+    }
     html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">'
       + '<table style="width:100%;border-collapse:collapse;font-size:0.72rem;min-width:560px;">'
       + '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);">'
@@ -6888,6 +6901,40 @@ async function adminBulkForceSignOutStale() {
   } catch (err) {
     showToast('Bulk failed: ' + (err && err.message || err));
     console.error('adminBulkForceSignOutStale error:', err);
+  }
+}
+
+// Broader sweep: stamp forceSignOutAt on every non-stranded user who is
+// either known-behind or "unknown" version. The forceSignOutAt code shipped
+// at v344, so the stamp is a no-op for anyone older than that — but the
+// stamp is harmless either way (the field just sits on the profile until a
+// new-enough client checks it). Users on the latest build are excluded so
+// they don't churn through an unnecessary re-auth.
+async function adminBulkForceSignOutAllStale() {
+  if (!isAppOwner()) return;
+  const targets = _adminUserVersions.filter(u => !u.stranded && (u.verNum === null || u.behind > 0));
+  if (targets.length === 0) { showToast('Nobody eligible'); return; }
+  const reachable = targets.filter(u => u.verNum !== null && u.verNum >= 344).length;
+  const bestEffort = targets.length - reachable;
+  if (!confirm('Force sign-out ' + targets.length + ' user(s)?\n\n'
+    + '• ' + reachable + ' are on v344+ and will sign out + reload onto the latest build on their next app open.\n'
+    + '• ' + bestEffort + ' are unknown or pre-v344 — the stamp is harmless but they\'ll only refresh when their service worker naturally updates on a future visit.\n\n'
+    + 'No data is lost. Stranded users are skipped — re-assign them first.')) return;
+  try {
+    const ts = new Date().toISOString();
+    const batchSize = 400;
+    for (let i = 0; i < targets.length; i += batchSize) {
+      const slice = targets.slice(i, i + batchSize);
+      const batch = db.batch();
+      slice.forEach(u => batch.set(
+        db.collection('userProfiles').doc(u.uid), { forceSignOutAt: ts }, { merge: true }));
+      await batch.commit();
+    }
+    showToast('Armed force sign-out for ' + targets.length + ' user(s)');
+    adminLoadUserVersions();
+  } catch (err) {
+    showToast('Bulk failed: ' + (err && err.message || err));
+    console.error('adminBulkForceSignOutAllStale error:', err);
   }
 }
 
