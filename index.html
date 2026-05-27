@@ -1761,6 +1761,26 @@ input.mil-time.invalid {
   padding: 24px;
   text-align: center;
 }
+.initial-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.initial-loader-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(245, 158, 11, 0.15);
+  border-top-color: #f59e0b;
+  border-radius: 50%;
+  animation: il-spin 0.7s linear infinite;
+}
+@keyframes il-spin {
+  to { transform: rotate(360deg); }
+}
 .auth-overlay h1 { font-size: 1.6rem; margin-bottom: 8px; }
 .auth-overlay p { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 24px; max-width: 340px; }
 .auth-overlay .auth-disclaimer {
@@ -1912,6 +1932,24 @@ body.hide-monetary .monetary-hide { display: none !important; }
 </style>
 </head>
 <body>
+
+<!-- Initial loader: covers everything until onAuthStateChanged resolves
+     and we know whether to show the auth overlay or the main app. Without
+     this, the post-idle reload (#510) leaves users on a white-then-blank
+     screen for the first second of boot. Hidden by hideInitialLoader(). -->
+<div id="initialLoader" class="initial-loader" aria-hidden="true">
+  <div class="initial-loader-spinner"></div>
+</div>
+<script>
+  function hideInitialLoader() {
+    const el = document.getElementById('initialLoader');
+    if (el) el.remove();
+  }
+  // Defensive fallback: if onAuthStateChanged never fires (fatal boot
+  // error, etc.), drop the loader after 30s so the user can at least
+  // see and interact with the underlying state.
+  setTimeout(hideInitialLoader, 30000);
+</script>
 
 <!-- Demo mode banner -->
 <div id="demoBanner" class="hidden" style="position:fixed;bottom:var(--bottom-nav);left:0;right:0;z-index:9999;background:rgba(250,204,21,0.95);color:#1a1a1a;text-align:center;padding:4px 12px;font-size:0.75rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;">
@@ -38799,6 +38837,7 @@ auth.onAuthStateChanged(async (user) => {
           + '<div style="margin-top:4px;">Tap <strong>Sign in with Google</strong> below to retry.</div>';
         errEl.classList.remove('hidden');
       }
+      hideInitialLoader();
       return;
     }
     // Seed the shared-shifts diff cache once per session so subsequent
@@ -38816,6 +38855,7 @@ auth.onAuthStateChanged(async (user) => {
     // Re-run migration & init with cloud data
     migrateData(data);
     initApp();
+    hideInitialLoader();
     // Defensive backstop for sub-only go-live: fire-and-forget reconcile
     // that writes any blob-only cases into the per-case subcollection so
     // failed writes / bypass paths / sync-disabled windows self-heal.
@@ -39025,6 +39065,7 @@ auth.onAuthStateChanged(async (user) => {
     _lastSyncedShiftPayloads.clear();
     _sharedShiftsPrimePromise = null;
     document.getElementById('authOverlay').classList.remove('hidden');
+    hideInitialLoader();
     // Clear the synchronous signed-in hint so the next cold load shows
     // the auth overlay immediately instead of flashing the cached app.
     try { localStorage.removeItem('pt_signedIn'); } catch (_) {}
