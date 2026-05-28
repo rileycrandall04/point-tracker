@@ -12229,11 +12229,22 @@ async function loadFromFirestore(uid) {
     // UI populates with zeros. Server-first guarantees either fresh data
     // or a network error (caught below); cache fallback keeps offline
     // use working when the network truly is unreachable.
+    // Race the server read against an 8s inner timeout. Without this, a
+    // slow-but-not-failing server read just hangs — the cache fallback
+    // below never fires, and only the outer 15s Promise.race watchdog
+    // catches it, dropping the user back at the auth overlay with no
+    // data loaded. Bouncing through force-signout wipes the local
+    // Firestore cache, so a slow server on the next sign-in is exactly
+    // when we need the inner timeout most.
     async function getDoc(docRef) {
       try {
-        return await docRef.get({ source: 'server' });
+        return await Promise.race([
+          docRef.get({ source: 'server' }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('server-timeout')), 8000))
+        ]);
       } catch (netErr) {
-        console.warn('[boot] server read failed, falling back to cache:', netErr && netErr.code);
+        console.warn('[boot] server read failed/timed out, falling back to cache:',
+          netErr && (netErr.code || netErr.message));
         return await docRef.get({ source: 'cache' });
       }
     }
@@ -39478,7 +39489,11 @@ auth.onAuthStateChanged(async (user) => {
     // app shell with no signal that anything is wrong. On timeout, treat
     // it like a load error: keep sync OFF, run initApp() so the UI is at
     // least interactive against local data, and toast the user to reload.
-    const LOAD_TIMEOUT_MS = 10000;
+    // Outer safety net. Each getDoc() inside loadFromFirestore now has its
+    // own 8s server timeout that falls through to the local cache, so this
+    // only catches the case where both server AND cache are slow/failing.
+    // 15s gives that combined path enough room to complete on flaky mobile.
+    const LOAD_TIMEOUT_MS = 15000;
     const result = await Promise.race([
       (async () => {
         const r = await loadFromFirestore(user.uid);
