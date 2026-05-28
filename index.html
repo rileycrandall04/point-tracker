@@ -39875,28 +39875,44 @@ function reloadCommunityData() {
 // Start as null (not 0) so we only act on transitions where we actually
 // observed a `hidden` event first. With `0`, a stray `visible` event on a
 // freshly-loaded page computes elapsed = Date.now() (millions of ms),
-// which would falsely trigger the 5-min reload mid-boot.
+// which would falsely trigger the reload mid-boot.
 let lastHiddenAt = null;
+// Shared helper so visibilitychange and window.focus both call the same
+// staleness logic. iOS Safari (and PWAs on iOS especially) doesn't always
+// fire visibilitychange when the user foregrounds a frozen PWA — focus is
+// a more reliable signal there. lastHiddenAt being set is the gate; both
+// events only act if we actually observed a hidden transition first.
+function _handleReturnFromIdle() {
+  if (!currentUser || lastHiddenAt === null) return;
+  const elapsed = Date.now() - lastHiddenAt;
+  if (elapsed > 2 * 60 * 1000) {
+    // After 2+ min hidden, the in-memory data + Firestore connection are
+    // unreliable enough that we'd rather boot from a known-good state
+    // than try to repair piecemeal. Reports of returning to a populated-
+    // but-empty app shell (blank date, 0 pts, no cases) trace to this
+    // path silently failing to refresh the user's `data` object. A full
+    // reload re-runs onAuthStateChanged → loadFromFirestore → initApp.
+    // 2 min threshold also catches iOS PWA wake-from-suspend cases where
+    // the user reopens after a short break.
+    lastHiddenAt = null;
+    location.reload();
+  } else if (elapsed > 30 * 1000) {
+    // Even for shorter idle periods (>30s), refresh community data.
+    reloadCommunityData();
+  }
+}
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     lastHiddenAt = Date.now();
-  } else if (currentUser && lastHiddenAt !== null) {
-    const elapsed = Date.now() - lastHiddenAt;
-    if (elapsed > 5 * 60 * 1000) {
-      // After 5+ min hidden, the in-memory data + Firestore connection are
-      // unreliable enough that we'd rather boot from a known-good state
-      // than try to repair piecemeal. Reports of returning to a populated-
-      // but-empty app shell (blank date, 0 pts, no cases) trace to this
-      // path silently failing to refresh the user's `data` object. A full
-      // reload re-runs onAuthStateChanged → loadFromFirestore → initApp.
-      location.reload();
-      return;
-    } else if (elapsed > 30 * 1000) {
-      // Even for shorter idle periods (>30s), refresh community data
-      reloadCommunityData();
-    }
+  } else {
+    _handleReturnFromIdle();
   }
 });
+// Backup signal for iOS PWA wake — iOS doesn't always fire visibilitychange
+// when foregrounding a suspended PWA, but window.focus tends to. Idempotent
+// with the visibilitychange handler because the same lastHiddenAt gate +
+// the null-reset after reload prevent double-firing.
+window.addEventListener('focus', _handleReturnFromIdle);
 
 // When the tab is restored from the browser's back/forward cache (bfcache),
 // the DOM is frozen at whatever state it was in when suspended, and
