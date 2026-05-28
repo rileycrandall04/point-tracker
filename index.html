@@ -14626,9 +14626,14 @@ function effectiveWorkDate() {
   // On-call shifts cover the patient overnight even while clocked out between
   // cases, so before the post-call hour (06:40) the early-morning hours still
   // belong to yesterday's call shift. From 06:40 on, a clean clocked-out state
-  // means today's (post-call) day has started.
-  const isCallShift = ['1st_call','2nd_call','3rd_call','4th_call'].includes(prevShift.assignmentType);
-  if (isCallShift && currentMin < 400) return yesterdayKey;
+  // means today's (post-call) day has started. "Covers overnight" means the
+  // resolved pager window for that shift+date crosses midnight (end > 1440),
+  // which catches 1st–4th call, mole, cardiac_liver, endo, SF1, SF2, and any
+  // per-site overrides — not just the four named call types.
+  const _yIsWkndOrHol = isWeekend(yesterdayKey) || !!prevShift.isHoliday;
+  const _yPagerWin = getPagerPayWindow(prevShift.assignmentType, _yIsWkndOrHol, yesterdayKey, prevShift.siteId);
+  const coversOvernight = !!(_yPagerWin && _yPagerWin.end > 1440);
+  if (coversOvernight && currentMin < 400) return yesterdayKey;
 
   return todayStr();
 }
