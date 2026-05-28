@@ -13936,11 +13936,12 @@ function restampCaseLocationsForShift(shiftDate) {
 
 // Resolve the subSiteId to stamp on a case at save time. Priority:
 //   1. The time entry segment that owns the case start time.
-//   2. Point-in-time case types (APS rounding, Acute Pain procedures)
-//      carry no start time, so for those borrow the tag from the time
-//      entry covering "now," then any tagged entry. Without this they'd
-//      blow past every per-entry tag and hit the validation toast even
-//      though the shift was clearly tagged.
+//   2. Any tagged time entry on the shift. Covers (a) pre_call + evening
+//      shifts where the evening row UI has no Location picker, so those
+//      entries get merged into shift.timeEntries untagged; (b) cases
+//      whose start time falls outside every interval but the user
+//      clearly tagged the shift; (c) point-in-time case types (APS
+//      rounding, Acute Pain procedure) that carry no start time.
 //   3. The shift-level subSiteId (set for flat-payment shifts and any
 //      shift type the admin hasn't moved to a per-time-entry picker).
 //   4. The admin's per-shift-type default.
@@ -13951,11 +13952,15 @@ function subSiteIdForCase(shift, caseStartTime) {
   if (isLocationExemptForType(shift.siteId, shift.assignmentType)) return '';
   const seg = _findTimeEntryForCase(shift, caseStartTime);
   if (seg && seg.subSiteId) return seg.subSiteId;
-  if (!caseStartTime && shift.timeEntries && shift.timeEntries.length) {
-    const now = new Date();
-    const nowHM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-    const active = _findTimeEntryForCase(shift, nowHM);
-    if (active && active.subSiteId) return active.subSiteId;
+  if (shift.timeEntries && shift.timeEntries.length) {
+    // Prefer the segment owning "now" when the case has no start time —
+    // matches a live case being entered without filling a time first.
+    if (!caseStartTime) {
+      const now = new Date();
+      const nowHM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+      const active = _findTimeEntryForCase(shift, nowHM);
+      if (active && active.subSiteId) return active.subSiteId;
+    }
     const tagged = shift.timeEntries.find(e => e && e.subSiteId);
     if (tagged) return tagged.subSiteId;
   }
