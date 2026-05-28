@@ -18824,11 +18824,23 @@ function _renderShiftTypeDistribution(fShiftsBase, fShiftsSand) {
 function _renderSf1ModelComparison(fShiftsBase, fShiftsSand) {
   // Per-shift total-points distribution per role. mean/median/SD are over
   // each shift's total points; hours is the clocked-hr denominator.
-  const collect = (shifts, type) => {
+  // `types` is one assignmentType or a list; `dowBucket` ('wkday'|'wknd')
+  // filters by the date's day-of-week to mirror the Community Stats SF 1
+  // split — Wknd = Sat/Sun, everything else (incl. Friday and weekday
+  // holidays) = Wkday — so these rows line up with that page's buckets.
+  const _isWkndDate = (dateStr) => {
+    if (!dateStr) return false;
+    const dow = new Date(dateStr + 'T12:00:00').getDay();
+    return dow === 0 || dow === 6;   // Sun or Sat (matches _communityStatsBucket)
+  };
+  const collect = (shifts, types, dowBucket) => {
+    const typeSet = Array.isArray(types) ? types : [types];
     const vals = [];
     let total = 0, hours = 0;
     for (const s of (shifts || [])) {
-      if ((s.assignmentType || '') !== type) continue;
+      if (!typeSet.includes(s.assignmentType || '')) continue;
+      if (dowBucket === 'wkday' && _isWkndDate(s.date)) continue;
+      if (dowBucket === 'wknd'  && !_isWkndDate(s.date)) continue;
       const v = s.total || 0;
       vals.push(v);
       total += v;
@@ -18836,16 +18848,21 @@ function _renderSf1ModelComparison(fShiftsBase, fShiftsSand) {
     }
     return { vals, total, hours, n: vals.length };
   };
-  const combine = (...gs) => gs.reduce((a, g) => ({
-    vals: a.vals.concat(g.vals), total: a.total + g.total,
-    hours: a.hours + g.hours, n: a.n + g.n
-  }), { vals: [], total: 0, hours: 0, n: 0 });
 
-  const before    = collect(fShiftsBase, 'SF1');
-  const aftSingle = collect(fShiftsSand,  'SF1');
-  const aftDay    = collect(fShiftsSand,  'SF1_Day');
-  const aftNight  = collect(fShiftsSand,  'SF1_Night');
-  const aftAll    = combine(aftSingle, aftDay, aftNight);
+  // Default = synthesized single 24h SF 1, also split Wkday/Wknd.
+  const before      = collect(fShiftsBase, 'SF1');
+  const beforeWkday = collect(fShiftsBase, 'SF1', 'wkday');
+  const beforeWknd  = collect(fShiftsBase, 'SF1', 'wknd');
+
+  // Experimental split roles, plus Wkday/Wknd buckets over all three
+  // after-roles so the combined after reconciles date-for-date.
+  const afterRoles = ['SF1', 'SF1_Day', 'SF1_Night'];
+  const aftSingle = collect(fShiftsSand, 'SF1');
+  const aftDay    = collect(fShiftsSand, 'SF1_Day');
+  const aftNight  = collect(fShiftsSand, 'SF1_Night');
+  const aftAll    = collect(fShiftsSand, afterRoles);
+  const aftWkday  = collect(fShiftsSand, afterRoles, 'wkday');
+  const aftWknd   = collect(fShiftsSand, afterRoles, 'wknd');
 
   if (before.n === 0 && aftAll.n === 0) return '';
 
@@ -18881,27 +18898,38 @@ function _renderSf1ModelComparison(fShiftsBase, fShiftsSand) {
     '</tr>';
   };
 
-  // Δ of the combined after-model vs the default model (mean/shift & pts/hr).
-  const dShift = meanOf(aftAll) - meanOf(before);
-  const dHr    = perHr(aftAll)  - perHr(before);
-  const deltaRow = (before.n > 0 && aftAll.n > 0) ?
-    '<tr style="border-top:1px dashed var(--border);">' +
-      '<td style="padding:4px 8px;color:var(--text-dim);">&Delta; after vs default (mean/shift, pts/hr)</td>' +
+  // Δ of the after-model vs the default model (mean/shift & pts/hr), both
+  // for the Wkday bucket (the row directly comparable to Community Stats)
+  // and the combined universe.
+  const deltaRowFor = (label, b, a) => {
+    if (!(b.n > 0 && a.n > 0)) return '';
+    const dShift = meanOf(a) - meanOf(b);
+    const dHr    = perHr(a)  - perHr(b);
+    return '<tr style="border-top:1px dashed var(--border);">' +
+      '<td style="padding:4px 8px;color:var(--text-dim);">' + label + '</td>' +
       '<td style="padding:4px 8px;"></td><td style="padding:4px 8px;"></td>' +
       '<td style="padding:4px 8px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:' + dCol(dShift) + ';">' + sgn(dShift) + '</td>' +
       '<td style="padding:4px 8px;"></td><td style="padding:4px 8px;"></td>' +
       '<td style="padding:4px 8px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:' + dCol(dHr) + ';">' + sgn(dHr) + '</td>' +
-    '</tr>' : '';
+    '</tr>';
+  };
+  const deltaRows =
+    deltaRowFor('&Delta; after vs default &mdash; Wkday (mean/shift, pts/hr)', beforeWkday, aftWkday) +
+    deltaRowFor('&Delta; after vs default &mdash; combined (mean/shift, pts/hr)', before, aftAll);
 
   const tnum = (v, dp) => Number.isFinite(v) ? (Math.round(v * Math.pow(10, dp)) / Math.pow(10, dp)).toFixed(dp) : '';
   const tline = (label, g) => [label, g.n, tnum(g.total, 1), tnum(meanOf(g), 2),
     tnum(medianOf(g), 2), tnum(sdOf(g), 2), tnum(perHr(g), 2)].join('\t');
   const tsvText = [
     ['Role', 'Shifts', 'Total pts', 'Mean/shift', 'Median/shift', 'SD/shift', 'Pts/clocked-hr'].join('\t'),
-    tline('SF 1 (default)', before),
+    tline('SF 1 (default, Wkday)', beforeWkday),
+    tline('SF 1 (default, Wknd)', beforeWknd),
+    tline('SF 1 (default, all)', before),
     tline('SF 1 Day', aftDay),
     tline('SF 1 Night', aftNight),
     tline('SF 1 (Fri/hol/wknd, 24h)', aftSingle),
+    tline('SF 1 (after, Wkday)', aftWkday),
+    tline('SF 1 (after, Wknd)', aftWknd),
     tline('SF 1 combined (after)', aftAll)
   ].join('\n');
 
@@ -18920,16 +18948,20 @@ function _renderSf1ModelComparison(fShiftsBase, fShiftsSand) {
         '<th style="padding:4px 8px;text-align:right;">Pts/clocked-hr</th>' +
       '</tr></thead><tbody>' +
         '<tr><td colspan="7" style="padding:5px 8px 2px;color:var(--text-dim);font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;">Default model</td></tr>' +
-        row('SF 1', before, true) +
+        row('SF 1 — Wkday', beforeWkday, false) +
+        row('SF 1 — Wknd', beforeWknd, false) +
+        row('SF 1 — all', before, true) +
         '<tr><td colspan="7" style="padding:7px 8px 2px;color:var(--text-dim);font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;">Experimental model</td></tr>' +
         row('SF 1 Day', aftDay, false) +
         row('SF 1 Night', aftNight, false) +
         row('SF 1 (Fri/hol/wknd, 24h)', aftSingle, false) +
+        row('SF 1 — Wkday (after)', aftWkday, false) +
+        row('SF 1 — Wknd (after)', aftWknd, false) +
         row('SF 1 — combined (after)', aftAll, true) +
-        deltaRow +
+        deltaRows +
       '</tbody></table></div>' +
       '<div style="font-size:0.68rem;color:var(--text-dim);margin-top:6px;line-height:1.4;">' +
-        'Both Default and Experimental now score the <strong>same synthesized SF 1 universe</strong> (every SF 1 rotation date rebuilt on a fixed 24&nbsp;hr clock), so Default <em>= the synthesized single 24&nbsp;hr SF 1</em>, not the raw real records. Experimental = M&ndash;Th non-holiday split into Day (0700&ndash;1700) + Night (1700&rarr;0700, all pager/call); Fri/holiday/weekend stays one 24&nbsp;hr SF 1. Mean/Median/SD are per-shift total points (sample SD). ' +
+        'Both Default and Experimental now score the <strong>same synthesized SF 1 universe</strong> (every SF 1 rotation date rebuilt on a fixed 24&nbsp;hr clock), so Default <em>= the synthesized single 24&nbsp;hr SF 1</em>, not the raw real records. Rows are split <strong>Wkday / Wknd</strong> to line up with the Community Stats SF 1 buckets (<strong>Wknd = Sat/Sun</strong>; Friday and weekday holidays count as Wkday). <strong>Heads-up:</strong> this is still a 24&nbsp;hr reconstruction, so even the Wkday baseline sits <em>above</em> the Community Stats per-shift SF 1 mean &mdash; that page scores each shift as <em>actually clocked</em>, and the gap is the synthesized overnight call/AR the real weekday records never logged. Use these rows to compare Wkday-vs-Wkday and Wknd-vs-Wknd <em>within</em> the sandbox, not to reconcile against Community Stats absolute means. Experimental = M&ndash;Th non-holiday split into Day (0700&ndash;1700) + Night (1700&rarr;0700, all pager/call); Fri/holiday/weekend stays one 24&nbsp;hr SF 1. Mean/Median/SD are per-shift total points (sample SD). ' +
         '<strong>SF 1 combined (after) should now reconcile with the Default SF 1 total</strong>; the remaining Δ is the real policy effect: AR is re-rated by time-of-day across the 17:00 split (so Day&rsquo;s 13/hr daytime vs Night&rsquo;s 20/hr&times;multipliers shifts points between rows). Baseline and split use the same SF&nbsp;1 doubling rule (the 2026&#8209;04&#8209;27 pre-cutover gate is respected unless the &ldquo;double pre-cutover&rdquo; sub-option is on, in which case both sides double early shifts). Per-shift <em>medians</em> still never add up (a median is a middle value, not a sum) &mdash; compare Total pts, not medians, to reconcile.' +
       '</div>' +
   '</div>';
