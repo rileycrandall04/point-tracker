@@ -13195,6 +13195,11 @@ const DEFAULT_SHIFT_RULES = {
   // sites that don't have a per-shift pager window structure (e.g. Other).
   unrestricted_call_entry: { label: 'Unrestricted Call', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' }, unrestrictedCallEntry: true, noProductivity: true },
   forced_off:       { label: 'UVH Forced Off',   pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
+  // Post-PM recovery day after SF1 / Mole / OB PM. Behaves exactly like
+  // vacation (0 points, no time entries, no cases, location-exempt) but
+  // the vacation tracker filters strictly on `vacation` so these don't
+  // burn against the user's annual vacation balance.
+  post_pm:          { label: 'Post SF1/Mole/OB PM', pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } },
   vacation:         { label: 'Vacation / Off',   pagerWindow: null, unrestrictedCall: null, arRate: { mode: 'general' } }
 };
 
@@ -13217,6 +13222,7 @@ const ASSIGNMENT_TYPE_OPTIONS = [
   { value: 'CRNA_supervision', label: 'CRNA Supervision' },
   { value: 'unrestricted_call_entry', label: 'Unrestricted Call' },
   { value: 'forced_off', label: 'Forced Off' },
+  { value: 'post_pm', label: 'Post SF1/Mole/OB PM' },
   { value: 'vacation', label: 'Vacation / Off' }
 ];
 
@@ -13869,14 +13875,22 @@ function getDefaultSubSiteForAssignmentType(siteId, assignmentType) {
   return v === '__none__' ? '' : v;
 }
 
+// Post-PM (recovery day after SF1 / Mole / OB PM) behaves like vacation
+// everywhere except the vacation tracker (renderVacationTracker keeps a
+// strict `=== 'vacation'` filter so these days don't burn against the
+// user's annual vacation balance).
+function isVacationLikeType(t) {
+  return t === 'vacation' || t === 'post_pm';
+}
+
 // Admin marks a shift type as "Not applicable" via the Locations card; the
 // sentinel '__none__' lives in subSiteDefaults. When exempt, no Location
 // picker is shown anywhere for that type and cases under it are never tagged.
-// Vacation and forced_off are always treated as exempt (they have no
-// clocked-in time at all) — saving them never requires a location pick.
+// Vacation / Post-PM / forced_off are always treated as exempt (they have
+// no clocked-in time at all) — saving them never requires a location pick.
 function isLocationExemptForType(siteId, assignmentType) {
   if (!assignmentType) return false;
-  if (assignmentType === 'vacation' || assignmentType === 'forced_off') return true;
+  if (isVacationLikeType(assignmentType) || assignmentType === 'forced_off') return true;
   const defaults = getSubSiteDefaults(siteId);
   return defaults[assignmentType] === '__none__';
 }
@@ -15195,7 +15209,7 @@ const SANDBOX_AREA_TAXONOMY = {
   ob:          { label: 'OB',          shiftTypes: ['OB_restricted', 'SF1', 'SF2'] },
   call:        { label: 'Call',        shiftTypes: ['1st_call', '2nd_call', '3rd_call', '4th_call', 'mole', 'endo', 'cardiac_liver', 'unrestricted_call_entry'] },
   supervision: { label: 'Supervision', shiftTypes: ['CRNA_supervision'] },
-  off:         { label: 'Off',         shiftTypes: ['forced_off', 'vacation'] }
+  off:         { label: 'Off',         shiftTypes: ['forced_off', 'vacation', 'post_pm'] }
 };
 
 // Reverse index built once: assignmentType → areaKey. Anything missing is
@@ -15359,7 +15373,7 @@ function calcPreCallOverlayPts(shift) {
 }
 
 function calcARPoints(shift) {
-  if (shift.assignmentType === 'vacation') return 0;
+  if (isVacationLikeType(shift.assignmentType)) return 0;
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return 56;
   const flatRule = getFlatPaymentRule(shift);
   if (flatRule) return flatRule.flatPoints;
@@ -15581,7 +15595,7 @@ function calcARBreakdown(shift, _skipSandboxHook) {
     return _engineSandboxLogicHooks.calcARBreakdown(shift,
       (s) => calcARBreakdown(s, true));
   }
-  if (shift.assignmentType === 'vacation') return { ar: 0, call: 0, preCall: 0 };
+  if (isVacationLikeType(shift.assignmentType)) return { ar: 0, call: 0, preCall: 0 };
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return { ar: _eo('bonuses.forceOffFlat', 56), call: 0, preCall: 0 };
   const flatRuleBD = getFlatPaymentRule(shift);
   if (flatRuleBD) return { ar: flatRuleBD.flatPoints, call: 0, preCall: 0 };
@@ -19875,7 +19889,7 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
   // Vacation, forced-off, and flat-payment shifts (e.g. IMC AOD) have no
   // clocked-in time at all.
   const isFlatPayment = !!getFlatPaymentRule(type, getCurrentSiteId());
-  if (type === 'forced_off' || type === 'vacation' || isFlatPayment) {
+  if (type === 'forced_off' || isVacationLikeType(type) || isFlatPayment) {
     populateTimeEntries([{ start: '', end: '' }]);
     document.getElementById('timeEntriesGroup').classList.add('hidden');
   } else {
@@ -20287,16 +20301,19 @@ function updateDataEntryState() {
     summaryBar.classList.remove('hidden');
     shiftSection.style.display = 'none';
     const isVacation = shift.assignmentType === 'vacation';
+    const isPostPm = shift.assignmentType === 'post_pm';
     const isForcedOff = shift.assignmentType === 'forced_off' || shift.forcedOff;
     const badge = document.getElementById('deSSBBadge');
     const hasPreCallOverlay = (shift.preCallStart || shift.preCallEnd) && ['mole','OB_restricted'].includes(shift.assignmentType);
     badge.textContent = hasPreCallOverlay
       ? 'Pre-Call + ' + getAssignmentTypeName(shift.assignmentType, shift.siteId)
       : getAssignmentTypeName(isForcedOff ? 'forced_off' : shift.assignmentType, shift.siteId);
-    badge.classList.toggle('vacation', isVacation);
+    badge.classList.toggle('vacation', isVacation || isPostPm);
     const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
     if (isVacation) {
       document.getElementById('deSSBTimes').textContent = 'Vacation Day';
+    } else if (isPostPm) {
+      document.getElementById('deSSBTimes').textContent = 'Post SF1/Mole/OB PM';
     } else if (isForcedOff) {
       document.getElementById('deSSBTimes').textContent = '56 pts — Forced Off';
     } else {
@@ -20310,8 +20327,8 @@ function updateDataEntryState() {
         return loc ? (range + ' @ ' + loc) : range;
       }).join(', ');
     }
-    // Show case section only if not vacation/forced off
-    if (isVacation || isForcedOff) {
+    // Show case section only if not vacation/post-PM/forced off
+    if (isVacation || isPostPm || isForcedOff) {
       caseSection.classList.add('hidden');
     } else {
       caseSection.classList.remove('hidden');
@@ -20329,7 +20346,7 @@ function updateDataEntryState() {
   }
   // Show "Add Cases" button only when editing an existing shift (so user can switch back to case view)
   const switchToCaseBtn = document.getElementById('switchToCaseEntryBtn');
-  const isVacOrForcedForBtn = shift && (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off' || shift.forcedOff);
+  const isVacOrForcedForBtn = shift && (isVacationLikeType(shift.assignmentType) || shift.assignmentType === 'forced_off' || shift.forcedOff);
   switchToCaseBtn.classList.toggle('hidden', !(shift && deShiftEditing && !isVacOrForcedForBtn));
   // Show delete button only when editing an existing shift
   document.getElementById('deleteShiftDE').classList.toggle('hidden', !shift);
@@ -20483,9 +20500,10 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
   // Pre-Call with evening assignment: save as evening type with pre-call overlay
   const eveningAssignment = assignmentType === 'pre_call' ? (document.getElementById('eveningAssignmentType').value || '') : '';
   const isVacation = assignmentType === 'vacation';
+  const isPostPm = assignmentType === 'post_pm';
   const isForcedOff = assignmentType === 'forced_off';
   const isFlatPaymentSave = !!getFlatPaymentRule(assignmentType, getCurrentSiteId());
-  const skipTimeEntries = isVacation || isForcedOff || isFlatPaymentSave;
+  const skipTimeEntries = isVacation || isPostPm || isForcedOff || isFlatPaymentSave;
   const timeEntries = skipTimeEntries ? [{ start: '', end: '' }] : collectTimeEntries();
   const effectiveType = eveningAssignment || assignmentType;
   const hasPagerWindow = getPagerPayWindow(effectiveType, isWeekend(date) || document.getElementById('holidayCheck')?.checked, date) !== null;
@@ -21766,7 +21784,10 @@ document.getElementById('saveCaseBtn').addEventListener('click', () => {
   const date = workingDate;
   if (!date) { showToast('Set shift date first'); return; }
   if (!data.shifts[date]) { showToast('Please save a shift for this date first'); return; }
-  if (data.shifts[date].assignmentType === 'vacation') { showToast('Vacation days do not have cases'); return; }
+  if (isVacationLikeType(data.shifts[date].assignmentType)) {
+    showToast(data.shifts[date].assignmentType === 'post_pm' ? 'Post SF1/Mole/OB PM days do not have cases' : 'Vacation days do not have cases');
+    return;
+  }
   const caseData = buildCaseFromForm();
   caseData.id = genId();
   caseData.shiftDate = date;
@@ -22810,7 +22831,7 @@ function updateTodayRateChips() {
   if (!el) return;
   const date = workingDate;
   const shift = data.shifts[date];
-  if (!shift || shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off' || shift.forcedOff) {
+  if (!shift || isVacationLikeType(shift.assignmentType) || shift.assignmentType === 'forced_off' || shift.forcedOff) {
     el.innerHTML = '';
     return;
   }
@@ -23922,7 +23943,7 @@ document.addEventListener('toggle', function(e) {
 
 // Shared helper: shift clocked-in hours (sum of time entries, not gaps)
 function calcShiftHours(shift) {
-  if (!shift || shift.assignmentType === 'vacation') return 0;
+  if (!shift || isVacationLikeType(shift.assignmentType)) return 0;
   const nextShiftCap = shift.date ? getNextShiftStartMin(shift.date) : null;
   const entries = shift.timeEntries || [];
   if (entries.length > 0) {
@@ -24248,7 +24269,7 @@ function getShiftPayBreakdown(shift) {
 }
 
 function _shiftPayBreakdownCore(shift) {
-  if (shift.assignmentType === 'vacation') return [];
+  if (isVacationLikeType(shift.assignmentType)) return [];
   if (shift.forcedOff || shift.assignmentType === 'forced_off') return [{ clockIn: '', clockOut: '', payCode: 'Forced Off', durationMin: 0, payRate: 0, amount: 56 }];
   const flatRulePB = getFlatPaymentRule(shift);
   if (flatRulePB) return [{ clockIn: '', clockOut: '', payCode: flatRulePB.label || 'Flat', durationMin: 0, payRate: 0, amount: flatRulePB.flatPoints }];
@@ -24681,7 +24702,7 @@ function getShiftBadgeClass(type) {
   if (type.includes('call')) return 'sl-badge-call';
   if (type === 'endo') return 'sl-badge-endo';
   if (type === 'SF1' || type === 'SF2') return 'sl-badge-sf';
-  if (type === 'vacation' || type === 'forced_off') return 'sl-badge-vac';
+  if (isVacationLikeType(type) || type === 'forced_off') return 'sl-badge-vac';
   return 'sl-badge-other';
 }
 
@@ -24813,7 +24834,7 @@ function renderShiftLogTable() {
     const flagBtn = `<button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button>`;
     const delBtn = `<button class="sl-del-btn" title="Delete" onclick="event.stopPropagation();deleteShiftFromLog('${shift.date}')">&times;</button>`;
     const actionsCell = `<td class="sl-col-actions sl-actions-cell">${flagBtn}${delBtn}</td>`;
-    if (shift.assignmentType === 'vacation') {
+    if (isVacationLikeType(shift.assignmentType)) {
       const altClass = shiftIdx % 2 === 1 ? ' sl-alt' : '';
       const fClass = shift.flagged ? ' flagged-row' : '';
       const uClass = shift.unbilled ? ' unbilled-row' : '';
@@ -24825,7 +24846,7 @@ function renderShiftLogTable() {
       html += `<td>-</td><td>-</td>`;
       html += `<td class="sl-col-clockin">-</td><td class="sl-col-clockout">-</td>`;
       html += `<td class="sl-col-inout">-</td>`;
-      html += `<td class="sl-col-paycode">Vacation</td><td>-</td><td>-</td><td>0.0</td>`;
+      html += `<td class="sl-col-paycode">${shift.assignmentType === 'post_pm' ? 'Post PM' : 'Vacation'}</td><td>-</td><td>-</td><td>0.0</td>`;
       html += `<td class="sl-col-flag"><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button></td>`;
       html += `<td class="sl-del-cell sl-col-del"><button class="sl-del-btn" title="Delete shift" onclick="event.stopPropagation();deleteShiftFromLog('${shift.date}')">&times;</button></td>`;
       html += `<td class="sl-col-actions sl-actions-cell"><button class="flag-btn ${shift.flagged ? 'flagged' : ''}" onclick="event.stopPropagation();toggleShiftFlag('${shift.date}')">&#9873;</button><button class="sl-del-btn" title="Delete" onclick="event.stopPropagation();deleteShiftFromLog('${shift.date}')">&times;</button></td>`;
@@ -27469,7 +27490,7 @@ function renderEarningsEstimator() {
   html += '</div>';
 
   // Data source note
-  const shiftCount = Object.values(data.shifts).filter(s => s.assignmentType && s.assignmentType !== 'vacation' && s.assignmentType !== 'forced_off' && !s.forcedOff && !isFuturePagerOnly(s)).length;
+  const shiftCount = Object.values(data.shifts).filter(s => s.assignmentType && !isVacationLikeType(s.assignmentType) && s.assignmentType !== 'forced_off' && !s.forcedOff && !isFuturePagerOnly(s)).length;
   html += '<div style="font-size:0.62rem;color:var(--text-dim);text-align:center;margin-top:6px;">' + shiftCount + ' shifts \u2022 Avg pts from all history \u2022 Shifts/wk from last 3 months</div>';
 
   tableEl.innerHTML = html;
@@ -29823,8 +29844,9 @@ function renderMonthlyPace() {
   monthShifts.forEach(s => { if (!isFuturePagerOnly(s)) currentPts += getShiftPointsForDate(s.date, true).total; });
   currentPts = round2(currentPts);
 
-  // Count weekdays and vacation days this month
-  const vacationDays = monthShifts.filter(s => s.assignmentType === 'vacation');
+  // Count weekdays and vacation-like off days this month (vacation +
+  // Post-PM both excluded from working-day expectations).
+  const vacationDays = monthShifts.filter(s => isVacationLikeType(s.assignmentType));
   const totalVacDays = vacationDays.length;
 
   // Count working days in the month, excluding vacation days
@@ -29832,7 +29854,7 @@ function renderMonthlyPace() {
   let weekdaysInMonth = 0;
   let weekdaysElapsed = 0;
   const vacDates = new Set(vacationDays.map(s => s.date));
-  const shiftDates = new Set(monthShifts.filter(s => s.assignmentType !== 'vacation').map(s => s.date));
+  const shiftDates = new Set(monthShifts.filter(s => !isVacationLikeType(s.assignmentType)).map(s => s.date));
   const remainingDays = []; // working days after today that count toward pts/day needed
   for (let d = 1; d <= daysInMonth; d++) {
     const dt = new Date(effY, effM - 1, d);
@@ -30178,7 +30200,7 @@ function getAvgPointsByShiftType() {
   let allTotal = 0, allCount = 0;
   Object.values(data.shifts).forEach(shift => {
     if (!shift.assignmentType) return;
-    if (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off') return;
+    if (isVacationLikeType(shift.assignmentType) || shift.assignmentType === 'forced_off') return;
     if (shift.forcedOff) return;
     if (isFuturePagerOnly(shift)) return;
     const t = calcShiftTotal(shift).total;
@@ -30994,7 +31016,7 @@ function getShiftsPerWeekByType() {
 
   recent.forEach(s => {
     if (!s.assignmentType) return;
-    if (s.assignmentType === 'vacation' || s.assignmentType === 'forced_off') return;
+    if (isVacationLikeType(s.assignmentType) || s.assignmentType === 'forced_off') return;
     if (s.forcedOff) return;
     if (isFuturePagerOnly(s)) return;
 
@@ -31461,7 +31483,7 @@ function buildShiftEfficiency() {
   const mode = shiftEfficiencyMode;
   const groups = {};
   Object.values(data.shifts).forEach(shift => {
-    if (!shift || shift.assignmentType === 'vacation') return;
+    if (!shift || isVacationLikeType(shift.assignmentType)) return;
     let denom;
     if (mode === '24hr') {
       denom = 24;
@@ -31575,7 +31597,7 @@ function loadCommunityStats(force) {
         if (!d.uid || !d.siteId || !d.assignmentType) return;
         // Vacation shifts have hours = 0 by definition; the per-24hr view
         // still wants pager-only nights with 0 clocked hours but >0 points.
-        if (d.assignmentType === 'vacation') return;
+        if (isVacationLikeType(d.assignmentType)) return;
         if (!_isShiftSettled(d.shiftDate)) return;
         // Drop 0-point shifts — placeholders / never-worked entries that
         // would otherwise drag the per-shift and per-hour averages down.
@@ -31983,7 +32005,7 @@ function renderTimeSummary() {
   let totalStartMin = 0, totalEndMin = 0, count = 0;
   const workedWeeks = new Set();
   recent.forEach(s => {
-    if (!s.assignmentType || s.assignmentType === 'vacation' || s.assignmentType === 'forced_off' || s.forcedOff) return;
+    if (!s.assignmentType || isVacationLikeType(s.assignmentType) || s.assignmentType === 'forced_off' || s.forcedOff) return;
     // Skip future pager-only placeholder shifts
     if (isFuturePagerOnly(s)) return;
     const hrs = calcShiftHours(s);
@@ -32113,7 +32135,7 @@ function renderProductionTrend() {
     const mk = dateKey.substring(0, 7);
     if (hoursByMonth.hasOwnProperty(mk)) {
       const shift = shifts[dateKey];
-      if (shift && shift.assignmentType !== 'vacation' && shift.assignmentType !== 'forced_off' && !shift.forcedOff && !isFuturePagerOnly(shift)) {
+      if (shift && !isVacationLikeType(shift.assignmentType) && shift.assignmentType !== 'forced_off' && !shift.forcedOff && !isFuturePagerOnly(shift)) {
         const hrs = calcShiftHours(shift);
         hoursByMonth[mk] += hrs;
         countByMonth[mk] += 1;
@@ -32168,7 +32190,7 @@ function buildDayOfWeek() {
   const countByDay = [0,0,0,0,0,0,0];
   const recent = getRecentShifts(3);
   recent.forEach(s => {
-    if (!s.assignmentType || s.assignmentType === 'vacation' || s.assignmentType === 'forced_off' || s.forcedOff) return;
+    if (!s.assignmentType || isVacationLikeType(s.assignmentType) || s.assignmentType === 'forced_off' || s.forcedOff) return;
     if (isFuturePagerOnly(s)) return;
     const d = new Date(s.date + 'T12:00:00');
     const dow = d.getDay();
@@ -32611,7 +32633,7 @@ function renderDailyTab() {
     const pts = round2(dailyPts[d] || 0);
     const shiftType = dailyTypes[d];
     const isToday = dateStr === todayStr;
-    const isVac = shiftType === 'vacation';
+    const isVac = isVacationLikeType(shiftType);
     const isPastOrToday = isPastMonth || dateStr <= todayStr;
     monthTotal += pts;
     if (shiftType) shiftCount++;
@@ -32927,8 +32949,8 @@ function syncPagerShift(dateStr, type) {
   // UVH-flavor; pre-remap legacy data may still have those keys saved.
   type = remapAssignmentTypeForSite(type, shift && shift.siteId);
   const hasRealEntries = shift && shift.timeEntries && shift.timeEntries.some(e => e.start);
-  const isVacOrOff = type === 'vacation' || type === 'forced_off';
-  const existingIsVacOrOff = shift && (shift.assignmentType === 'vacation' || shift.assignmentType === 'forced_off');
+  const isVacOrOff = isVacationLikeType(type) || type === 'forced_off';
+  const existingIsVacOrOff = shift && (isVacationLikeType(shift.assignmentType) || shift.assignmentType === 'forced_off');
 
   if (hasRealEntries) {
     // Never overwrite shifts with real clock data, but sync assignmentType from calendar
@@ -33049,10 +33071,13 @@ function renderDayDetailContent() {
 
   const totals = getShiftPointsForDate(dateStr, true);
   const isVacation = shift.assignmentType === 'vacation';
+  const isPostPm = shift.assignmentType === 'post_pm';
   const entries = shift.timeEntries || [{ start: shift.startTime, end: shift.endTime }];
   let timesText = '';
   if (isVacation) {
     timesText = 'Vacation Day';
+  } else if (isPostPm) {
+    timesText = 'Post SF1/Mole/OB PM';
   } else {
     timesText = entries.map(e => (e.start || '?') + ' - ' + (e.end || '?')).join(', ');
   }
@@ -33060,7 +33085,7 @@ function renderDayDetailContent() {
   let html = '';
   // Shift bar
   html += `<div class="dd-shift-bar">
-    <span class="dd-badge${isVacation ? ' vacation' : ''}">${escHtml(getAssignmentTypeName(shift.assignmentType, shift.siteId))}</span>
+    <span class="dd-badge${(isVacation || isPostPm) ? ' vacation' : ''}">${escHtml(getAssignmentTypeName(shift.assignmentType, shift.siteId))}</span>
     <span class="dd-times">${escHtml(timesText)}</span>
     <button class="btn btn-outline btn-sm" onclick="openShiftEdit('${dateStr}')" style="padding:4px 10px;font-size:0.72rem;">Edit</button>
   </div>`;
@@ -34128,7 +34153,7 @@ function closeSurgeonCaseEditor() {
 
 function calcCaseARContribution(c, shift) {
   if (!c.startTime || !c.endTime || !shift || !shift.assignmentType) return 0;
-  if (shift.assignmentType === 'vacation' || shift.forcedOff || shift.assignmentType === 'forced_off') return 0;
+  if (isVacationLikeType(shift.assignmentType) || shift.forcedOff || shift.assignmentType === 'forced_off') return 0;
   let s = timeToMinutes(c.startTime);
   let e = timeToMinutes(c.endTime);
   if (e <= s) e += 1440;
@@ -35387,12 +35412,12 @@ function updateHeaderPoints() {
   if (prefix === thisPrefix) {
     const dayOfMonth = eD;
     const daysInMonth = new Date(eY, eM, 0).getDate();
-    const vacDays = monthShifts.filter(s => s.assignmentType === 'vacation');
+    const vacDays = monthShifts.filter(s => isVacationLikeType(s.assignmentType));
     const hdrVacDates = new Set(vacDays.map(s => s.date));
-    // Count working days excluding vacation — same logic as renderMonthlyPace
+    // Count working days excluding vacation/Post-PM — same logic as renderMonthlyPace
     // Weekend days with a scheduled shift still count as working days
     let hdrWeekdaysInMonth = 0, hdrWeekdaysElapsed = 0;
-    const hdrShiftDates = new Set(monthShifts.filter(s => s.assignmentType !== 'vacation').map(s => s.date));
+    const hdrShiftDates = new Set(monthShifts.filter(s => !isVacationLikeType(s.assignmentType)).map(s => s.date));
     for (let dd = 1; dd <= daysInMonth; dd++) {
       const dt = new Date(eY, eM - 1, dd);
       const dow = dt.getDay();
