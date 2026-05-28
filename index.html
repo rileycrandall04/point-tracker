@@ -5086,6 +5086,22 @@ body.hide-monetary .monetary-hide { display: none !important; }
   </div>
 </div>
 
+<!-- Post-overnight "which day is this clock-in for?" prompt. Fires once
+     per app load during the 06:15-06:39 ambiguity window when yesterday
+     has an overnight-coverage shift. Default action keeps yesterday. -->
+<div class="modal-overlay hidden" id="overnightChoiceModal">
+  <div class="modal" style="max-width:420px;">
+    <h2>Continue yesterday's overnight shift?</h2>
+    <p style="font-size:0.85rem;color:var(--text-dim);margin:6px 0 14px;">
+      Yesterday's <strong id="overnightChoiceShiftLabel"></strong> covers the early-morning hours. Should new clock-ins right now belong to that shift, or to today?
+    </p>
+    <div class="modal-actions" style="flex-direction:column;gap:8px;align-items:stretch;">
+      <button class="btn btn-primary" id="overnightChoiceContinueBtn">Continue yesterday's shift</button>
+      <button class="btn btn-outline" id="overnightChoiceTodayBtn">Start today</button>
+    </div>
+  </div>
+</div>
+
 <!-- Share App link -->
 <div class="modal-overlay hidden" id="shareAppModal" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="modal" style="max-width:420px;">
@@ -14638,6 +14654,31 @@ function effectiveWorkDate() {
   return todayStr();
 }
 
+// Window where "is this still yesterday's overnight, or a fresh today?" is
+// genuinely ambiguous: 06:15-06:39. Earlier than that, default to
+// yesterday's shift silently; 06:40+ already falls through to today.
+let _overnightChoicePromptShown = false;
+function maybePromptOvernightContinuation() {
+  if (_overnightChoicePromptShown) return;
+  const now = new Date();
+  const m = now.getHours() * 60 + now.getMinutes();
+  if (m < 375 || m > 399) return;
+  const yest = new Date(now);
+  yest.setDate(yest.getDate() - 1);
+  const yKey = yest.getFullYear() + '-' + String(yest.getMonth()+1).padStart(2,'0') + '-' + String(yest.getDate()).padStart(2,'0');
+  const prev = data.shifts && data.shifts[yKey];
+  if (!prev) return;
+  const isWkndOrHol = isWeekend(yKey) || !!prev.isHoliday;
+  const pw = getPagerPayWindow(prev.assignmentType, isWkndOrHol, yKey, prev.siteId);
+  if (!(pw && pw.end > 1440)) return;
+  _overnightChoicePromptShown = true;
+  const modal = document.getElementById('overnightChoiceModal');
+  if (!modal) return;
+  const label = formatDateShort(yKey) + ' ' + getAssignmentTypeName(prev.assignmentType, prev.siteId);
+  document.getElementById('overnightChoiceShiftLabel').textContent = label;
+  modal.classList.remove('hidden');
+}
+
 function timeToMinutes(timeStr) {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(':').map(Number);
@@ -16277,6 +16318,16 @@ function setWorkingDate(d) {
     renderToday();
   }
 }
+
+document.getElementById('overnightChoiceContinueBtn').addEventListener('click', () => {
+  document.getElementById('overnightChoiceModal').classList.add('hidden');
+  // effectiveWorkDate already returned yesterday — nothing else to do.
+});
+
+document.getElementById('overnightChoiceTodayBtn').addEventListener('click', () => {
+  document.getElementById('overnightChoiceModal').classList.add('hidden');
+  setWorkingDate(todayStr());
+});
 
 // Header prev/next day navigation
 document.getElementById('headerPrevDay').addEventListener('click', () => {
@@ -39753,6 +39804,7 @@ function initApp() {
   if (typeof _maybeShowAnnouncements === 'function' && currentUser) {
     setTimeout(() => { try { _maybeShowAnnouncements(); } catch (_) {} }, 1200);
   }
+  setTimeout(() => { try { maybePromptOvernightContinuation(); } catch (_) {} }, 600);
 }
 
 // Run init immediately with localStorage data (will re-run after auth)
