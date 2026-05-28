@@ -30325,7 +30325,14 @@ function writeSharedTurnoverStats() {
   });
 }
 
-let _sharedTurnoverStatsTimer = null;
+// `var` (not `let`) because saveData() can reach scheduleSharedTurnoverStatsSync
+// during top-level script execution (via migrateData → saveData on initial
+// boot) before this line has been reached, which puts a `let` declaration
+// in the temporal dead zone and throws an uncaught ReferenceError mid-boot.
+// Hoisted `var` initializes to undefined, the if-truthy check below handles
+// that fine, and execution continues. This was the silent throw that froze
+// boot before onAuthStateChanged fired on mobile.
+var _sharedTurnoverStatsTimer = null;
 function scheduleSharedTurnoverStatsSync() {
   if (_sharedTurnoverStatsTimer) clearTimeout(_sharedTurnoverStatsTimer);
   _sharedTurnoverStatsTimer = setTimeout(() => {
