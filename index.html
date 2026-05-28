@@ -39422,13 +39422,28 @@ auth.onAuthStateChanged(async (user) => {
     // user's profile when they're stuck on a stale cached build. The next
     // time the user opens the app and reaches this point, we sign them out,
     // unregister the service worker, and clear all caches so the next load
-    // is fully fresh. Only fires once per stamp (we record the timestamp in
-    // localStorage and skip if we've already responded to it).
+    // is fully fresh.
+    //
+    // Persistence is layered so localStorage being wiped (Android Chrome
+    // PWA can clear it during SW unregister + cache clear + signOut in the
+    // same tick) doesn't trap the user in an infinite bounce loop:
+    //   - localStorage marker: primary cross-session signal
+    //   - sessionStorage marker: survives reload within the same tab even
+    //     if localStorage gets wiped
+    //   - hard bounce cap (2 per tab session): last-resort escape if both
+    //     storages are unreliable
     if (currentUserProfile && currentUserProfile.forceSignOutAt) {
       try {
-        const responded = localStorage.getItem('pt_force_signout_responded') || '';
-        if (currentUserProfile.forceSignOutAt > responded) {
-          localStorage.setItem('pt_force_signout_responded', currentUserProfile.forceSignOutAt);
+        const responded = localStorage.getItem('pt_force_signout_responded')
+                       || sessionStorage.getItem('pt_force_signout_responded')
+                       || '';
+        const bounceCount = parseInt(sessionStorage.getItem('pt_force_signout_bounces') || '0', 10) || 0;
+        if (bounceCount >= 2) {
+          console.warn('[force-signout] bounce cap reached, skipping force sign-out for', currentUserProfile.forceSignOutAt);
+        } else if (currentUserProfile.forceSignOutAt > responded) {
+          try { localStorage.setItem('pt_force_signout_responded', currentUserProfile.forceSignOutAt); } catch (_) {}
+          try { sessionStorage.setItem('pt_force_signout_responded', currentUserProfile.forceSignOutAt); } catch (_) {}
+          try { sessionStorage.setItem('pt_force_signout_bounces', String(bounceCount + 1)); } catch (_) {}
           // Unregister all service workers so the next load fetches a
           // fresh sw.js without the cached one intercepting.
           try {
