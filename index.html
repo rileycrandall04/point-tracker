@@ -21621,6 +21621,27 @@ function _getShiftLevelLocation() {
   return r ? r.value : '';
 }
 
+// Best-guess Location for the case-form hint when no start time has been
+// typed yet. Non-flat-payment shifts (1st Call, etc.) keep the tag on
+// each time entry rather than at shift level, so the older
+// `shift.subSiteId` fallback under-reports and the hint shows
+// "not set" even when the time-entry tag will correctly stamp the case.
+// Order: segment owning the current wall-clock time → first entry with
+// a tag → shift-level → admin default.
+function _hintFallbackSubSite(shift, siteId) {
+  if (!shift) return '';
+  if (shift.timeEntries && shift.timeEntries.length) {
+    const now = new Date();
+    const nowHM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const active = _findTimeEntryForCase(shift, nowHM);
+    if (active && active.subSiteId) return active.subSiteId;
+    const tagged = shift.timeEntries.find(e => e && e.subSiteId);
+    if (tagged) return tagged.subSiteId;
+  }
+  if (shift.subSiteId) return shift.subSiteId;
+  return getDefaultSubSiteForAssignmentType(siteId, shift.assignmentType) || '';
+}
+
 // Refresh the "Location: X" hint under the case form based on the
 // current start time and the shift's segment tags. Stays hidden on
 // sites without sub-sites or when no inheritable tag exists.
@@ -21633,12 +21654,9 @@ function _updateCaseFormLocationHint() {
   if (shift && isLocationExemptForType(siteId, shift.assignmentType)) { hint.classList.add('hidden'); return; }
   if (!shift) { hint.classList.add('hidden'); return; }
   const startTime = document.getElementById('caseStart')?.value || '';
-  // Resolve via segment when a start time is filled, otherwise fall back
-  // to the shift-level / admin default so the hint is visible from the
-  // moment the form is open.
   const subId = startTime
     ? subSiteIdForCase(shift, startTime)
-    : (shift.subSiteId || getDefaultSubSiteForAssignmentType(siteId, shift.assignmentType));
+    : _hintFallbackSubSite(shift, siteId);
   hint.classList.remove('hidden');
   if (!subId) {
     hint.innerHTML = '<strong>Location:</strong> <span style="color:var(--accent2);">not set</span> <span style="opacity:0.7;">(edit the shift to tag this segment)</span>';
@@ -21667,7 +21685,9 @@ function _updateEditCaseLocationHint() {
   // Standard cases use editCaseStart; labor uses editLaborStart.
   const startEl = document.getElementById('editCaseStart') || document.getElementById('editLaborStart');
   const startTime = (startEl && startEl.value) || c.startTime || '';
-  const subId = startTime ? subSiteIdForCase(shift, startTime) : (c.subSiteId || (shift && shift.subSiteId) || '');
+  const subId = startTime
+    ? subSiteIdForCase(shift, startTime)
+    : (c.subSiteId || _hintFallbackSubSite(shift, siteId));
   hint.classList.remove('hidden');
   if (!subId) {
     hint.innerHTML = '<strong>Location:</strong> <span style="color:var(--accent2);">not set</span> <span style="opacity:0.7;">(edit the shift to tag this segment)</span>';
