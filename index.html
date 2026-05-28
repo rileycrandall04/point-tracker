@@ -3810,7 +3810,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <div class="card" style="margin-top:12px;">
     <h2>Excel Template</h2>
     <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-      Download a pre-formatted Excel workbook with two sheets &mdash; <strong>Shifts</strong> and <strong>Cases</strong> &mdash; then fill in your prior data and upload it on the Import page. Cases link to shifts automatically by date.
+      Download a pre-formatted Excel workbook with two sheets &mdash; <strong>Shifts</strong> and <strong>Cases</strong> &mdash; fill in your prior data, then upload it below. Cases link to shifts automatically by date.
     </p>
     <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
       <summary style="cursor:pointer;color:var(--accent);font-weight:600;">What's in the template</summary>
@@ -3825,6 +3825,43 @@ body.hide-monetary .monetary-hide { display: none !important; }
       </div>
     </details>
     <button class="btn btn-primary" id="downloadTemplateBtn" style="width:100%;">Download Excel Template</button>
+  </div>
+
+  <!-- Import Cases (and optional Shifts sheet) -->
+  <div class="card" style="margin-top:12px;">
+    <h2>Import from Excel</h2>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
+      Upload the filled-in template, or any Excel (.xlsx), CSV (Google Sheet export), PDF (Charge Detail), or screenshot of cases.
+      If the workbook has a <strong>Shifts</strong> sheet, those shifts will be imported too.
+      Duplicate cases (same date + start time) and dates with an existing shift are skipped.
+    </p>
+    <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
+      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">Other accepted column formats</summary>
+      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;line-height:1.6;">
+        <strong>Excel (.xlsx) &mdash; flexible header row:</strong><br>
+        <code style="font-size:0.7rem;">Date | Procedure | ASA Code | Base Units | Start | End | Surgeon | Modifier | Shared</code><br><br>
+        <strong>Column details:</strong><br>
+        <strong>Date:</strong> M/D, M/D/YYYY, or Excel date (required)<br>
+        <strong>Procedure:</strong> e.g., Lap Chole, Total Knee<br>
+        <strong>ASA Code:</strong> e.g., 00740, 01402<br>
+        <strong>Base Units:</strong> ASA base unit value (numeric)<br>
+        <strong>Start / End:</strong> H:MM AM/PM or 24-hour HH:MM<br>
+        <strong>Surgeon:</strong> Attending name<br>
+        <strong>Modifier:</strong> "E" for emergency, "4" or "5" for ASA physical status<br>
+        <strong>Shared:</strong> "Y" if shared/split case<br><br>
+        Headers are matched flexibly (e.g., "proc", "description", "case" all match Procedure).
+        Only Date is required &mdash; all other columns are optional.<br><br>
+        <strong>CSV fallback (no header row):</strong><br>
+        <code style="font-size:0.7rem;">Date, Surgeon, Base Units, Start, End, Time, Modifiers, Block, Shared?, Points</code><br>
+        <code style="font-size:0.7rem;">1/5,A Hill,6,8:02:00 AM,11:08:00 AM,186.00,,,,21.6</code>
+      </div>
+    </details>
+    <div class="upload-area" id="csvUploadArea">
+      <div style="font-size:2rem;">&#128203;</div>
+      <p>Tap to upload .xlsx, .csv, .pdf, or screenshot</p>
+      <input type="file" id="csvFile" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg">
+    </div>
+    <div id="csvImportResults"></div>
   </div>
 
   <!-- Owner-only: restore data doc from a restored backup database -->
@@ -3899,45 +3936,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
     <div id="importTimeAction" class="hidden" style="margin-top:12px;">
       <button class="btn btn-primary" id="importShiftsBtn" style="width:100%;">Import Shifts</button>
     </div>
-  </div>
-
-  <!-- Import Cases -->
-  <div class="card">
-    <h2>Import Cases</h2>
-    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px;">
-      Upload cases from Excel (.xlsx), CSV (Google Sheet export), PDF (Charge Detail), or screenshot.
-      If the workbook also has a <strong>Shifts</strong> sheet (see the Excel Template on the Settings page), those shifts will be imported too.
-      Duplicate cases (same date + start time) and dates with an existing shift are skipped.
-    </p>
-    <details style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">
-      <summary style="cursor:pointer;color:var(--accent);font-weight:600;">Recommended Excel column format</summary>
-      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;line-height:1.6;">
-        <strong>Excel (.xlsx) &mdash; use a header row with these column names:</strong><br>
-        <code style="font-size:0.7rem;">Date | Procedure | ASA Code | Base Units | Start | End | Surgeon | Modifier | Shared</code><br><br>
-        <strong>Column details:</strong><br>
-        <strong>Date:</strong> M/D, M/D/YYYY, or Excel date (required)<br>
-        <strong>Procedure:</strong> e.g., Lap Chole, Total Knee<br>
-        <strong>ASA Code:</strong> e.g., 00740, 01402<br>
-        <strong>Base Units:</strong> ASA base unit value (numeric)<br>
-        <strong>Start / End:</strong> H:MM AM/PM or 24-hour HH:MM<br>
-        <strong>Surgeon:</strong> Attending name<br>
-        <strong>Modifier:</strong> "E" for emergency, "4" or "5" for ASA physical status<br>
-        <strong>Shared:</strong> "Y" if shared/split case<br><br>
-        Headers are matched flexibly (e.g., "proc", "description", "case" all match Procedure).
-        Only Date is required &mdash; all other columns are optional.
-        Shifts are auto-created for dates without an existing shift.
-        Duplicates (same date + start time) are skipped.<br><br>
-        <strong>CSV fallback (no header row):</strong><br>
-        <code style="font-size:0.7rem;">Date, Surgeon, Base Units, Start, End, Time, Modifiers, Block, Shared?, Points</code><br>
-        <code style="font-size:0.7rem;">1/5,A Hill,6,8:02:00 AM,11:08:00 AM,186.00,,,,21.6</code>
-      </div>
-    </details>
-    <div class="upload-area" id="csvUploadArea">
-      <div style="font-size:2rem;">&#128203;</div>
-      <p>Tap to upload .xlsx, .csv, .pdf, or screenshot</p>
-      <input type="file" id="csvFile" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg">
-    </div>
-    <div id="csvImportResults"></div>
   </div>
 
   <!-- Scan Billing Sheet — hidden until OCR pipeline is wired up -->
