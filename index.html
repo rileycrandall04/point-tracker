@@ -4599,12 +4599,29 @@ body.hide-monetary .monetary-hide { display: none !important; }
         Per-case migration health: comparison of blob vs subcollection counts per user, global rollout flag, and recent fallback events. Run the comparison before flipping the rollout flag to spot any drift.
       </p>
 
-      <!-- Global rollout flag -->
+      <!-- Per-user graduation to sub-only -->
       <details class="adm-fold">
-        <summary>Subcollection reads rollout</summary>
+        <summary>Per-user graduation to sub-only (launch flag)</summary>
         <div class="adm-fold-body">
         <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;line-height:1.5;">
-          <strong>off</strong>: everyone reads from the blob (safest). <strong>opted-in-only</strong>: only users with the per-profile opt-in read from subcollection — use this to canary one user. <strong>on</strong>: everyone reads from subcollection, except users with the per-user disable flag.
+          When this flag is <strong>ON</strong>, any user who logs in with a clean reconcile (their subcollection mirrors their blob) is automatically stamped <code>profile.casesSubOnly = true</code> and reads from the subcollection from that login onward — regardless of the legacy global flag below. Each user graduates individually as they refresh, so dormant users keep working on blob until they show up. Dual-write to the blob continues unchanged; this only changes the read path. Set OFF to pause new graduations (already-graduated users remain graduated).
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+          <label style="font-size:0.85rem;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="adminMigGraduationFlag" onchange="adminMigSaveGraduationFlag()" style="width:16px;height:16px;cursor:pointer;">
+            Activate per-user graduation
+          </label>
+        </div>
+        <div id="adminMigGraduationFlagStatus" style="font-size:0.78rem;margin-top:6px;"></div>
+        </div>
+      </details>
+
+      <!-- Global rollout flag -->
+      <details class="adm-fold">
+        <summary>Subcollection reads rollout (legacy global flag)</summary>
+        <div class="adm-fold-body">
+        <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;line-height:1.5;">
+          <strong>off</strong>: everyone reads from the blob (safest). <strong>opted-in-only</strong>: only users with the per-profile opt-in read from subcollection — use this to canary one user. <strong>on</strong>: everyone reads from subcollection, except users with the per-user disable flag. <em>Note: graduated users above bypass this flag entirely.</em>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
           <label style="font-size:0.8rem;">Current state:</label>
@@ -6533,16 +6550,27 @@ async function adminMigInit() {
   // Populate global flag selector with current value.
   try {
     const doc = await db.collection('appConfig').doc('flags').get();
-    const state = doc.exists ? ((doc.data() || {}).subcollectionReads || 'off') : 'off';
+    const data = doc.exists ? (doc.data() || {}) : {};
+    const state = data.subcollectionReads || 'off';
     const sel = document.getElementById('adminMigGlobalFlag');
     if (sel) sel.value = state;
-    const qEnabled = doc.exists && (doc.data() || {}).quarantineEnabled === true;
+    const qEnabled = data.quarantineEnabled === true;
     const qCb = document.getElementById('adminQuarantineToggle');
     if (qCb) qCb.checked = qEnabled;
     const qStatus = document.getElementById('adminQuarantineStatus');
     if (qStatus) {
       qStatus.style.color = 'var(--text-dim)';
       qStatus.textContent = 'Currently ' + (qEnabled ? 'ON — new users are quarantined.' : 'OFF — open sign-up (current behavior).');
+    }
+    const gradOn = data.casesGraduationActive === true;
+    const gradCb = document.getElementById('adminMigGraduationFlag');
+    if (gradCb) gradCb.checked = gradOn;
+    const gradStatus = document.getElementById('adminMigGraduationFlagStatus');
+    if (gradStatus) {
+      gradStatus.style.color = 'var(--text-dim)';
+      gradStatus.textContent = 'Currently ' + (gradOn
+        ? 'ON — eligible users graduate on their next clean reconcile.'
+        : 'OFF — no new graduations (pre-launch state).');
     }
     const statusEl = document.getElementById('adminMigGlobalFlagStatus');
     if (statusEl) {
@@ -6560,6 +6588,42 @@ async function adminMigInit() {
   adminMigPruneOldDiagnostics().catch(err => console.warn('Diagnostics prune failed:', err));
   // Show recent fallbacks immediately.
   adminMigLoadDiagnostics();
+}
+
+// Owner: toggles the casesGraduationActive launch flag in appConfig/flags.
+// When true, the auth handler stamps profile.casesSubOnly on every user who
+// passes a clean reconcile on login — they immediately read from sub-only
+// from that login forward. When false, nothing stamps (pre-launch state).
+async function adminMigSaveGraduationFlag() {
+  if (!isAppOwner() && !isLegacyAdmin()) return;
+  const cb = document.getElementById('adminMigGraduationFlag');
+  if (!cb) return;
+  const on = !!cb.checked;
+  const statusEl = document.getElementById('adminMigGraduationFlagStatus');
+  if (statusEl) {
+    statusEl.style.color = 'var(--text-dim)';
+    statusEl.textContent = 'Saving…';
+  }
+  try {
+    await db.collection('appConfig').doc('flags').set({
+      casesGraduationActive: on,
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser ? currentUser.uid : ''
+    }, { merge: true });
+    globalScalingFlags.casesGraduationActive = on;
+    if (statusEl) {
+      statusEl.style.color = 'var(--accent)';
+      statusEl.textContent = on
+        ? 'LAUNCHED. Eligible users graduate to sub-only on their next clean reconcile (each user, individually). Dormant users stay on blob until they refresh.'
+        : 'Disabled. No new users will be graduated. Already-graduated users remain graduated (clearing profile.casesSubOnly is a manual reversal).';
+    }
+    showToast('Graduation flag set to ' + (on ? 'ON' : 'OFF'));
+  } catch (err) {
+    if (statusEl) {
+      statusEl.style.color = 'var(--accent2)';
+      statusEl.textContent = 'Save failed: ' + (err.message || err);
+    }
+  }
 }
 
 async function adminMigSaveGlobalFlag() {
@@ -6920,7 +6984,9 @@ async function adminLoadUserVersions() {
         uid: doc.id,
         email: d.email || '', name: d.displayName || '',
         ver: d.runningVersion || '', verAt: d.runningVersionAt || '',
-        approvedSiteId: d.approvedSiteId || ''
+        approvedSiteId: d.approvedSiteId || '',
+        casesSubOnly: d.casesSubOnly === true,
+        casesSubOnlyAt: d.casesSubOnlyAt || ''
       });
     });
     // Per-user settings.siteId for the stranded check (owner can read all).
@@ -6947,8 +7013,11 @@ async function adminLoadUserVersions() {
     const behindN = users.filter(u => u.behind !== null && u.behind > 0).length;
     const kickableN = users.filter(u => u.verNum !== null && u.verNum >= 344 && u.behind > 0).length;
     const unknownN = users.filter(u => u.verNum === null).length;
+    const graduatedN = users.filter(u => u.casesSubOnly === true).length;
+    const pendingN = total - graduatedN;
     setStatus(total + ' users · ' + strandedN + ' stranded · ' + behindN +
-      ' behind current · ' + unknownN + ' version unknown',
+      ' behind current · ' + unknownN + ' version unknown · '
+      + graduatedN + ' graduated (sub-only) · ' + pendingN + ' pending',
       (strandedN || behindN) ? 'var(--accent2)' : 'var(--accent)');
 
     let html = '';
@@ -6977,7 +7046,7 @@ async function adminLoadUserVersions() {
       + '<table style="width:100%;border-collapse:collapse;font-size:0.72rem;min-width:560px;">'
       + '<thead><tr style="text-align:left;border-bottom:1px solid var(--border);">'
       + '<th style="padding:4px 6px;">User</th><th style="padding:4px 6px;">Version</th>'
-      + '<th style="padding:4px 6px;">Site status</th><th style="padding:4px 6px;">Actions</th>'
+      + '<th style="padding:4px 6px;">Site status</th><th style="padding:4px 6px;">Sub-only</th><th style="padding:4px 6px;">Actions</th>'
       + '</tr></thead><tbody>';
     users.forEach(u => {
       const who = escapeHtml(u.email || u.name || u.uid);
@@ -7001,10 +7070,14 @@ async function adminLoadUserVersions() {
       actions += '<button class="btn btn-sm" style="padding:2px 8px;" '
         + (canKick ? '' : 'disabled title="Device too old (<v344) — must clear manually" ')
         + 'onclick="adminForceSignOutOne(\'' + u.uid + '\')">Force sign-out</button>';
+      const subOnlyCell = u.casesSubOnly
+        ? '<span style="color:var(--accent);" title="Graduated at ' + escapeHtml(u.casesSubOnlyAt || '') + '">&check; graduated</span>'
+        : '<span style="color:var(--text-dim);">pending</span>';
       html += '<tr style="border-bottom:1px solid var(--border);">'
         + '<td style="padding:4px 6px;">' + who + '</td>'
         + '<td style="padding:4px 6px;">' + vCell + '</td>'
         + '<td style="padding:4px 6px;">' + site + '</td>'
+        + '<td style="padding:4px 6px;white-space:nowrap;">' + subOnlyCell + '</td>'
         + '<td style="padding:4px 6px;white-space:nowrap;">' + actions + '</td></tr>';
     });
     html += '</tbody></table></div>';
@@ -8790,6 +8863,9 @@ async function adminMSShowUserFlags(uid) {
       ['profile.runningVersionAt', p.runningVersionAt || '(none)'],
       ['profile.useSubcollectionReads', p.useSubcollectionReads === undefined ? 'undefined' : String(p.useSubcollectionReads)],
       ['profile.useSubcollectionReadsDisabled', p.useSubcollectionReadsDisabled === undefined ? 'undefined' : String(p.useSubcollectionReadsDisabled)],
+      ['profile.casesSubOnly (graduated)', p.casesSubOnly === true ? 'true' : 'false / undefined'],
+      ['profile.casesSubOnlyAt', p.casesSubOnlyAt || '(not graduated)'],
+      ['profile.casesSubOnlyVersion', p.casesSubOnlyVersion || '(none)'],
       ['profile.lastSignIn', p.lastSignIn || '(none)'],
       ['profile.forceSignOutAt', p.forceSignOutAt || '(not armed)']
     ];
@@ -11092,10 +11168,38 @@ async function mirrorAllCasesToSub() {
 // adds during a sync-disabled window, paths that bypass writeCaseDoc
 // (Import JSON / Restore tool / etc.), and the per-user opt-out flag. Read
 // only; never deletes from the sub.
+// Stamps profile.casesSubOnly = true for the current user, gated on the
+// global launch flag (casesGraduationActive). Called only after a confirmed-
+// clean reconcile, so the user's subcollection is guaranteed to mirror their
+// blob at the moment they graduate. After this stamp, shouldUseSubcollectionReads
+// returns true regardless of the legacy global Phase 2 flag.
+async function _maybeGraduateToSubOnly() {
+  if (!firestoreSyncEnabled || !currentUser) return;
+  if (!(globalScalingFlags && globalScalingFlags.casesGraduationActive)) return;
+  if (currentUserProfile && currentUserProfile.casesSubOnly === true) return; // already graduated
+  if (!settings || settings.casesBackfilledV1 !== true) return; // pre-migration user
+  try {
+    const ver = (typeof getCurrentCacheVersion === 'function') ? await getCurrentCacheVersion() : '';
+    const update = {
+      casesSubOnly: true,
+      casesSubOnlyAt: new Date().toISOString()
+    };
+    if (ver) update.casesSubOnlyVersion = ver;
+    await db.collection('userProfiles').doc(currentUser.uid).set(update, { merge: true });
+    if (!currentUserProfile) currentUserProfile = {};
+    Object.assign(currentUserProfile, update);
+    console.log('[graduation] User graduated to sub-only (cases)');
+    logScalingDiagnostic('user_graduated_sub_only', { runningVersion: ver || '' });
+  } catch (err) {
+    console.warn('[graduation] stamp failed:', err);
+  }
+}
+
 async function reconcileSubFromBlobOnLoad() {
   if (!firestoreSyncEnabled || !currentUser) return;
   if (!isCaseDualWriteEnabled()) return;
   if (!settings || settings.casesBackfilledV1 !== true) return; // not migrated yet
+  let cleanSync = false;
   try {
     const uid = currentUser.uid;
     const [blobSnap, subSnap] = await Promise.all([
@@ -11106,47 +11210,56 @@ async function reconcileSubFromBlobOnLoad() {
     const subIds = new Set();
     subSnap.forEach(d => { if (d.id) subIds.add(d.id); });
     const missing = blobCases.filter(c => c && c.id && !subIds.has(c.id));
-    if (missing.length === 0) return;
-    const batchSize = 400;
-    let written = 0;
-    for (let i = 0; i < missing.length; i += batchSize) {
-      const slice = missing.slice(i, i + batchSize);
-      const batch = db.batch();
-      slice.forEach(c => {
-        const ref = db.collection('users').doc(uid).collection('cases').doc(c.id);
-        const payload = JSON.parse(JSON.stringify(c));
-        payload.updatedAt = new Date().toISOString();
-        batch.set(ref, payload);
-      });
-      try {
-        await batch.commit();
-        written += slice.length;
-      } catch (err) {
-        console.error('[reconcileSubFromBlob] batch error:', err);
-        logScalingDiagnostic('on_load_sub_reconcile_batch_failed', {
-          error: String((err && err.message) || err),
-          errorCode: (err && err.code) || ''
+    if (missing.length === 0) {
+      cleanSync = true;
+    } else {
+      const batchSize = 400;
+      let written = 0;
+      for (let i = 0; i < missing.length; i += batchSize) {
+        const slice = missing.slice(i, i + batchSize);
+        const batch = db.batch();
+        slice.forEach(c => {
+          const ref = db.collection('users').doc(uid).collection('cases').doc(c.id);
+          const payload = JSON.parse(JSON.stringify(c));
+          payload.updatedAt = new Date().toISOString();
+          batch.set(ref, payload);
         });
-        return;
+        try {
+          await batch.commit();
+          written += slice.length;
+        } catch (err) {
+          console.error('[reconcileSubFromBlob] batch error:', err);
+          logScalingDiagnostic('on_load_sub_reconcile_batch_failed', {
+            error: String((err && err.message) || err),
+            errorCode: (err && err.code) || ''
+          });
+          return; // don't graduate — sync is not clean
+        }
       }
-    }
-    console.log('[reconcileSubFromBlob] Wrote ' + written + ' blob-only case(s) to subcollection');
-    logScalingDiagnostic('on_load_sub_reconcile', { wrote: written });
-    // Per-case forensic record so we can correlate each blob-only case with
-    // when it was originally added (caseTimestamp) and any nearby skip log.
-    // Capped to keep the diagnostics collection from exploding on huge syncs.
-    for (const c of missing.slice(0, 50)) {
-      logScalingDiagnostic('reconcile_healed_blob_only', {
-        caseId: c.id,
-        caseTimestamp: c.timestamp || '',
-        shiftDate: c.shiftDate || '',
-        procedure: (c.procedure || c.caseType || '').toString().slice(0, 60),
-        ageHours: c.timestamp ? Math.round((Date.now() - new Date(c.timestamp).getTime()) / 3600000) : null
-      });
+      console.log('[reconcileSubFromBlob] Wrote ' + written + ' blob-only case(s) to subcollection');
+      logScalingDiagnostic('on_load_sub_reconcile', { wrote: written });
+      // Per-case forensic record so we can correlate each blob-only case with
+      // when it was originally added (caseTimestamp) and any nearby skip log.
+      // Capped to keep the diagnostics collection from exploding on huge syncs.
+      for (const c of missing.slice(0, 50)) {
+        logScalingDiagnostic('reconcile_healed_blob_only', {
+          caseId: c.id,
+          caseTimestamp: c.timestamp || '',
+          shiftDate: c.shiftDate || '',
+          procedure: (c.procedure || c.caseType || '').toString().slice(0, 60),
+          ageHours: c.timestamp ? Math.round((Date.now() - new Date(c.timestamp).getTime()) / 3600000) : null
+        });
+      }
+      cleanSync = (written === missing.length);
     }
   } catch (err) {
     console.error('[reconcileSubFromBlob] failed:', err);
   }
+  // After a confirmed-clean reconcile (sub now mirrors blob), the user is
+  // eligible to graduate to sub-only reads. The graduation helper checks the
+  // global launch flag and per-user state itself, so this call is a no-op
+  // until the flag flips on launch day.
+  if (cleanSync) _maybeGraduateToSubOnly();
 }
 
 function deleteCaseDoc(caseId) {
@@ -11381,7 +11494,7 @@ async function backfillCaseSubcollection() {
 // collection with debug context. The Migration Diagnostics admin page lists
 // recent entries and auto-prunes anything older than 30 days when viewed.
 
-let globalScalingFlags = { subcollectionReads: 'off', quarantineEnabled: false };
+let globalScalingFlags = { subcollectionReads: 'off', quarantineEnabled: false, casesGraduationActive: false };
 let globalScalingFlagsLoaded = false;
 const PHASE2_FULL_RECONCILE_DAYS = 7;
 const PHASE2_DIAGNOSTIC_PRUNE_DAYS = 30;
@@ -11394,7 +11507,8 @@ async function loadGlobalScalingFlags() {
       const d = doc.data() || {};
       globalScalingFlags = {
         subcollectionReads: d.subcollectionReads || 'off',
-        quarantineEnabled: d.quarantineEnabled === true
+        quarantineEnabled: d.quarantineEnabled === true,
+        casesGraduationActive: d.casesGraduationActive === true
       };
     }
     globalScalingFlagsLoaded = true;
@@ -11405,9 +11519,15 @@ async function loadGlobalScalingFlags() {
 }
 
 // Decides whether THIS user reads from the subcollection. Per-user disable
-// trumps everything; otherwise global flag decides.
+// trumps everything. A user who has been GRADUATED (profile.casesSubOnly)
+// always reads from sub regardless of the global flag — that's how the
+// per-user graduation migration works: each user moves to sub-only on their
+// own login, while dormant users keep reading from blob until they
+// eventually refresh and graduate. The legacy global-flag/opt-in path stays
+// as the fallback for non-graduated users.
 function shouldUseSubcollectionReads() {
   if (currentUserProfile && currentUserProfile.useSubcollectionReadsDisabled === true) return false;
+  if (currentUserProfile && currentUserProfile.casesSubOnly === true) return true;
   const state = (globalScalingFlags && globalScalingFlags.subcollectionReads) || 'off';
   if (state === 'on') return true;
   if (state === 'opted-in-only') {
