@@ -13936,9 +13936,14 @@ function restampCaseLocationsForShift(shiftDate) {
 
 // Resolve the subSiteId to stamp on a case at save time. Priority:
 //   1. The time entry segment that owns the case start time.
-//   2. The shift-level subSiteId (set for flat-payment shifts and any
+//   2. Point-in-time case types (APS rounding, Acute Pain procedures)
+//      carry no start time, so for those borrow the tag from the time
+//      entry covering "now," then any tagged entry. Without this they'd
+//      blow past every per-entry tag and hit the validation toast even
+//      though the shift was clearly tagged.
+//   3. The shift-level subSiteId (set for flat-payment shifts and any
 //      shift type the admin hasn't moved to a per-time-entry picker).
-//   3. The admin's per-shift-type default.
+//   4. The admin's per-shift-type default.
 // Returns '' when the shift type is admin-marked "Not applicable" so an
 // inherited default can't sneak through.
 function subSiteIdForCase(shift, caseStartTime) {
@@ -13946,6 +13951,14 @@ function subSiteIdForCase(shift, caseStartTime) {
   if (isLocationExemptForType(shift.siteId, shift.assignmentType)) return '';
   const seg = _findTimeEntryForCase(shift, caseStartTime);
   if (seg && seg.subSiteId) return seg.subSiteId;
+  if (!caseStartTime && shift.timeEntries && shift.timeEntries.length) {
+    const now = new Date();
+    const nowHM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const active = _findTimeEntryForCase(shift, nowHM);
+    if (active && active.subSiteId) return active.subSiteId;
+    const tagged = shift.timeEntries.find(e => e && e.subSiteId);
+    if (tagged) return tagged.subSiteId;
+  }
   if (shift.subSiteId) return shift.subSiteId;
   return getDefaultSubSiteForAssignmentType(shift.siteId, shift.assignmentType);
 }
