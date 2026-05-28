@@ -10374,8 +10374,14 @@ function _buildKnownProcedureList() {
     if (!raw) return;
     const trimmed = String(raw).trim();
     if (!trimmed) return;
-    const key = trimmed.toLowerCase();
-    if (!seen[key]) seen[key] = trimmed;
+    // Funnel through normalizeProcedureName so admin-mapped variants
+    // collapse into their canonical — once "TKA" → "Total Knee" is set,
+    // the variant stops appearing in suggestions even if historical
+    // cases or the ASA pool still carry the raw string.
+    const display = normalizeProcedureName(trimmed);
+    if (!display) return;
+    const key = display.toLowerCase();
+    if (!seen[key]) seen[key] = display;
   }
   // 1. ASA-code procedure pool (DB-backed, considered canonical-ish).
   if (typeof asaCodeProcedures === 'object' && asaCodeProcedures) {
@@ -10384,11 +10390,12 @@ function _buildKnownProcedureList() {
       for (const n of list) add(n);
     }
   }
-  // 2. Procedure-mapping variants and canonicals (admin-curated).
+  // 2. Procedure-mapping canonicals (admin-curated). Variants are
+  //    intentionally skipped — adding them only to have add() collapse
+  //    them right back is wasted work.
   if (procedureMappingsCache) {
-    for (const [variant, canonical] of Object.entries(procedureMappingsCache)) {
+    for (const canonical of Object.values(procedureMappingsCache)) {
       add(canonical);
-      add(variant);
     }
   }
   // 3. Local cases (whatever the user has entered). No caseType filter —
@@ -20739,7 +20746,7 @@ function getProcHistory() {
   const map = {};
   data.cases.forEach(c => {
     if (c.caseType !== 'standard' || !c.procedure) return;
-    const name = c.procedure.trim();
+    const name = normalizeProcedureName(c.procedure);
     if (!name || name.toLowerCase() === 'standard') return;
     if (!map[name]) map[name] = { count: 0, lastUnits: '', lastASACode: '' };
     map[name].count++;
@@ -20752,7 +20759,7 @@ function getProcHistory() {
     sharedCasesCache.forEach(sc => {
       if (sc.uid === myUid) return;
       if (sc.caseType !== 'standard' || !sc.procedure) return;
-      const name = sc.procedure.trim();
+      const name = normalizeProcedureName(sc.procedure);
       if (!name || name.toLowerCase() === 'standard') return;
       if (!map[name]) map[name] = { count: 0, lastUnits: '', lastASACode: '' };
       map[name].count++;
@@ -20769,7 +20776,7 @@ function getProcsForCode(code) {
   data.cases.forEach(c => {
     if (c.caseType !== 'standard' || !c.asaCode || !c.procedure) return;
     if (c.asaCode.trim() === code) {
-      const name = c.procedure.trim();
+      const name = normalizeProcedureName(c.procedure);
       if (!name || name.toLowerCase() === 'standard') return;
       map[name] = (map[name] || 0) + 1;
     }
@@ -20780,7 +20787,7 @@ function getProcsForCode(code) {
       if (sc.uid === myUid) return;
       if (sc.caseType !== 'standard' || !sc.asaCode || !sc.procedure) return;
       if (sc.asaCode.trim() === code) {
-        const name = sc.procedure.trim();
+        const name = normalizeProcedureName(sc.procedure);
         if (!name || name.toLowerCase() === 'standard') return;
         map[name] = (map[name] || 0) + 1;
       }
@@ -20789,7 +20796,9 @@ function getProcsForCode(code) {
   // Source 3: Community procedure mappings
   if (asaCodeProceduresLoaded && asaCodeProcedures[code]) {
     asaCodeProcedures[code].forEach(function(procName) {
-      if (!map[procName]) map[procName] = 0;
+      const canonical = normalizeProcedureName(procName);
+      if (!canonical) return;
+      if (!map[canonical]) map[canonical] = 0;
     });
   }
   return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
@@ -34128,7 +34137,7 @@ function renderTopProcedures() {
     if (e <= s) e += 1440;
     const hrs = (e - s) / 60;
     if (hrs <= 0) return;
-    const name = c.caseType === 'standard' ? (c.procedure || 'Standard') : getCaseTypeName(c.caseType, c);
+    const name = c.caseType === 'standard' ? (normalizeProcedureName(c.procedure) || 'Standard') : getCaseTypeName(c.caseType, c);
     const shift = data.shifts[c.shiftDate];
     const pts = calcCasePoints(c, shift, true);
     if (!procData[name]) procData[name] = { totalPts: 0, totalHrs: 0, totalDollars: 0, count: 0 };
@@ -34152,7 +34161,7 @@ function renderTopProcedures() {
       if (e <= s) e += 1440;
       const hrs = (e - s) / 60;
       if (hrs <= 0) return;
-      const name = sc.caseType === 'standard' ? (sc.procedure || 'Standard') : getCaseTypeName(sc.caseType);
+      const name = sc.caseType === 'standard' ? (normalizeProcedureName(sc.procedure) || 'Standard') : getCaseTypeName(sc.caseType);
       const pts = approxSharedCasePoints(sc);
       if (!procData[name]) procData[name] = { totalPts: 0, totalHrs: 0, totalDollars: 0, count: 0 };
       procData[name].totalPts += pts;
@@ -34229,7 +34238,7 @@ function renderSurgeonEfficiency() {
     if (!surgeonData[surgeon]) surgeonData[surgeon] = { totalPts: 0, dates: {}, caseCount: 0, caseItems: [] };
     surgeonData[surgeon].totalPts += pts;
     surgeonData[surgeon].caseCount++;
-    surgeonData[surgeon].caseItems.push({ id: c.id, shiftDate: c.shiftDate, procedure: c.procedure || c.caseType || 'Case', pts, isFromShared: false });
+    surgeonData[surgeon].caseItems.push({ id: c.id, shiftDate: c.shiftDate, procedure: normalizeProcedureName(c.procedure) || c.caseType || 'Case', pts, isFromShared: false });
     if (!surgeonData[surgeon].dates[dateKey]) surgeonData[surgeon].dates[dateKey] = { earliest: null, latest: null };
     const startMin = timeToMinutes(c.startTime);
     let endMin = timeToMinutes(c.endTime);
@@ -34254,7 +34263,7 @@ function renderSurgeonEfficiency() {
       if (!surgeonData[surgeon]) surgeonData[surgeon] = { totalPts: 0, dates: {}, caseCount: 0, caseItems: [] };
       surgeonData[surgeon].totalPts += pts;
       surgeonData[surgeon].caseCount++;
-      surgeonData[surgeon].caseItems.push({ id: null, shiftDate: sc.shiftDate, procedure: sc.procedure || sc.caseType || 'Case', pts, isFromShared: true });
+      surgeonData[surgeon].caseItems.push({ id: null, shiftDate: sc.shiftDate, procedure: normalizeProcedureName(sc.procedure) || sc.caseType || 'Case', pts, isFromShared: true });
       if (!surgeonData[surgeon].dates[dateKey]) surgeonData[surgeon].dates[dateKey] = { earliest: null, latest: null };
       const startMin = timeToMinutes(sc.startTime);
       let endMin = timeToMinutes(sc.endTime);
