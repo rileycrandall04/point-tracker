@@ -14626,32 +14626,62 @@ function effectiveWorkDate() {
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayKey = yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
   const prevShift = data.shifts[yesterdayKey];
-  if (!prevShift) return todayStr();
 
-  const entries = prevShift.timeEntries || [];
-  // Still clocked in on yesterday's shift across midnight (an overnight case
-  // running). The 06:31–06:59 window is excluded so a fresh early-morning
-  // clock-in counts as today's work, not a continuation of yesterday.
-  const overnightOpen = entries.some(e => {
-    if (!e.start || e.end) return false;
-    const s = timeToMinutes(e.start);
-    return s <= 390 || s >= 420;
-  });
-  if (overnightOpen) return yesterdayKey;
+  if (prevShift) {
+    const entries = prevShift.timeEntries || [];
+    // Still clocked in on yesterday's shift across midnight (an overnight case
+    // running). The 06:31–06:59 window is excluded so a fresh early-morning
+    // clock-in counts as today's work, not a continuation of yesterday.
+    const overnightOpen = entries.some(e => {
+      if (!e.start || e.end) return false;
+      const s = timeToMinutes(e.start);
+      return s <= 390 || s >= 420;
+    });
+    if (overnightOpen) return yesterdayKey;
+  }
 
   // On-call shifts cover the patient overnight even while clocked out between
   // cases, so before the post-call hour (06:40) the early-morning hours still
   // belong to yesterday's call shift. From 06:40 on, a clean clocked-out state
-  // means today's (post-call) day has started. "Covers overnight" means the
-  // resolved pager window for that shift+date crosses midnight (end > 1440),
-  // which catches 1st–4th call, mole, cardiac_liver, endo, SF1, SF2, and any
-  // per-site overrides — not just the four named call types.
-  const _yIsWkndOrHol = isWeekend(yesterdayKey) || !!prevShift.isHoliday;
-  const _yPagerWin = getPagerPayWindow(prevShift.assignmentType, _yIsWkndOrHol, yesterdayKey, prevShift.siteId);
-  const coversOvernight = !!(_yPagerWin && _yPagerWin.end > 1440);
-  if (coversOvernight && currentMin < 400) return yesterdayKey;
+  // means today's (post-call) day has started. We treat a shift as "covers
+  // overnight" if its resolved rule has either (a) a pager window whose end
+  // crosses midnight, or (b) any unrestricted-call window — which catches
+  // SF1/SF2/endo/etc. even on per-site rule overrides that drop pagerWindow.
+  // Falls back to the calendar assignment when there's no saved shift record
+  // (SF1 and other rotations frequently live only in calendarAssignments).
+  let yType = prevShift ? prevShift.assignmentType : null;
+  const ySiteId = prevShift ? prevShift.siteId : null;
+  const yIsHoliday = prevShift ? !!prevShift.isHoliday : false;
+  if (!yType && data.calendarAssignments && data.calendarAssignments[yesterdayKey]) {
+    yType = data.calendarAssignments[yesterdayKey].type || null;
+  }
+  if (yType && currentMin < 400) {
+    if (_shiftTypeCoversOvernight(yType, ySiteId, yesterdayKey, yIsHoliday)) return yesterdayKey;
+  }
 
   return todayStr();
+}
+
+// True when the given assignment type, resolved against per-site rules,
+// covers the patient overnight on the given date — used by
+// effectiveWorkDate and the post-overnight prompt. Pager window crossing
+// midnight OR any unrestricted-call coverage counts; this is intentionally
+// looser than `getPagerPayWindow`, which also gates out "Post" calendar
+// labels and isn't what we want for the rollback decision.
+function _shiftTypeCoversOvernight(assignmentType, siteId, dateStr, isHoliday) {
+  if (!assignmentType) return false;
+  const rules = getResolvedShiftRules(siteId)[assignmentType];
+  if (!rules) return false;
+  const isWkndOrHol = isWeekend(dateStr) || !!isHoliday;
+  if (rules.pagerWindow) {
+    const pw = isWkndOrHol ? rules.pagerWindow.weekend : rules.pagerWindow.weekday;
+    if (pw && pw.end > 1440) return true;
+  }
+  if (rules.unrestrictedCall) {
+    const uc = isWkndOrHol ? rules.unrestrictedCall.weekend : rules.unrestrictedCall.weekday;
+    if (uc) return true;
+  }
+  return false;
 }
 
 // Window where "is this still yesterday's overnight, or a fresh today?" is
@@ -14667,14 +14697,18 @@ function maybePromptOvernightContinuation() {
   yest.setDate(yest.getDate() - 1);
   const yKey = yest.getFullYear() + '-' + String(yest.getMonth()+1).padStart(2,'0') + '-' + String(yest.getDate()).padStart(2,'0');
   const prev = data.shifts && data.shifts[yKey];
-  if (!prev) return;
-  const isWkndOrHol = isWeekend(yKey) || !!prev.isHoliday;
-  const pw = getPagerPayWindow(prev.assignmentType, isWkndOrHol, yKey, prev.siteId);
-  if (!(pw && pw.end > 1440)) return;
+  let yType = prev ? prev.assignmentType : null;
+  const ySiteId = prev ? prev.siteId : null;
+  const yIsHoliday = prev ? !!prev.isHoliday : false;
+  if (!yType && data.calendarAssignments && data.calendarAssignments[yKey]) {
+    yType = data.calendarAssignments[yKey].type || null;
+  }
+  if (!yType) return;
+  if (!_shiftTypeCoversOvernight(yType, ySiteId, yKey, yIsHoliday)) return;
   _overnightChoicePromptShown = true;
   const modal = document.getElementById('overnightChoiceModal');
   if (!modal) return;
-  const label = formatDateShort(yKey) + ' ' + getAssignmentTypeName(prev.assignmentType, prev.siteId);
+  const label = formatDateShort(yKey) + ' ' + getAssignmentTypeName(yType, ySiteId);
   document.getElementById('overnightChoiceShiftLabel').textContent = label;
   modal.classList.remove('hidden');
 }
