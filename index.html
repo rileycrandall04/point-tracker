@@ -2395,6 +2395,31 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div id="shiftLocationRadios" style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-top:4px;font-size:0.85rem;"></div>
       </div>
 
+      <!-- UVH 1st-4th call only: optional cardiac coverage overlay. None
+           (default), AM/PM each add the half-bonus (22.5 pts), Full adds
+           the standard 45. Styled to match the Location picker above. -->
+      <div id="callCardiacCoverageSection" class="form-group hidden">
+        <label>Cardiac coverage</label>
+        <div id="callCardiacCoverageRadios" style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-top:4px;font-size:0.85rem;">
+          <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--text);">
+            <input type="radio" name="callCardiacCoverage" value="" checked style="width:14px;height:14px;margin:0;flex:none;">
+            <span>None</span>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--text);">
+            <input type="radio" name="callCardiacCoverage" value="am" style="width:14px;height:14px;margin:0;flex:none;">
+            <span>AM (+22.5)</span>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--text);">
+            <input type="radio" name="callCardiacCoverage" value="pm" style="width:14px;height:14px;margin:0;flex:none;">
+            <span>PM (+22.5)</span>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--text);">
+            <input type="radio" name="callCardiacCoverage" value="full" style="width:14px;height:14px;margin:0;flex:none;">
+            <span>Full (+45)</span>
+          </label>
+        </div>
+      </div>
+
       <div class="form-group" id="timeEntriesGroup">
         <label id="timeEntriesLabel">Time Entries</label>
         <p id="timeEntriesHelp" class="hidden" style="font-size:0.72rem;color:var(--text-dim);margin:0 0 6px;line-height:1.4;"></p>
@@ -2462,32 +2487,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
         </div>
       </div>
 
-      <!-- UVH call shifts only: optional cardiac coverage overlay. Adds the
-           cardiac/liver subspecialty bonus on top of normal pager pay. AM
-           and PM split the bonus 50/50 (22.5 pts each); Full pays 45. -->
-      <div id="callCardiacCoverageSection" class="hidden">
-        <div class="divider"></div>
-        <div class="form-group" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;">
-          <div style="font-weight:600;margin-bottom:8px;">Cardiac coverage</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid var(--border);font-size:0.82rem;">
-              <input type="radio" name="callCardiacCoverage" value="" checked style="margin:0;cursor:pointer;"> None
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid var(--border);font-size:0.82rem;">
-              <input type="radio" name="callCardiacCoverage" value="am" style="margin:0;cursor:pointer;"> AM (+22.5)
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid var(--border);font-size:0.82rem;">
-              <input type="radio" name="callCardiacCoverage" value="pm" style="margin:0;cursor:pointer;"> PM (+22.5)
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid var(--border);font-size:0.82rem;">
-              <input type="radio" name="callCardiacCoverage" value="full" style="margin:0;cursor:pointer;"> Full (+45)
-            </label>
-          </div>
-          <p style="font-size:0.72rem;color:var(--text-dim);margin:0;line-height:1.4;">
-            Adds the cardiac/liver subspecialty bonus on top of this call shift's normal pager pay.
-          </p>
-        </div>
-      </div>
 
       <div id="unrestrictedCallEntryOptions" class="hidden">
         <div class="divider"></div>
