@@ -2462,6 +2462,22 @@ body.hide-monetary .monetary-hide { display: none !important; }
         </div>
       </div>
 
+      <!-- UVH call shifts only: optional cardiac coverage overlay. Adds the
+           +45 cardiac/liver subspecialty bonus on top of the call shift's
+           normal pager pay when the user is covering cardiac alongside call. -->
+      <div id="callCardiacCoverageSection" class="hidden">
+        <div class="divider"></div>
+        <div class="form-group" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;margin:0;">
+            <input type="checkbox" id="callCardiacCoverage" style="width:18px;height:18px;cursor:pointer;margin:0;">
+            Cardiac coverage
+          </label>
+          <p style="font-size:0.72rem;color:var(--text-dim);margin:6px 0 0;line-height:1.4;">
+            Adds the <strong>+45 pt</strong> cardiac/liver subspecialty bonus to this call shift's pay, in addition to the normal pager pay.
+          </p>
+        </div>
+      </div>
+
       <div id="unrestrictedCallEntryOptions" class="hidden">
         <div class="divider"></div>
         <div class="form-group">
@@ -16253,10 +16269,13 @@ function calcShiftTotal(shift, _skipSandboxHook) {
   // so per-site cardiac/liver types (IMC CV/Liver, MD CV, SG Heart Call)
   // automatically earn the +45 pt bonus. Also keep the literal UVH
   // 'cardiac_liver' check so the legacy default rule (which doesn't
-  // declare the flag) keeps working.
+  // declare the flag) keeps working. shift.cardiacCoverage is the UVH
+  // call-shift overlay — toggled per shift when the on-call provider is
+  // also covering cardiac.
   const _ssRule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
   const _hasSubspec = (shift.assignmentType === 'cardiac_liver')
-    || !!(_ssRule && (_ssRule.cardiacBonus || _ssRule.liverBonus));
+    || !!(_ssRule && (_ssRule.cardiacBonus || _ssRule.liverBonus))
+    || !!shift.cardiacCoverage;
   // When an IMC pager-call type is selected, its subspec column is the
   // authoritative cardiac/liver bonus (already baked into the 94 / 129
   // total). Don't double-count by also auto-adding the rule's +45.
@@ -19670,6 +19689,7 @@ function renderTemplates() {
       setShiftTypeSelectValue(document.getElementById('shiftAssignmentType'), t.type);
       populateTimeEntries([{ start: t.start, end: t.end }]);
       document.getElementById('cardiacLiverOptions').classList.toggle('hidden', t.type !== 'cardiac_liver');
+      _updateCallCardiacCoverageVisibility(t.type);
       updateSupervisionOverlayVisibility();
       showToast('Template applied');
     });
@@ -19840,6 +19860,21 @@ function updatePreCallOverlayVisibility() {
   }
 }
 
+// UVH-only: the "cardiac coverage" overlay is offered on 1st-4th call so the
+// user can stack the +45 cardiac/liver subspec bonus on top of normal call
+// pay. Other sites either have dedicated CV/Liver call types (IMC) or no
+// equivalent, so the section stays hidden.
+function _updateCallCardiacCoverageVisibility(type) {
+  const sec = document.getElementById('callCardiacCoverageSection');
+  if (!sec) return;
+  const isUVH = getCurrentSiteId() === 'UVH';
+  const isCall = type === '1st_call' || type === '2nd_call'
+    || type === '3rd_call' || type === '4th_call';
+  const eligible = isUVH && isCall;
+  sec.classList.toggle('hidden', !eligible);
+  if (!eligible) document.getElementById('callCardiacCoverage').checked = false;
+}
+
 function updateTempCoverageVisibility() {
   const type = getSelectedAssignmentType();
   const isWkndOrHol = document.getElementById('shiftHoliday').checked || isWeekend(workingDate);
@@ -19920,6 +19955,7 @@ document.getElementById('shiftAssignmentType').addEventListener('change', functi
   const type = this.value;
   updatePagerCallTypeVisibility(type, /*resetToSuggested*/ true);
   document.getElementById('cardiacLiverOptions').classList.toggle('hidden', type !== 'cardiac_liver');
+  _updateCallCardiacCoverageVisibility(type);
   document.getElementById('vacationRangeSection').classList.toggle('hidden', type !== 'vacation');
   document.getElementById('eveningAssignmentSection').classList.toggle('hidden', type !== 'pre_call');
   document.getElementById('timeEntriesLabel').textContent = type === 'pre_call' ? 'Pre-Call Times' : 'Time Entries';
@@ -20175,6 +20211,8 @@ function loadShiftForDate() {
     document.getElementById('vacationEndDate').value = '';
     document.getElementById('subspecCoverage').checked = shift.subspecCoverage || false;
     document.getElementById('teeCount').value = shift.teeCount || 0;
+    document.getElementById('callCardiacCoverage').checked = !!shift.cardiacCoverage;
+    _updateCallCardiacCoverageVisibility(shift.assignmentType);
     // Pre-call (morning OR) overlay — only meaningful for OB_restricted / mole.
     updatePreCallOverlayVisibility();
     {
@@ -20288,6 +20326,8 @@ function loadShiftForDate() {
     document.getElementById('vacationEndDate').value = '';
     document.getElementById('subspecCoverage').checked = false;
     document.getElementById('teeCount').value = 0;
+    document.getElementById('callCardiacCoverage').checked = false;
+    _updateCallCardiacCoverageVisibility(getSelectedAssignmentType());
     document.getElementById('unrestrictedCallEntryOptions').classList.add('hidden');
     document.getElementById('unrestrictedCallHours').value = 0;
     document.getElementById('dayForceOffSection').classList.add('hidden');
@@ -20692,6 +20732,12 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       forcedOff: false,
       pagerCallTypes: _pcSavedArr,
       subspecCoverage: document.getElementById('subspecCoverage').checked,
+      cardiacCoverage: (() => {
+        const cb = document.getElementById('callCardiacCoverage');
+        const eligibleType = effectiveType === '1st_call' || effectiveType === '2nd_call'
+          || effectiveType === '3rd_call' || effectiveType === '4th_call';
+        return !!(cb && cb.checked && eligibleType);
+      })(),
       teeCount: parseInt(document.getElementById('teeCount').value) || 0,
       unrestrictedCallHours: parseFloat(document.getElementById('unrestrictedCallHours').value) || 0,
       supervisionStart: supervisionEnabled ? document.getElementById('supervisionStart').value : '',
@@ -24306,7 +24352,8 @@ function getShiftPayBreakdown(shift) {
   if (getPagerCallType(shift)) return rows;
   const _ssRule = getResolvedShiftRules(shift.siteId)[shift.assignmentType];
   const _hasSubspec = (shift.assignmentType === 'cardiac_liver')
-    || !!(_ssRule && (_ssRule.cardiacBonus || _ssRule.liverBonus));
+    || !!(_ssRule && (_ssRule.cardiacBonus || _ssRule.liverBonus))
+    || !!shift.cardiacCoverage;
   if (!_hasSubspec) return rows;
   const _ssPts = calcSubspecPoints(shift);
   if (!(_ssPts > 0)) return rows;
