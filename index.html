@@ -2395,9 +2395,26 @@ body.hide-monetary .monetary-hide { display: none !important; }
         <div id="shiftLocationRadios" style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-top:4px;font-size:0.85rem;"></div>
       </div>
 
+      <div class="form-group" id="timeEntriesGroup">
+        <label id="timeEntriesLabel">Time Entries</label>
+        <p id="timeEntriesHelp" class="hidden" style="font-size:0.72rem;color:var(--text-dim);margin:0 0 6px;line-height:1.4;"></p>
+        <div id="timeEntriesContainer">
+          <div class="te-block" style="margin-bottom:8px;">
+            <div class="time-entry-row" style="margin-bottom:0;">
+              <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="07:10">
+              <span class="te-label">to</span>
+              <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-end" value="17:00">
+              <button type="button" class="remove-entry-btn" disabled>&times;</button>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="add-entry-btn" id="addTimeEntryBtn">+ Add Time Entry</button>
+      </div>
+
       <!-- UVH 1st-4th call only: optional cardiac coverage overlay. None
            (default), AM/PM each add the half-bonus (22.5 pts), Full adds
-           the standard 45. Styled to match the Location picker above. -->
+           the standard 45. Sits below the time entries so the per-entry
+           Location pickers read first. -->
       <div id="callCardiacCoverageSection" class="form-group hidden">
         <label>Cardiac coverage</label>
         <div id="callCardiacCoverageRadios" style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-top:4px;font-size:0.85rem;">
@@ -2418,22 +2435,6 @@ body.hide-monetary .monetary-hide { display: none !important; }
             <span>Full (+45)</span>
           </label>
         </div>
-      </div>
-
-      <div class="form-group" id="timeEntriesGroup">
-        <label id="timeEntriesLabel">Time Entries</label>
-        <p id="timeEntriesHelp" class="hidden" style="font-size:0.72rem;color:var(--text-dim);margin:0 0 6px;line-height:1.4;"></p>
-        <div id="timeEntriesContainer">
-          <div class="te-block" style="margin-bottom:8px;">
-            <div class="time-entry-row" style="margin-bottom:0;">
-              <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-start" value="07:10">
-              <span class="te-label">to</span>
-              <input type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5" class="mil-time te-end" value="17:00">
-              <button type="button" class="remove-entry-btn" disabled>&times;</button>
-            </div>
-          </div>
-        </div>
-        <button type="button" class="add-entry-btn" id="addTimeEntryBtn">+ Add Time Entry</button>
       </div>
 
       <div class="checkbox-group">
