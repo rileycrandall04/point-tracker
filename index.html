@@ -2463,17 +2463,28 @@ body.hide-monetary .monetary-hide { display: none !important; }
       </div>
 
       <!-- UVH call shifts only: optional cardiac coverage overlay. Adds the
-           +45 cardiac/liver subspecialty bonus on top of the call shift's
-           normal pager pay when the user is covering cardiac alongside call. -->
+           cardiac/liver subspecialty bonus on top of normal pager pay. AM
+           and PM split the bonus 50/50 (22.5 pts each); Full pays 45. -->
       <div id="callCardiacCoverageSection" class="hidden">
         <div class="divider"></div>
         <div class="form-group" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;margin:0;">
-            <input type="checkbox" id="callCardiacCoverage" style="width:18px;height:18px;cursor:pointer;margin:0;">
-            Cardiac coverage
-          </label>
-          <p style="font-size:0.72rem;color:var(--text-dim);margin:6px 0 0;line-height:1.4;">
-            Adds the <strong>+45 pt</strong> cardiac/liver subspecialty bonus to this call shift's pay, in addition to the normal pager pay.
+          <div style="font-weight:600;margin-bottom:8px;">Cardiac coverage</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid var(--border);font-size:0.82rem;">
+              <input type="radio" name="callCardiacCoverage" value="" checked style="margin:0;cursor:pointer;"> None
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid var(--border);font-size:0.82rem;">
+              <input type="radio" name="callCardiacCoverage" value="am" style="margin:0;cursor:pointer;"> AM (+22.5)
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid var(--border);font-size:0.82rem;">
+              <input type="radio" name="callCardiacCoverage" value="pm" style="margin:0;cursor:pointer;"> PM (+22.5)
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid var(--border);font-size:0.82rem;">
+              <input type="radio" name="callCardiacCoverage" value="full" style="margin:0;cursor:pointer;"> Full (+45)
+            </label>
+          </div>
+          <p style="font-size:0.72rem;color:var(--text-dim);margin:0;line-height:1.4;">
+            Adds the cardiac/liver subspecialty bonus on top of this call shift's normal pager pay.
           </p>
         </div>
       </div>
@@ -16213,12 +16224,16 @@ function calcSubspecPoints(shift, _skipSandboxHook) {
     return _engineSandboxLogicHooks.calcSubspecPoints(shift,
       (s) => calcSubspecPoints(s, true));
   }
-  // Cardiac/Liver shifts always include the 45-pt subspecialty bonus
-  // as part of their base. The legacy subspecCoverage checkbox is kept
-  // as a no-op for backward compatibility but no longer required.
-  let pts = _eo('bonuses.subspecCardiacLiver', 45);
+  // cardiacCoverage is the UVH call-shift overlay. 'am' / 'pm' pay half the
+  // cardiac/liver bonus (22.5 each); 'full' or legacy boolean true pay the
+  // whole 45. When the flag is unset (cardiac_liver / IMC CV / IMC Liver
+  // automatic subspec assignments) the full bonus also applies — those
+  // call sites are gated upstream by _hasSubspec.
+  const cc = shift.cardiacCoverage;
+  const fraction = (cc === 'am' || cc === 'pm') ? 0.5 : 1;
+  let pts = _eo('bonuses.subspecCardiacLiver', 45) * fraction;
   pts += (parseInt(shift.teeCount) || 0) * _eo('bonuses.teePerCount', 22);
-  return pts;
+  return round2(pts);
 }
 
 function calcTempCoveragePoints(shift) {
@@ -19862,8 +19877,9 @@ function updatePreCallOverlayVisibility() {
 
 // UVH-only: the "cardiac coverage" overlay is offered on 1st-4th call so the
 // user can stack the +45 cardiac/liver subspec bonus on top of normal call
-// pay. Other sites either have dedicated CV/Liver call types (IMC) or no
-// equivalent, so the section stays hidden.
+// pay. AM and PM pay half (22.5 each); Full pays the whole 45. Other sites
+// either have dedicated CV/Liver call types (IMC) or no equivalent, so the
+// section stays hidden.
 function _updateCallCardiacCoverageVisibility(type) {
   const sec = document.getElementById('callCardiacCoverageSection');
   if (!sec) return;
@@ -19872,7 +19888,31 @@ function _updateCallCardiacCoverageVisibility(type) {
     || type === '3rd_call' || type === '4th_call';
   const eligible = isUVH && isCall;
   sec.classList.toggle('hidden', !eligible);
-  if (!eligible) document.getElementById('callCardiacCoverage').checked = false;
+  if (!eligible) _setCallCardiacCoverageValue('');
+}
+
+// Get/set helpers for the AM/PM/Full radio group. Migration: legacy boolean
+// true → 'full', falsy → '' (no bonus); unknown values fall through to ''.
+function _getCallCardiacCoverageValue() {
+  const r = document.querySelector('input[name="callCardiacCoverage"]:checked');
+  const v = r ? r.value : '';
+  return (v === 'am' || v === 'pm' || v === 'full') ? v : '';
+}
+function _setCallCardiacCoverageValue(v) {
+  let val = v;
+  if (val === true) val = 'full';
+  if (!val) val = '';
+  const radios = document.querySelectorAll('input[name="callCardiacCoverage"]');
+  let matched = false;
+  radios.forEach(r => {
+    const hit = r.value === val;
+    r.checked = hit;
+    if (hit) matched = true;
+  });
+  if (!matched) {
+    const none = document.querySelector('input[name="callCardiacCoverage"][value=""]');
+    if (none) none.checked = true;
+  }
 }
 
 function updateTempCoverageVisibility() {
@@ -20211,7 +20251,7 @@ function loadShiftForDate() {
     document.getElementById('vacationEndDate').value = '';
     document.getElementById('subspecCoverage').checked = shift.subspecCoverage || false;
     document.getElementById('teeCount').value = shift.teeCount || 0;
-    document.getElementById('callCardiacCoverage').checked = !!shift.cardiacCoverage;
+    _setCallCardiacCoverageValue(shift.cardiacCoverage);
     _updateCallCardiacCoverageVisibility(shift.assignmentType);
     // Pre-call (morning OR) overlay — only meaningful for OB_restricted / mole.
     updatePreCallOverlayVisibility();
@@ -20326,7 +20366,7 @@ function loadShiftForDate() {
     document.getElementById('vacationEndDate').value = '';
     document.getElementById('subspecCoverage').checked = false;
     document.getElementById('teeCount').value = 0;
-    document.getElementById('callCardiacCoverage').checked = false;
+    _setCallCardiacCoverageValue('');
     _updateCallCardiacCoverageVisibility(getSelectedAssignmentType());
     document.getElementById('unrestrictedCallEntryOptions').classList.add('hidden');
     document.getElementById('unrestrictedCallHours').value = 0;
@@ -20733,10 +20773,10 @@ document.getElementById('saveShiftBtn').addEventListener('click', () => {
       pagerCallTypes: _pcSavedArr,
       subspecCoverage: document.getElementById('subspecCoverage').checked,
       cardiacCoverage: (() => {
-        const cb = document.getElementById('callCardiacCoverage');
+        const v = _getCallCardiacCoverageValue();
         const eligibleType = effectiveType === '1st_call' || effectiveType === '2nd_call'
           || effectiveType === '3rd_call' || effectiveType === '4th_call';
-        return !!(cb && cb.checked && eligibleType);
+        return eligibleType ? v : '';
       })(),
       teeCount: parseInt(document.getElementById('teeCount').value) || 0,
       unrestrictedCallHours: parseFloat(document.getElementById('unrestrictedCallHours').value) || 0,
@@ -24357,7 +24397,11 @@ function getShiftPayBreakdown(shift) {
   if (!_hasSubspec) return rows;
   const _ssPts = calcSubspecPoints(shift);
   if (!(_ssPts > 0)) return rows;
-  rows.push({ clockIn: '', clockOut: '', payCode: 'Subspecialty Call', durationMin: 0, payRate: 0, amount: _ssPts, isPager: true, isSubRow: false });
+  const _ccVal = shift.cardiacCoverage;
+  let _ssLabel = 'Subspecialty Call';
+  if (_ccVal === 'am') _ssLabel = 'Subspecialty Call (AM)';
+  else if (_ccVal === 'pm') _ssLabel = 'Subspecialty Call (PM)';
+  rows.push({ clockIn: '', clockOut: '', payCode: _ssLabel, durationMin: 0, payRate: 0, amount: _ssPts, isPager: true, isSubRow: false });
   return rows;
 }
 
