@@ -3279,7 +3279,7 @@ body.hide-monetary .monetary-hide { display: none !important; }
   <!-- Turnover Time -->
   <div class="card collapse-section" id="turnoverCard" style="padding:10px 14px;">
     <div class="collapse-header" onclick="toggleCollapse('turnover')" style="border-bottom:none;min-height:auto;padding:4px 0;">
-      <span style="font-size:0.78rem;font-weight:600;">Turnover Time <span class="info-icon" data-tip="Minutes between case end and the next case start, within one continuous clock-in. Excludes labor / APS / acute pain / ICU-ER / shared cases, c-sections, nerve-block-only entries, NORA, ACS, OB-style shifts, SF1 daytime, weekends, and holidays. Window: trailing 90 days. Need 10 intervals to show a number. Group = macro-average across other contributors at this site (mean of each user's mean / median of each user's median).">i</span></span>
+      <span style="font-size:0.78rem;font-weight:600;">Turnover Time <span class="info-icon" data-tip="Minutes between case end and the next case start, within one continuous clock-in. Excludes labor / APS / acute pain / ICU-ER / shared cases, c-sections, nerve-block-only entries, NORA, ACS, OB-style shifts, SF1 daytime, weekends, and holidays. Window: trailing 90 days. Need 5 intervals to show a number. Group = macro-average across other contributors at this site (mean of each user's mean / median of each user's median).">i</span></span>
       <span style="display:flex;align-items:center;gap:10px;">
         <span id="turnoverOverallInline" style="font-size:0.92rem;font-weight:700;color:var(--accent);">&mdash;</span>
         <span class="arrow" id="turnoverArrow">&#9660;</span>
@@ -30303,7 +30303,7 @@ function getSiteWideAvgByType() {
 //     segments; intervals only span cases inside the same segment
 // ================================================================
 const TURNOVER_WINDOW_DAYS = 90;
-const TURNOVER_MIN_INTERVALS = 10;
+const TURNOVER_MIN_INTERVALS = 5;
 const TURNOVER_PHASE_A_MIN_CONTRIBUTORS = 3;
 const TURNOVER_PHASE_C_MIN_CONTRIBUTORS = 10;
 const TURNOVER_PHASE_C_FRESH_DAYS = 30;
