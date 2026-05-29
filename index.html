@@ -32675,10 +32675,10 @@ function renderDailyTab() {
     const isVac = shiftType === 'vacation';
     const isPastOrToday = isPastMonth || dateStr <= todayStr;
     monthTotal += pts;
-    if (shiftType) shiftCount++;
+    if (shiftType && pts > 0) shiftCount++;
     if (isPastOrToday) {
       pastMonthTotal += pts;
-      if (shiftType) pastShiftCount++;
+      if (shiftType && pts > 0) pastShiftCount++;
     }
 
     let classes = 'daily-cal-cell';
