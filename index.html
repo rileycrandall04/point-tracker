@@ -2062,25 +2062,12 @@ body.hide-monetary .monetary-hide { display: none !important; }
       'Giving more roc...',
       'Waiting for room turnover...',
       'Anesthesia delay...',
+      'Placing add ons...',
+      'Refilling the vaporizer...',
       'Ordering scope patch for Edel...',
       'Finishing pain rounds...',
       'Jaw thrusting...'
     ];
-    // UVH-specific phrases — gated on the saved siteId in localStorage so
-    // they only roll into the rotation for UVH users. settings hasn't been
-    // loaded yet at this point in boot, so read mwa_settings directly.
-    var _bootSiteId = 'UVH';
-    try {
-      var _s = localStorage.getItem('mwa_settings');
-      if (_s) {
-        var _parsed = JSON.parse(_s);
-        if (_parsed && _parsed.siteId) _bootSiteId = _parsed.siteId;
-      }
-    } catch (e) {}
-    if (_bootSiteId === 'UVH') {
-      phrases.push('Placing add ons...');
-      phrases.push('Refilling the vaporizer...');
-    }
     for (var i = phrases.length - 1; i > 0; i--) {
       var j = Math.floor(Math.random() * (i + 1));
       var tmp = phrases[i]; phrases[i] = phrases[j]; phrases[j] = tmp;
