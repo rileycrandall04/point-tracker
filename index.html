@@ -11013,25 +11013,59 @@ function saveSettings(s) {
   syncToFirestore('settings', syncable);
 }
 
+// Pending payload for the debounced Firestore write. Lifted out of the
+// setTimeout closure so flushPendingFirestoreSync can fire it early when
+// the tab is being hidden / closed — that's the deterministic window that
+// produces sub > blob drift (per-case writeCaseDoc is immediate, but blob
+// saveData is debounced 500 ms; close-within-500ms drops the blob write
+// while the sub keeps the case).
+let _pendingSyncDoc = null;
+let _pendingSyncPayload = null;
+
 function syncToFirestore(docName, payload) {
   if (!firestoreSyncEnabled || !currentUser) return;
   updateSyncStatus('syncing');
   clearTimeout(syncDebounceTimer);
-  syncDebounceTimer = setTimeout(() => {
-    const docRef = db.collection('users').doc(currentUser.uid).collection('data').doc(docName);
-    docRef.set(JSON.parse(JSON.stringify(payload))).then(() => {
-      updateSyncStatus('synced');
-    }).catch(err => {
-      console.error('Firestore sync error:', err);
-      updateSyncStatus('error');
-      if (err.code === 'permission-denied' || err.code === 'unauthenticated') {
-        firestoreSyncEnabled = false;
-        showSessionExpiredBanner();
-      } else {
-        showToast('Save failed — check connection');
-      }
-    });
-  }, 500);
+  _pendingSyncDoc = docName;
+  _pendingSyncPayload = payload;
+  syncDebounceTimer = setTimeout(_runPendingFirestoreSync, 500);
+}
+
+function _runPendingFirestoreSync() {
+  syncDebounceTimer = null;
+  if (!_pendingSyncDoc || _pendingSyncPayload == null) return;
+  if (!firestoreSyncEnabled || !currentUser) {
+    _pendingSyncDoc = null; _pendingSyncPayload = null;
+    return;
+  }
+  const docName = _pendingSyncDoc;
+  const payload = _pendingSyncPayload;
+  _pendingSyncDoc = null; _pendingSyncPayload = null;
+  const docRef = db.collection('users').doc(currentUser.uid).collection('data').doc(docName);
+  docRef.set(JSON.parse(JSON.stringify(payload))).then(() => {
+    updateSyncStatus('synced');
+  }).catch(err => {
+    console.error('Firestore sync error:', err);
+    updateSyncStatus('error');
+    if (err.code === 'permission-denied' || err.code === 'unauthenticated') {
+      firestoreSyncEnabled = false;
+      showSessionExpiredBanner();
+    } else {
+      showToast('Save failed — check connection');
+    }
+  });
+}
+
+// Called from visibilitychange (hidden) and pagehide listeners so the
+// debounced blob write can't be lost when the user backgrounds or closes
+// the app within 500 ms of saving. Fires the pending write immediately —
+// the browser still has to deliver the request, so completion isn't
+// guaranteed, but this gives the SDK its best chance instead of definitely
+// dropping it.
+function flushPendingFirestoreSync() {
+  if (!syncDebounceTimer) return;
+  clearTimeout(syncDebounceTimer);
+  _runPendingFirestoreSync();
 }
 
 // ---- Shared case data (community pool) ----
@@ -40021,6 +40055,10 @@ function _handleReturnFromIdle() {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     lastHiddenAt = Date.now();
+    // Fire any debounced Firestore save before the tab is fully hidden, so a
+    // close-within-500ms-of-save can't drop the blob write while the
+    // immediate per-case sub write committed.
+    try { flushPendingFirestoreSync(); } catch (_) {}
   } else {
     _handleReturnFromIdle();
   }
@@ -40030,6 +40068,13 @@ document.addEventListener('visibilitychange', () => {
 // with the visibilitychange handler because the same lastHiddenAt gate +
 // the null-reset after reload prevent double-firing.
 window.addEventListener('focus', _handleReturnFromIdle);
+
+// pagehide fires on most browsers when a navigation/close is committing;
+// it's the most reliable signal for "the JS context is about to die." Pair
+// it with visibilitychange so neither path can leak a pending blob write.
+window.addEventListener('pagehide', () => {
+  try { flushPendingFirestoreSync(); } catch (_) {}
+});
 
 // When the tab is restored from the browser's back/forward cache (bfcache),
 // the DOM is frozen at whatever state it was in when suspended, and
