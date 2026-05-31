@@ -11265,6 +11265,15 @@ async function mirrorAllCasesToSub() {
 // returns true regardless of the legacy global Phase 2 flag.
 async function _maybeGraduateToSubOnly() {
   if (!firestoreSyncEnabled || !currentUser) return;
+  // The reconcile that calls us fires from the auth handler fire-and-forget,
+  // and so does loadGlobalScalingFlags — they race. If the flag fetch hasn't
+  // completed yet, globalScalingFlags still holds its default (everything
+  // off) and we'd silently bail every login until the user happened to
+  // refresh after the flag load won the race. Wait for the load to settle
+  // before reading.
+  if (!globalScalingFlagsLoaded) {
+    try { await loadGlobalScalingFlags(); } catch (_) {}
+  }
   if (!(globalScalingFlags && globalScalingFlags.casesGraduationActive)) return;
   if (currentUserProfile && currentUserProfile.casesSubOnly === true) return; // already graduated
   if (!settings || settings.casesBackfilledV1 !== true) return; // pre-migration user
